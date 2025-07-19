@@ -284,7 +284,7 @@ function RefInput({
               value.type === "local"
                 ? "Enter file name..."
                 : value.type === "wowhead"
-                  ? "https://www.wowhead.com/npc=12345/..."
+                  ? `https://www.wowhead.com/${category}=12345/...`
                   : "Enter Display ID number..."
             }
             value={value.value}
@@ -478,7 +478,6 @@ export default function WoWNPCExporter() {
                 value={character.base}
                 onChange={(base) => {
                   if (base.type==="wowhead") {
-                    // extract npc name from ...npc=1234/name
                     const npcName = getNpcNameFromWowheadUrl(base.value)
                     if (npcName) {
                       setOutputFileName(npcName)
@@ -1018,6 +1017,7 @@ export default function WoWNPCExporter() {
 }
 
 function getNpcNameFromWowheadUrl(url: string) {
+  // extract npc name from ...npc=1234/name
   const npcName = url.split("/").pop()?.split("=").pop()
   return npcName
 }
