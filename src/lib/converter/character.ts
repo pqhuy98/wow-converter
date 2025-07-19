@@ -1,8 +1,7 @@
 import chalk from 'chalk';
 import path, { join } from 'path';
+import { z } from 'zod';
 
-// Flexible NPC exporter supporting local filesystem models, Wowhead URLs, and display IDs.
-// NOTE: This file is self-contained – it does not rely on common-wowhead.ts.
 import { assetPrefix, wowExportPath } from '@/lib/global-config';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
@@ -19,8 +18,6 @@ import {
 import { MDL } from '../objmdl/mdl/mdl';
 import { Config } from './common';
 import { AssetManager } from './model-manager';
-import { z } from 'zod';
-
 
 export const LocalRefSchema = z.object({ type: z.literal('local'), value: z.string() });
 export const WowheadRefSchema = z.object({ type: z.literal('wowhead'), value: z.string() });
@@ -34,7 +31,7 @@ export const CharacterSchema = z.object({
   inGameMovespeed: z.number(),
   size: z.enum(['small', 'medium', 'large', 'hero', 'semi-giant', 'giant']).optional(),
   scale: z.number().optional(),
-  attachItems: z.record(z.number(), AttachItemSchema).optional(),
+  attachItems: z.record(z.union([z.number(), z.string()]), AttachItemSchema).optional(),
   noDecay: z.boolean().optional(),
   portraitCameraSequenceName: z.string().optional(),
 });
@@ -49,8 +46,6 @@ export type AttachItem = z.infer<typeof AttachItemSchema>;
 export const local = (pathStr: string): LocalRef => ({ type: 'local', value: pathStr });
 export const wowhead = (url: string): WowheadRef => ({ type: 'wowhead', value: url });
 export const displayID = (id: number | string): DisplayRef => ({ type: 'displayID', value: String(id) });
-
-
 
 const wantedZPerSize = {
   small: 60,
@@ -436,5 +431,5 @@ async function resolveAttachItems(map?: Record<number, AttachItem>): Promise<Rec
 }
 
 function relativeToExport(p: string | undefined): string | undefined {
-  return p ? path.relative(wowExportPath, p) : undefined;
+  return p ? path.relative(wowExportPath.value, p) : undefined;
 }

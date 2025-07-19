@@ -6,7 +6,7 @@ import { existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import {
-  CharacterExporter, displayID, Character, wowhead,
+  Character, CharacterExporter, displayID, wowhead,
 } from '../converter/character';
 import { Config } from '../converter/common';
 import { AttackTag } from '../objmdl/animation/animation_mapper';
@@ -133,12 +133,12 @@ export async function exportCreatureModels(
       const start0 = performance.now();
       let start = performance.now();
 
-      const attachItems: Character['attachItems'] = new Map();
+      const attachItems: Character['attachItems'] = {};
 
       if (c.equipment?.item1) {
         const slot = inventoryTypeToEquipmentSlot(c.equipment.item1.InventoryType, 0);
         if (slot !== undefined) {
-          attachItems.set(slot, { path: wowhead(`https://www.wowhead.com/wotlk/item=${c.equipment.item1.entry}`), scale: 1 });
+          attachItems[slot] = { path: wowhead(`https://www.wowhead.com/wotlk/item=${c.equipment.item1.entry}`), scale: 1 };
         } else {
           console.log(`Unmapped item 1: ${c.equipment.item1.entry} ${c.equipment.item1.entry}`);
         }
@@ -146,7 +146,7 @@ export async function exportCreatureModels(
       if (c.equipment?.item2) {
         const slot = inventoryTypeToEquipmentSlot(c.equipment.item2.InventoryType, 1);
         if (slot !== undefined) {
-          attachItems.set(slot, { path: wowhead(`https://www.wowhead.com/wotlk/item=${c.equipment.item2.entry}`), scale: 1 });
+          attachItems[slot] = { path: wowhead(`https://www.wowhead.com/wotlk/item=${c.equipment.item2.entry}`), scale: 1 };
         } else {
           console.log(`Unmapped item 2: ${c.equipment.item2.entry} ${c.equipment.item2.entry}`);
         }

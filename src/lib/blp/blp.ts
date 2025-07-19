@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const {
   Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
 // eslint-disable-next-line @typescript-eslint/no-unsafe-call, no-eval, @typescript-eslint/no-var-requires
-} = require('../../../bin/blp-preview/win32-x64-binding.node');
+} = require('./bin/blp-preview/win32-x64-binding.node');
 
 export function blp2Image(blpPath: string, distPath: string, type: 'png' | 'jpg' | 'blp' = 'png') {
   const img = new Image();

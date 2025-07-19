@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 
 import { blp2Image } from '../blp/blp';
+import { wowExportPath } from '../global-config';
 import { V3 } from '../math/vector';
 import { convertObjMdl } from '../objmdl';
 import { Config, Model, WowObject } from './common';
@@ -20,9 +21,9 @@ export class AssetManager {
     }
 
     const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
-    const objFullPath = path.join(this.config.wowExportPath, objRelativePath);
+    const objFullPath = path.join(wowExportPath.value, objRelativePath);
     // console.log('Parsing model', objFullPath);
-    const { mdl, texturePaths } = convertObjMdl(objFullPath, this.config.wowExportPath, this.config.assetPrefix, this.config);
+    const { mdl, texturePaths } = convertObjMdl(objFullPath, wowExportPath.value, this.config.assetPrefix, this.config);
     const model: Model = {
       relativePath: path.join(this.config.assetPrefix, `${objectPath}.mdl`),
       mdl,
@@ -68,7 +69,7 @@ export class AssetManager {
       if (existsSync(toPath)) {
         continue;
       }
-      const fromPath = path.join(this.config.wowExportPath, texturePath);
+      const fromPath = path.join(wowExportPath.value, texturePath);
       if (!existsSync(fromPath)) {
         console.warn('Skipping texture not found', fromPath);
         continue;

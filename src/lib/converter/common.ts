@@ -18,7 +18,6 @@ export interface WowObject {
 }
 
 export interface Config {
-  wowExportPath: string
   assetPrefix: string
   terrainHeightClampPercent: {
     upper: number,

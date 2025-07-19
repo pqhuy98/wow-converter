@@ -5,6 +5,7 @@ import {
 import { glob } from 'glob';
 import path from 'path';
 
+import { wowExportPath } from '../global-config';
 import { Vector3 } from '../math/common';
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../math/rotation';
 import { V3 } from '../math/vector';
@@ -47,9 +48,9 @@ export class WowObjectManager {
   }
 
   async parse(patterns: string[], filter?: (fileName: string, type: WowObjectType) => boolean) {
-    const globPatterns = patterns.map((p) => path.join(this.config.wowExportPath, p).replaceAll(path.sep, '/'));
+    const globPatterns = patterns.map((p) => path.join(wowExportPath.value, p).replaceAll(path.sep, '/'));
     const files = glob.sync(globPatterns, {
-      cwd: this.config.wowExportPath,
+      cwd: wowExportPath.value,
       absolute: true,
     }).map((f) => f.replaceAll(path.sep, '/'));
     console.log('Parsing root files', files);
@@ -72,11 +73,11 @@ export class WowObjectManager {
   }
 
   private relative(fullPath: string) {
-    return fullPath.replaceAll(this.config.wowExportPath, '');
+    return fullPath.replaceAll(wowExportPath.value, '');
   }
 
   private full(relativePath: string) {
-    return path.join(this.config.wowExportPath, relativePath);
+    return path.join(wowExportPath.value, relativePath);
   }
 
   private async parseRecursive(objectPath: string, current: WowObject, filter?: (fileName: string, type: WowObjectType) => boolean) {

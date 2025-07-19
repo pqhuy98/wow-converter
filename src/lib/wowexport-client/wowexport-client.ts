@@ -9,6 +9,7 @@
  * await client.loadCASC('C:/World of Warcraft');
  * await client.exportModel(12345, './output/model.obj');
  */
+import chalk from 'chalk';
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { Socket } from 'net';
@@ -118,7 +119,10 @@ export class WowExportClient extends EventEmitter {
       this.socket = new Socket();
       this.socket.on('data', (data: Buffer) => this.onData(data));
       this.socket.on('close', () => this.onConnectionClose());
-      this.socket.on('error', (err: Error) => this.onError(err));
+      this.socket.on('error', (err: Error) => {
+        console.error(chalk.red('Error connecting to wow.export RCP server, did you run it?'));
+        this.onError(err);
+      });
     }
 
     return new Promise((resolve, reject) => {

@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 
+import { wowExportPath } from '@/lib/global-config';
+
 import { BlizzardNull } from '../../constants';
 import { Config } from '../../converter/common';
 import { QuaternionRotation, Vector3 } from '../../math/common';
@@ -291,7 +293,7 @@ export class M2MetadataFile implements MetadataFile {
     const textures: Texture[] = this.textures.map((tex) => ({
       id: 0,
       image: tex.fileNameExternal
-        ? join(texturePrefix, relative(this.options.wowExportPath, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
+        ? join(texturePrefix, relative(wowExportPath.value, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
         : '',
       wrapHeight: (tex.flags & 1) > 0,
       wrapWidth: (tex.flags & 2) > 0,

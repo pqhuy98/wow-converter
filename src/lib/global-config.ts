@@ -1,14 +1,25 @@
-import path from 'path';
+import chalk from 'chalk';
 
 import { Config } from './converter/common';
 import { radians } from './math/rotation';
 import { BlendMode } from './objmdl/mdl/mdl';
+import { wowExportClient } from './wowexport-client/wowexport-client';
 
-export const wowExportPath = 'C:/Users/quang/wow.export/';
+// eslint-disable-next-line import/no-mutable-exports
+export const wowExportPath = {
+  value: '',
+};
 export const assetPrefix = 'wow';
 
+wowExportClient.getConfig().then((config) => {
+  wowExportPath.value = config.exportDirectory;
+  console.log(chalk.green('Connected successfully to wow.export server'));
+  console.log('wow.export assets path:', chalk.gray(wowExportPath.value));
+}).catch((error) => {
+  console.error(chalk.red('Cannot connect to wow.export server, did you run it?'));
+});
+
 export const defaultConfig: Config = {
-  wowExportPath: wowExportPath.replace(path.sep, '/'),
   assetPrefix,
   release: true,
 

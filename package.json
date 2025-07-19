@@ -4,21 +4,58 @@
   "description": "",
   "author": "Huy Pham",
   "license": "MIT",
+  "pkg": {
+    "assets": [
+      "webui/out/**"
+    ]
+  },
   "scripts": {
     "lint": "eslint src/**/*.ts --fix",
-    "prisma:generate": "prisma generate"
+    "dev": "tsx watch src/server.ts",
+    "prisma:generate": "prisma generate",
+    "build:webui": "cd webui && npm run build",
+    "build:server": "shx rm -rf build && tsc && tsc-alias",
+    "build:1": "rollup -c",
+    "build:2": "shx rm -rf dist && pkg build/server.bundle.js --target node18-win-x64 --output dist/wow-converter.exe --config package.json",
+    "build:3": "cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin",
+    "build:exe": "npm run build:1 && npm run build:2 && npm run build:3",
+    "build": "npm run build:webui && npm run build:server && npm run build:exe"
   },
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@stylistic/eslint-plugin-ts": "^2.8.0",
     "@types/assert": "^1.5.11",
+    "@types/chalk": "^2.2.4",
     "@types/fs-extra": "^11.0.4",
+    "@types/glob": "^8.1.0",
     "@types/lodash": "^4.17.20",
     "@types/node": "^24.0.14",
-    "prisma": "^6.11.1"
+    "@typescript-eslint/eslint-plugin": "^7.12.0",
+    "@typescript-eslint/parser": "^7.12.0",
+    "airbnb-base": "^1.0.4",
+    "audit": "^0.0.6",
+    "cross-env": "^7.0.3",
+    "esbuild": "^0.25.7",
+    "eslint": "^8.57.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-simple-import-sort": "^12.1.0",
+    "eslint-plugin-unused-imports": "^3.2.0",
+    "npm": "^11.4.2",
+    "pkg": "^5.8.1",
+    "prisma": "^6.11.1",
+    "rollup": "^4.45.1",
+    "shx": "^0.4.0",
+    "tsc-alias": "^1.8.16"
   },
   "dependencies": {
     "@prisma/client": "^6.12.0",
     "assert": "^2.1.0",
     "chalk": "^5.4.1",
+    "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
     "express": "^5.1.0",
     "fs": "^0.0.1-security",

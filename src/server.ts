@@ -1,20 +1,42 @@
+import chalk from 'chalk';
+import cors from 'cors';
 import express from 'express';
-import { CharacterExporter, CharacterSchema } from './lib/converter/character';
-import { defaultConfig } from './lib/global-config';
-import { Config } from './lib/converter/common';
-import { ensureDirSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+import path from 'path';
 import z from 'zod';
 
+import { CharacterExporter, CharacterSchema } from './lib/converter/character';
+import { Config } from './lib/converter/common';
+import { defaultConfig } from './lib/global-config';
 
-const ceOutputPath = 'dist/exported-assets';
+console.log(`
+ ██╗  ██╗ ██╗   ██╗ ██╗   ██╗ █╗  ███████╗
+ ██║  ██║ ██║   ██║ ╚██╗ ██╔╝ ╚╝  ██╔════╝
+ ███████║ ██║   ██║  ╚████╔╝      ███████╗
+ ██╔══██║ ██║   ██║   ╚██╔╝       ╚════██║
+ ██║  ██║ ╚██████╔╝    ██║        ███████║
+ ╚═╝  ╚═╝  ╚═════╝     ╚═╝        ╚══════╝
+
+ ██╗    ██╗  ██████╗  ██╗    ██╗         ██████╗  ██████╗  ███╗   ██╗ ██╗   ██╗ ███████╗ ██████╗  ████████╗ ███████╗ ██████╗
+ ██║    ██║ ██╔═══██╗ ██║    ██║        ██╔════╝ ██╔═══██╗ ████╗  ██║ ██║   ██║ ██╔════╝ ██╔══██╗ ╚══██╔══╝ ██╔════╝ ██╔══██╗
+ ██║ █╗ ██║ ██║   ██║ ██║ █╗ ██║ █████╗ ██║      ██║   ██║ ██╔██╗ ██║ ██║   ██║ █████╗   ██████╔╝    ██║    █████╗   ██████╔╝
+ ██║███╗██║ ██║   ██║ ██║███╗██║ ╚════╝ ██║      ██║   ██║ ██║╚██╗██║ ╚██╗ ██╔╝ ██╔══╝   ██╔══██╗    ██║    ██╔══╝   ██╔══██╗
+ ╚███╔███╔╝ ╚██████╔╝ ╚███╔███╔╝        ╚██████╗ ╚██████╔╝ ██║ ╚████║  ╚████╔╝  ███████╗ ██║  ██║    ██║    ███████╗ ██║  ██║
+  ╚══╝╚══╝   ╚═════╝   ╚══╝╚══╝          ╚═════╝  ╚═════╝  ╚═╝  ╚═══╝   ╚═══╝   ╚══════╝ ╚═╝  ╚═╝    ╚═╝    ╚══════╝ ╚═╝  ╚═
+
+`);
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const ceOutputPath = 'exported-assets';
 const ceConfig: Config = {
   ...defaultConfig,
   assetPrefix: 'wow',
   rawModelScaleUp: defaultConfig.rawModelScaleUp * 2,
 };
-ensureDirSync(ceOutputPath);
-
-const app = express();
+fsExtra.ensureDirSync(ceOutputPath);
 
 const ExporCharacterRequestSchema = z.object({
   character: CharacterSchema,
@@ -24,18 +46,18 @@ const ExporCharacterRequestSchema = z.object({
     removeUnusedVertices: z.boolean().optional(),
     removeUnusedNodes: z.boolean().optional(),
     removeUnusedMaterialsTextures: z.boolean().optional(),
-    removeCinematicSequences: z.boolean().optional(),
   }).optional(),
   format: z.enum(['mdx', 'mdl']).optional(),
 });
 
 app.post('/export/character', async (req: express.Request, res: express.Response) => {
   const ce = new CharacterExporter(ceOutputPath, ceConfig);
+  console.log(req.body);
   const request = ExporCharacterRequestSchema.parse(req.body);
 
   await ce.exportCharacter(request.character, request.outputFileName);
 
-  const exportedModels: string[] = [];
+  let exportedModels: string[] = [];
   ce.models.forEach(([mdl, filePath]) => {
     if (request.optimization?.sortSequences) {
       mdl.modify.sortSequences();
@@ -49,28 +71,44 @@ app.post('/export/character', async (req: express.Request, res: express.Response
     if (request.optimization?.removeUnusedMaterialsTextures) {
       mdl.modify.removeUnusedMaterialsTextures();
     }
-    if (request.optimization?.removeCinematicSequences) {
-      mdl.modify.removeCinematicSequences();
-    }
     mdl.modify.optimizeKeyFrames();
     mdl.sync();
     if (request.format === 'mdx' || !request.format) {
-      writeFileSync(`${filePath}.mdx`, mdl.toMdx());
+      fsExtra.writeFileSync(`${filePath}.mdx`, mdl.toMdx());
       exportedModels.push(`${filePath}.mdx`);
     } else {
-      writeFileSync(`${filePath}.mdl`, mdl.toString());
+      fsExtra.writeFileSync(`${filePath}.mdl`, mdl.toString());
       exportedModels.push(`${filePath}.mdl`);
     }
   });
   ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  const textures = ce.assetManager.exportTextures(ce.outputPath);
+  let textures = ce.assetManager.exportTextures(ce.outputPath);
 
-  res.send({
+  exportedModels = exportedModels.map((model) => path.relative(ce.outputPath, model));
+  textures = textures.map((texture) => path.relative(ce.outputPath, texture));
+
+  res.json({
     exportedModels,
     exportedTextures: textures,
+    outputDirectory: path.resolve(ce.outputPath),
   });
 });
 
-app.listen(3000, () => {
-  console.log('Server is running on port 3000');
+const port = 3001;
+
+// serve the static UI
+const uiDir = path.join('webui', 'out');
+if (fsExtra.existsSync(uiDir)) {
+  console.log(`Serving UI web interface at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
+  app.use(express.static(uiDir));
+  app.get('/', (_, res) => res.sendFile(path.join(uiDir, 'index.html')));
+} else {
+  console.log(`No UI found, serving only REST API at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
+}
+// Error-handling middleware (must be **after** all routes)
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error(err);
+  res.status(500).json({ error: err.message ?? err });
 });
+
+app.listen(port);

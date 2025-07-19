@@ -1,9 +1,9 @@
 import chalk from 'chalk';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import path from 'path';
 
 import { Config } from '../converter/common';
-import { guessFilterMode } from '../global-config';
+import { guessFilterMode, wowExportPath } from '../global-config';
 import { AnimationFile } from './animation/animation';
 import {
   GeosetVertex, Material, Matrix, MDL, SkinWeight, Texture,
@@ -49,7 +49,7 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
     const matMap = new Map<string, Material>();
     mtl.materials.forEach((mtlMaterial) => {
       const materialRelativePath = path.relative(assetRoot, path.join(parentDir, mtlMaterial.map_Kd!));
-      if (!existsSync(path.join(config.wowExportPath, materialRelativePath))) {
+      if (!existsSync(path.join(wowExportPath.value, materialRelativePath))) {
         console.warn('Material not found', materialRelativePath, 'for model', objFilePath);
       }
       texturePaths.add(materialRelativePath);

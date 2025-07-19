@@ -5,7 +5,7 @@
     "lib": [
       "es2022"
     ],
-    "outDir": "./dist",
+    "outDir": "./build",
     "moduleResolution": "node",
     "esModuleInterop": true,
     "strictNullChecks": true,
@@ -20,5 +20,10 @@
       ]
     },
   },
-  "include": ["src", "examples" ],
+  "tsc-alias": {
+    "resolveFullPaths": true,
+    "verbose": false
+  },
+  "include": ["src", "examples", "bin"],
+  "exclude": ["webui"]
 }
