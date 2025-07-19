@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": [
+      "es2022"
+    ],
+    "outDir": "./dist",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strictNullChecks": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "paths": {
+      "common/src/*": [
+        "../common/src/*"
+      ],
+      "@/*": [
+        "./src/*"
+      ]
+    },
+  },
+  "include": ["src", "examples" ],
+}
