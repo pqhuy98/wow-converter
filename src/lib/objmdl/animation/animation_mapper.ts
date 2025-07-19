@@ -1,4 +1,5 @@
 import z from 'zod';
+
 import { Data } from './animation';
 
 // Retrieved from https://github.com/Marlamin/wow.tools.local/blob/main/wwwroot/js/anims.js, index-based, no need for number

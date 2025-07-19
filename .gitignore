@@ -2,6 +2,7 @@ exported-assets
 build
 target
 dist
+dist.zip
 maps/**
 notes.txt
 !maps/template-empty.w3x/*

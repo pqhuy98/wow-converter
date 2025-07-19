@@ -19,7 +19,25 @@ import { MDL } from '../objmdl/mdl/mdl';
 import { Config } from './common';
 import { AssetManager } from './model-manager';
 
-export const LocalRefSchema = z.object({ type: z.literal('local'), value: z.string() });
+export const LocalRefSchema = z.object({
+  type: z.literal('local'),
+  value: z.string().refine(
+    (val) => {
+      // Must not be absolute path
+      if (path.isAbsolute(val)) return false;
+      // Must not contain ".." as a path segment
+      if (val.split(/[\\/]/).some((seg) => seg === '..')) return false;
+      // Must not start with "/" or "\"
+      if (/^[\\/]/.test(val)) return false;
+      // Must not contain null bytes or suspicious chars
+      if (/[\0]/.test(val)) return false;
+      return true;
+    },
+    {
+      message: 'Local file path must be a relative path and must not contain ".." or start with a slash.',
+    },
+  ),
+});
 export const WowheadRefSchema = z.object({ type: z.literal('wowhead'), value: z.string() });
 export const DisplayRefSchema = z.object({ type: z.literal('displayID'), value: z.string() });
 export const RefSchema = z.discriminatedUnion('type', [LocalRefSchema, WowheadRefSchema, DisplayRefSchema]);
@@ -67,6 +85,7 @@ export class CharacterExporter {
   }
 
   public async exportCharacter(char: Character, outputFile: string) {
+    await wowExportClient.syncConfig();
     const baseRef = char.base;
 
     if (baseRef.type === 'local') {

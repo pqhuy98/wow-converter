@@ -117,3 +117,14 @@ export function reverseFourCC(code: number): string {
 export function toMap<T, K extends(keyof T)>(array: T[], key: K) {
   return new Map(array.map((item) => [item[key], item]));
 }
+
+export function waitUntil(condition: () => boolean) {
+  return new Promise((resolve) => {
+    const interval = setInterval(() => {
+      if (condition()) {
+        clearInterval(interval);
+        resolve(true);
+      }
+    }, 100);
+  });
+}

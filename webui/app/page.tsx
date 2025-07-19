@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { host } from "@/app/config"
-import Link from "next/link"
+import { isLocalRef } from "@/lib/utils"
 
 type RefType = "local" | "wowhead" | "displayID"
 type AttackTag = "" | "1H" | "2H" | "2HL" | "Unarmed" | "Bow" | "Rifle" | "Thrown"
@@ -55,7 +55,7 @@ interface ExportRequest {
 
 // Tooltips organized in a record
 const tooltips = {
-  baseModel: "The base character model to use. Can be a Wowhead URL, local file relative to wow.export folder, or Display ID number.",
+  baseModel: "The base character model to use. Can be a Wowhead URL, local file inside wow.export folder, or Display ID number.",
   attackAnimation: "Determines which attack animations the character will use.",
   characterSize: "How tall the character is in the game.",
   movementSpeed: "Base movement speed of the unit type",
@@ -63,7 +63,7 @@ const tooltips = {
   keepCinematic: "Preserve cinematic animation sequences in the exported model. Warning: WoW models have many cinematic sequences, this significantly increases file size.",
   noDecay: "Do not automatically add Decay animations",
   portraitCamera: "Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.",
-  itemReference: "The item to attach - can be a Wowhead URL, local file relative to wow.export folder, or Display ID.",
+  itemReference: "The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.",
   attachmentPoint: "Where on the character model this item will be attached",
   itemScale: "Scale multiplier for this specific item (1.0 = normal size)",
 }
@@ -254,7 +254,7 @@ function RefInput({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Label className="text-sm font-medium">{label}</Label>
-        <TooltipProvider delayDuration={200}>
+        <TooltipProvider>
           <Tooltip>
             <TooltipTrigger>
               <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -307,6 +307,9 @@ const validateRef = (ref: RefSchema, category: RefCategory): string | null => {
   if (ref.type === "wowhead" && !ref.value.startsWith(`https://www.wowhead.com/${category}=`)) {
     return "Invalid Wowhead URL"
   }
+  if (ref.type === "local" && !isLocalRef(ref.value)) {
+    return "Invalid local file path"
+  }
   if (ref.type === "displayID" && isNaN(Number(ref.value))) {
     return "Invalid Display ID"
   }
@@ -314,24 +317,23 @@ const validateRef = (ref: RefSchema, category: RefCategory): string | null => {
 }
 
 const attackTagOptions = [
-  { value: "none", label: "None", description: "No attack animation" },
-  { value: "1H", label: "1H Weapon", description: "One-handed weapon animation" },
-  { value: "2H", label: "2H Weapon", description: "Two-handed weapon animation" },
-  { value: "2HL", label: "2H Large Weapon", description: "Two-handed large weapon animation" },
-  { value: "Unarmed", label: "Unarmed", description: "Unarmed attack animation" },
-  { value: "Bow", label: "Bow", description: "Bow attack animation" },
-  { value: "Rifle", label: "Rifle", description: "Rifle attack animation" },
-  { value: "Thrown", label: "Thrown weapon animation" },
+  { value: "all", label: "All", description: "Include all attack animations" },
+  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapons" },
+  { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
+  { value: "2HL", label: "2H Large Weapon", description: "The model uses e.g. polearm" },
+  { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
+  { value: "Bow", label: "Bow", description: "The model uses a bow" },
+  { value: "Rifle", label: "Rifle", description: "The model uses a rifle" },
+  { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon" },
 ]
 
 const sizeOptions = [
-  { value: "none", label: "Default", description: "Use default character size" },
-  { value: "small", label: "Small", description: "Small size category" },
-  { value: "medium", label: "Medium", description: "Medium size category" },
-  { value: "large", label: "Large", description: "Large size category" },
-  { value: "hero", label: "Hero", description: "Hero size category" },
-  { value: "semi-giant", label: "Semi-Giant", description: "Semi-giant size category" },
-  { value: "giant", label: "Giant", description: "Giant size category" },
+  { value: "none", label: "Default", description: "Original WoW size times 30" },
+  { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
+  { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
+  { value: "large", label: "Large", description: "As tall as Undead Abomination" },
+  { value: "hero", label: "Hero", description: "As tall as Tauren Chieftain" },
+  { value: "giant", label: "Giant", description: "As tall as Flesh Golem" },
 ]
 
 const portraitSuggestions = ["Stand", "Stand Ready"]
@@ -483,7 +485,7 @@ export default function WoWNPCExporter() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Label className="text-sm">Attack Animation</Label>
-                    <TooltipProvider delayDuration={200}>
+                    <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
                           <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -495,11 +497,11 @@ export default function WoWNPCExporter() {
                     </TooltipProvider>
                   </div>
                   <Select
-                    value={character.attackTag || "none"}
-                    onValueChange={(value: string) =>
+                    value={character.attackTag || "all"}
+                    onValueChange={(value: AttackTag | "all") =>
                       setCharacter({
                         ...character,
-                        attackTag: value === "none" ? undefined : (value as AttackTag),
+                        attackTag: value === "all" ? undefined : (value as AttackTag),
                       })
                     }
                   >
@@ -522,7 +524,7 @@ export default function WoWNPCExporter() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Label className="text-sm">Character Size</Label>
-                    <TooltipProvider delayDuration={200}>
+                    <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
                           <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -564,7 +566,7 @@ export default function WoWNPCExporter() {
                   <Label htmlFor="movespeed" className="text-sm min-w-fit">
                     Movement Speed
                   </Label>
-                  <TooltipProvider delayDuration={200}>
+                  <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
                         <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -590,7 +592,7 @@ export default function WoWNPCExporter() {
                   <Label htmlFor="scale" className="text-sm min-w-fit">
                     Scale Multiplier
                   </Label>
-                  <TooltipProvider delayDuration={200}>
+                  <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
                         <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -625,7 +627,7 @@ export default function WoWNPCExporter() {
                   />
                   <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
                     Keep Cinematic Sequences
-                    <TooltipProvider delayDuration={200}>
+                    <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
                           <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -646,7 +648,7 @@ export default function WoWNPCExporter() {
                   />
                   <Label htmlFor="noDecay" className="flex items-center gap-2 text-sm">
                     No Decay
-                    <TooltipProvider delayDuration={200}>
+                    <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
                           <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -665,7 +667,7 @@ export default function WoWNPCExporter() {
                   <Label htmlFor="portraitCamera" className="text-sm">
                     Portrait Camera Sequence
                   </Label>
-                  <TooltipProvider delayDuration={200}>
+                  <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
                         <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -745,7 +747,7 @@ export default function WoWNPCExporter() {
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <Label className="text-sm">Attachment Point</Label>
-                              <TooltipProvider delayDuration={200}>
+                              <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
                                     <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -775,7 +777,7 @@ export default function WoWNPCExporter() {
                                 <Label htmlFor={`scale-${id}`} className="text-sm">
                                   Scale
                                 </Label>
-                                <TooltipProvider delayDuration={200}>
+                                <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger>
                                       <HelpCircle className="h-4 w-4 text-muted-foreground" />

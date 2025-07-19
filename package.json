@@ -4,22 +4,28 @@
   "description": "",
   "author": "Huy Pham",
   "license": "MIT",
+  "type": "module",
   "pkg": {
     "assets": [
       "webui/out/**"
-    ]
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "dist"
   },
   "scripts": {
     "lint": "eslint src/**/*.ts --fix",
     "dev": "tsx watch src/server.ts",
     "prisma:generate": "prisma generate",
     "build:webui": "cd webui && npm run build",
-    "build:server": "shx rm -rf build && tsc && tsc-alias",
+    "build:0": "shx rm -rf build && tsc && tsc-alias",
     "build:1": "rollup -c",
-    "build:2": "shx rm -rf dist && pkg build/server.bundle.js --target node18-win-x64 --output dist/wow-converter.exe --config package.json",
+    "build:2": "shx rm -rf dist && pkg build/server.bundle.js --config package.json --compress Gzip --options max-old-space-size=99999",
     "build:3": "cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin",
-    "build:exe": "npm run build:1 && npm run build:2 && npm run build:3",
-    "build": "npm run build:webui && npm run build:server && npm run build:exe"
+    "build:app": "npm run build:0 && npm run build:1 && npm run build:2 && npm run build:3",
+    "build:wow.export": "cd wow.export && node build win-x64 && cd .. && shx cp -r wow.export/bin/win-x64/* dist && shx rm dist/update update.json",
+    "build": "npm run build:webui && npm run build:server && npm run build:exe && npm run build:wow.export"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
@@ -54,7 +60,7 @@
   "dependencies": {
     "@prisma/client": "^6.12.0",
     "assert": "^2.1.0",
-    "chalk": "^5.4.1",
+    "chalk": "^4.1.2",
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
     "express": "^5.1.0",
@@ -65,6 +71,7 @@
     "intn": "^1.0.0",
     "lodash": "^4.17.21",
     "mdx-m3-viewer": "^5.12.0",
+    "open": "^10.2.0",
     "round-to": "^6.0.0",
     "typescript": "^5.8.3",
     "war3-model": "^4.0.0",

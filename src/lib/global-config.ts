@@ -13,9 +13,7 @@ export const assetPrefix = 'wow';
 
 wowExportClient.getConfig().then((config) => {
   wowExportPath.value = config.exportDirectory;
-  console.log(chalk.green('Connected successfully to wow.export server'));
-  console.log('wow.export assets path:', chalk.gray(wowExportPath.value));
-}).catch((error) => {
+}).catch(() => {
   console.error(chalk.red('Cannot connect to wow.export server, did you run it?'));
 });
 

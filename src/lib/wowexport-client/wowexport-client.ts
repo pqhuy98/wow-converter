@@ -154,6 +154,10 @@ export class WowExportClient extends EventEmitter {
     });
   }
 
+  async syncConfig(): Promise<void> {
+    await Promise.all(Object.entries(desiredConfig).map(([key, value]) => this.setConfig(key, value)));
+  }
+
   /**
      * Send a command to the server and wait for response
      * @param command - Command ID
@@ -782,3 +786,26 @@ export class WowExportClient extends EventEmitter {
 }
 
 export const wowExportClient = new WowExportClient();
+
+export const desiredConfig = {
+  enableM2Skins: true,
+  enableSharedTextures: true,
+  enableSharedChildren: true,
+  enableAbsoluteMTLPaths: false,
+  enableAbsoluteCSVPaths: false,
+  removePathSpaces: true,
+  removePathSpacesCopy: true,
+  exportTextureFormat: 'PNG',
+  exportModelFormat: 'OBJ',
+  exportM2Bones: true,
+  exportM2Meta: true,
+  exportWMOMeta: true,
+  modelsExportSkin: true,
+  modelsExportSkel: true,
+  modelsExportBone: true,
+  modelsExportAnim: true,
+  modelsExportUV2: false,
+  modelsExportTextures: true,
+  modelsExportAlpha: true,
+  modelsExportAnimations: true,
+};

@@ -1,9 +1,6 @@
 import assert from 'assert';
 import chalk from 'chalk';
-import {
-  existsSync, rmSync, writeFileSync,
-} from 'fs';
-// Creature cache
+import { existsSync, rmSync, writeFileSync } from 'fs';
 import { copySync } from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
@@ -16,7 +13,7 @@ import { ObjectType, Terrain } from '@/vendors/wc3maptranslator/data';
 import { ModificationType, ObjectModificationTable } from '@/vendors/wc3maptranslator/data/ObjectModificationTable';
 import { Unit } from '@/vendors/wc3maptranslator/data/Unit';
 
-import { Creature, exportCreatureModels, getCreaturesInTile } from '../src/lib/azerothcore-client/azerothcore-client';
+import { Creature, exportCreatureModels, getCreaturesInTile } from '../src/lib/azerothcore-client/creatures';
 import { distancePerTile } from '../src/lib/constants';
 import { Config, WowObject, WowObjectType } from '../src/lib/converter/common';
 import { computeAbsoluteMinMaxExtents } from '../src/lib/converter/model-manager';
@@ -99,7 +96,6 @@ async function main() {
   await write({ mapPath });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-shadow
 export async function generate(adtPatterns: string[]) {
   const wowObjectManager = new WowObjectManager(config);
   await wowObjectManager.parse(adtPatterns, filter);
@@ -155,7 +151,6 @@ export async function generate(adtPatterns: string[]) {
   return {
     wowObjectManager,
     war3Exporter,
-    // eslint-disable-next-line @typescript-eslint/no-shadow
     write: async ({ mapPath }: {mapPath: string}) => {
       assert.ok(mapPath.startsWith('maps/'));
       if (!existsSync(mapPath)) {

@@ -281,7 +281,7 @@ export class MDLModify {
     };
 
     for (const bone of this.mdl.bones) {
-      if (bone.translation && !bone.translation.globalSeq) optimiseAnim(bone.translation, 0.01);
+      if (bone.translation && !bone.translation.globalSeq) optimiseAnim(bone.translation, 0.005);
       if (bone.rotation && !bone.rotation.globalSeq) optimiseAnim(bone.rotation, 0.001);
       if (bone.scaling && !bone.scaling.globalSeq) optimiseAnim(bone.scaling, 0.01);
     }

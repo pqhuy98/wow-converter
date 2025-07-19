@@ -67,6 +67,7 @@ export class AssetManager {
     for (const texturePath of this.textures) {
       const toPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
       if (existsSync(toPath)) {
+        exportedTexturePaths.push(toPath);
         continue;
       }
       const fromPath = path.join(wowExportPath.value, texturePath);
