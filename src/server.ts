@@ -2,22 +2,19 @@ import chalk from 'chalk';
 import cors from 'cors';
 import express from 'express';
 import fsExtra from 'fs-extra';
-import open from 'open';
 import path from 'path';
 import z from 'zod';
 
-import { CharacterExporter, CharacterSchema } from './lib/converter/character';
+import { CharacterExporter, CharacterSchema, LocalRefValueSchema } from './lib/converter/character';
 import { Config } from './lib/converter/common';
-import { defaultConfig, wowExportPath } from './lib/global-config';
+import { defaultConfig } from './lib/global-config';
 import { printLogo } from './lib/logo';
 import { waitUntil } from './lib/utils';
+import { wowExportClient } from './lib/wowexport-client/wowexport-client';
 
 async function main() {
-  await waitUntil(() => wowExportPath.value !== '');
   printLogo();
-  console.log(chalk.green('Connected successfully to wow.export server'));
-
-  console.log('wow.export assets path:', chalk.gray(wowExportPath.value));
+  await waitUntil(() => wowExportClient.isReady);
 
   const app = express();
   app.use(cors());
@@ -31,9 +28,12 @@ async function main() {
   };
   fsExtra.ensureDirSync(ceOutputPath);
 
+  /**
+   * Export character
+   */
   const ExporCharacterRequestSchema = z.object({
     character: CharacterSchema,
-    outputFileName: z.string(),
+    outputFileName: LocalRefValueSchema,
     optimization: z.object({
       sortSequences: z.boolean().optional(),
       removeUnusedVertices: z.boolean().optional(),
@@ -44,8 +44,12 @@ async function main() {
   });
 
   app.post('/export/character', async (req: express.Request, res: express.Response) => {
+    if (!wowExportClient.isReady) {
+      res.status(500).json({ error: 'wow.export RCP server is not ready' });
+    }
+
     const ce = new CharacterExporter(ceOutputPath, ceConfig);
-    console.log(req.body);
+    console.log(chalk.blue(req.method), req.path, chalk.gray(JSON.stringify(req.body, null, 2)));
     const request = ExporCharacterRequestSchema.parse(req.body);
 
     await ce.exportCharacter(request.character, request.outputFileName);
@@ -67,6 +71,7 @@ async function main() {
       mdl.modify.optimizeKeyFrames();
       mdl.sync();
       if (request.format === 'mdx' || !request.format) {
+        fsExtra.ensureDirSync(path.dirname(filePath));
         fsExtra.writeFileSync(`${filePath}.mdx`, mdl.toMdx());
         exportedModels.push(`${filePath}.mdx`);
       } else {
@@ -80,13 +85,18 @@ async function main() {
     exportedModels = exportedModels.map((model) => path.relative(ce.outputPath, model));
     textures = textures.map((texture) => path.relative(ce.outputPath, texture));
 
-    res.json({
+    const resp = {
       exportedModels,
       exportedTextures: textures,
       outputDirectory: path.resolve(ce.outputPath),
-    });
+    };
+    console.log('Response:', chalk.gray(JSON.stringify(resp, null, 2)));
+    res.json(resp);
   });
 
+  /**
+   * Web server
+   */
   const port = 3001;
 
   // serve the static UI
@@ -105,7 +115,7 @@ async function main() {
   });
 
   app.listen(port, () => {
-    void open(`http://127.0.0.1:${port}`);
+    // void open(`http://127.0.0.1:${port}`);
   });
 }
 void main();

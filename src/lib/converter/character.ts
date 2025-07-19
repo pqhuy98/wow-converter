@@ -19,25 +19,26 @@ import { MDL } from '../objmdl/mdl/mdl';
 import { Config } from './common';
 import { AssetManager } from './model-manager';
 
-export const LocalRefSchema = z.object({
-  type: z.literal('local'),
-  value: z.string().refine(
-    (val) => {
-      // Must not be absolute path
-      if (path.isAbsolute(val)) return false;
-      // Must not contain ".." as a path segment
-      if (val.split(/[\\/]/).some((seg) => seg === '..')) return false;
-      // Must not start with "/" or "\"
-      if (/^[\\/]/.test(val)) return false;
-      // Must not contain null bytes or suspicious chars
-      if (/[\0]/.test(val)) return false;
-      return true;
-    },
-    {
-      message: 'Local file path must be a relative path and must not contain ".." or start with a slash.',
-    },
-  ),
-});
+// Local file path must be a relative path and must not contain ".." or start with a slash.
+// This is to prevent path traversal attacks and other security issues.
+export const LocalRefValueSchema = z.string().refine(
+  (val) => {
+    // Must not be absolute path
+    if (path.isAbsolute(val)) return false;
+    // Must not contain ".." as a path segment
+    if (val.split(/[\\/]/).some((seg) => seg === '..')) return false;
+    // Must not start with "/" or "\"
+    if (/^[\\/]/.test(val)) return false;
+    // Must not contain null bytes or suspicious chars
+    if (/[\0]/.test(val)) return false;
+    return true;
+  },
+  {
+    message: 'Local file path must be a relative path and must not contain ".." or start with a slash.',
+  },
+);
+
+export const LocalRefSchema = z.object({ type: z.literal('local'), value: LocalRefValueSchema });
 export const WowheadRefSchema = z.object({ type: z.literal('wowhead'), value: z.string() });
 export const DisplayRefSchema = z.object({ type: z.literal('displayID'), value: z.string() });
 export const RefSchema = z.discriminatedUnion('type', [LocalRefSchema, WowheadRefSchema, DisplayRefSchema]);
@@ -183,22 +184,22 @@ export class CharacterExporter {
   private attachModel(
     attachItems: Record<number, AttachItem>,
     equipSlot: EquipmentSlot,
-    modelPath: string | undefined,
+    model: [string, number] | undefined,
   ): void {
-    if (!modelPath) return;
+    if (!model) return;
     const atts = this.equipmentToAttachmentMap[equipSlot];
-    if (atts && atts.length) attachItems[atts[0]] = { path: local(modelPath) };
+    if (atts && atts.length) attachItems[atts[0]] = { path: local(model[0]), scale: model[1] };
   }
 
   private attachShoulders(
     attachItems: Record<number, AttachItem>,
-    left: string | undefined,
-    right: string | undefined,
+    left: [string, number] | undefined,
+    right: [string, number] | undefined,
   ): void {
     const atts = this.equipmentToAttachmentMap[EquipmentSlot.Shoulder];
     if (!atts) return;
-    if (left) attachItems[atts[0]] = { path: local(left) };
-    if (right && atts.length > 1) attachItems[atts[1]] = { path: local(right) };
+    if (left) attachItems[atts[0]] = { path: local(left[0]), scale: left[1] };
+    if (right && atts.length > 1) attachItems[atts[1]] = { path: local(right[0]), scale: right[1] };
   }
 
   // ---------------------------------------------------------------------------
@@ -213,8 +214,8 @@ export class CharacterExporter {
     const start = performance.now();
     const prep = await prepareNpcExport(npcDisplayId);
 
-    const slotModelPaths = new Map<string, string>();
-    const slotModelPathsR = new Map<string, string>();
+    const slotModelPaths = new Map<string, [string, number]>();
+    const slotModelPathsR = new Map<string, [string, number]>();
     const slotTexturePaths = new Map<string, string>();
     let npcTexturePath: string | undefined;
     let exportPath = '';
@@ -244,12 +245,22 @@ export class CharacterExporter {
         if (!data.modelFiles?.[0]?.fileDataId) continue;
         const modelId = data.modelFiles[0].fileDataId;
         const exp = exportedModels.find((m) => m.fileDataID === modelId);
-        slotModelPaths.set(slot.slotId, relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!);
+
+        // For some reason, Orc models have smaller shoulder bones than other races
+        const raceOrc = 2;
+
+        slotModelPaths.set(slot.slotId, [
+          relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
+          slot.slotId === EquipmentSlot.Shoulder.toString() && prep.rpcParams.race === raceOrc ? 1.75 : 1,
+        ]);
 
         if (slot.slotId === EquipmentSlot.Shoulder.toString() && data.modelFiles?.[1]?.fileDataId) {
           const modelIdR = data.modelFiles[1].fileDataId;
           const expR = exportedModels.find((m) => m.fileDataID === modelIdR);
-          slotModelPathsR.set(slot.slotId, relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!);
+          slotModelPathsR.set(slot.slotId, [
+            relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!,
+            slot.slotId === EquipmentSlot.Shoulder.toString() && prep.rpcParams.race === raceOrc ? 1.75 : 1,
+          ]);
         }
       }
 
@@ -269,7 +280,7 @@ export class CharacterExporter {
         npcTexturePath = relativeToExport(tex[0].file);
       }
 
-      // If cinematic animations should be removed, compute their IDs and pass to RPC
+      // If cinematic animations should be removed, compute their IDs and pass to RPC to reduce export size
       const excludedAnimIds: number[] = [];
       // Iterate through a reasonable range of animation IDs to detect cinematic ones
       for (let animId = 0; animId < ANIM_NAMES.length; animId++) {
@@ -292,7 +303,7 @@ export class CharacterExporter {
         console.error({ exportedModels, result });
       }
     } else {
-    // ---------------- MODEL-ONLY NPC ----------------
+      // ---------------- MODEL-ONLY NPC ----------------
       const modelExports: { fileDataID: number; skinName?: string }[] = [prep.baseModel];
       const modelSlots = prep.equipmentSlots.filter((s) => s.hasModel && s.data);
 
@@ -325,12 +336,18 @@ export class CharacterExporter {
         if (!data.modelFiles?.[0]?.fileDataId) continue;
         const modelId = data.modelFiles[0].fileDataId;
         const exp = exportedModels.find((m) => m.fileDataID === modelId);
-        slotModelPaths.set(slot.slotId, relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!);
+        slotModelPaths.set(slot.slotId, [
+          relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
+          1,
+        ]);
 
         if (slot.slotId === EquipmentSlot.Shoulder.toString() && data.modelFiles?.[1]?.fileDataId) {
           const modelIdR = data.modelFiles[1].fileDataId;
           const expR = exportedModels.find((m) => m.fileDataID === modelIdR);
-          slotModelPathsR.set(slot.slotId, relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!);
+          slotModelPathsR.set(slot.slotId, [
+            relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!,
+            1,
+          ]);
         }
       }
 

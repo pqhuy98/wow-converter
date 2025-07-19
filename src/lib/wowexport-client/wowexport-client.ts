@@ -14,6 +14,8 @@ import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { Socket } from 'net';
 
+import { wowExportPath } from '../global-config';
+
 // Type definitions
 export interface ServerInfo {
     version: string;
@@ -86,18 +88,56 @@ export class WowExportClient extends EventEmitter {
 
   private buffer: string = '';
 
-  private connected: boolean = false;
+  public status = {
+    connected: false,
+    configLoaded: false,
+    cascLoaded: false,
+  };
+
+  public get isReady() {
+    return this.status.connected && this.status.configLoaded && this.status.cascLoaded;
+  }
 
   constructor(host: string = 'localhost', port: number = 17751) {
     super();
+    this.setMaxListeners(100);
 
     this.socket = new Socket();
 
-    // Set up socket event handlers
-    this.socket.on('data', (data: Buffer) => this.onData(data));
-    this.socket.on('close', () => this.onConnectionClose());
-    this.socket.on('error', (err: Error) => this.onError(err));
-    void this.connect(host, port);
+    void (async () => {
+      for (let failedAttempts = 0; ;) {
+        try {
+          if (!this.status.connected) {
+            await this.connect(host, port);
+            console.log(chalk.green('✅ Connected to wow.export RCP'), chalk.gray(`at ${host}:${port}`));
+            failedAttempts = 0;
+          }
+          if (!this.status.configLoaded) {
+            const config = await this.getConfig();
+            wowExportPath.value = config.exportDirectory;
+            this.status.configLoaded = true;
+            console.log(chalk.green('✅ Retrieved wow.export asset dir:'), chalk.gray(wowExportPath.value));
+            failedAttempts = 0;
+          }
+          if (!this.status.cascLoaded) {
+            const info = await this.getCASCInfo();
+            this.status.cascLoaded = true;
+            console.log(chalk.green('✅ Retrieved wow.export CASC info:'), info.buildName);
+            failedAttempts = 0;
+          }
+        } catch (err) {
+          if (failedAttempts === 0) {
+            if (!this.status.connected || !this.status.configLoaded) {
+              console.error(chalk.yellow(`⏳ Cannot connecting to wow.export RCP server at ${host}:${port}, did you run it?`));
+            } else if (!this.status.cascLoaded) {
+              console.error(chalk.yellow('⏳ Cannot getting wow.export CASC info, did you select game installation?'));
+            }
+          }
+          failedAttempts++;
+        }
+        await new Promise((resolve) => { setTimeout(resolve, 100); });
+      }
+    })();
     void this.registerHook('HOOK_EXPORT_COMPLETE');
   }
 
@@ -109,31 +149,31 @@ export class WowExportClient extends EventEmitter {
      */
   async connect(host: string = 'localhost', port: number = 17751): Promise<void> {
     // If already connected, disconnect first
-    if (this.connected) {
-      this.disconnect();
+    if (this.status.connected) {
+      return Promise.resolve();
     }
 
     // Create a new socket if the current one is in use
-    if (this.socket.destroyed === false) {
+    if (this.socket) {
       this.socket.destroy();
-      this.socket = new Socket();
-      this.socket.on('data', (data: Buffer) => this.onData(data));
-      this.socket.on('close', () => this.onConnectionClose());
-      this.socket.on('error', (err: Error) => {
-        console.error(chalk.red('Error connecting to wow.export RCP server, did you run it?'));
-        this.onError(err);
-      });
     }
+    this.socket = new Socket();
+    this.socket.on('data', (data: Buffer) => this.onData(data));
+    this.socket.on('close', () => this.onConnectionClose());
 
     return new Promise((resolve, reject) => {
       this.debug && console.log(`Connecting to wow.export RCP at [${host}]:${port}`);
 
       this.socket.connect(port, host, () => {
-        this.connected = true;
+        this.status.connected = true;
         this.debug && console.log('Connected to wow.export RCP server');
+        this.socket.on('error', () => {
+          this.status.connected = false;
+          this.status.configLoaded = false;
+          this.status.cascLoaded = false;
+        });
         resolve();
       });
-
       this.socket.once('error', reject);
     });
   }
@@ -142,10 +182,6 @@ export class WowExportClient extends EventEmitter {
      * Disconnect from the server
      */
   disconnect(): void {
-    if (this.connected) {
-      this.socket.end();
-      this.connected = false;
-    }
   }
 
   private waitForConnection(): Promise<void> {
@@ -165,7 +201,7 @@ export class WowExportClient extends EventEmitter {
      * @returns Promise that resolves with response data
      */
   async sendCommand(command: string, data: any = {}): Promise<RCPResponse> {
-    if (!this.connected) {
+    if (!this.status.connected) {
       await this.waitForConnection();
     }
 
@@ -206,7 +242,7 @@ export class WowExportClient extends EventEmitter {
             break;
           case 'LOAD_CASC_BUILD':
           case 'GET_CASC_INFO':
-            shouldResolve = response.id === 'CASC_INFO';
+            shouldResolve = response.id === 'CASC_INFO' || response.id === 'CASC_UNAVAILABLE';
             break;
           case 'CLEAR_CACHE':
             shouldResolve = response.id === 'CACHE_CLEARED';
@@ -311,17 +347,10 @@ export class WowExportClient extends EventEmitter {
      */
   private onConnectionClose(): void {
     this.debug && console.log('Connection to wow.export RCP server closed');
-    this.connected = false;
+    this.status.connected = false;
+    this.status.configLoaded = false;
+    this.status.cascLoaded = false;
     this.emit('disconnected');
-  }
-
-  /**
-     * Handle connection errors
-     * @param err - Error object
-     */
-  private onError(err: Error): void {
-    console.error('RCP connection error:', err.message);
-    this.emit('error', err);
   }
 
   // ===== HIGH-LEVEL API METHODS =====

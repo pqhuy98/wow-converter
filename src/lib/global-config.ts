@@ -1,21 +1,12 @@
-import chalk from 'chalk';
-
 import { Config } from './converter/common';
 import { radians } from './math/rotation';
 import { BlendMode } from './objmdl/mdl/mdl';
-import { wowExportClient } from './wowexport-client/wowexport-client';
 
 // eslint-disable-next-line import/no-mutable-exports
 export const wowExportPath = {
   value: '',
 };
 export const assetPrefix = 'wow';
-
-wowExportClient.getConfig().then((config) => {
-  wowExportPath.value = config.exportDirectory;
-}).catch(() => {
-  console.error(chalk.red('Cannot connect to wow.export server, did you run it?'));
-});
 
 export const defaultConfig: Config = {
   assetPrefix,

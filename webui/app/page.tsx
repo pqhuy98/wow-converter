@@ -318,9 +318,9 @@ const validateRef = (ref: RefSchema, category: RefCategory): string | null => {
 
 const attackTagOptions = [
   { value: "all", label: "All", description: "Include all attack animations" },
-  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapons" },
+  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapon(s)" },
   { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
-  { value: "2HL", label: "2H Large Weapon", description: "The model uses e.g. polearm" },
+  { value: "2HL", label: "2HL Weapon", description: "The model uses a 2H polearm" },
   { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
   { value: "Bow", label: "Bow", description: "The model uses a bow" },
   { value: "Rifle", label: "Rifle", description: "The model uses a rifle" },
@@ -346,7 +346,7 @@ export default function WoWNPCExporter() {
     portraitCameraSequenceName: "Stand",
   })
 
-  const [outputFileName, setOutputFileName] = useState("")
+  const [outputFileName, setOutputFileName] = useState(getNpcNameFromWowheadUrl(character.base.value) ?? "")
   const [format, setFormat] = useState<Format>("mdx")
   const [optimization, setOptimization] = useState({
     sortSequences: true,
@@ -403,6 +403,7 @@ export default function WoWNPCExporter() {
 
     // Check output filename
     if (!outputFileName.trim()) return false
+    if (!isLocalRef(outputFileName)) return false
 
     // Check all attach items have valid references
     const attachItems = character.attachItems || {}
@@ -475,7 +476,16 @@ export default function WoWNPCExporter() {
             <CardContent className="space-y-4">
               <RefInput
                 value={character.base}
-                onChange={(base) => setCharacter({ ...character, base })}
+                onChange={(base) => {
+                  if (base.type==="wowhead") {
+                    // extract npc name from ...npc=1234/name
+                    const npcName = getNpcNameFromWowheadUrl(base.value)
+                    if (npcName) {
+                      setOutputFileName(npcName)
+                    }
+                  }
+                  setCharacter({ ...character, base })
+                }}
                 label="Base Model"
                 tooltipKey="baseModel"
                 category="npc"
@@ -1005,4 +1015,9 @@ export default function WoWNPCExporter() {
       </div>
     </div>
   )
+}
+
+function getNpcNameFromWowheadUrl(url: string) {
+  const npcName = url.split("/").pop()?.split("=").pop()
+  return npcName
 }

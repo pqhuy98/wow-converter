@@ -78,7 +78,7 @@ export class AssetManager {
       blp2Image(fromPath, toPath, 'blp');
       exportedTexturePaths.push(toPath);
     }
-    console.log('Exported textures to', assetPath);
+    console.log(`Exported ${exportedTexturePaths.length} textures`);
     return exportedTexturePaths;
   }
 
