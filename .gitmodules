@@ -1,0 +1,3 @@
+[submodule "wow.export"]
+	path = wow.export
+	url = https://github.com/pqhuy98/wow.export
