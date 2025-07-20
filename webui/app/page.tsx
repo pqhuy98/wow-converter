@@ -59,13 +59,13 @@ const tooltips = {
   attackAnimation: "Determines which attack animations the character will use.",
   characterSize: "How tall the character is in the game.",
   movementSpeed: "Base movement speed of the unit type",
-  scaleMultiplier: "Additional scale multiplier (1.0 = normal size, optional)",
+  scaleMultiplier: "Additional scale multiplier (1.0 = no change, optional)",
   keepCinematic: "Preserve cinematic animation sequences in the exported model. Warning: WoW models have many cinematic sequences, this significantly increases file size.",
   noDecay: "Do not automatically add Decay animations",
   portraitCamera: "Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.",
   itemReference: "The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.",
   attachmentPoint: "Where on the character model this item will be attached",
-  itemScale: "Scale multiplier for this specific item (1.0 = normal size)",
+  itemScale: "Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.",
 }
 
 enum WoWAttachmentID {
@@ -341,6 +341,7 @@ const portraitSuggestions = ["Stand", "Stand Ready"]
 export default function WoWNPCExporter() {
   const [character, setCharacter] = useState<Character>({
     base: { type: "wowhead", value: "https://www.wowhead.com/npc=88002/highlord-darion-mograine" },
+    size: "hero",
     inGameMovespeed: 270,
     attachItems: {},
     portraitCameraSequenceName: "Stand",
@@ -459,8 +460,8 @@ export default function WoWNPCExporter() {
       <div className="max-w-6xl mx-auto space-y-4">
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold text-gray-900">Huy's wow-converter</h1>
-          <p className="text-lg text-gray-600">Easily export World of Warcraft NPC models</p>
-          <p className="text-lg text-gray-600">Written by <b>pqhuy98</b> - <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer">"wc3-sandbox"</a></p>
+          <p className="text-lg text-gray-600">Easily export WoW NPC models into Warcraft 3 MDL/MDX</p>
+          <span className="text-lg text-gray-600">Created by <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer">wc3-sandbox</a></span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -716,7 +717,7 @@ export default function WoWNPCExporter() {
                 <Sword className="h-5 w-5" />
                 Attached Items
               </CardTitle>
-              <CardDescription>Add weapons, armor, and other items to attach to the character</CardDescription>
+              <CardDescription>Add weapons and other items to attach to the character</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-3">
@@ -933,6 +934,17 @@ export default function WoWNPCExporter() {
                   />
                   <Label htmlFor="removeUnusedMaterials" className="text-sm">
                     Optimize Materials
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="optimizeKeyFrames"
+                    disabled
+                    checked={true}
+                  />
+                  <Label htmlFor="optimizeKeyFrames">
+                    Optimize Key Frames
                   </Label>
                 </div>
               </div>
