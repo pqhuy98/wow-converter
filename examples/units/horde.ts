@@ -29,9 +29,6 @@ async function varokSaurfang() {
     },
     inGameMovespeed: 270,
   }, 'varok-saurfang');
-  mdl.modify
-    .setWowAttachmentScale(WoWAttachmentID.ShoulderLeft, 1.75)
-    .setWowAttachmentScale(WoWAttachmentID.ShoulderRight, 1.75);
   mdl.sequences = mdl.sequences.filter((s) => [
     'Swim', 'Fast', 'Hit', 'Spin', 'Sleep',
   ].every((str) => !s.name.includes(str)));
@@ -59,11 +56,6 @@ async function korkronGeneral() {
       },
       inGameMovespeed: 270,
     }, `korkron-general-${url.split('/').pop()!.split('.')[0]}`);
-    if (!url.includes('30752')) {
-      mdl.modify
-        .setWowAttachmentScale(WoWAttachmentID.ShoulderLeft, 1.75)
-        .setWowAttachmentScale(WoWAttachmentID.ShoulderRight, 1.75);
-    }
 
     mdl.sequences = mdl.sequences.filter((s) => [
       'Swim', 'Fast', 'Hit', 'Spin', 'Sleep',
