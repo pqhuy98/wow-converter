@@ -19,9 +19,9 @@ async function main() {
   console.log('Starting scourgeWowhead');
   await scourgeWowhead();
   console.log('Starting scourge');
-  scourge();
+  await scourge();
 }
 
 if (require.main === module) {
-  void main();
+  void main().then(() => process.exit(0));
 }

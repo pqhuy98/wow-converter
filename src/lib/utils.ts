@@ -119,6 +119,7 @@ export function toMap<T, K extends(keyof T)>(array: T[], key: K) {
 }
 
 export function waitUntil(condition: () => boolean) {
+  if (condition()) return Promise.resolve(true);
   return new Promise((resolve) => {
     const interval = setInterval(() => {
       if (condition()) {

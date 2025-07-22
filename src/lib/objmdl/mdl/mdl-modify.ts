@@ -176,7 +176,7 @@ export class MDLModify {
     const distanceScale = {
       Head: 3,
       Chest: 2,
-      Root: 1.5,
+      Root: 1,
     }[cameraBone.name]!;
 
     const cameraPosition = V3.sum(nodePos, [
@@ -386,10 +386,10 @@ export class MDLModify {
   addMdlItemToBone(item: MDL, boneName: string) {
     const attachmentBone = this.mdl.bones.find((b) => b.name === boneName);
     if (!attachmentBone) {
-      console.error(chalk.red(`Cannot find bone "${boneName}" for attachment.`));
+      console.error(chalk.red(`Cannot find bone "${boneName}" to attach item "${path.basename(item.model.name)}".`));
       return this;
     }
-    console.log('Attach item', path.basename(item.model.name), 'to bone', attachmentBone.name);
+    console.log(`Attach item "${path.basename(item.model.name)}" to bone "${attachmentBone.name}"`);
 
     item.bones.forEach((b) => {
       if (!b.parent) {
@@ -613,28 +613,162 @@ export class MDLModify {
     return maxZ;
   }
 
-  estimateAttackDamagePoint() {
-    // loop through all Attack sequences, get timestamp when max X of all vertices at timestamp 0.1, 0.2,... of the sequence
-    // interval.
-    // return the average of the timestamps
-    const timestamps: number[] = [];
-    this.mdl.sequences.filter((s) => /$Attack [0-9]+^/.test(s.name)).forEach((s) => {
-      console.log(s.name);
-      let maxX = -Infinity;
-      let maxXTimestamp = 0;
-      const tstamps = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-      tstamps.forEach((t) => {
-        const timestamp = t * (s.interval[1] - s.interval[0]);
-        iterateNodesAtTimestamp(this.mdl, s, timestamp, (node, value) => {
-          if (value.position[0] > maxX) {
-            maxX = value.position[0];
-            maxXTimestamp = timestamp;
+  // TODO: this doesn't work with Undead character!!
+  computeWalkMovespeed() {
+    const debug = false;
+
+    this.mdl.sequences.forEach((seq) => {
+      if (seq.movementSpeed === 0 && ([
+        'Walk', 'Run', 'Sprint', 'FlyWalk',
+      ].includes(seq.data.wowName))) {
+        console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
+        const walkSeq = seq;
+        const SAMPLE_STEPS = 30;
+
+        // -------------------------------------------------------------------
+        // 1. Sample frames and capture node positions
+        // -------------------------------------------------------------------
+        type FrameEntry = { node: Node; position: Vector3 };
+        type FrameInfo = { entries: FrameEntry[]; time: number };
+
+        const frames: FrameInfo[] = [];
+
+        let globalMin: Vector3 = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+        let globalMax: Vector3 = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+        for (let i = 0; i <= SAMPLE_STEPS; i += 1) {
+          const t = walkSeq.interval[0] + ((walkSeq.interval[1] - walkSeq.interval[0]) * i) / SAMPLE_STEPS;
+          const entries: FrameEntry[] = [];
+
+          iterateNodesAtTimestamp(this.mdl, walkSeq, t, (node: Node, value) => {
+            entries.push({ node, position: value.position });
+            globalMin = V3.min(globalMin, value.position);
+            globalMax = V3.max(globalMax, value.position);
+          });
+
+          frames.push({ entries, time: t });
+        }
+
+        // -------------------------------------------------------------------
+        // 2. Derive tolerances
+        // -------------------------------------------------------------------
+        const diag = Math.hypot(
+          globalMax[0] - globalMin[0],
+          globalMax[1] - globalMin[1],
+          globalMax[2] - globalMin[2],
+        );
+        const groundTolerance = diag * 0.02; // 10% of model size
+        const zStableTolerance = diag * 0.02; // 2% of model size
+
+        const legs = this.mdl.bones.filter((b) => b.name.startsWith('Leg'));
+        const legChildren = new Set<Node>(legs);
+        if (legChildren.size > 0) {
+          for (const bone of this.mdl.bones) {
+            if (legChildren.has(bone)) continue;
+            let cur = bone.parent;
+            while (cur) {
+              if (legChildren.has(cur)) {
+                legChildren.add(bone);
+                break;
+              }
+              cur = cur.parent;
+            }
           }
+        }
+        debug && console.log(this.mdl.model.name, 'bones below legs:', legChildren.size);
+
+        // -------------------------------------------------------------------
+        // 3. Detect contacts with Z-stability check
+        // -------------------------------------------------------------------
+        const contactXs: number[] = [];
+        const contactFrameTimes: number[] = [];
+        const contactFrameIndices: number[] = [];
+        const contactFrameContactCount: number[] = [];
+        const prevZ = new Map<Node, number>();
+
+        const contactFlags: boolean[] = [];
+
+        const contactBones = new Set<Node>();
+
+        let prevTime = 0;
+        frames.forEach(({ entries, time }, frameIdx) => {
+          const timeDeltaS = (time - prevTime) / 1000;
+          entries.forEach(({ node, position }) => {
+            const isLeg = legChildren.size === 0 || legChildren.has(node);
+            const stableZ = !prevZ.has(node) || Math.abs(position[2] - prevZ.get(node)!) / timeDeltaS <= zStableTolerance;
+            if (stableZ && Math.abs(position[2]) <= groundTolerance && isLeg) {
+              contactXs.push(position[0]);
+              contactBones.add(node);
+              if (!contactFlags[frameIdx]) {
+                contactFlags[frameIdx] = true;
+                contactFrameTimes.push(time);
+                contactFrameIndices.push(frameIdx);
+                contactFrameContactCount[frameIdx] = 1;
+              } else {
+                contactFrameContactCount[frameIdx] += 1;
+              }
+            }
+            prevZ.set(node, position[2]);
+          });
+          prevTime = time;
         });
-      });
-      timestamps.push(maxXTimestamp);
+
+        debug && console.log(this.mdl.model.name, 'contact bones:', [...contactBones].map((b) => b.name));
+
+        // -------------------------------------------------------------------
+        // 4. Outlier removal (trim 5 % at each end)
+        // -------------------------------------------------------------------
+        let minContactX = Number.POSITIVE_INFINITY;
+        let maxContactX = Number.NEGATIVE_INFINITY;
+
+        if (contactXs.length >= 2) {
+          const sorted = [...contactXs].sort((a, b) => a - b);
+          const trim = Math.floor(sorted.length * 0.05);
+          const trimmed = sorted.slice(trim, sorted.length - trim || undefined);
+          minContactX = Math.min(...trimmed);
+          maxContactX = Math.max(...trimmed);
+        }
+
+        const strideLength = maxContactX - minContactX;
+
+        // -------------------------------------------------------------------
+        // 5. Duration – sum of intervals where consecutive frames both have contact
+        // -------------------------------------------------------------------
+        let durationMs = 0;
+        if (contactFrameTimes.length >= 2) {
+          for (let i = 0; i < contactFrameIndices.length - 1; i += 1) {
+            if (contactFrameIndices[i + 1] === contactFrameIndices[i] + 1) {
+              durationMs += contactFrameTimes[i + 1] - contactFrameTimes[i];
+            }
+          }
+        }
+        if (durationMs === 0) {
+          durationMs = walkSeq.interval[1] - walkSeq.interval[0];
+        }
+        const strideDurationSeconds = durationMs / 2 / 1000; // divide by 2 because each feet moves forward then backward
+        debug && console.log(this.mdl.model.name, seq.name, 'contact durationMs', durationMs, 'stride duration S', strideDurationSeconds);
+
+        const moveSpeed = strideDurationSeconds > 0 ? strideLength / strideDurationSeconds : 0;
+        if (debug) {
+          console.log(seq.interval);
+          console.log(contactFrameTimes);
+          console.log(contactFrameContactCount);
+          console.log({
+            groundTolerance,
+            zStableTolerance,
+            minContactX,
+            maxContactX,
+            strideLength,
+            strideDurationSeconds,
+            moveSpeed,
+          });
+        }
+        if (moveSpeed > 0 && moveSpeed < diag) {
+          walkSeq.movementSpeed = moveSpeed;
+        }
+      }
     });
-    return timestamps.reduce((a, b) => a + b, 0) / timestamps.length;
+    return this;
   }
 
   removeWowSequence(wowName: string, variant?: number) {
@@ -643,12 +777,12 @@ export class MDLModify {
   }
 
   useWalkSequenceByWowName(wowName: WowAnimName) {
-    const walkSeq = this.mdl.sequences.find((s) => s.name === 'Walk');
-    if (walkSeq) {
-      walkSeq.name = `Cinematic ${walkSeq.data.wowName}`;
-    }
     const seq = this.mdl.sequences.find((s) => s.data.wowName === wowName);
     if (seq) {
+      const walkSeq = this.mdl.sequences.find((s) => s.name === 'Walk');
+      if (walkSeq) {
+        walkSeq.name = `Cinematic ${walkSeq.data.wowName}`;
+      }
       seq.name = 'Walk';
     }
     return this;

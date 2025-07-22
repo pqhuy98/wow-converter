@@ -328,7 +328,7 @@ const attackTagOptions = [
 ]
 
 const sizeOptions = [
-  { value: "none", label: "Default", description: "Original WoW size times 30" },
+  { value: "none", label: "Default", description: "Original WoW size times 60" },
   { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
   { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
   { value: "large", label: "Large", description: "As tall as Undead Abomination" },

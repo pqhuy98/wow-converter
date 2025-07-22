@@ -11,7 +11,7 @@ export const ceConfig: Config = {
   assetPrefix: 'wow',
   rawModelScaleUp: defaultConfig.rawModelScaleUp * 2,
 };
-export const ceOutputPath = 'dist/exported-assets';
+export const ceOutputPath = 'exported-assets';
 fsExtra.ensureDirSync(ceOutputPath);
 
 export const ce = new CharacterExporter(ceOutputPath, ceConfig);

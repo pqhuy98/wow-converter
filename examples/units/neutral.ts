@@ -1,3 +1,4 @@
+import esMain from 'es-main';
 import { writeFileSync } from 'fs';
 
 import { displayID, local, wowhead } from '@/lib/converter/character';
@@ -5,8 +6,8 @@ import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 
 import { ce } from './common';
 
-function bolvarIcc() {
-  ce.exportCharacter({
+async function bolvarIcc() {
+  await ce.exportCharacter({
     base: local('creature\\lavaman\\lavaman'),
     inGameMovespeed: 270,
     attackTag: '2H',
@@ -39,7 +40,7 @@ async function wolf() {
 }
 
 export async function main() {
-  bolvarIcc();
+  await bolvarIcc();
   await wolf();
   ce.assetManager.exportTextures(ce.outputPath);
   ce.models.forEach(([model, path]) => {
@@ -54,6 +55,6 @@ export async function main() {
   });
 }
 
-if (require.main === module) {
-  void main();
+if (esMain(import.meta)) {
+  void main().then(() => process.exit(0));
 }

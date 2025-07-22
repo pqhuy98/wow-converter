@@ -103,22 +103,22 @@ export async function exportCreatureModels(
   outputPath: string,
   config: Config,
 ) {
+  const debug = false;
   let cnt = 0;
   const exportedDisplayIds = new Set<number>();
 
   const batchSize = 5;
   for (let i = 0; i < creatures.length; i += batchSize) {
     const batch = creatures.slice(i, i + batchSize);
-    // eslint-disable-next-line no-loop-func
     await Promise.all(batch.map(async (c) => {
       cnt++;
-      const displayId = batch[0].model.CreatureDisplayID;
+      const displayId = c.model.CreatureDisplayID;
       if (!displayId) {
         throw new Error(`No display id found for creature template ${c.template.entry}`);
       }
 
       if (existsSync(join(outputPath, `creature-${displayId}.mdx`)) && !config.overrideModels) {
-        console.log('Skipping file already exists', chalk.yellow(`creature-${displayId}.mdx`));
+        debug && console.log('Skipping file already exists', chalk.yellow(`creature-${displayId}.mdx`));
         return;
       }
 
@@ -170,7 +170,6 @@ export async function exportCreatureModels(
           .removeUnusedVertices()
           .removeUnusedNodes()
           .removeUnusedMaterialsTextures()
-          .removeCinematicSequences()
           .optimizeKeyFrames();
         model.sync();
         writeFileSync(`${path}.mdx`, model.toMdx());

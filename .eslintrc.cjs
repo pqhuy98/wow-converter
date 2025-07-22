@@ -34,6 +34,7 @@ module.exports = {
     },
   ],
   rules: {
+    'no-loop-func': 'off',
     "@typescript-eslint/no-shadow": "off",
     "no-multi-assign": "off",
     "import/no-cycle": "off",

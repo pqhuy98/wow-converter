@@ -471,8 +471,7 @@ export enum WoWAttachmentID {
 }
 
 // Only map WoW attachment points that have a valid WC3 equivalent.
-// See AttachmentPointBones for valid WC3 keys.
-// E.g. WoW ArmL/ArmR do not exist in WC3, so we use Medium/Large as proxies.
+// E.g. WoW ShoulderRight/ShoulderLeft do not exist in WC3, so we use Medium/Large as proxies.
 export const WoWToWC3AttachmentMap: Partial<Record<WoWAttachmentID, string>> = {
   [WoWAttachmentID.Head]: 'Head',
   [WoWAttachmentID.HandRight]: 'Hand Right',
@@ -486,9 +485,6 @@ export const WoWToWC3AttachmentMap: Partial<Record<WoWAttachmentID, string>> = {
   [WoWAttachmentID.Base]: 'Origin',
   // Add more as needed
 };
-
-// Note: AttachmentBones has been removed as we now use dynamic attachments from metadata
-// The attachment system now creates bones and attachment points based on the JSON metadata
 
 export function getBoneName(bone_id: number, index: number, crc: number) {
   if (bone_id in BONE_NAMES) return BONE_NAMES[bone_id];

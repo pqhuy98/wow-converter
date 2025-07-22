@@ -73,7 +73,7 @@ export class WowObjectManager {
   }
 
   private relative(fullPath: string) {
-    return fullPath.replaceAll(wowExportPath.value, '');
+    return path.relative(wowExportPath.value, fullPath);
   }
 
   private full(relativePath: string) {

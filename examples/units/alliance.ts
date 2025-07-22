@@ -1,3 +1,4 @@
+import esMain from 'es-main';
 import { writeFileSync } from 'fs';
 
 import { local, wowhead } from '@/lib/converter/character';
@@ -62,7 +63,6 @@ export async function main() {
       .removeUnusedVertices()
       .removeUnusedNodes()
       .removeUnusedMaterialsTextures()
-      .removeCinematicSequences()
       .optimizeKeyFrames();
     model.sync();
     // model.sequences.sort((s1, s2) => s1.interval[0] - s2.interval[0])
@@ -76,6 +76,6 @@ export async function main() {
   console.log('Alliance done');
 }
 
-if (require.main === module) {
-  void main();
+if (esMain(import.meta)) {
+  void main().then(() => process.exit(0));
 }

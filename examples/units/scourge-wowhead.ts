@@ -1,3 +1,4 @@
+import esMain from 'es-main';
 import fs from 'fs-extra';
 
 import { wowhead } from '@/lib/converter/character';
@@ -118,7 +119,6 @@ export async function main() {
       .removeUnusedVertices()
       .removeUnusedNodes()
       .removeUnusedMaterialsTextures()
-      .removeCinematicSequences()
       .optimizeKeyFrames();
     model.sync();
     // model.sequences.sort((s1, s2) => s1.interval[0] - s2.interval[0])
@@ -155,6 +155,6 @@ function hideWeapon(mdl: MDL, attachmentId: WoWAttachmentID, sequenceNames: stri
   };
 }
 
-if (require.main === module) {
-  void main();
+if (esMain(import.meta)) {
+  void main().then(() => process.exit(0));
 }

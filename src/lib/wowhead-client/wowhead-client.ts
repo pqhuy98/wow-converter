@@ -147,6 +147,8 @@ export const baseUrls = [
   'https://wow.zamimg.com/modelviewer/wrath',
 ];
 
+const debug = false;
+
 async function fetchJson(url: string) {
   for (const baseUrl of baseUrls) {
     try {
@@ -202,7 +204,9 @@ export async function processItemData(
   if (slotId === -1) {
     url = `/meta/item/${itemDisplayId}.json`;
   }
+  debug && console.log('Fetching item data for', url);
   const armorData = await fetchJson(url) as ItemData;
+  debug && console.log('Fetched item data successfully for', itemDisplayId);
   return {
     modelFiles: filterFilesByRaceGender(armorData.ModelFiles || {}, targetRace, targetGender),
     textureFiles: [
@@ -238,10 +242,13 @@ export { EquipmentSlot };
 export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparation> {
   // Fetch NPC metadata only ONCE.
   const npcMetaUrl = `/meta/npc/${npcId}.json`;
+  debug && console.log('Fetching NPC metadata for', npcMetaUrl);
   const npcData = await fetchJson(npcMetaUrl) as NPCData;
+  debug && console.log('Fetched NPC metadata successfully for', npcId);
 
   // ==== Character-based NPC ====
   if (npcData.Character) {
+    debug && console.log('Processing character-based NPC', npcId);
     const character = npcData.Character;
     const characterData = {
       character,
@@ -303,7 +310,7 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
 
   // ==== Model-only NPC ====
   if (npcData.Model) {
-    // Lazy import wowExportClient to avoid potential circular deps
+    debug && console.log('Processing model-only NPC', npcId);
 
     const modelId: number = npcData.Model;
     const textureIds: number[] = npcData.Textures ? Object.values(npcData.Textures) : [];
@@ -334,6 +341,8 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
         });
       }
     }
+
+    debug && console.log('PrepareNpcExport done', { modelId, skinName });
 
     return {
       type: 'model',

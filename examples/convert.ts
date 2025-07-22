@@ -1,11 +1,12 @@
 import assert from 'assert';
 import chalk from 'chalk';
 import { existsSync, rmSync, writeFileSync } from 'fs';
-import { copySync } from 'fs-extra';
+import fsExtra from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
 
 import { dataHeightToGameZ, maxGameHeightDiff } from '@/lib/utils';
+import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import {
   DoodadsTranslator, ObjectsTranslator, TerrainTranslator, UnitsTranslator,
 } from '@/vendors/wc3maptranslator';
@@ -27,16 +28,20 @@ import { radians } from '../src/lib/math/rotation';
 import { V3 } from '../src/lib/math/vector';
 import { generateFourCC } from '../src/lib/utils';
 
+const mapIds = {
+  Azeroth: 0,
+  Northrend: 571,
+  Outland: 530,
+};
+
 const paths = [
   // '**/northrend/adt_*_*.obj',
-  ...buildPaths('**/azeroth', [22, 26], [39, 43]),
-  // ...buildPaths('**/expansion01', [26, 30], [30, 33]),
+  // ...buildPaths('**/azeroth', [22, 26], [39, 43]),
+  ...buildPaths('**/northrend', [33, 34], [24, 25]),
 ];
-const mapId = 0; // azeroth
-// const mapId = 571; // northrend
-// const mapId = 530; // outland
+const mapId = mapIds.Northrend;
 // const mapPath = 'maps/andorhal.w3x';
-const mapPath = 'maps/vashjir.w3x';
+const mapPath = 'maps/naxxramas.w3x';
 
 const assetPrefix = 'wow';
 
@@ -44,11 +49,11 @@ const config: Config = {
   ...defaultConfig,
   assetPrefix,
   terrainHeightClampPercent: {
-    lower: 0,
-    upper: 1,
+    // lower: 0,
+    // upper: 1,
 
-    // lower: gameZToPercent(1450),
-    // upper: gameZToPercent(1400),
+    lower: gameZToPercent(-600),
+    upper: gameZToPercent(800),
   },
   pitchRollThresholdRadians: radians(99),
   waterZThreshold: -2000,
@@ -92,6 +97,7 @@ function gameZToPercent(z: number) {
 }
 
 async function main() {
+  await wowExportClient.waitUntilReady();
   const { write } = await generate(paths);
   await write({ mapPath });
 }
@@ -154,7 +160,7 @@ export async function generate(adtPatterns: string[]) {
     write: async ({ mapPath }: {mapPath: string}) => {
       assert.ok(mapPath.startsWith('maps/'));
       if (!existsSync(mapPath)) {
-        copySync('maps/template-empty.w3x', mapPath);
+        fsExtra.copySync('maps/template-empty.w3x', mapPath);
       }
       wowObjectManager.assetManager.exportModels(mapPath);
       wowObjectManager.assetManager.exportTextures(mapPath);
@@ -229,8 +235,8 @@ export async function generateUnitsData(
   const makeUnitType = (c: Creature): string => {
     const typeId = generateFourCC('lower').codeString;
     unitObjectsData.custom[`${typeId}:hfoo`] = [
-      { id: 'unam', type: ModificationType.string, value: c.template.subname || c.template.name },
-      { id: 'upro', type: ModificationType.string, value: c.template.name || c.template.subname },
+      { id: 'unam', type: ModificationType.string, value: c.template.name || c.template.subname },
+      // { id: 'upro', type: ModificationType.string, value: c.template.name || c.template.subname },
       { id: 'umdl', type: ModificationType.string, value: `creature-${c.model.CreatureDisplayID}.mdx` },
       { id: 'uabi', type: ModificationType.string, value: '' },
       { id: 'usca', type: ModificationType.real, value: scale * c.model.DisplayScale },

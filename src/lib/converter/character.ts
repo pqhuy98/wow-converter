@@ -16,6 +16,7 @@ import {
   ANIM_NAMES, AttackTagSchema, getWc3AnimName, getWowAnimName,
 } from '../objmdl/animation/animation_mapper';
 import { MDL } from '../objmdl/mdl/mdl';
+import { waitUntil } from '../utils';
 import { Config } from './common';
 import { AssetManager } from './model-manager';
 
@@ -87,6 +88,7 @@ export class CharacterExporter {
 
   public async exportCharacter(char: Character, outputFile: string) {
     await wowExportClient.syncConfig();
+    await waitUntil(() => wowExportClient.isReady);
     const baseRef = char.base;
 
     if (baseRef.type === 'local') {
@@ -98,13 +100,19 @@ export class CharacterExporter {
       ? await getDisplayIdFromUrl(baseRef.value)
       : Number(baseRef.value);
 
-    return this.buildWowheadExport(displayId, char, outputFile);
+    return this.exportWowheadModel(displayId, char, outputFile);
+  }
+
+  public includeMdlToOutput(mdl: MDL, outputFile: string) {
+    const fullOutputFile = join(this.outputPath, outputFile);
+    this.models.push([mdl, fullOutputFile]);
   }
 
   private exportModel(char: Character, outputFile: string) {
     const start = performance.now();
+    console.log('Base model:', char.base.value);
     const model = this.assetManager.parse(char.base.value, true).mdl;
-    debug && console.log('parse took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+    debug && console.log('Parsed wow.export model took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
     if (char.attackTag != null) {
       model.sequences = model.sequences.filter((seq) => !char.attackTag || seq.data.attackTag === '' || seq.data.attackTag === char.attackTag);
@@ -128,6 +136,9 @@ export class CharacterExporter {
           model.modify.addMdlItemToBone(itemMdl, wowAttachment.bone.name);
         } else {
           console.error(chalk.red(`Cannot find bone for wow attachment ${wowAttachmentId}`));
+          if (model.wowAttachments.length === 0) {
+            console.error(chalk.red(`No WoW attachments data found in this model "${char.base.value}"`));
+          }
         }
       });
     }
@@ -137,7 +148,7 @@ export class CharacterExporter {
       const standSeq = model.sequences.find((seq) => seq.name === 'Stand') ?? model.sequences[0];
       if (standSeq) {
         const maxStandZ = model.modify.getMaxZAtTimestamp(standSeq, 0);
-        console.log(model.model.name, { wantedZ, maxStandZ });
+        debug && console.log(model.model.name, { wantedZ, maxStandZ });
         model.modify.scale((char.scale ?? 1) * wantedZ / maxStandZ);
       } else {
         throw new Error(`Cannot find Stand animation of model ${model.model.name}`);
@@ -155,58 +166,29 @@ export class CharacterExporter {
     }
 
     if (char.inGameMovespeed) {
-      const walkSequence = model.sequences.find((seq) => seq.name === 'Walk')!;
-      if (walkSequence) {
-        const scale = 1.1 * (walkSequence.movementSpeed || 450) / char.inGameMovespeed;
-        model.sequences.filter((seq) => seq.name.includes('Walk') && !seq.name.includes('Spin')).forEach((seq) => {
-          model.modify.scaleSequenceDuration(seq, scale);
-        });
-      }
+      model.sequences.filter((seq) => seq.movementSpeed > 0 && seq.name.includes('Walk')
+      && !seq.name.includes('Spin')
+      && !seq.name.includes('Swim')
+      && !seq.name.includes('Alternate')).forEach((seq) => {
+        debug && console.log(model.model.name, seq.name, 'old moveSpeed', seq.movementSpeed, 'new moveSpeed', char.inGameMovespeed);
+        const scale = seq.movementSpeed / char.inGameMovespeed; // duration is inverse of speed
+        model.modify.scaleSequenceDuration(seq, scale);
+        seq.movementSpeed = char.inGameMovespeed;
+      });
     }
 
     if (!char.noDecay) {
       model.modify.addDecayAnimation();
     }
-    this.addModelToExport(model, outputFile);
+    this.includeMdlToOutput(model, outputFile);
     return model;
-  }
-
-  public addModelToExport(mdl: MDL, outputFile: string) {
-    const fullOutputFile = join(this.outputPath, outputFile);
-    this.models.push([mdl, fullOutputFile]);
-  }
-
-  private equipmentToAttachmentMap: Partial<Record<EquipmentSlot, WoWAttachmentID[]>> = {
-    [EquipmentSlot.Head]: [WoWAttachmentID.Helm],
-    [EquipmentSlot.Shoulder]: [WoWAttachmentID.ShoulderLeft, WoWAttachmentID.ShoulderRight],
-  };
-
-  private attachModel(
-    attachItems: Record<number, AttachItem>,
-    equipSlot: EquipmentSlot,
-    model: [string, number] | undefined,
-  ): void {
-    if (!model) return;
-    const atts = this.equipmentToAttachmentMap[equipSlot];
-    if (atts && atts.length) attachItems[atts[0]] = { path: local(model[0]), scale: model[1] };
-  }
-
-  private attachShoulders(
-    attachItems: Record<number, AttachItem>,
-    left: [string, number] | undefined,
-    right: [string, number] | undefined,
-  ): void {
-    const atts = this.equipmentToAttachmentMap[EquipmentSlot.Shoulder];
-    if (!atts) return;
-    if (left) attachItems[atts[0]] = { path: local(left[0]), scale: left[1] };
-    if (right && atts.length > 1) attachItems[atts[1]] = { path: local(right[0]), scale: right[1] };
   }
 
   // ---------------------------------------------------------------------------
   // Wowhead export pipeline (handles both model-only and character exports)
   // ---------------------------------------------------------------------------
 
-  private async buildWowheadExport(
+  private async exportWowheadModel(
     npcDisplayId: number,
     originalChar: Character,
     outputFile: string,
@@ -370,12 +352,22 @@ export class CharacterExporter {
     const attachItems = await resolveAttachItems(originalChar.attachItems);
 
     // Equipment attachments
-    this.attachModel(attachItems, EquipmentSlot.Head, slotModelPaths.get(EquipmentSlot.Head.toString()));
-    this.attachShoulders(
-      attachItems,
-      slotModelPaths.get(EquipmentSlot.Shoulder.toString()),
-      slotModelPathsR.get(EquipmentSlot.Shoulder.toString()),
-    );
+    const equipmentToAttachmentMap: Partial<Record<EquipmentSlot, WoWAttachmentID[]>> = {
+      [EquipmentSlot.Head]: [WoWAttachmentID.Helm],
+      [EquipmentSlot.Shoulder]: [WoWAttachmentID.ShoulderLeft, WoWAttachmentID.ShoulderRight],
+    };
+    const attachItemModel = (
+      equipSlot: EquipmentSlot,
+      left: [string, number] | undefined,
+      right: [string, number] | undefined,
+    ) => {
+      const atts = equipmentToAttachmentMap[equipSlot];
+      if (!atts) return;
+      if (left) attachItems[atts[0]] = { path: local(left[0]), scale: left[1] };
+      if (right && atts.length > 1) attachItems[atts[1]] = { path: local(right[0]), scale: right[1] };
+    };
+    attachItemModel(EquipmentSlot.Head, slotModelPaths.get(EquipmentSlot.Head.toString()), undefined);
+    attachItemModel(EquipmentSlot.Shoulder, slotModelPaths.get(EquipmentSlot.Shoulder.toString()), slotModelPathsR.get(EquipmentSlot.Shoulder.toString()));
 
     // -----------------------------------------------------------------------
     // Final MDL export

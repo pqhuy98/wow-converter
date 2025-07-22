@@ -42,7 +42,7 @@ export class AssetManager {
       const fullPath = `${path.join(assetPath, this.config.assetPrefix, relativePath)}.${this.config.release ? 'mdx' : 'mdl'}`;
 
       if (!this.config.overrideModels && existsSync(fullPath)) {
-        console.log('Skipping model already exists', fullPath);
+        // console.log('Skipping model already exists', fullPath);
         continue;
       }
 

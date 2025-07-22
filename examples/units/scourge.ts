@@ -1,35 +1,61 @@
+import esMain from 'es-main';
 import { writeFileSync } from 'fs';
 
+import { CharacterExporter, local, wowhead } from '@/lib/converter/character';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 
-import { ce } from './common';
-import { local } from '@/lib/converter/character';
+import { ceConfig } from './common';
 
-export function bosses() {
-  ce.exportCharacter({
+const outputDir = './maps/demo.w3x/';
+const ce = new CharacterExporter(outputDir, ceConfig);
+
+export async function bosses() {
+  await ce.exportCharacter({
     base: local('creature\\ministerofdeath\\ministerofdeath'),
     inGameMovespeed: 270,
     size: 'hero',
   }, 'lady-deathwhisper');
 }
 
-export function items() {
-  [
+export async function items() {
+  await Promise.all([
     ['item\\objectcomponents\\weapon\\sword_1h_naxxramas_d_01', 'sword'],
     ['item\\objectcomponents\\head\\helm_plate_raiddeathknight_g_01_hum_helm_plate_raiddeathknight_g_01', 'helm'],
     ['item\\objectcomponents\\shoulder\\lshoulder_plate_raiddeathknight_g_01_shoulder_plate_raiddeathknight_g_01', 'shoulderL'],
     ['item\\objectcomponents\\shoulder\\rshoulder_plate_raiddeathknight_g_01', 'shoulderR'],
-  ].forEach(([base, outputFile]) => ce.exportCharacter({ base: local(base), inGameMovespeed: 0 }, outputFile));
+  ].map(([base, outputFile]) => ce.exportCharacter({ base: local(base), inGameMovespeed: 0 }, outputFile)));
 }
 
 export async function ghouls() {
   const models = await Promise.all([
-    ce.exportCharacter({ base: local('creature\\northrendgeist\\northrendgeist_green'), size: 'medium', inGameMovespeed: 270 }, 'geist'),
-    ce.exportCharacter({ base: local('creature\\ghoul2\\ghoul2grey'), size: 'medium', inGameMovespeed: 270 }, 'ghoul-1'),
-    ce.exportCharacter({ base: local('creature\\northrendghoul2\\northrendghoul2_grey'), size: 'medium', inGameMovespeed: 270 }, 'ghoul-2'),
-    ce.exportCharacter({ base: local('creature\\northrendghoul2spiked\\northrendghoul2spiked_northrendghoul2_blue'), size: 'large', inGameMovespeed: 270 }, 'ghoul-3'),
+    ce.exportCharacter({
+      base: local('creature\\northrendgeist\\northrendgeist_green'),
+      size: 'medium',
+      inGameMovespeed: 270,
+      keepCinematic: true,
+    }, 'geist'),
+    ce.exportCharacter({
+      base: local('creature\\ghoul2\\ghoul2grey'),
+      size: 'medium',
+      inGameMovespeed: 270,
+      keepCinematic: true,
+    }, 'ghoul-1'),
+    ce.exportCharacter({
+      base: local('creature\\northrendghoul2\\northrendghoul2_grey'),
+      size: 'medium',
+      inGameMovespeed: 270,
+      keepCinematic: true,
+    }, 'ghoul-2'),
+    ce.exportCharacter({
+      base: local('creature\\northrendghoul2spiked\\northrendghoul2spiked_northrendghoul2_blue'),
+      size: 'large',
+      inGameMovespeed: 270,
+      keepCinematic: true,
+    }, 'ghoul-3'),
   ]);
   models.forEach((model) => {
+    model.modify.useWalkSequenceByWowName('Walk');
+    // model.modify.removeCinematicSequences();
     model.modify.addEventObjectBySequenceName('SNDXDGHO', 'Death', 0);
   });
 }
@@ -48,7 +74,11 @@ export async function fleshGiants() {
   const models = await Promise.all([
     ce.exportCharacter({ base: local('creature\\northrendfleshgiant\\northrendfleshgiant01'), size: 'giant', inGameMovespeed: 270 }, 'flesh-giant'),
     ce.exportCharacter({ base: local('creature\\northrendfleshgiant\\northrendfleshgiant01frost'), size: 'giant', inGameMovespeed: 270 }, 'flesh-giant-frost'),
-    ce.exportCharacter({ base: local('creature\\icecrownfleshbeast\\icecrownfleshbeast_01'), size: 'giant', inGameMovespeed: 270 }, 'flesh-beast'),
+    ce.exportCharacter({
+      base: local('creature\\icecrownfleshbeast\\icecrownfleshbeast_01'),
+      size: 'giant',
+      inGameMovespeed: 0,
+    }, 'flesh-beast'),
   ]);
   models.forEach((model) => {
     model.modify.addEventObjectBySequenceName('SNDXDABO', 'Death', 0);
@@ -72,9 +102,14 @@ export async function skeletons() {
   camera.target.position = [34, 0, 90];
 
   const skeleton = await ce.exportCharacter({
-    base: local('creature\\skeletonnaked\\skeletonnakedskin_blue'), attackTag: 'Unarmed', size: 'medium', inGameMovespeed: 270,
+    base: local('creature\\skeletonnaked\\skeletonnakedskin_blue'),
+    attackTag: 'Unarmed',
+    size: 'medium',
+    keepCinematic: true,
+    inGameMovespeed: 0,
   }, 'skeleton');
   skeleton.modify.addEventObjectBySequenceName('SNDXDSKE', 'Death', 0);
+
   const skeletonMage = await ce.exportCharacter({ base: local('creature\\skeletonmage\\skeletonmage'), size: 'medium', inGameMovespeed: 270 }, 'skeleton-mage');
   skeletonMage.modify.addEventObjectBySequenceName('SNDXDSKE', 'Death', 0);
 
@@ -142,9 +177,11 @@ export async function vrykul() {
     base: local('creature\\zombiefiedvrykul\\zombiefiedvrykul1pale'),
     size: 'large',
     inGameMovespeed: 270,
+    keepCinematic: true,
     attackTag: 'Unarmed',
   }, 'vrykul-zombie');
   zombieVrykul.modify.useWalkSequenceByWowName('Walk');
+  zombieVrykul.modify.removeCinematicSequences();
 
   const vrykulWarrior = await ce.exportCharacter({
     base: local('creature\\frostvrykulmale\\frostvrykulmaleskin'),
@@ -162,19 +199,29 @@ export async function vrykul() {
     .removeWowSequence('AttackOff', 0);
 }
 
-export function main() {
-  ghouls()
-  abominations()
-  fleshGiants();
-  skeletons();
-  cryptFiends();
-  vrykul()
-  items()
-  bosses();
-  doodads()
-  spells()
-  zombies();
-  fleshGiantCorpse();
+export async function frostWyrm() {
+  const mdl = await ce.exportCharacter({
+    base: wowhead('https://www.wowhead.com/npc=111640/frost-wyrm'),
+    inGameMovespeed: 270,
+    size: 'giant',
+  }, 'frost-wyrm');
+  mdl.modify.removeUnusedNodes();
+}
+
+export async function main() {
+  await ghouls();
+  await abominations();
+  await fleshGiants();
+  await skeletons();
+  await cryptFiends();
+  await vrykul();
+  await items();
+  await bosses();
+  await doodads();
+  await spells();
+  await zombies();
+  await fleshGiantCorpse();
+  await frostWyrm();
 
   ce.assetManager.exportTextures(ce.outputPath);
   ce.models.forEach(([model, path]) => {
@@ -183,17 +230,13 @@ export function main() {
       .removeUnusedVertices()
       .removeUnusedNodes()
       .removeUnusedMaterialsTextures()
-      .removeCinematicSequences()
       .optimizeKeyFrames();
     model.sync();
-    // model.sequences.sort((s1, s2) => s1.interval[0] - s2.interval[0])
-    // model.sequences.forEach(s => s.name += " " + s.data.wowName)
-    // writeFileSync(path + ".mdl", model.toString())
     writeFileSync(`${path}.mdx`, model.toMdx());
     console.log('Wrote character model to', path);
   });
 }
 
-if (require.main === module) {
-  main();
+if (esMain(import.meta)) {
+  void main().then(() => process.exit(0));
 }

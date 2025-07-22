@@ -130,6 +130,11 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
         if (!vMap.has(v.vertexIndex)) {
           const objN = obj.models[0].vertexNormals[v.vertexNormalIndex - 1];
           const objT = obj.models[0].textureCoords[v.textureCoordsIndex - 1];
+          if (!objT) {
+            console.error('No texture coords found for vertex', v.vertexIndex, 'in', objFilePath);
+            console.error('obj.models[0].textureCoords.length', obj.models[0].textureCoords.length);
+            console.error('obj.models[0].textureCoords - 1', v.textureCoordsIndex - 1);
+          }
 
           let skinWeights: SkinWeight[] | undefined;
           let matrix: Matrix | undefined;
@@ -181,6 +186,10 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
   start = performance.now();
   mdl.modify.addWc3AttachmentPoint();
   debug && console.log('addWc3AttachmentPoint took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+
+  start = performance.now();
+  mdl.modify.computeWalkMovespeed();
+  debug && console.log('computeWalkMovespeed took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   return { mdl, texturePaths };
 }

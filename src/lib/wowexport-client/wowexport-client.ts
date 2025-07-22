@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import { Socket } from 'net';
 
 import { wowExportPath } from '../global-config';
+import { waitUntil } from '../utils';
 
 // Type definitions
 export interface ServerInfo {
@@ -81,9 +82,9 @@ export interface RCPResponse {
 
 export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COMPLETE';
 
-export class WowExportClient extends EventEmitter {
-  public debug = false;
+const debug = false;
 
+export class WowExportClient extends EventEmitter {
   private socket: Socket;
 
   private buffer: string = '';
@@ -96,6 +97,10 @@ export class WowExportClient extends EventEmitter {
 
   public get isReady() {
     return this.status.connected && this.status.configLoaded && this.status.cascLoaded;
+  }
+
+  public async waitUntilReady() {
+    return waitUntil(() => this.isReady);
   }
 
   constructor(host: string = 'localhost', port: number = 17751) {
@@ -114,7 +119,7 @@ export class WowExportClient extends EventEmitter {
           }
           if (!this.status.configLoaded) {
             const config = await this.getConfig();
-            wowExportPath.value = config.exportDirectory;
+            wowExportPath.value = config.exportDirectory.replace('\\', '/');
             this.status.configLoaded = true;
             console.log(chalk.green('✅ Retrieved wow.export asset dir:'), chalk.gray(wowExportPath.value));
             failedAttempts = 0;
@@ -162,11 +167,11 @@ export class WowExportClient extends EventEmitter {
     this.socket.on('close', () => this.onConnectionClose());
 
     return new Promise((resolve, reject) => {
-      this.debug && console.log(`Connecting to wow.export RCP at [${host}]:${port}`);
+      debug && console.log(`Connecting to wow.export RCP at [${host}]:${port}`);
 
       this.socket.connect(port, host, () => {
         this.status.connected = true;
-        this.debug && console.log('Connected to wow.export RCP server');
+        debug && console.log('Connected to wow.export RCP server');
         this.socket.on('error', () => {
           this.status.connected = false;
           this.status.configLoaded = false;
@@ -294,7 +299,9 @@ export class WowExportClient extends EventEmitter {
     const json = JSON.stringify(data);
     const message = `${json.length}\0${json}`;
     this.socket.write(message);
-    this.debug && console.log(`→ ${data.id} (${json.length} bytes)`);
+    if (debug && data.id !== 'CONFIG_SET') {
+      debug && console.log(`→ ${data.id} (${json.length} bytes)`);
+    }
   }
 
   /**
@@ -326,7 +333,9 @@ export class WowExportClient extends EventEmitter {
         const messageData = this.buffer.substring(offset, offset + size);
         const json: RCPResponse = JSON.parse(messageData);
 
-        this.debug && console.log(`← ${json.id} (${size} bytes)`);
+        if (debug && json.id !== 'CONFIG_SET_DONE') {
+          debug && console.log(`← ${json.id} (${size} bytes)`);
+        }
         // Emit the message with both the specific ID and generic 'response' event
         this.emit(json.id, json);
         this.emit('response', json);
@@ -346,7 +355,7 @@ export class WowExportClient extends EventEmitter {
      * Handle connection close
      */
   private onConnectionClose(): void {
-    this.debug && console.log('Connection to wow.export RCP server closed');
+    debug && console.log('Connection to wow.export RCP server closed');
     this.status.connected = false;
     this.status.configLoaded = false;
     this.status.cascLoaded = false;
@@ -581,7 +590,7 @@ export class WowExportClient extends EventEmitter {
 
     if (response.id === 'EXPORT_START') {
       const exportInfo = response as unknown as ExportInfo;
-      this.debug && console.log(`Export started with ID: ${exportInfo.exportID}`);
+      debug && console.log(`Export model started with ID: ${exportInfo.exportID}`);
       exportID = exportInfo.exportID;
 
       // Emit a synthetic event to re-evaluate any events that arrived before exportID was known
@@ -619,7 +628,7 @@ export class WowExportClient extends EventEmitter {
 
     if (response.id === 'EXPORT_START') {
       const exportInfo = response as unknown as ExportInfo;
-      this.debug && console.log(`Export started with ID: ${exportInfo.exportID}`);
+      debug && console.log(`Export textures started with ID: ${exportInfo.exportID}`);
       exportID = exportInfo.exportID;
 
       // Emit a synthetic event to re-evaluate any events that arrived before exportID was known
@@ -664,7 +673,7 @@ export class WowExportClient extends EventEmitter {
 
     if (response.id === 'EXPORT_START') {
       const exportInfo = response as unknown as ExportInfo;
-      this.debug && console.log(`Character export started with ID: ${exportInfo.exportID}`);
+      debug && console.log(`Export character started with ID: ${exportInfo.exportID}`);
       exportID = exportInfo.exportID;
 
       // Emit a synthetic event to re-evaluate any events that arrived before exportID was known
@@ -682,7 +691,7 @@ export class WowExportClient extends EventEmitter {
     return new Promise((resolve) => {
       const pending: unknown[] = [];
       const eventHandler = (eventData: any) => {
-        this.debug && console.log('hookEvent eventData', eventData);
+        debug && console.log(`Recevied hook event "${eventData.hookID}"`);
         const result = matcher(eventData);
         if (result === 'not ready') {
           pending.push(eventData);
@@ -798,18 +807,18 @@ export class WowExportClient extends EventEmitter {
      * @returns Promise with CASC information
      */
   async initializeCASC(installPath: string, buildIndex: number = 0): Promise<CASCInfo> {
-    this.debug && console.log('Loading CASC from local installation...');
+    debug && console.log('Loading CASC from local installation...');
     const builds = await this.loadCASCLocal(installPath);
 
-    this.debug && console.log(`Found ${builds.length} builds`);
+    debug && console.log(`Found ${builds.length} builds`);
     if (builds.length === 0) {
       throw new Error('No builds found in installation');
     }
 
-    this.debug && console.log(`Loading build ${buildIndex}: ${builds[buildIndex]?.Product || 'Unknown'}`);
+    debug && console.log(`Loading build ${buildIndex}: ${builds[buildIndex]?.Product || 'Unknown'}`);
     const cascInfo = await this.loadCASCBuild(buildIndex);
 
-    this.debug && console.log(`CASC loaded: ${cascInfo.buildName} (${cascInfo.buildKey})`);
+    debug && console.log(`CASC loaded: ${cascInfo.buildName} (${cascInfo.buildKey})`);
     return cascInfo;
   }
 }
