@@ -103,7 +103,7 @@ export class WowExportClient extends EventEmitter {
     return waitUntil(() => this.isReady);
   }
 
-  constructor(host: string = 'localhost', port: number = 17751) {
+  constructor(host: string = '127.0.0.1', port: number = 17751) {
     super();
     this.setMaxListeners(100);
 
@@ -140,7 +140,7 @@ export class WowExportClient extends EventEmitter {
           }
           failedAttempts++;
         }
-        await new Promise((resolve) => { setTimeout(resolve, 100); });
+        await new Promise((resolve) => { setTimeout(resolve, 3000); });
       }
     })();
     void this.registerHook('HOOK_EXPORT_COMPLETE');
@@ -335,6 +335,7 @@ export class WowExportClient extends EventEmitter {
 
         if (debug && json.id !== 'CONFIG_SET_DONE') {
           debug && console.log(`← ${json.id} (${size} bytes)`);
+          debug && console.log(JSON.stringify(json, null, 2));
         }
         // Emit the message with both the specific ID and generic 'response' event
         this.emit(json.id, json);
@@ -586,6 +587,7 @@ export class WowExportClient extends EventEmitter {
     };
     const hookEventPromise = this.waitForHookEvent(isComplete);
 
+    debug && console.log('exportModels start', models);
     const response = await this.sendCommand('EXPORT_MODEL', { models });
 
     if (response.id === 'EXPORT_START') {
@@ -664,6 +666,11 @@ export class WowExportClient extends EventEmitter {
       if (exportID === -1) {
         return 'not ready';
       }
+
+      if (eventData.hookID === 'HOOK_EXPORT_COMPLETE') {
+        debug && console.log('export character complete', eventData);
+      }
+
       return eventData.hookID === 'HOOK_EXPORT_COMPLETE'
         && eventData.exportPath && eventData.fileName
         && eventData.fileManifest && eventData.exportID === exportID;

@@ -356,6 +356,7 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
 }
 
 export async function getDisplayIdFromUrl(url: string) {
+  debug && console.log('getDisplayIdFromUrl start', url);
   const text = await fetch(url).then((res) => res.text());
   // data-mv-type-id="42928"
   const displayId = text.match(/data-mv-display-id="(\d+)"/)?.[1];

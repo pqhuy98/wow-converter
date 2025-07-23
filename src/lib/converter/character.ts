@@ -285,6 +285,8 @@ export class CharacterExporter {
       if (!exportPath) {
         console.error('Failed to export character NPC');
         console.error({ exportedModels, result });
+      } else {
+        debug && console.log('exported character path:', exportPath);
       }
     } else {
       // ---------------- MODEL-ONLY NPC ----------------
@@ -303,15 +305,14 @@ export class CharacterExporter {
       }
 
       // Deduplicate & export
-      const uniqueExports = Array.from(new Map(modelExports.map((e) => [e.fileDataID, e])).values());
-      const exportedModels = await wowExportClient.exportModels(uniqueExports);
+      const exportedModels = await wowExportClient.exportModels(modelExports);
 
       // Base model path
       const baseExp = exportedModels.find((m) => m.fileDataID === prep.baseModel.fileDataID);
       exportPath = relativeToExport(baseExp?.files.find((f) => f.type === 'OBJ')?.file)!;
       if (!exportPath) {
         console.error('Failed to export model-only NPC', prep.baseModel);
-        console.error(JSON.stringify({ exportedModels, baseExp, uniqueExports }, null, 2));
+        console.error(JSON.stringify({ exportedModels, baseExp, modelExports }, null, 2));
       }
 
       // Map equipment
@@ -349,7 +350,9 @@ export class CharacterExporter {
     // Build attachItems map (existing custom + equipment models)
     // -----------------------------------------------------------------------
 
+    debug && console.log('start resolveAttachItems');
     const attachItems = await resolveAttachItems(originalChar.attachItems);
+    debug && console.log('end resolveAttachItems');
 
     // Equipment attachments
     const equipmentToAttachmentMap: Partial<Record<EquipmentSlot, WoWAttachmentID[]>> = {
@@ -439,7 +442,9 @@ async function getSkinName(
 async function resolveItemRef(ref: Ref): Promise<string> {
   if (ref.type === 'local') return ref.value;
 
+  debug && console.log('resolveItemRef getDisplayIdFromUrl start', ref);
   const displayId = ref.type === 'wowhead' ? await getDisplayIdFromUrl(ref.value) : Number(ref.value);
+  debug && console.log('resolveItemRef getDisplayIdFromUrl end', displayID);
   const itemData = await processItemData(-1, displayId, 0, 0);
   const skinName = await getSkinName(itemData.modelFiles[0].fileDataId, itemData.textureFiles);
   const exported = (await wowExportClient.exportModels([
