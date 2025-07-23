@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { host } from "@/app/config"
+import { host, isDev } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
 
 type RefType = "local" | "wowhead" | "displayID"
@@ -975,8 +975,8 @@ export default function WoWNPCExporter() {
                 <p className="text-red-600">{exportResult.error}</p>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-2 w-full">
+                  <div className="flex-col items-center gap-10">
+                      {isDev && <div className="flex items-center gap-2 w-full">
                         <Button
                           variant="outline"
                           size="icon"
@@ -992,9 +992,15 @@ export default function WoWNPCExporter() {
                         </Button>
                         <span className="text-lg font-mono select-all">{exportResult.outputDirectory}</span> 
                       </div>
-                    {/* <Button variant="outline" size="icon">
-                      <Download className="h-4 w-4" />
-                    </Button> */}
+                      }
+                      <div className="flex items-center gap-2 w-full pt-2">
+                        <Button variant="default" size="icon" onClick={() => {
+                          window.open(`${host}/download/${exportResult.zipFile}`, '_blank');
+                        }}>
+                          <Download className="h-4 w-4" />
+                        </Button> 
+                        <span className="text-lg font-mono select-all">{exportResult.zipFile}</span>
+                      </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>

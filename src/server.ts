@@ -1,3 +1,4 @@
+import archiver from 'archiver';
 import chalk from 'chalk';
 import cors from 'cors';
 import express from 'express';
@@ -85,9 +86,30 @@ async function main() {
     exportedModels = exportedModels.map((model) => path.relative(ce.outputPath, model));
     textures = textures.map((texture) => path.relative(ce.outputPath, texture));
 
+    // Create a zip archive that contains every exported model & texture
+    const randomSuffix = Math.random().toString(36).slice(2, 8);
+    const zipFileName = `${request.outputFileName}-${randomSuffix}.zip`;
+    const zipFilePath = path.join(ce.outputPath, zipFileName);
+
+    const output = fsExtra.createWriteStream(zipFilePath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.pipe(output);
+
+    [...exportedModels, ...textures].forEach((relativePath) => {
+      archive.file(path.join(ce.outputPath, relativePath), { name: relativePath });
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      output.on('close', () => resolve());
+      archive.on('error', (err) => reject(err));
+      archive.finalize();
+    });
+
     const resp = {
       exportedModels,
       exportedTextures: textures,
+      zipFile: zipFileName,
       outputDirectory: path.resolve(ce.outputPath),
     };
     console.log('Response:', chalk.gray(JSON.stringify(resp, null, 2)));
@@ -108,6 +130,30 @@ async function main() {
   } else {
     console.log(`No UI found, serving only REST API at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
   }
+
+  // Download endpoint for zipped assets – only serves .zip files located in the export directory
+  app.get('/download/:fileName', (req, res) => {
+    const { fileName } = req.params;
+
+    // Basic validation – filename must be alphanumeric/underscore/dash and end with .zip
+    if (!/^[\w-]+\.zip$/.test(fileName)) {
+      return res.status(400).json({ error: 'Invalid file name' });
+    }
+
+    const resolvedPath = path.resolve(ceOutputPath, fileName);
+
+    // Prevent directory-traversal attacks – path must stay inside ceOutputPath
+    if (!resolvedPath.startsWith(path.resolve(ceOutputPath))) {
+      return res.status(400).json({ error: 'Invalid path' });
+    }
+
+    if (!fsExtra.existsSync(resolvedPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    return res.download(resolvedPath);
+  });
+
   // Error-handling middleware (must be **after** all routes)
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err);

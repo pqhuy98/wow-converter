@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { Socket } from 'net';
 
+import { args } from '../constants';
 import { wowExportPath } from '../global-config';
 import { waitUntil } from '../utils';
 
@@ -39,7 +40,8 @@ export interface CASCBuild {
     BuildConfig: string;
     CDNConfig: string;
     KeyRing: string;
-    [key: string]: any;
+    BuildId: string;
+    VersionsName: string;
 }
 
 export interface FileEntry {
@@ -135,7 +137,17 @@ export class WowExportClient extends EventEmitter {
             if (!this.status.connected || !this.status.configLoaded) {
               console.error(chalk.yellow(`⏳ Cannot connecting to wow.export RCP server at ${host}:${port}, did you run it?`));
             } else if (!this.status.cascLoaded) {
-              console.error(chalk.yellow('⏳ Cannot getting wow.export CASC info, did you select game installation?'));
+              if (args.cascRemote) {
+                const [region, product] = args.cascRemote.split(':');
+                console.log({ region, product });
+                const cascRemote = await this.loadCASCRemote(region);
+                const buildIdx = cascRemote.findIndex((build: any) => build.Product === product);
+                console.log('Selected build:', cascRemote[buildIdx]);
+                const cascInfo = await this.loadCASCBuild(buildIdx);
+                console.log({ cascInfo });
+              } else {
+                console.error(chalk.yellow('⏳ Cannot getting wow.export CASC info, did you select game installation?'));
+              }
             }
           }
           failedAttempts++;
@@ -213,6 +225,11 @@ export class WowExportClient extends EventEmitter {
     const requestId = randomUUID();
     const payload = { id: command, ...data, requestId };
 
+    let timeoutS = 30000;
+    if (command === 'LOAD_CASC_BUILD') {
+      timeoutS = 300000; // load casc build can take a long time
+    }
+
     return new Promise((resolve, reject) => {
       // Set up response handler - listen for the specific response type
       const responseHandler = (response: RCPResponse) => {
@@ -243,9 +260,11 @@ export class WowExportClient extends EventEmitter {
             break;
           case 'LOAD_CASC_LOCAL':
           case 'LOAD_CASC_REMOTE':
-            shouldResolve = response.id === 'CASC_INSTALL_BUILDS';
+            shouldResolve = response.id === 'CASC_INSTALL_BUILDS' || response.id === 'ERR_INVALID_INSTALL';
             break;
           case 'LOAD_CASC_BUILD':
+            shouldResolve = response.id === 'CASC_INFO' || response.id === 'ERR_NO_CASC_SETUP' || response.id === 'ERR_INVALID_CASC_BUILD' || response.id === 'ERR_CASC_FAILED';
+            break;
           case 'GET_CASC_INFO':
             shouldResolve = response.id === 'CASC_INFO' || response.id === 'CASC_UNAVAILABLE';
             break;
@@ -287,7 +306,7 @@ export class WowExportClient extends EventEmitter {
       setTimeout(() => {
         this.removeListener('response', responseHandler);
         reject(new Error(`Command ${command} timed out`));
-      }, 30000);
+      }, timeoutS);
     });
   }
 
