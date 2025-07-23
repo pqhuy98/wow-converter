@@ -7,11 +7,21 @@ import path from 'path';
 
 const require = createRequire(import.meta.url);
 
-// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-unsafe-assignment
-const {
-  Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
-// eslint-disable-next-line @typescript-eslint/no-unsafe-call, no-eval, @typescript-eslint/no-var-requires
-} = require('./bin/blp-preview/win32-x64-binding.node');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let Image: any;
+let TYPE_PNG: number;
+let TYPE_JPEG: number;
+let TYPE_BLP: number;
+
+if (process.platform === 'win32') {
+  ({
+    Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
+  } = require('./bin/blp-preview/win32-x64-binding.node'));
+} else {
+  ({
+    Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
+  } = require('./bin/blp-preview/darwin-arm64-binding.node'));
+}
 
 export function blp2Image(blpPath: string, distPath: string, type: 'png' | 'jpg' | 'blp' = 'png') {
   const img = new Image();
