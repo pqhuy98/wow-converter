@@ -81,7 +81,7 @@ async function main() {
       }
     });
     ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-    let textures = ce.assetManager.exportTextures(ce.outputPath);
+    let textures = await ce.assetManager.exportTextures(ce.outputPath);
 
     exportedModels = exportedModels.map((model) => path.relative(ce.outputPath, model));
     textures = textures.map((texture) => path.relative(ce.outputPath, texture));

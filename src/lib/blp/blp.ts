@@ -5,40 +5,35 @@ import fs from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
 
+import { png2BlpJs } from './blp-js';
+
 const require = createRequire(import.meta.url);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let Image: any;
-let TYPE_PNG: number;
-let TYPE_JPEG: number;
 let TYPE_BLP: number;
 
 if (process.platform === 'win32') {
   ({
-    Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
+    Image, TYPE_BLP,
   } = require('./bin/blp-preview/win32-x64-binding.node'));
 } else if (process.platform === 'darwin' && process.arch === 'x64') {
   ({
-    Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
+    Image, TYPE_BLP,
   } = require('./bin/blp-preview/darwin-arm64-binding.node'));
-} else if (process.platform === 'linux') {
-  ({
-    Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
-  } = require('./bin/blp-preview/linux-x64-binding.node'));
-} else {
-  throw new Error(`Unsupported platform: ${process.platform}-${process.arch}`);
 }
 
-export function blp2Image(blpPath: string, distPath: string, type: 'png' | 'jpg' | 'blp' = 'png') {
-  const img = new Image();
-  const buf = fs.readFileSync(blpPath);
-  img.loadFromBuffer(buf, 0, buf.length);
-  fs.mkdirSync(path.dirname(distPath), { recursive: true });
-  if (type === 'png') {
-    fs.writeFileSync(distPath, img.toBuffer(TYPE_PNG));
-  } else if (type === 'blp') {
-    fs.writeFileSync(distPath, img.toBuffer(TYPE_BLP));
-  } else {
-    fs.writeFileSync(distPath, img.toBuffer(TYPE_JPEG));
+export async function pngToBlp(pngPath: string, blpPath: string) {
+  console.log('pngToBlp', pngPath, blpPath);
+  if (!Image) {
+    console.log('Using custom png2BlpJs');
+    await png2BlpJs(pngPath, blpPath);
+    return;
   }
+
+  const img = new Image();
+  const buf = fs.readFileSync(pngPath);
+  img.loadFromBuffer(buf, 0, buf.length);
+  fs.mkdirSync(path.dirname(blpPath), { recursive: true });
+  fs.writeFileSync(blpPath, img.toBuffer(TYPE_BLP));
 }

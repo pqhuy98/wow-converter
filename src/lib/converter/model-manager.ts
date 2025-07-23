@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 
-import { blp2Image } from '../blp/blp';
+import { pngToBlp } from '../blp/blp';
 import { wowExportPath } from '../global-config';
 import { V3 } from '../math/vector';
 import { convertObjMdl } from '../objmdl';
@@ -60,24 +60,24 @@ export class AssetManager {
     this.textures.add(texturePath);
   }
 
-  exportTextures(assetPath: string) {
+  async exportTextures(assetPath: string) {
     const exportedTexturePaths: string[] = [];
     console.log('Exporting textures to', assetPath);
     mkdirSync(assetPath, { recursive: true });
-    for (const texturePath of this.textures) {
+    await Promise.all(Array.from(this.textures).map(async (texturePath) => {
       const toPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
       if (existsSync(toPath)) {
         exportedTexturePaths.push(toPath);
-        continue;
+        return;
       }
       const fromPath = path.join(wowExportPath.value, texturePath);
       if (!existsSync(fromPath)) {
         console.warn('Skipping texture not found', fromPath);
-        continue;
+        return;
       }
-      blp2Image(fromPath, toPath, 'blp');
+      await pngToBlp(fromPath, toPath);
       exportedTexturePaths.push(toPath);
-    }
+    }));
     console.log(`Exported ${exportedTexturePaths.length} textures`);
     return exportedTexturePaths;
   }
