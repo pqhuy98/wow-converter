@@ -17,10 +17,16 @@ if (process.platform === 'win32') {
   ({
     Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
   } = require('./bin/blp-preview/win32-x64-binding.node'));
-} else {
+} else if (process.platform === 'darwin' && process.arch === 'x64') {
   ({
     Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
   } = require('./bin/blp-preview/darwin-arm64-binding.node'));
+} else if (process.platform === 'linux') {
+  ({
+    Image, TYPE_PNG, TYPE_JPEG, TYPE_BLP,
+  } = require('./bin/blp-preview/linux-x64-binding.node'));
+} else {
+  throw new Error(`Unsupported platform: ${process.platform}-${process.arch}`);
 }
 
 export function blp2Image(blpPath: string, distPath: string, type: 'png' | 'jpg' | 'blp' = 'png') {
