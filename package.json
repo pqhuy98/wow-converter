@@ -23,7 +23,7 @@
     "build:1": "rollup -c",
     "build:2": "shx rm -rf dist && pkg build/server.bundle.js --config package.json --compress Gzip --options max-old-space-size=99999",
     "build:3": "cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin",
-    "build:app": "npm run build:0 && npm run build:1 && npm run build:2 && npm run build:3",
+    "build:app": "npm run prisma:generate && npm run build:0 && npm run build:1 && npm run build:2 && npm run build:3",
     "build:wow.export": "cd wow.export && node build win-x64 && cd .. && shx cp -r wow.export/bin/win-x64/* dist && shx rm dist/update dist/update.json",
     "build": "npm run build:webui && npm run build:app && npm run build:wow.export"
   },
