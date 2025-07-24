@@ -304,8 +304,12 @@ function RefInput({
 }
 
 const validateRef = (ref: RefSchema, category: RefCategory): string | null => {
-  if (ref.type === "wowhead" && !ref.value.startsWith(`https://www.wowhead.com/${category}=`)) {
-    return "Invalid Wowhead URL"
+  if (ref.type === "wowhead") {
+    // Allow URLs with expansion prefixes like /wotlk/, /classic/, etc. (only a-z characters)
+    const wowheadPattern = new RegExp(`^https://www\\.wowhead\\.com/(?:[a-z]+/)?${category}=`)
+    if (!wowheadPattern.test(ref.value)) {
+      return "Invalid Wowhead URL"
+    }
   }
   if (ref.type === "local" && !isLocalRef(ref.value)) {
     return "Invalid local file path"
@@ -1035,7 +1039,15 @@ export default function WoWNPCExporter() {
 }
 
 function getNpcNameFromWowheadUrl(url: string) {
-  // extract npc name from ...npc=1234/name
-  const npcName = url.split("/").pop()?.split("=").pop()
-  return npcName
+  // extract npc name from ...npc=1234/name, handling expansion prefixes
+  const parts = url.split("/")
+  // Find the part that contains the category=id/name pattern
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]
+    if (part.includes("=")) {
+      const npcName = part.split("=").pop()
+      return npcName
+    }
+  }
+  return undefined
 }
