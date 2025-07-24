@@ -615,7 +615,7 @@ export class MDLModify {
 
   // TODO: this doesn't work with Undead character!!
   computeWalkMovespeed() {
-    const debug = true;
+    const debug = false;
 
     this.mdl.sequences.forEach((seq) => {
       if (seq.movementSpeed === 0 && ([

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -362,6 +362,13 @@ export default function WoWNPCExporter() {
   })
 
   const [isExporting, setIsExporting] = useState(false)
+
+  // Job/queue tracking
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'done' | 'failed' | null>(null)
+  const [queuePosition, setQueuePosition] = useState<number | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
   const [exportResult, setExportResult] = useState<any>(null)
 
   const addAttachItem = () => {
@@ -423,9 +430,13 @@ export default function WoWNPCExporter() {
   const handleExport = async () => {
     setIsExporting(true)
     setExportResult(null)
+    setJobId(null)
+    setJobStatus(null)
+    setQueuePosition(null)
+    setErrorMessage(null)
 
     try {
-      // Create a clean character object for export
+      // Prepare request
       const exportCharacter = {
         ...character,
         attackTag: character.attackTag === undefined ? "" : character.attackTag,
@@ -450,15 +461,55 @@ export default function WoWNPCExporter() {
         throw new Error(await response.text())
       }
 
-      const result = await response.json()
-      setExportResult(result)
+      const result = await response.json() // { jobId }
+      setJobId(result.jobId)
+      setJobStatus('pending')
     } catch (error: any) {
       console.error("Export error:", error)
-      setExportResult({ error: "Export failed. " + (error.error ?? error) })
+      setErrorMessage(error?.message || String(error))
+      setJobStatus('failed')
     } finally {
       setIsExporting(false)
     }
   }
+
+  // Poll job status every 1s when a job is active
+  useEffect(() => {
+    if (!jobId || !jobStatus || jobStatus === 'done' || jobStatus === 'failed') return
+
+    const fetchJobStatus = async () => {
+      try {
+        const res = await fetch(`${host}/export/character/status/${jobId}`)
+        if (!res.ok) {
+          throw new Error(await res.text())
+        }
+        const data = await res.json()
+        setJobStatus(data.status)
+
+        if (data.status === 'pending') {
+          setQueuePosition(data.position)
+        } else if (data.status === 'processing') {
+          setQueuePosition(0)
+        } else if (data.status === 'done') {
+          setExportResult(data.result)
+          clearInterval(interval)
+        } else if (data.status === 'failed') {
+          setErrorMessage(data.error || 'Job failed')
+          clearInterval(interval)
+        }
+      } catch (e: any) {
+        console.error('Polling error:', e)
+        setErrorMessage(e?.message || String(e))
+        setJobStatus('failed')
+        clearInterval(interval)
+      }
+    }
+
+    const interval = setInterval(fetchJobStatus, 1000)
+    fetchJobStatus()
+
+    return () => clearInterval(interval)
+  }, [jobId, jobStatus])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -869,7 +920,7 @@ export default function WoWNPCExporter() {
               </div>
 
               <div className="md:col-span-2">
-                <Button onClick={handleExport} disabled={isExporting || !isValidForExport} className="w-full" size="lg">
+                <Button onClick={handleExport} disabled={isExporting || !isValidForExport || jobStatus==='pending' || jobStatus==='processing'} className="w-full" size="lg">
                   {isExporting ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -957,8 +1008,24 @@ export default function WoWNPCExporter() {
           </CardContent>
         </Card>
 
-        {/* Export Results */}
-        {exportResult && (
+        {jobStatus && jobStatus !== 'done' && (
+          <Card>
+            <CardContent className="py-6">
+              {jobStatus === 'pending' && (
+                <p className="text-center">Your request is queued. Current position: {queuePosition ?? 'N/A'}</p>
+              )}
+              {jobStatus === 'processing' && (
+                <p className="text-center">Your request is being processed...</p>
+              )}
+              {jobStatus === 'failed' && (
+                <p className="text-center text-red-600">{errorMessage || 'Job failed'}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Finished result */}
+        {exportResult && jobStatus === 'done' && (
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-lg">
