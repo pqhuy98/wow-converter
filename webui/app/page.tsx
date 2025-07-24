@@ -477,8 +477,11 @@ export default function WoWNPCExporter() {
   useEffect(() => {
     if (!jobId || !jobStatus || jobStatus === 'done' || jobStatus === 'failed') return
 
+    let pendingFetches = 0
     const fetchJobStatus = async () => {
       try {
+        pendingFetches++
+        if (pendingFetches > 1) return
         const res = await fetch(`${host}/export/character/status/${jobId}`)
         if (!res.ok) {
           throw new Error(await res.text())
@@ -502,6 +505,8 @@ export default function WoWNPCExporter() {
         setErrorMessage(e?.message || String(e))
         setJobStatus('failed')
         clearInterval(interval)
+      } finally {
+        pendingFetches--
       }
     }
 
