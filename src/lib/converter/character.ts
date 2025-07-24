@@ -170,8 +170,8 @@ export class CharacterExporter {
       && !seq.name.includes('Spin')
       && !seq.name.includes('Swim')
       && !seq.name.includes('Alternate')).forEach((seq) => {
-        debug && console.log(model.model.name, seq.name, 'old moveSpeed', seq.movementSpeed, 'new moveSpeed', char.inGameMovespeed);
-        const scale = seq.movementSpeed / char.inGameMovespeed; // duration is inverse of speed
+        debug && console.log(model.model.name, `${seq.name} (${seq.data.wowName})`, 'old moveSpeed', seq.movementSpeed, 'new moveSpeed', char.inGameMovespeed);
+        const scale = (seq.movementSpeed || 450) / char.inGameMovespeed; // duration is inverse of speed
         model.modify.scaleSequenceDuration(seq, scale);
         seq.movementSpeed = char.inGameMovespeed;
       });

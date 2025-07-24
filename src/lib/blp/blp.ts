@@ -24,7 +24,6 @@ if (process.platform === 'win32') {
 }
 
 export async function pngToBlp(pngPath: string, blpPath: string) {
-  console.log('pngToBlp', pngPath, blpPath);
   if (!Image) {
     console.log('Using custom png2BlpJs');
     await png2BlpJs(pngPath, blpPath);

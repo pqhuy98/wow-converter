@@ -615,14 +615,13 @@ export class MDLModify {
 
   // TODO: this doesn't work with Undead character!!
   computeWalkMovespeed() {
-    const debug = false;
+    const debug = true;
 
     this.mdl.sequences.forEach((seq) => {
       if (seq.movementSpeed === 0 && ([
         'Walk', 'Run', 'Sprint', 'FlyWalk',
       ].includes(seq.data.wowName))) {
         console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
-        const walkSeq = seq;
         const SAMPLE_STEPS = 30;
 
         // -------------------------------------------------------------------
@@ -637,10 +636,10 @@ export class MDLModify {
         let globalMax: Vector3 = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
 
         for (let i = 0; i <= SAMPLE_STEPS; i += 1) {
-          const t = walkSeq.interval[0] + ((walkSeq.interval[1] - walkSeq.interval[0]) * i) / SAMPLE_STEPS;
+          const t = seq.interval[0] + ((seq.interval[1] - seq.interval[0]) * i) / SAMPLE_STEPS;
           const entries: FrameEntry[] = [];
 
-          iterateNodesAtTimestamp(this.mdl, walkSeq, t, (node: Node, value) => {
+          iterateNodesAtTimestamp(this.mdl, seq, t, (node: Node, value) => {
             entries.push({ node, position: value.position });
             globalMin = V3.min(globalMin, value.position);
             globalMax = V3.max(globalMax, value.position);
@@ -743,7 +742,7 @@ export class MDLModify {
           }
         }
         if (durationMs === 0) {
-          durationMs = walkSeq.interval[1] - walkSeq.interval[0];
+          durationMs = seq.interval[1] - seq.interval[0];
         }
         const strideDurationSeconds = durationMs / 2 / 1000; // divide by 2 because each feet moves forward then backward
         debug && console.log(this.mdl.model.name, seq.name, 'contact durationMs', durationMs, 'stride duration S', strideDurationSeconds);
@@ -754,6 +753,9 @@ export class MDLModify {
           console.log(contactFrameTimes);
           console.log(contactFrameContactCount);
           console.log({
+            seqName: seq.name,
+            wowName: seq.data.wowName,
+            diag,
             groundTolerance,
             zStableTolerance,
             minContactX,
@@ -763,8 +765,12 @@ export class MDLModify {
             moveSpeed,
           });
         }
-        if (moveSpeed > 0 && moveSpeed < diag) {
-          walkSeq.movementSpeed = moveSpeed;
+        if (moveSpeed > 0.2 * diag && moveSpeed < diag) {
+          debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed', moveSpeed);
+          seq.movementSpeed = moveSpeed;
+        } else {
+          debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed to 0');
+          seq.movementSpeed = 0;
         }
       }
     });
