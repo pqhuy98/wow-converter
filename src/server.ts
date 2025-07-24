@@ -110,6 +110,7 @@ async function main() {
       exportedModels,
       exportedTextures: textures,
       zipFile: zipFileName,
+      zipFileSize: fsExtra.statSync(zipFilePath).size,
       outputDirectory: path.resolve(ce.outputPath),
     };
     console.log('Response:', chalk.gray(JSON.stringify(resp, null, 2)));

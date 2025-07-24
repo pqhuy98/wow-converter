@@ -13,6 +13,7 @@ import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle } from "lu
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { host, isDev } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
+import Link from "next/link"
 
 type RefType = "local" | "wowhead" | "displayID"
 type AttackTag = "" | "1H" | "2H" | "2HL" | "Unarmed" | "Bow" | "Rifle" | "Thrown"
@@ -1002,8 +1003,10 @@ export default function WoWNPCExporter() {
                           window.open(`${host}/download/${exportResult.zipFile}`, '_blank');
                         }}>
                           <Download className="h-4 w-4" />
-                        </Button> 
-                        <span className="text-lg font-mono select-all">{exportResult.zipFile}</span>
+                        </Button>
+                        <Link href={`${host}/download/${exportResult.zipFile}`} target="_blank">
+                          <span className="text-lg">{exportResult.zipFile} ({formatBytes(exportResult.zipFileSize)})</span>
+                        </Link>
                       </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1045,9 +1048,16 @@ function getNpcNameFromWowheadUrl(url: string) {
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i]
     if (part.includes("=")) {
-      const npcName = part.split("=").pop()
+      const npcName = (parts[i+1] || parts[i]).split("=").pop()
       return npcName
     }
   }
   return undefined
+}
+
+function formatBytes(bytes: number) {
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes === 0) return '0 B';
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
 }
