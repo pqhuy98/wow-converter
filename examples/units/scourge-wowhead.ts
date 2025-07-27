@@ -45,17 +45,19 @@ async function cultAdherent() {
   const mdl = await ce.exportCharacter({
     base: wowhead('https://www.wowhead.com/wotlk/npc=37949/cult-adherent'),
     attachItems: {
-      [WoWAttachmentID.HandRight]: { path: scourgeStaff, scale: 1.25 },
+      [WoWAttachmentID.HandRight]: { path: scourgeStaff, scale: 1 },
     },
     size: 'hero',
     attackTag: '1H',
     inGameMovespeed: 270,
     portraitCameraSequenceName: 'Stand Ready',
+    keepCinematic: true,
   }, 'cult-adherent');
   mdl.geosets = mdl.geosets.filter((g) => !g.name.includes('Hair'));
   mdl.sequences = mdl.sequences.filter((s) => !s.name.includes('Attack') || s.data.wowName === 'Attack1H');
   mdl.sequences.filter((s) => s.data.wowName.startsWith('Kneel')).forEach((s) => s.keep = true);
   hideWeapon(mdl, WoWAttachmentID.HandRight, ['Cinematic Kneel']);
+  mdl.modify.removeCinematicSequences();
 }
 
 async function reanimatedAdherent() {
@@ -69,7 +71,6 @@ async function reanimatedAdherent() {
     inGameMovespeed: 270,
   }, 'reanimated-adherent');
   mdl.modify.useWalkSequenceByWowName('Walk');
-  mdl.geosets.find((g) => g.name.includes('Trouser'))!.material = mdl.materials[0];
   mdl.sequences = mdl.sequences.filter((s) => !s.name.includes('Attack') || s.data.wowName === 'Attack1H');
 }
 
@@ -101,17 +102,16 @@ async function ancientSkeletalSoldier() {
     portraitCameraSequenceName: 'Stand Ready',
   }, 'ancient-skeletal-soldier');
   boneMelee2H(mdl);
-  mdl.geosets.find((g) => g.name.includes('Facial'))!.material = mdl.materials[2];
   mdl.sequences = mdl.sequences.filter((s) => !s.name.includes('Attack') || s.data.wowName === 'Attack1H');
 }
 
 export async function main() {
-  await cultFanatic();
+  // await cultFanatic();
   await cultAdherent();
-  await reanimatedFanatic();
-  await reanimatedAdherent();
-  await deathboundWard();
-  await ancientSkeletalSoldier();
+  // await reanimatedFanatic();
+  // await reanimatedAdherent();
+  // await deathboundWard();
+  // await ancientSkeletalSoldier();
 
   ce.models.forEach(([model, filePath]) => {
     model.modify
@@ -129,13 +129,11 @@ export async function main() {
   });
 
   ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  ce.assetManager.exportTextures(ce.outputPath);
+  await ce.assetManager.exportTextures(ce.outputPath);
   process.exit(0);
 }
 
 function boneMelee2H(mdl: MDL) {
-  mdl.geosets.filter((g) => g.name.includes('Glove') || g.name.includes('Boot'))
-    .forEach((g) => g.material = mdl.materials[0]);
   mdl.modify.useWalkSequenceByWowName('Walk');
   // delete the 3rd sequence that the name "Attack"
   const atk3 = mdl.sequences.filter((s) => s.name === 'Attack')[2];

@@ -81,6 +81,10 @@ export interface Material {
     filterMode: BlendMode;
     texture: Texture;
     twoSided: boolean;
+    unfogged: boolean;
+    unlit: boolean;
+    noDepthTest: boolean;
+    noDepthSet: boolean;
     tvertexAnim?: TextureAnim;
   }[];
 }
@@ -320,6 +324,10 @@ ${this.materials.map((material) => `
       FilterMode ${layer.filterMode},
       static TextureID ${layer.texture.id},
       ${layer.twoSided ? 'TwoSided,' : ''}
+      ${layer.unfogged ? 'Unfogged,' : ''}
+      ${layer.noDepthTest ? 'NoDepthTest,' : ''}
+      ${layer.noDepthSet ? 'NoDepthSet,' : ''}
+      ${layer.unlit ? 'Unlit,' : ''}
       ${layer.tvertexAnim != null ? `TVertexAnimId ${layer.tvertexAnim.id},` : ''}
     }`).join('\n')}
   }`).join('\n')}
@@ -682,6 +690,10 @@ ${this.pivotPointsToString()}
               filterMode: 'None',
               texture: this.textures[0],
               twoSided: false,
+              unfogged: false,
+              unlit: false,
+              noDepthTest: false,
+              noDepthSet: false,
             },
           ],
           constantColor: true,

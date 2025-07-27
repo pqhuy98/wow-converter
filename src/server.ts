@@ -83,7 +83,7 @@ async function main() {
   /** Core export logic, extracted into its own function so the queue worker can reuse it */
   async function handleExport(request: ExportCharacterRequest) {
     const ce = new CharacterExporter(ceOutputPath, ceConfig);
-    console.log(chalk.gray(`Processing job for ${request.outputFileName} …`));
+    console.log(`Processing job for ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
 
     await ce.exportCharacter(request.character, request.outputFileName);
 

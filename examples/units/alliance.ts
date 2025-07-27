@@ -72,7 +72,7 @@ export async function main() {
     console.log('Wrote character model to', path);
   });
   ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  ce.assetManager.exportTextures(ce.outputPath);
+  await ce.assetManager.exportTextures(ce.outputPath);
   console.log('Alliance done');
 }
 

@@ -96,7 +96,7 @@ export async function main() {
   });
 
   ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  ce.assetManager.exportTextures(ce.outputPath);
+  await ce.assetManager.exportTextures(ce.outputPath);
 }
 
 if (esMain(import.meta)) {

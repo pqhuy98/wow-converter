@@ -7,7 +7,7 @@ import { V3 } from '../../math/vector';
 import { WowAnimName } from '../animation/animation_mapper';
 import { WoWAttachmentID, WoWToWC3AttachmentMap } from '../animation/bones_mapper';
 import {
-  Bone, Extents, Face, GeosetVertex, GlobalSequence, Material, MDL, Node, Sequence, SkinWeight, TransformAnimation,
+  Bone, Extents, Face, GeosetVertex, GlobalSequence, Material, MDL, Node, Sequence, SkinWeight, Texture, TransformAnimation,
 } from './mdl';
 import {
   buildNodesChildrenList, interpolateTransformQuat, iterateNodesAtTimestamp, Value,
@@ -290,15 +290,37 @@ export class MDLModify {
   }
 
   removeUnusedMaterialsTextures() {
-    const usedMaterials = new Set<Material>(
-      this.mdl.geosets.filter((geoset) => geoset.vertices.length > 0)
-        .map((geoset) => geoset.material),
-    );
+    // Deduplicate textures
+    this.mdl.materials = [...new Set(this.mdl.geosets.map((geoset) => geoset.material))];
+    const textureKey = (tex: Texture) => JSON.stringify(tex);
+    const usedTextures = new Map<string, Texture>();
+    this.mdl.materials.forEach((mat) => {
+      mat.layers.forEach((layer) => {
+        if (layer.texture.image === '') {
+          console.log('Empty texture', mat.id, layer.texture.image);
+        }
+        const texKey = textureKey(layer.texture);
+        if (!usedTextures.has(texKey)) {
+          usedTextures.set(texKey, layer.texture);
+        } else {
+          layer.texture = usedTextures.get(texKey)!;
+        }
+      });
+    });
+    this.mdl.textures = [...usedTextures.values()];
 
-    const usedTextures = new Set([...usedMaterials].flatMap((mat) => mat.layers.map((layer) => layer.texture)));
-
-    this.mdl.materials = this.mdl.materials.filter((mat) => usedMaterials.has(mat));
-    this.mdl.textures = this.mdl.textures.filter((tex) => usedTextures.has(tex));
+    // Deduplicate materials
+    const materialKey = (mat: Material) => JSON.stringify(mat);
+    const usedMaterials = new Map<string, Material>();
+    this.mdl.geosets.forEach((geoset) => {
+      const matKey = materialKey(geoset.material);
+      if (!usedMaterials.has(matKey)) {
+        usedMaterials.set(matKey, geoset.material);
+      } else {
+        geoset.material = usedMaterials.get(matKey)!;
+      }
+    });
+    this.mdl.materials = [...usedMaterials.values()];
     return this;
   }
 

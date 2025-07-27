@@ -35,14 +35,13 @@ async function wolf() {
     },
     portraitCameraSequenceName: 'Stand Ready',
   }, 'ancient-skeletal-soldier');
-  mdl.geosets.find((g) => g.name.includes('Facial'))!.material = mdl.materials[2];
   mdl.sequences = mdl.sequences.filter((s) => !s.name.includes('Attack') || s.data.wowName === 'Attack1H');
 }
 
 export async function main() {
   await bolvarIcc();
   await wolf();
-  ce.assetManager.exportTextures(ce.outputPath);
+  await ce.assetManager.exportTextures(ce.outputPath);
   ce.models.forEach(([model, path]) => {
     model.modify
       .sortSequences()

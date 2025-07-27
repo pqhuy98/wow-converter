@@ -4,7 +4,7 @@ import path from 'path';
 import { pngToBlp } from '../blp/blp';
 import { wowExportPath } from '../global-config';
 import { V3 } from '../math/vector';
-import { convertObjMdl } from '../objmdl';
+import { convertWowExportModel } from '../objmdl';
 import { Config, Model, WowObject } from './common';
 
 export class AssetManager {
@@ -23,7 +23,7 @@ export class AssetManager {
     const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
     const objFullPath = path.join(wowExportPath.value, objRelativePath);
     // console.log('Parsing model', objFullPath);
-    const { mdl, texturePaths } = convertObjMdl(objFullPath, wowExportPath.value, this.config.assetPrefix, this.config);
+    const { mdl, texturePaths } = convertWowExportModel(objFullPath, wowExportPath.value, this.config);
     const model: Model = {
       relativePath: path.join(this.config.assetPrefix, `${objectPath}.mdl`),
       mdl,

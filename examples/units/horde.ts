@@ -71,9 +71,9 @@ async function korkronGeneral() {
 }
 
 export async function main() {
-  await garrosh();
+  // await garrosh();
   await varokSaurfang();
-  await korkronGeneral();
+  // await korkronGeneral();
 
   ce.models.forEach(([model, path]) => {
     model.modify
@@ -90,7 +90,7 @@ export async function main() {
     console.log('Wrote character model to', path);
   });
   ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  ce.assetManager.exportTextures(ce.outputPath);
+  await ce.assetManager.exportTextures(ce.outputPath);
 }
 
 if (esMain(import.meta)) {

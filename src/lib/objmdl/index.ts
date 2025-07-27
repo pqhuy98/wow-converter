@@ -1,20 +1,22 @@
 import chalk from 'chalk';
 import { existsSync } from 'fs';
+import _ from 'lodash';
 import path from 'path';
 
 import { Config } from '../converter/common';
-import { guessFilterMode, wowExportPath } from '../global-config';
+import { guessFilterMode } from '../global-config';
 import { AnimationFile } from './animation/animation';
 import {
-  GeosetVertex, Material, Matrix, MDL, SkinWeight, Texture,
+  GeosetVertex, Material, Matrix, MDL, SkinWeight,
+  Texture,
 } from './mdl/mdl';
 import { M2MetadataFile } from './metadata/m2_metadata';
 import { MTLFile } from './mtl';
-import { IFace, OBJFile } from './obj';
+import { IFace, IGroup, OBJFile } from './obj';
 
 const debug = false;
 
-export function convertObjMdl(objFilePath: string, assetRoot: string, texturePrefix: string, config: Config) {
+export function convertWowExportModel(objFilePath: string, wowExportAssetRoot: string, config: Config): {mdl: MDL, texturePaths: Set<string>} {
   let start = performance.now();
   const obj = new OBJFile(objFilePath).parse();
   const mtl = new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'));
@@ -23,14 +25,14 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
 
   const mdl = new MDL({
     formatVersion: 900,
-    name: path.relative(assetRoot, objFilePath).replace('.obj', '.mdl'),
+    name: path.relative(wowExportAssetRoot, objFilePath).replace('.obj', '.mdl'),
   });
 
   if (obj.models.length === 0) {
     return { mdl, texturePaths: new Set<string>() };
   }
 
-  const groups = new Map<string, IFace[]>();
+  const groups = new Map<IGroup, IFace[]>();
   obj.models[0].faces.forEach((f) => {
     if (!groups.has(f.group)) {
       groups.set(f.group, []);
@@ -41,21 +43,59 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
   const parentDir = path.dirname(objFilePath);
 
   // Extract material data
-  // eslint-disable-next-line
-  let resolveGeosetMaterial = (_geosetId: number, _matName: string): MDL['materials'][number] => mdl.materials[0];
+
   const texturePaths = new Set<string>();
 
-  if (!metadata.isLoaded) {
-    const matMap = new Map<string, Material>();
-    mtl.materials.forEach((mtlMaterial) => {
-      const materialRelativePath = path.relative(assetRoot, path.join(parentDir, mtlMaterial.map_Kd!));
-      if (!existsSync(path.join(wowExportPath.value, materialRelativePath))) {
-        console.warn('Material not found', materialRelativePath, 'for model', objFilePath);
+  const {
+    textureAnims, submeshIdToMat,
+  } = metadata.extractMDLTexturesMaterials(config.assetPrefix, animation, mdl.globalSequences);
+  mdl.textures = [];
+  mdl.materials = [];
+  mdl.textureAnims = textureAnims;
+  metadata.textures.forEach((tex) => {
+    if (!tex.fileNameExternal) return;
+    const absPath = path.join(parentDir, tex.fileNameExternal);
+    if (!existsSync(absPath)) {
+      console.warn('Skipping texture not found', absPath, 'for model', objFilePath);
+      return;
+    }
+    const textureRelativePath = path.relative(wowExportAssetRoot, absPath);
+    texturePaths.add(textureRelativePath);
+  });
+
+  const mtlNameMap = new Map<string, Material>();
+
+  const resolveGeosetMaterial = (submeshId: number, matName: string): MDL['materials'][number] => {
+    const mat = _.cloneDeep(submeshIdToMat.get(submeshId));
+
+    const mtlMaterial = mtl.materials.find((m) => m.name === matName);
+
+    const textureRelativePath = mtlMaterial ? path.relative(wowExportAssetRoot, path.join(parentDir, mtlMaterial.map_Kd!)) : undefined;
+
+    if (mat) {
+      mat.layers.forEach((l) => {
+        const blpPath = textureRelativePath ? path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp')) : l.texture.image;
+        l.texture = {
+          ...l.texture,
+          image: blpPath,
+        };
+        if (textureRelativePath) {
+          texturePaths.add(textureRelativePath);
+        }
+      });
+    } else {
+      // metadata does not have this material, fallback to resolve material from mtl file
+
+      if (mtlNameMap.has(matName)) {
+        return mtlNameMap.get(matName)!;
       }
-      texturePaths.add(materialRelativePath);
+
+      debug && console.log('no submeshIdToMat for submeshId', submeshId, 'matName', matName);
+      debug && console.log('Fallback to mtl file');
+      textureRelativePath && texturePaths.add(textureRelativePath);
       const texture: Texture = {
         id: 0,
-        image: path.join(texturePrefix, materialRelativePath.replace('.png', '.blp')),
+        image: textureRelativePath ? path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp')) : '',
         wrapHeight: true,
         wrapWidth: true,
       };
@@ -63,33 +103,27 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
         id: 0,
         constantColor: true,
         layers: [
-          { texture, filterMode: guessFilterMode(materialRelativePath), twoSided: false },
+          {
+            texture,
+            filterMode: textureRelativePath ? guessFilterMode(textureRelativePath) : 'None',
+            twoSided: false,
+            unfogged: false,
+            unlit: false,
+            noDepthTest: false,
+            noDepthSet: false,
+          },
         ],
       };
       mdl.textures.push(texture);
       mdl.materials.push(material);
-      matMap.set(mtlMaterial.name, material);
-    });
-    resolveGeosetMaterial = (_geosetId, matName) => matMap.get(matName)!;
-  } else {
-    const {
-      textures, materials, textureAnims, geosetToMat,
-    } = metadata.extractMDLTexturesMaterials(texturePrefix, groups.size, animation, mdl.globalSequences);
-    mdl.textures = textures;
-    mdl.materials = materials;
-    mdl.textureAnims = textureAnims;
-    // eslint-disable-next-line
-    resolveGeosetMaterial = (geosetId, _matName) => geosetToMat[geosetId]!;
-    metadata.textures.forEach((tex) => {
-      const absPath = path.join(parentDir, tex.fileNameExternal);
-      if (!tex.fileNameExternal || !existsSync(absPath)) {
-        console.warn('Skipping texture not found', absPath, 'for model', objFilePath);
-        return;
-      }
-      const materialRelativePath = path.relative(assetRoot, path.join(parentDir, tex.fileNameExternal));
-      texturePaths.add(materialRelativePath);
-    });
-  }
+      mtlNameMap.set(matName, material);
+      return material;
+    }
+
+    return mat;
+  };
+
+  // Construct mdl
 
   let mdlAnim: ReturnType<typeof animation.toMdl>;
   if (animation.isLoaded) {
@@ -106,21 +140,29 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
     }];
   }
 
+  const submeshToId = new Map(metadata.skin.subMeshes.map((s, i) => [s, i]));
+  const enabledSubmeshes = metadata.skin.subMeshes.filter((s) => s.enabled);
+
   groups.forEach((faces) => {
+    const i = mdl.geosets.length;
+    const submesh = enabledSubmeshes[i];
+    const submeshId = submeshToId.get(submesh)!;
     mdl.geosets.push({
       id: 0,
-      name: faces[0].group,
+      name: faces[0].group.name,
       vertices: [],
       faces: [],
       matrices: mdl.bones.map((b) => ({ id: 0, bones: [b] })),
       minimumExtent: [0, 0, 0],
       maximumExtent: [0, 0, 0],
       boundsRadius: 0,
-      material: resolveGeosetMaterial(mdl.geosets.length, faces[0].material),
+      material: resolveGeosetMaterial(submeshId, faces[0].material),
       selectionGroup: 0,
     });
-
     const geoset = mdl.geosets[mdl.geosets.length - 1];
+
+    mdl.textures.push(...geoset.material.layers.map((l) => l.texture));
+    mdl.materials.push(geoset.material);
 
     const vMap = new Map<number, GeosetVertex>();
 
@@ -165,8 +207,24 @@ export function convertObjMdl(objFilePath: string, assetRoot: string, texturePre
     });
   });
 
+  // Assign materials to geosets
+
   if (metadata.isLoaded) {
     mdl.geosetAnims = metadata.extractMDLGeosetAnim(animation, mdl.geosets);
+
+    // Validate submeshes equals to geosets
+    debug && console.log('Geoset count:', mdl.geosets.length, 'Submesh count:', enabledSubmeshes.length);
+    mdl.geosets.forEach((geoset, i) => {
+      const subMesh = enabledSubmeshes[i];
+      if (!subMesh || subMesh.vertexCount !== geoset.vertices.length) {
+        console.error('Submesh mismatch', {
+          subMesh,
+          geoset: geoset.name,
+        });
+        throw new Error('Submesh mismatch');
+      }
+      debug && console.log(geoset.name, metadata.skin.subMeshes.findIndex((s) => s === subMesh), geoset.material.layers[0].texture.image);
+    });
   }
 
   debug && console.log('basic parse took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');

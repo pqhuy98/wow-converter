@@ -163,7 +163,7 @@ export async function generate(adtPatterns: string[]) {
         fsExtra.copySync('maps/template-empty.w3x', mapPath);
       }
       wowObjectManager.assetManager.exportModels(mapPath);
-      wowObjectManager.assetManager.exportTextures(mapPath);
+      await wowObjectManager.assetManager.exportTextures(mapPath);
       writeFileSync(
         path.join(mapPath, 'war3map.w3e'),
         TerrainTranslator.jsonToWar(wc3Terrain).buffer,

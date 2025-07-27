@@ -110,7 +110,7 @@ export class CharacterExporter {
 
   private exportModel(char: Character, outputFile: string) {
     const start = performance.now();
-    console.log('Base model:', char.base.value);
+    console.log('Base model:', path.join(wowExportPath.value, char.base.value));
     const model = this.assetManager.parse(char.base.value, true).mdl;
     debug && console.log('Parsed wow.export model took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
@@ -231,7 +231,7 @@ export class CharacterExporter {
         // For some reason, Orc models have smaller shoulder bones than other races
         const raceOrc = 2;
         const genderMale = 0;
-        const isOrcMale = prep.rpcParams.race === raceOrc && prep.rpcParams.gender === genderMale;
+        const isOrcMale = prep.exportCharRpcParams.race === raceOrc && prep.exportCharRpcParams.gender === genderMale;
 
         slotModelPaths.set(slot.slotId, [
           relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
@@ -277,10 +277,10 @@ export class CharacterExporter {
           excludedAnimIds.push(animId);
         }
       }
-      prep.rpcParams.excludeAnimationIds = [...new Set(excludedAnimIds)];
+      prep.exportCharRpcParams.excludeAnimationIds = [...new Set(excludedAnimIds)];
 
       // Export character via RPC to OBJ directory
-      const result = await wowExportClient.exportCharacter({ ...prep.rpcParams });
+      const result = await wowExportClient.exportCharacter({ ...prep.exportCharRpcParams });
       exportPath = relativeToExport(result.exportPath)!;
       if (!exportPath) {
         console.error('Failed to export character NPC');
@@ -384,11 +384,36 @@ export class CharacterExporter {
     // NPC face/skin override
     if (npcTexturePath) {
       this.assetManager.addPngTexture(npcTexturePath);
-      mdl.textures[0].image = path.join(assetPrefix, npcTexturePath).replace('.png', '.blp');
-      mdl.geosets.forEach((g) => {
-        if (['Facial', 'Hair'].some((name) => g.name.includes(name))) g.material = mdl.materials[1];
-        if (['Face'].some((name) => g.name.includes(name))) g.material = mdl.materials[0];
-        if (g.name.includes('EyeGlowB')) g.material.layers[0].filterMode = 'Transparent';
+      const baseTexturePath = mdl.geosets[0].material.layers[0].texture.image;
+      const newTexturePath = path.join(assetPrefix, npcTexturePath).replace('.png', '.blp');
+
+      mdl.geosets.forEach((geoset, i) => {
+        // For skeleton, we don't want to override anything but
+        // For some reason, the skull is not included in the npc baked texture
+        let skip = false;
+        const raceSkeleton = 20;
+        if (prep.type === 'character' && prep.exportCharRpcParams.race === raceSkeleton) {
+          skip = true;
+          let geosetIds: number[] | undefined;
+          if (geoset.name.includes('Glove') && mdl.geosets[i - 1].name.includes('Glove')) {
+            geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Gloves.toString())?.data.geosetIds;
+          } else if (geoset.name.includes('Boot') && mdl.geosets[i + 1].name.includes('Boot')) {
+            geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Boots.toString())?.data.geosetIds;
+          } else if (geoset.name.includes('Trousers')) {
+            geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Legs.toString())?.data.geosetIds;
+          }
+          if (geosetIds && geosetIds.length > 0) {
+            skip = false;
+          }
+        }
+        if (skip) return;
+
+        // Replace the base texture with the npc baked texture
+        geoset.material.layers.forEach((layer) => {
+          if (layer.texture.image === baseTexturePath || layer.texture.image === '') {
+            layer.texture.image = newTexturePath;
+          }
+        });
       });
     }
 
@@ -418,6 +443,10 @@ export class CharacterExporter {
             filterMode: 'Transparent',
             texture: mdl.textures.at(-1)!,
             twoSided: cfg.twoSided ?? false,
+            unfogged: false,
+            unlit: false,
+            noDepthTest: false,
+            noDepthSet: false,
           },
         ],
       });

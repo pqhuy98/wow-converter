@@ -179,7 +179,7 @@ export async function exportCreatureModels(
 
       start = performance.now();
       ex.assetManager.purgeTextures(ex.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-      ex.assetManager.exportTextures(ex.outputPath);
+      await ex.assetManager.exportTextures(ex.outputPath);
       console.log('export materials took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       const end = performance.now();

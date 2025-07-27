@@ -7,7 +7,9 @@ export class OBJFile {
 
   private currentMaterial = '';
 
-  private currentGroup = '';
+  private currentGroup: IGroup = {
+    name: '',
+  };
 
   private smoothingGroup = 0;
 
@@ -72,13 +74,13 @@ export class OBJFile {
   private currentModel(): IModel {
     if (this.result.models.length === 0) {
       this.result.models.push({
+        group: [this.currentGroup = { name: '' }],
         faces: [],
         name: this.defaultModelName,
         textureCoords: [],
         vertexNormals: [],
         vertices: [],
       });
-      this.currentGroup = '';
       this.smoothingGroup = 0;
     }
 
@@ -88,13 +90,13 @@ export class OBJFile {
   private parseObject(lineItems: string[]): void {
     const modelName = lineItems.length >= 2 ? lineItems[1] : this.defaultModelName;
     this.result.models.push({
+      group: [this.currentGroup = { name: '' }],
       faces: [],
       name: modelName,
       textureCoords: [],
       vertexNormals: [],
       vertices: [],
     });
-    this.currentGroup = '';
     this.smoothingGroup = 0;
   }
 
@@ -103,7 +105,9 @@ export class OBJFile {
       throw new Error('Group statements must have exactly 1 argument (eg. g group_1)');
     }
 
-    this.currentGroup = lineItems[1];
+    this.currentGroup = {
+      name: lineItems[1],
+    };
   }
 
   private parseVertexCoords(lineItems: string[]): void {
@@ -216,8 +220,13 @@ export interface IResult {
   materialLibraries: string[];
 }
 
+export interface IGroup {
+  name: string;
+}
+
 export interface IModel {
   name: string;
+  group: IGroup[];
   vertices: IVertex[];
   textureCoords: ITextureVertex[];
   vertexNormals: IVertex[];
@@ -226,7 +235,7 @@ export interface IModel {
 
 export interface IFace {
   material: string;
-  group: string;
+  group: IGroup;
   smoothingGroup: number;
   vertices: IFaceVertexIndicies[];
 }

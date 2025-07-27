@@ -1,4 +1,6 @@
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { LRUCache } from 'lru-cache';
+
+import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 interface FileEntry {
   FileDataId: number;
@@ -75,17 +77,6 @@ interface FilteredFile {
   fileDataId: number;
 }
 
-interface RPCParams {
-  race: number;
-  gender: number;
-  customizations: { [optionId: string]: number };
-  geosetIds: number[];
-  format: string;
-  include_animations: boolean;
-  include_base_clothing: boolean;
-  excludeAnimationIds?: number[];
-}
-
 interface EquipmentSlotData {
   slotId: string;
   hasModel: boolean;
@@ -93,7 +84,7 @@ interface EquipmentSlotData {
 }
 
 interface ExportResult {
-  rpcParams: RPCParams;
+  exportCharRpcParams: ExportCharacterParams;
   npcTextureFile: number | null;
   equipmentSlots: EquipmentSlotData[];
 }
@@ -149,11 +140,17 @@ export const baseUrls = [
 
 const debug = false;
 
+const fetchCache = new LRUCache<string, object>({ max: 1000 });
+
 async function fetchJson(url: string) {
+  const cached = fetchCache.get(url);
+  if (cached) return cached;
+
   for (const baseUrl of baseUrls) {
     try {
       const response = await fetch(`${baseUrl}${url}`);
       const json = await response.json();
+      fetchCache.set(url, json as object);
       return json;
     } catch (error) {
       // swallow error
@@ -220,18 +217,37 @@ export async function processItemData(
   };
 }
 
-function generateRPCParams(characterData: CharacterData): RPCParams {
+async function getExportCharacterRpcParams(characterData: CharacterData): Promise<ExportCharacterParams> {
   const customizations: { [optionId: string]: number } = {};
   for (const cust of characterData.customizations) { customizations[cust.optionId] = cust.choiceId; }
 
-  const rpcParams: RPCParams = {
+  const customGeosetIds = new Set<number>();
+  const slotIds = Object.values(EquipmentSlot).filter((value) => typeof value === 'number') as number[];
+  for (const slotId of slotIds) {
+    if (!characterData.equipment || !characterData.equipment[slotId.toString()]) continue;
+    const itemId = characterData.equipment[slotId.toString()];
+    const slotData = await processItemData(slotId, itemId, characterData.raceId, characterData.genderId);
+    if ([
+      EquipmentSlot.Legs,
+      EquipmentSlot.Boots,
+      EquipmentSlot.Chest,
+      EquipmentSlot.Gloves,
+      EquipmentSlot.Belt,
+      EquipmentSlot.Back,
+      EquipmentSlot.Tabard,
+    ].includes(slotId)) {
+      slotData?.geosetIds?.forEach((geosetId) => customGeosetIds.add(geosetId));
+    }
+  }
+
+  const rpcParams: ExportCharacterParams = {
     race: characterData.raceId,
     gender: characterData.genderId,
     customizations,
     format: 'obj',
     include_animations: true,
     include_base_clothing: false,
-    geosetIds: [],
+    geosetIds: Array.from(customGeosetIds),
   };
 
   return rpcParams;
@@ -263,38 +279,20 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
 
     // Process all equipment slots dynamically
     const equipmentSlots: EquipmentSlotData[] = [];
-
-    // Get all enum values
     const slotIds = Object.values(EquipmentSlot).filter((value) => typeof value === 'number') as number[];
-
-    const customGeosetIds = new Set<number>();
     for (const slotId of slotIds) {
       if (!characterData.equipment || !characterData.equipment[slotId.toString()]) continue;
       const itemId = characterData.equipment[slotId.toString()];
       const slotData = await processItemData(slotId, itemId, characterData.raceId, characterData.genderId);
-
       equipmentSlots.push({
         slotId: slotId.toString(),
         hasModel: MODEL_SLOTS.has(slotId.toString()),
         data: slotData,
       });
-
-      if ([
-        EquipmentSlot.Legs,
-        EquipmentSlot.Boots,
-        EquipmentSlot.Chest,
-        EquipmentSlot.Gloves,
-        EquipmentSlot.Belt,
-        EquipmentSlot.Back,
-        EquipmentSlot.Tabard,
-      ].includes(slotId)) {
-        slotData?.geosetIds?.forEach((geosetId) => customGeosetIds.add(geosetId));
-      }
     }
 
     // Generate RPC parameters
-    const rpcParams = generateRPCParams(characterData);
-    rpcParams.geosetIds = Array.from(customGeosetIds);
+    const rpcParams = await getExportCharacterRpcParams(characterData);
 
     // Extract NPC base texture
     const npcTextureFile = characterData.textureFiles
@@ -302,7 +300,7 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
 
     return {
       type: 'character',
-      rpcParams,
+      exportCharRpcParams: rpcParams,
       npcTextureFile,
       equipmentSlots,
     };

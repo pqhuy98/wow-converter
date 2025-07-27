@@ -10,12 +10,11 @@ import { AnimationFile } from '../animation/animation';
 import {
   Geoset, GlobalSequence, m2BlendModeToWc3FilterMode, Material, MDL, Texture, TextureAnim, wowToWc3Interpolation,
 } from '../mdl/mdl';
-import { MetadataFile } from './interface';
 
 namespace Data {
   export interface Texture {
-    fileNameInternal: string
-    fileNameExternal: string
+    fileNameInternal?: string
+    fileNameExternal?: string
     mtlName: string
     flags: number
     fileDataID: number
@@ -132,7 +131,7 @@ namespace Data {
   }
 }
 
-export class M2MetadataFile implements MetadataFile {
+export class M2MetadataFile {
   fileType: string;
 
   fileDataID: number;
@@ -141,7 +140,7 @@ export class M2MetadataFile implements MetadataFile {
 
   internalName: string;
 
-  textures: Data.Texture[];
+  textures: Data.Texture[] = [];
 
   textureTypes: number[];
 
@@ -157,7 +156,7 @@ export class M2MetadataFile implements MetadataFile {
 
   transparencyLookup: number[];
 
-  textureTransforms: Data.TextureTransform[];
+  textureTransforms: Data.TextureTransform[] = [];
 
   textureTransformsLookup: number[];
 
@@ -169,21 +168,26 @@ export class M2MetadataFile implements MetadataFile {
 
   collisionSphereRadius: number;
 
-  skin: Data.Skin;
+  skin: Data.Skin = {
+    subMeshes: [],
+    textureUnits: [],
+    fileName: '',
+    fileDataID: 0,
+  };
 
   isLoaded = false;
 
   constructor(private filePath: string, private options: Config) {
     try {
       Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
-      if (this.fileType === 'm2' && this.textures.every((tex) => tex.fileNameExternal && tex.fileNameInternal)) {
-        // ADT files (terrain) won't have metadata JSON.
-        // WMO files (world object)'s metadata file is not yet supported.
-        // Therefore fallback to heuristic OBJ textures/materials decoding.
-        // Heuristic OBJ textures/materials uses `guessFilterMode` which is not always correct.
+      if (this.fileType === 'm2') {
+      // ADT files (terrain) won't have metadata JSON.
+      // WMO files (world object)'s metadata file is not yet supported because it has different format.
+      // Therefore fallback to heuristic OBJ textures/materials decoding.
+      // Heuristic OBJ textures/materials uses `guessFilterMode` which is not always correct.
         this.isLoaded = true;
       } else {
-        // Metadata of other files (WMO) are not supported.
+      // Metadata of other files (WMO) are not supported.
         this.isLoaded = false;
       }
     } catch (e) {
@@ -281,12 +285,14 @@ export class M2MetadataFile implements MetadataFile {
 
   extractMDLTexturesMaterials(
     texturePrefix: string,
-    numGeosets: number,
     animFile: AnimationFile,
     globalSequences: GlobalSequence[],
-  ): Pick<MDL, 'textures' | 'materials' | 'textureAnims'> & {geosetToMat: Map<number, Material>} {
+  ): Pick<MDL, 'textureAnims'> & {submeshIdToMat: Map<number, Material>} {
     if (!this.isLoaded) {
-      throw new Error(`Metadata file is not loaded: ${this.filePath}`);
+      return {
+        textureAnims: [],
+        submeshIdToMat: new Map(),
+      };
     }
 
     // Textures
@@ -382,52 +388,38 @@ export class M2MetadataFile implements MetadataFile {
     });
 
     // Materials
-    const geosetMaterials: Material[] = Array(numGeosets).fill(0).map(() => ({
-      id: 0,
-      constantColor: true,
-      layers: [],
-    }));
+    const submeshMaterials = new Map<number, Material>();
 
     this.skin.textureUnits.forEach((tu) => {
-      const geosetId = tu.skinSectionIndex;
+      const submeshId = tu.skinSectionIndex;
       const textureId = this.textureCombos[tu.textureComboIndex];
       const material = this.materials[tu.materialIndex];
       const textAnimId = this.textureTransformsLookup[tu.textureTransformComboIndex];
 
-      geosetMaterials[geosetId] && geosetMaterials[geosetId].layers.push({
+      if (!submeshMaterials.has(submeshId)) {
+        submeshMaterials.set(submeshId, {
+          id: 0,
+          constantColor: true,
+          layers: [],
+        });
+      }
+
+      submeshMaterials.get(submeshId)!.layers.push({
         texture: textures[textureId],
         filterMode: m2BlendModeToWc3FilterMode(material.blendingMode),
-        twoSided: (material.flags & 0x04) > 0, // https://wowdev.wiki/M2#Render_flags_and_blending_modes
         tvertexAnim: textAnimId !== BlizzardNull ? textureAnims[textAnimId] : undefined,
+
+        // https://wowdev.wiki/M2#Render_flags_and_blending_modes
+        unlit: (material.flags & 0x01) > 0,
+        unfogged: (material.flags & 0x02) > 0,
+        twoSided: (material.flags & 0x04) > 0,
+        noDepthTest: (material.flags & 0x08) > 0,
+        noDepthSet: (material.flags & 0x10) > 0,
       });
     });
 
-    // deduplicate materials
-    function hashMaterial(mat: MDL['materials'][number]) {
-      return JSON.stringify(mat);
-    }
-
-    const dedupedMaterials: Material[] = [];
-    const geosetToMat = new Map(geosetMaterials.map((mat, i) => [i, mat]));
-    const hashToMat = new Map<string, Material>();
-
-    geosetMaterials.forEach((mat, geosetId) => {
-      const hashKey = hashMaterial(mat);
-      if (hashToMat.has(hashKey)) {
-        // reuse existing material
-        geosetToMat[geosetId] = hashToMat.get(hashKey)!;
-      } else {
-        // add new material
-        dedupedMaterials.push(mat);
-        geosetToMat[geosetId] = mat;
-        hashToMat.set(hashKey, mat);
-      }
-    });
-
     return {
-      textures,
-      materials: dedupedMaterials,
-      geosetToMat,
+      submeshIdToMat: submeshMaterials,
       textureAnims,
     };
   }

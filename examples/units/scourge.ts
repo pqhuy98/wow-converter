@@ -223,7 +223,7 @@ export async function main() {
   await fleshGiantCorpse();
   await frostWyrm();
 
-  ce.assetManager.exportTextures(ce.outputPath);
+  await ce.assetManager.exportTextures(ce.outputPath);
   ce.models.forEach(([model, path]) => {
     model.modify
       .sortSequences()

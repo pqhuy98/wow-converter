@@ -82,6 +82,17 @@ export interface RCPResponse {
     [key: string]: any;
 }
 
+export interface ExportCharacterParams {
+  race: number;
+  gender: number;
+  customizations: { [optionId: string]: number };
+  geosetIds: number[];
+  format: string;
+  include_animations: boolean;
+  include_base_clothing: boolean;
+  excludeAnimationIds?: number[];
+}
+
 export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COMPLETE';
 
 const debug = false;
@@ -247,7 +258,7 @@ export class WowExportClient extends EventEmitter {
           case 'EXPORT_MODEL':
           case 'EXPORT_TEXTURE':
           case 'EXPORT_CHARACTER':
-            shouldResolve = response.id === 'EXPORT_START' && response.requestId === requestId;
+            shouldResolve = response.id === 'EXPORT_START' && response.requestId === requestId || response.id === 'ERR_INVALID_PARAMETERS';
             break;
           case 'CONFIG_GET':
             shouldResolve = response.id === 'CONFIG_SINGLE' || response.id === 'CONFIG_FULL';
@@ -667,15 +678,7 @@ export class WowExportClient extends EventEmitter {
      * @param data - Character export data
      * @returns Promise with export files
      */
-  async exportCharacter(data: {
-    race: number;
-    gender: number;
-    customizations: { [optionId: string]: number };
-    format: string;
-    include_animations: boolean;
-    include_base_clothing: boolean;
-    excludeAnimationIds?: number[];
-  }): Promise<{
+  async exportCharacter(data: ExportCharacterParams): Promise<{
     exportPath: string;
     fileName: string;
     fileManifest: ExportFile[];
@@ -710,7 +713,7 @@ export class WowExportClient extends EventEmitter {
       throw new Error('No CASC loaded');
     }
 
-    throw new Error(`Failed to start character export${JSON.stringify(response, null, 2)}`);
+    throw new Error(`Failed to start character export: ${JSON.stringify(response, null, 2)}`);
   }
 
   private waitForHookEvent(matcher: (eventData: any) => boolean | 'not ready'): Promise<any> {

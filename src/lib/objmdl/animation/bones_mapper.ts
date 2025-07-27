@@ -1,5 +1,7 @@
 // Retrieved from https://wowdev.wiki/M2#Key_Bone_Names
 
+import { MDL } from '../mdl/mdl';
+
 const BONE_NAMES = {
   0: 'ArmL',
   1: 'ArmR',
@@ -492,4 +494,8 @@ export function getBoneName(bone_id: number, index: number, crc: number) {
   if (crc in CRC_BONE_NAMES) return CRC_BONE_NAMES[crc];
 
   return `bone_${index}`;
+}
+
+export function isUnknownBone(bone: MDL['bones'][number]) {
+  return /^bone_[0-9]+$/.test(bone.name);
 }
