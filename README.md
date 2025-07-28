@@ -48,6 +48,9 @@ This is my fork of Kruithne's https://github.com/Kruithne/wow.export with the re
     - Turn **ON** the RCP server with `Enable Remote Control Protocol` (leave default port **17751**)
     - Make sure **all** `Use Absolute … Paths` options are **OFF**.
 
+![wow.export.exe](https://github.com/pqhuy98/wow-converter/blob/main/docs/wow.export-1.jpg?raw=true)
+
+
 ### 3. Start **wow-converter**
 
 1. Run `wow-converter.exe`. A command line window will open displaying all app messages.
@@ -86,6 +89,7 @@ npm run build   # outputs the same binaries found in the release ZIP into the `d
 
 - Built by me - *Warcraft Sandbox* (<https://www.youtube.com/@WarcraftSandbox>).<br>
 - wow.export is forked from the amazing work of **Kruithne**: https://github.com/Kruithne/wow.export
+- Exported assets are from World of Warcraft, Blizzard Entertainment.
 - https://github.com/ChiefOfGxBxL/WC3MapTranslator
 - https://github.com/4eb0da/war3-model
 - https://github.com/flowtsohg/mdx-m3-viewer
