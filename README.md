@@ -31,7 +31,7 @@ Prefer working offline, fast, without waiting queue, and no constant ZIP downloa
 
 ### 1. Get the tools
 
-Download the latest release ZIP and extract it. You will see two files:
+Download the latest release ZIP here: https://github.com/pqhuy98/wow-converter/releases and extract it. You will see the two main files among many other files:
 
 | File | Purpose |
 |------|---------|
