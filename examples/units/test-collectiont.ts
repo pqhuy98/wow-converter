@@ -1,14 +1,16 @@
 import { writeFileSync } from 'fs';
 import path from 'path';
 
-import { AssetManager } from '@/lib/converter/model-manager';
-import { defaultConfig, wowExportPath } from '@/lib/global-config';
+import { AssetManager } from '@/lib/converter/common/model-manager';
+import { getDefaultConfig } from '@/lib/global-config';
 import { V3 } from '@/lib/math/vector';
 import { AnimationFile } from '@/lib/objmdl/animation/animation';
 import { ANIM_NAMES, getWc3AnimName, getWowAnimName } from '@/lib/objmdl/animation/animation_mapper';
 import { isUnknownBone } from '@/lib/objmdl/animation/bones_mapper';
 import { M2MetadataFile } from '@/lib/objmdl/metadata/m2_metadata';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+
+const config = await getDefaultConfig();
 
 async function character() {
   const excludedAnimIds: number[] = [];
@@ -45,12 +47,12 @@ async function character() {
   });
 
   const objPath = result.fileManifest.find((f) => f.type === 'OBJ')!.file;
-  const assetManager = new AssetManager(defaultConfig);
-  const model = assetManager.parse(path.relative(wowExportPath.value, objPath), true);
+  const assetManager = new AssetManager(config);
+  const model = assetManager.parse(path.relative(config.wowExportAssetDir, objPath), true);
   writeFileSync(path.join('exported-assets', 'test.mdl'), model.mdl.toString());
   await assetManager.exportTextures('exported-assets');
   console.log(result);
-  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), defaultConfig);
+  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), config);
   const animation = new AnimationFile(objPath.replace(/\.obj$/, '_bones.json'));
 
   return { model, metadata, animation };
@@ -58,12 +60,12 @@ async function character() {
 
 export async function collection() {
   await wowExportClient.waitUntilReady();
-  const objPath = path.join(wowExportPath.value, 'item\\objectcomponents\\collections\\collections_mechagnome_mg_m_collections_plate_mechagnome_c_01_gn_2618164.obj');
-  const assetManager = new AssetManager(defaultConfig);
-  const model = assetManager.parse(path.relative(wowExportPath.value, objPath), true);
+  const objPath = path.join(config.wowExportAssetDir, 'item\\objectcomponents\\collections\\collections_mechagnome_mg_m_collections_plate_mechagnome_c_01_gn_2618164.obj');
+  const assetManager = new AssetManager(config);
+  const model = assetManager.parse(path.relative(config.wowExportAssetDir, objPath), true);
   writeFileSync(path.join('exported-assets', 'collection.mdl'), model.mdl.toString());
   await assetManager.exportTextures('exported-assets');
-  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), defaultConfig);
+  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), config);
   const animation = new AnimationFile(objPath.replace(/\.obj$/, '_bones.json'));
   return { model, metadata, animation };
 }

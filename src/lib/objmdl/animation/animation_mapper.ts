@@ -1976,5 +1976,6 @@ export function isLoopAnimation(wowAnimation: string) {
     'ChannelCastDirected',
     'ChannelCastOmni',
     'Whirlwind',
+    'EmoteTalk',
   ].includes(wowAnimation);
 }

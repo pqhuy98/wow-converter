@@ -15,7 +15,6 @@ import { EventEmitter } from 'events';
 import { Socket } from 'net';
 
 import { args } from '../constants';
-import { wowExportPath } from '../global-config';
 import { waitUntil } from '../utils';
 
 // Type definitions
@@ -108,12 +107,27 @@ export class WowExportClient extends EventEmitter {
     cascLoaded: false,
   };
 
+  private assetDir = '';
+
+  async getAssetDir() {
+    if (this.assetDir) {
+      return this.assetDir;
+    }
+    const config = await this.getConfig();
+    this.assetDir = config.exportDirectory.replace('\\', '/');
+    return this.assetDir;
+  }
+
   public get isReady() {
     return this.status.connected && this.status.configLoaded && this.status.cascLoaded;
   }
 
   public async waitUntilReady() {
-    return waitUntil(() => this.isReady);
+    if (this.isReady) {
+      return;
+    }
+    await waitUntil(() => this.isReady);
+    await this.syncConfig();
   }
 
   constructor(host: string = '127.0.0.1', port: number = 17751) {
@@ -132,9 +146,9 @@ export class WowExportClient extends EventEmitter {
           }
           if (!this.status.configLoaded) {
             const config = await this.getConfig();
-            wowExportPath.value = config.exportDirectory.replace('\\', '/');
+            this.assetDir = config.exportDirectory.replace('\\', '/');
             this.status.configLoaded = true;
-            console.log(chalk.green('✅ Retrieved wow.export asset dir:'), chalk.gray(wowExportPath.value));
+            console.log(chalk.green('✅ Retrieved wow.export asset dir:'), chalk.gray(this.assetDir));
             failedAttempts = 0;
           }
           if (!this.status.cascLoaded) {
@@ -218,7 +232,7 @@ export class WowExportClient extends EventEmitter {
     });
   }
 
-  async syncConfig(): Promise<void> {
+  private async syncConfig(): Promise<void> {
     await Promise.all(Object.entries(desiredConfig).map(([key, value]) => this.setConfig(key, value)));
   }
 

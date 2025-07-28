@@ -10,6 +10,7 @@ import {
   TerrainTranslator,
   UnitsTranslator,
 } from './translators';
+import { MapTranslator } from './translators/MapTranslator';
 
 export {
   CamerasTranslator,
@@ -22,4 +23,5 @@ export {
   StringsTranslator,
   TerrainTranslator,
   UnitsTranslator,
+  MapTranslator,
 };

@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import path, { join } from 'path';
 import { z } from 'zod';
 
-import { assetPrefix, wowExportPath } from '@/lib/global-config';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import {
@@ -12,13 +11,12 @@ import {
   processItemData,
 } from '@/lib/wowhead-client/wowhead-client';
 
+import { Config } from '../global-config';
 import {
   ANIM_NAMES, AttackTagSchema, getWc3AnimName, getWowAnimName,
 } from '../objmdl/animation/animation_mapper';
 import { MDL } from '../objmdl/mdl/mdl';
-import { waitUntil } from '../utils';
-import { Config } from './common';
-import { AssetManager } from './model-manager';
+import { AssetManager } from './common/model-manager';
 
 // Local file path must be a relative path and must not contain ".." or start with a slash.
 // This is to prevent path traversal attacks and other security issues.
@@ -87,12 +85,12 @@ export class CharacterExporter {
   }
 
   public async exportCharacter(char: Character, outputFile: string) {
-    await wowExportClient.syncConfig();
-    await waitUntil(() => wowExportClient.isReady);
+    await wowExportClient.waitUntilReady();
+
     const baseRef = char.base;
 
     if (baseRef.type === 'local') {
-      const resolvedAttach = await resolveAttachItems(char.attachItems);
+      const resolvedAttach = await this.resolveAttachItems(char.attachItems);
       return this.exportModel({ ...char, base: baseRef, attachItems: resolvedAttach }, outputFile);
     }
 
@@ -110,7 +108,7 @@ export class CharacterExporter {
 
   private exportModel(char: Character, outputFile: string) {
     const start = performance.now();
-    console.log('Base model:', path.join(wowExportPath.value, char.base.value));
+    console.log('Base model:', path.join(this.config.wowExportAssetDir, char.base.value));
     const model = this.assetManager.parse(char.base.value, true).mdl;
     debug && console.log('Parsed wow.export model took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
@@ -211,10 +209,10 @@ export class CharacterExporter {
         const data = slot.data;
         if (data.modelFiles?.[0]?.fileDataId) {
           const modelId = data.modelFiles[0].fileDataId;
-          modelExports.push({ fileDataID: modelId, skinName: await getSkinName(modelId, data.textureFiles) });
+          modelExports.push({ fileDataID: modelId, skinName: await this.getSkinName(modelId, data.textureFiles) });
           if (slot.slotId === EquipmentSlot.Shoulder.toString() && data.modelFiles?.[1]?.fileDataId) {
             const modelIdR = data.modelFiles[1].fileDataId;
-            modelExports.push({ fileDataID: modelIdR, skinName: await getSkinName(modelIdR, data.textureFiles) });
+            modelExports.push({ fileDataID: modelIdR, skinName: await this.getSkinName(modelIdR, data.textureFiles) });
           }
         }
       }
@@ -234,7 +232,7 @@ export class CharacterExporter {
         const isOrcMale = prep.exportCharRpcParams.race === raceOrc && prep.exportCharRpcParams.gender === genderMale;
 
         slotModelPaths.set(slot.slotId, [
-          relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
+          this.relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
           slot.slotId === EquipmentSlot.Shoulder.toString() && isOrcMale ? 1.75 : 1,
         ]);
 
@@ -242,7 +240,7 @@ export class CharacterExporter {
           const modelIdR = data.modelFiles[1].fileDataId;
           const expR = exportedModels.find((m) => m.fileDataID === modelIdR);
           slotModelPathsR.set(slot.slotId, [
-            relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!,
+            this.relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!,
             slot.slotId === EquipmentSlot.Shoulder.toString() && isOrcMale ? 1.75 : 1,
           ]);
         }
@@ -254,14 +252,14 @@ export class CharacterExporter {
         if (slot.data?.textureFiles?.[0]?.fileDataId) {
           const textureId = slot.data.textureFiles[0].fileDataId;
           const texExport = await wowExportClient.exportTextures([textureId]);
-          slotTexturePaths.set(slot.slotId, relativeToExport(texExport[0].file)!);
+          slotTexturePaths.set(slot.slotId, this.relativeToExport(texExport[0].file)!);
         }
       }
 
       // NPC base texture
       if (prep.npcTextureFile) {
         const tex = await wowExportClient.exportTextures([prep.npcTextureFile]);
-        npcTexturePath = relativeToExport(tex[0].file);
+        npcTexturePath = this.relativeToExport(tex[0].file);
       }
 
       // If cinematic animations should be removed, compute their IDs and pass to RPC to reduce export size
@@ -281,7 +279,7 @@ export class CharacterExporter {
 
       // Export character via RPC to OBJ directory
       const result = await wowExportClient.exportCharacter({ ...prep.exportCharRpcParams });
-      exportPath = relativeToExport(result.exportPath)!;
+      exportPath = this.relativeToExport(result.exportPath)!;
       if (!exportPath) {
         console.error('Failed to export character NPC');
         console.error({ exportedModels, result });
@@ -297,10 +295,10 @@ export class CharacterExporter {
         const data = slot.data;
         if (!data.modelFiles?.[0]?.fileDataId) continue;
         const modelId = data.modelFiles[0].fileDataId;
-        modelExports.push({ fileDataID: modelId, skinName: await getSkinName(modelId, data.textureFiles) });
+        modelExports.push({ fileDataID: modelId, skinName: await this.getSkinName(modelId, data.textureFiles) });
         if (slot.slotId === EquipmentSlot.Shoulder.toString() && data.modelFiles?.[1]?.fileDataId) {
           const modelIdR = data.modelFiles[1].fileDataId;
-          modelExports.push({ fileDataID: modelIdR, skinName: await getSkinName(modelIdR, data.textureFiles) });
+          modelExports.push({ fileDataID: modelIdR, skinName: await this.getSkinName(modelIdR, data.textureFiles) });
         }
       }
 
@@ -309,7 +307,7 @@ export class CharacterExporter {
 
       // Base model path
       const baseExp = exportedModels.find((m) => m.fileDataID === prep.baseModel.fileDataID);
-      exportPath = relativeToExport(baseExp?.files.find((f) => f.type === 'OBJ')?.file)!;
+      exportPath = this.relativeToExport(baseExp?.files.find((f) => f.type === 'OBJ')?.file)!;
       if (!exportPath) {
         console.error('Failed to export model-only NPC', prep.baseModel);
         console.error(JSON.stringify({ exportedModels, baseExp, modelExports }, null, 2));
@@ -322,7 +320,7 @@ export class CharacterExporter {
         const modelId = data.modelFiles[0].fileDataId;
         const exp = exportedModels.find((m) => m.fileDataID === modelId);
         slotModelPaths.set(slot.slotId, [
-          relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
+          this.relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
           1,
         ]);
 
@@ -330,7 +328,7 @@ export class CharacterExporter {
           const modelIdR = data.modelFiles[1].fileDataId;
           const expR = exportedModels.find((m) => m.fileDataID === modelIdR);
           slotModelPathsR.set(slot.slotId, [
-            relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!,
+            this.relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!,
             1,
           ]);
         }
@@ -342,7 +340,7 @@ export class CharacterExporter {
         if (!slot.data?.textureFiles?.[0]?.fileDataId) continue;
         const textureId = slot.data.textureFiles[0].fileDataId;
         const texExport = await wowExportClient.exportTextures([textureId]);
-        slotTexturePaths.set(slot.slotId, relativeToExport(texExport[0].file)!);
+        slotTexturePaths.set(slot.slotId, this.relativeToExport(texExport[0].file)!);
       }
     }
 
@@ -351,7 +349,7 @@ export class CharacterExporter {
     // -----------------------------------------------------------------------
 
     debug && console.log('start resolveAttachItems');
-    const attachItems = await resolveAttachItems(originalChar.attachItems);
+    const attachItems = await this.resolveAttachItems(originalChar.attachItems);
     debug && console.log('end resolveAttachItems');
 
     // Equipment attachments
@@ -385,7 +383,7 @@ export class CharacterExporter {
     if (npcTexturePath) {
       this.assetManager.addPngTexture(npcTexturePath);
       const baseTexturePath = mdl.geosets[0].material.layers[0].texture.image;
-      const newTexturePath = path.join(assetPrefix, npcTexturePath).replace('.png', '.blp');
+      const newTexturePath = path.join(this.config.assetPrefix, npcTexturePath).replace('.png', '.blp');
 
       mdl.geosets.forEach((geoset, i) => {
         // For skeleton, we don't want to override anything but
@@ -431,7 +429,7 @@ export class CharacterExporter {
       this.assetManager.addPngTexture(texPath);
       mdl.textures.push({
         id: mdl.textures.length,
-        image: path.join(assetPrefix, texPath).replace('.png', '.blp'),
+        image: path.join(this.config.assetPrefix, texPath).replace('.png', '.blp'),
         wrapWidth: false,
         wrapHeight: false,
       });
@@ -455,45 +453,45 @@ export class CharacterExporter {
 
     return mdl;
   }
-}
 
-async function getSkinName(
-  modelId: number,
-  textureFiles: { fileDataId: number }[],
-): Promise<string | undefined> {
-  if (textureFiles.length === 0) return undefined;
-  const skins = await wowExportClient.getModelSkins(modelId);
-  return skins.find((skin) => skin.textureIDs
-    .every((id: number) => textureFiles.map((t) => t.fileDataId).includes(id)))?.id
+  private async getSkinName(
+    modelId: number,
+    textureFiles: { fileDataId: number }[],
+  ): Promise<string | undefined> {
+    if (textureFiles.length === 0) return undefined;
+    const skins = await wowExportClient.getModelSkins(modelId);
+    return skins.find((skin) => skin.textureIDs
+      .every((id: number) => textureFiles.map((t) => t.fileDataId).includes(id)))?.id
     ?? skins[0]?.id;
-}
-
-async function resolveItemRef(ref: Ref): Promise<string> {
-  if (ref.type === 'local') return ref.value;
-
-  debug && console.log('resolveItemRef getDisplayIdFromUrl start', ref);
-  const displayId = ref.type === 'wowhead' ? await getDisplayIdFromUrl(ref.value) : Number(ref.value);
-  debug && console.log('resolveItemRef getDisplayIdFromUrl end', displayID);
-  const itemData = await processItemData(-1, displayId, 0, 0);
-  const skinName = await getSkinName(itemData.modelFiles[0].fileDataId, itemData.textureFiles);
-  const exported = (await wowExportClient.exportModels([
-    { fileDataID: itemData.modelFiles[0].fileDataId, skinName },
-  ]))[0];
-  const obj = exported.files.find((f) => f.type === 'OBJ')?.file;
-  if (!obj) throw new Error('Failed to export attachment item OBJ');
-  return relativeToExport(obj)!;
-}
-
-async function resolveAttachItems(map?: Record<number, AttachItem>): Promise<Record<number, AttachItem>> {
-  const resolved: Record<number, AttachItem> = {};
-  if (!map) return resolved;
-  for (const [id, data] of Object.entries(map)) {
-    const p = await resolveItemRef(data.path);
-    resolved[Number(id)] = { path: local(p), scale: data.scale };
   }
-  return resolved;
-}
 
-function relativeToExport(p: string | undefined): string | undefined {
-  return p ? path.relative(wowExportPath.value, p) : undefined;
+  private async resolveItemRef(ref: Ref): Promise<string> {
+    if (ref.type === 'local') return ref.value;
+
+    debug && console.log('resolveItemRef getDisplayIdFromUrl start', ref);
+    const displayId = ref.type === 'wowhead' ? await getDisplayIdFromUrl(ref.value) : Number(ref.value);
+    debug && console.log('resolveItemRef getDisplayIdFromUrl end', displayID);
+    const itemData = await processItemData(-1, displayId, 0, 0);
+    const skinName = await this.getSkinName(itemData.modelFiles[0].fileDataId, itemData.textureFiles);
+    const exported = (await wowExportClient.exportModels([
+      { fileDataID: itemData.modelFiles[0].fileDataId, skinName },
+    ]))[0];
+    const obj = exported.files.find((f) => f.type === 'OBJ')?.file;
+    if (!obj) throw new Error('Failed to export attachment item OBJ');
+    return this.relativeToExport(obj)!;
+  }
+
+  private async resolveAttachItems(map?: Record<number, AttachItem>): Promise<Record<number, AttachItem>> {
+    const resolved: Record<number, AttachItem> = {};
+    if (!map) return resolved;
+    for (const [id, data] of Object.entries(map)) {
+      const p = await this.resolveItemRef(data.path);
+      resolved[Number(id)] = { path: local(p), scale: data.scale };
+    }
+    return resolved;
+  }
+
+  private relativeToExport(p: string | undefined): string | undefined {
+    return p ? path.relative(this.config.wowExportAssetDir, p) : undefined;
+  }
 }

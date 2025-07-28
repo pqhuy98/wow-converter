@@ -7,9 +7,8 @@ import fsExtra from 'fs-extra';
 import path from 'path';
 import z from 'zod';
 
-import { CharacterExporter, CharacterSchema, LocalRefValueSchema } from './lib/converter/character';
-import { Config } from './lib/converter/common';
-import { defaultConfig } from './lib/global-config';
+import { CharacterExporter, CharacterSchema, LocalRefValueSchema } from './lib/converter/character-exporter';
+import { getDefaultConfig } from './lib/global-config';
 import { printLogo } from './lib/logo';
 import { waitUntil } from './lib/utils';
 import { wowExportClient } from './lib/wowexport-client/wowexport-client';
@@ -23,11 +22,7 @@ async function main() {
   app.use(express.json());
 
   const ceOutputPath = 'exported-assets';
-  const ceConfig: Config = {
-    ...defaultConfig,
-    assetPrefix: 'wow',
-    rawModelScaleUp: defaultConfig.rawModelScaleUp * 2,
-  };
+  const ceConfig = await getDefaultConfig();
   fsExtra.ensureDirSync(ceOutputPath);
 
   /**

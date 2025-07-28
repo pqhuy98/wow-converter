@@ -1,5 +1,5 @@
 import {
-  creature, creature_template, creature_template_model, item_template, PrismaClient,
+  creature, creature_template, creature_template_model, item_template, Prisma, PrismaClient,
 } from '@prisma/client';
 import chalk from 'chalk';
 import { existsSync, writeFileSync } from 'fs';
@@ -7,8 +7,8 @@ import { join } from 'path';
 
 import {
   Character, CharacterExporter, displayID, wowhead,
-} from '../converter/character';
-import { Config } from '../converter/common';
+} from '../converter/character-exporter';
+import { Config } from '../global-config';
 import { AttackTag } from '../objmdl/animation/animation_mapper';
 import { WoWAttachmentID } from '../objmdl/animation/bones_mapper';
 import { toMap } from '../utils';
@@ -28,7 +28,11 @@ export interface Creature {
   model: creature_template_model;
 }
 
-export async function getCreaturesInTile(mapId: number, tileXy: [number, number]): Promise<Creature[]> {
+export async function getCreaturesInTile(
+  mapId: number,
+  tileXy: [number, number],
+  extraConditions: Prisma.creatureWhereInput = {},
+): Promise<Creature[]> {
   const [tileX, tileY] = tileXy;
 
   const tileSize = 533.3333333; // yards per ADT tile
@@ -47,6 +51,7 @@ export async function getCreaturesInTile(mapId: number, tileXy: [number, number]
       map: mapId,
       position_x: { gte: minX, lte: maxX },
       position_y: { gte: minY, lte: maxY },
+      ...extraConditions,
     },
   });
   const templateIds = new Set(creatures.map((c) => c.id1));
@@ -99,13 +104,26 @@ export async function getCreaturesInTile(mapId: number, tileXy: [number, number]
 }
 
 export async function exportCreatureModels(
-  creatures: Creature[],
+  allCreatures: Creature[],
   outputPath: string,
   config: Config,
 ) {
   const debug = false;
   let cnt = 0;
-  const exportedDisplayIds = new Set<number>();
+
+  // Filter out creatures with the same display id
+  const displayIds = new Set<number>();
+  const creatures = allCreatures.filter((c) => {
+    const displayId = c.model.CreatureDisplayID;
+    if (!displayId) {
+      throw new Error(`No display id found for creature template ${c.template.entry}`);
+    }
+    if (displayIds.has(displayId)) {
+      return false;
+    }
+    displayIds.add(displayId);
+    return true;
+  });
 
   const batchSize = 5;
   for (let i = 0; i < creatures.length; i += batchSize) {
@@ -122,13 +140,8 @@ export async function exportCreatureModels(
         return;
       }
 
-      if (exportedDisplayIds.has(displayId)) {
-        return;
-      }
-      exportedDisplayIds.add(displayId);
-
       console.log('\n');
-      console.log(`==== Exporting creature ${chalk.blue(c.template.name)} (${cnt}/${creatures.length}, guid=${c.creature.guid}, displayId=${displayId})`);
+      console.log(`==== Exporting creature ${chalk.blue(c.template.name)} (${cnt}/${allCreatures.length}, guid=${c.creature.guid}, displayId=${displayId})`);
 
       const start0 = performance.now();
       let start = performance.now();

@@ -1,7 +1,7 @@
 import esMain from 'es-main';
 import { writeFileSync } from 'fs';
 
-import { CharacterExporter, local, wowhead } from '@/lib/converter/character';
+import { CharacterExporter, local, wowhead } from '@/lib/converter/character-exporter';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 
 import { ceConfig } from './common';

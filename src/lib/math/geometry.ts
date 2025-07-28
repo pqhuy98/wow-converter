@@ -1,4 +1,4 @@
-import { Vector3 } from './common';
+import { Vector2, Vector3 } from './common';
 
 /**
  * @returns slope angle in degree
@@ -63,4 +63,42 @@ export function getZProjectionOfXyInTriangle(v1: Vector3, v2: Vector3, v3: Vecto
   const z = (-normal.a * x - normal.b * y - d) / normal.c;
 
   return z;
+}
+
+// Function to calculate the area of the triangle using vertices
+export function triangleArea(A: Vector2, B: Vector2, C: Vector2): number {
+  return Math.abs((A[0] * (B[1] - C[1]) + B[0] * (C[1] - A[1]) + C[0] * (A[1] - B[1])) / 2.0);
+}
+
+// Function to check if a point P is inside the triangle ABC
+export function isInsideTriangle(A: Vector2, B: Vector2, C: Vector2, P: Vector2): boolean {
+  const fullArea = triangleArea(A, B, C);
+  const area1 = triangleArea(P, B, C);
+  const area2 = triangleArea(A, P, C);
+  const area3 = triangleArea(A, B, P);
+
+  // Check if the sum of P's area with the sides of the triangle equals the full area
+  return Math.abs(fullArea - (area1 + area2 + area3)) < 1;
+}
+
+// Function to find integer points inside the triangle
+export function findIntegerPointsInTriangle(A: Vector2, B: Vector2, C: Vector2): Vector2[] {
+  const points: Vector2[] = [];
+  // Determine the bounding box of the triangle
+  const minX = Math.min(A[0], B[0], C[0]);
+  const maxX = Math.max(A[0], B[0], C[0]);
+  const minY = Math.min(A[1], B[1], C[1]);
+  const maxY = Math.max(A[1], B[1], C[1]);
+
+  // Iterate over the bounding box and check each point
+  for (let x = Math.floor(minX); x <= Math.ceil(maxX); x++) {
+    for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
+      const point: Vector2 = [x, y];
+      if (isInsideTriangle(A, B, C, point)) {
+        points.push(point);
+      }
+    }
+  }
+
+  return points;
 }

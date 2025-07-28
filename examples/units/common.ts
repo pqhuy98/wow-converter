@@ -1,8 +1,8 @@
 import { rmSync } from 'fs';
 import fsExtra from 'fs-extra';
 
-import { CharacterExporter } from '@/lib/converter/character';
-import { Config } from '@/lib/converter/common';
+import { CharacterExporter } from '@/lib/converter/character-exporter';
+import { Config } from '@/lib/converter/common/models';
 
 import { defaultConfig } from '../../src/lib/global-config';
 

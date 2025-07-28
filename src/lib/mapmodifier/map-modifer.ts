@@ -3,7 +3,7 @@ import assert from 'assert';
 import { DoodadList, ObjectModificationTable, Terrain } from '@/vendors/wc3maptranslator/data';
 
 import { distancePerTile } from '../constants';
-import { getInitialTerrain } from '../utils';
+import { getInitialTerrain } from './terrain';
 
 export interface Wc3Map {
   terrain: Terrain;

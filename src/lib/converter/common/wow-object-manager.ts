@@ -5,14 +5,14 @@ import {
 import { glob } from 'glob';
 import path from 'path';
 
-import { wowExportPath } from '../global-config';
-import { Vector3 } from '../math/common';
-import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../math/rotation';
-import { V3 } from '../math/vector';
-import {
-  Config, isWowObjectType, WowObject, WowObjectType,
-} from './common';
+import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+
+import { Config } from '../../global-config';
+import { Vector3 } from '../../math/common';
+import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../../math/rotation';
+import { V3 } from '../../math/vector';
 import { AssetManager, computeAbsoluteMinMaxExtents } from './model-manager';
+import { isWowObjectType, WowObject, WowObjectType } from './models';
 
 interface PlacementInfoRow {
   ModelFile: string
@@ -48,9 +48,11 @@ export class WowObjectManager {
   }
 
   async parse(patterns: string[], filter?: (fileName: string, type: WowObjectType) => boolean) {
-    const globPatterns = patterns.map((p) => path.join(wowExportPath.value, p).replaceAll(path.sep, '/'));
+    await wowExportClient.waitUntilReady();
+
+    const globPatterns = patterns.map((p) => path.join(this.config.wowExportAssetDir, p).replaceAll(path.sep, '/'));
     const files = glob.sync(globPatterns, {
-      cwd: wowExportPath.value,
+      cwd: this.config.wowExportAssetDir,
       absolute: true,
     }).map((f) => f.replaceAll(path.sep, '/'));
     console.log('Parsing root files', files);
@@ -59,7 +61,7 @@ export class WowObjectManager {
       const type = file.includes('adt') ? 'adt' : 'wmo';
       if (filter && !filter(file, type)) continue;
       const fileName = this.relative(file).replaceAll('.obj', '');
-      this.roots.push({
+      const root: WowObject = {
         id: fileName,
         model: undefined,
         position: [0, 0, 0],
@@ -67,17 +69,28 @@ export class WowObjectManager {
         scaleFactor: 1,
         children: [],
         type,
-      });
-      await this.parseRecursive(fileName, this.roots[this.roots.length - 1], filter);
+      };
+      this.roots.push(root);
+      await this.parseRecursive(fileName, root, filter);
+      if (isEmptyModel(root)) {
+        // Add children as roots, and make root as leaf
+        const children = root.children;
+        root.children = [];
+        children.forEach((child) => {
+          this.roots.push(child);
+          child.position = V3.sum(V3.rotate(child.position, root.rotation), root.position);
+          child.rotation = calculateChildAbsoluteEulerRotation(root.rotation, child.rotation);
+        });
+      }
     }
   }
 
   private relative(fullPath: string) {
-    return path.relative(wowExportPath.value, fullPath);
+    return path.relative(this.config.wowExportAssetDir, fullPath);
   }
 
   private full(relativePath: string) {
-    return path.join(wowExportPath.value, relativePath);
+    return path.join(this.config.wowExportAssetDir, relativePath);
   }
 
   private async parseRecursive(objectPath: string, current: WowObject, filter?: (fileName: string, type: WowObjectType) => boolean) {
@@ -92,15 +105,17 @@ export class WowObjectManager {
       // Center the terrain model and update its position
       const { min, max } = computeAbsoluteMinMaxExtents([current]);
       const center = V3.mean(min, max);
-      current.model.mdl.geosets.forEach((geoset) => geoset.vertices.forEach((v) => {
-        const vAbsolute = V3.rotate(v.position, current.rotation);
-        const vAbsoluteCentered = V3.sum(vAbsolute, V3.negative(center));
-        const vRelative = V3.rotate(vAbsoluteCentered, V3.negative(current.rotation));
-        v.position[0] = vRelative[0];
-        v.position[1] = vRelative[1];
-        v.position[2] = vRelative[2];
-      }));
-      current.position = center;
+      if (!isNaN(center[0]) && !isNaN(center[1]) && !isNaN(center[2])) {
+        current.model.mdl.geosets.forEach((geoset) => geoset.vertices.forEach((v) => {
+          const vAbsolute = V3.rotate(v.position, current.rotation);
+          const vAbsoluteCentered = V3.sum(vAbsolute, V3.negative(center));
+          const vRelative = V3.rotate(vAbsoluteCentered, V3.negative(current.rotation));
+          v.position[0] = vRelative[0];
+          v.position[1] = vRelative[1];
+          v.position[2] = vRelative[2];
+        }));
+        current.position = center;
+      }
     } else {
       this.doodads.push(current);
     }
@@ -270,4 +285,8 @@ function convertRowPositionRotation(row: PlacementInfoRow): {
       blender.rotation[2],
     ],
   };
+}
+
+function isEmptyModel(obj: WowObject) {
+  return obj.model!.mdl.geosets.every((geoset) => geoset.vertices.length === 0);
 }

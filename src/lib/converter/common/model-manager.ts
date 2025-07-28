@@ -1,11 +1,13 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 
-import { pngToBlp } from '../blp/blp';
-import { wowExportPath } from '../global-config';
-import { V3 } from '../math/vector';
-import { convertWowExportModel } from '../objmdl';
-import { Config, Model, WowObject } from './common';
+import { pngToBlp } from '../../blp/blp';
+import { Config } from '../../global-config';
+import { EulerRotation, Vector3 } from '../../math/common';
+import { calculateChildAbsoluteEulerRotation } from '../../math/rotation';
+import { V3 } from '../../math/vector';
+import { convertWowExportModel } from '../../objmdl';
+import { Model, WowObject } from './models';
 
 export class AssetManager {
   models = new Map<string, Model>();
@@ -21,9 +23,9 @@ export class AssetManager {
     }
 
     const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
-    const objFullPath = path.join(wowExportPath.value, objRelativePath);
+    const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
     // console.log('Parsing model', objFullPath);
-    const { mdl, texturePaths } = convertWowExportModel(objFullPath, wowExportPath.value, this.config);
+    const { mdl, texturePaths } = convertWowExportModel(objFullPath, this.config);
     const model: Model = {
       relativePath: path.join(this.config.assetPrefix, `${objectPath}.mdl`),
       mdl,
@@ -47,7 +49,7 @@ export class AssetManager {
       }
 
       const mdl = model.mdl;
-      if (mdl.model.boundsRadius > this.config.infiniteExtentBoundRadiusThreshold * this.config.rawModelScaleUp) {
+      if (mdl.model.boundsRadius > this.config.infiniteExtentBoundRadiusThreshold) {
         mdl.modify.setLargeExtents();
       }
       mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -70,7 +72,7 @@ export class AssetManager {
         exportedTexturePaths.push(toPath);
         return;
       }
-      const fromPath = path.join(wowExportPath.value, texturePath);
+      const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
       if (!existsSync(fromPath)) {
         console.warn('Skipping texture not found', fromPath);
         return;
@@ -99,13 +101,32 @@ export class AssetManager {
 export function computeAbsoluteMinMaxExtents(objs: WowObject[]) {
   let min = V3.all(Infinity);
   let max = V3.all(-Infinity);
+
+  function isEmpty(obj: WowObject) {
+    return obj.model!.mdl.geosets.every((geoset) => geoset.vertices.length === 0);
+  }
+
   objs.forEach((obj) => {
-    obj.model!.mdl.geosets.forEach((geoset) => {
-      geoset.vertices.forEach((v) => {
-        const rotatedV = V3.rotate(v.position, obj.rotation);
-        const position = V3.sum(obj.position, rotatedV);
-        min = V3.min(min, position);
-        max = V3.max(max, position);
+    let nodes = [obj];
+    let basePosition: Vector3 = [0, 0, 0];
+    let baseRotation: EulerRotation = [0, 0, 0];
+
+    if (isEmpty(obj)) {
+      nodes = obj.children;
+      basePosition = obj.position;
+      baseRotation = obj.rotation;
+    }
+
+    nodes.forEach((node) => {
+      const position = V3.sum(basePosition, V3.rotate(node.position, baseRotation));
+      const rotation = calculateChildAbsoluteEulerRotation(baseRotation, node.rotation);
+      node.model!.mdl.geosets.forEach((geoset) => {
+        geoset.vertices.forEach((v) => {
+          const rotatedV = V3.rotate(v.position, rotation);
+          const positionV = V3.sum(position, rotatedV);
+          min = V3.min(min, positionV);
+          max = V3.max(max, positionV);
+        });
       });
     });
   });

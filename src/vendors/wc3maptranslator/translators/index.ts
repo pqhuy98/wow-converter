@@ -9,3 +9,4 @@ export * from './StringsTranslator';
 export * from './TerrainTranslator';
 export * from './UnitsTranslator';
 export * from './ObjectsTranslator';
+export * from './MapTranslator';

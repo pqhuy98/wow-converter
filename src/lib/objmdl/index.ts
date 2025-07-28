@@ -3,8 +3,7 @@ import { existsSync } from 'fs';
 import _ from 'lodash';
 import path from 'path';
 
-import { Config } from '../converter/common';
-import { guessFilterMode } from '../global-config';
+import { Config } from '../global-config';
 import { AnimationFile } from './animation/animation';
 import {
   GeosetVertex, Material, Matrix, MDL, SkinWeight,
@@ -13,10 +12,11 @@ import {
 import { M2MetadataFile } from './metadata/m2_metadata';
 import { MTLFile } from './mtl';
 import { IFace, IGroup, OBJFile } from './obj';
+import { guessFilterMode } from './utils';
 
 const debug = false;
 
-export function convertWowExportModel(objFilePath: string, wowExportAssetRoot: string, config: Config): {mdl: MDL, texturePaths: Set<string>} {
+export function convertWowExportModel(objFilePath: string, config: Config): {mdl: MDL, texturePaths: Set<string>} {
   let start = performance.now();
   const obj = new OBJFile(objFilePath).parse();
   const mtl = new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'));
@@ -25,7 +25,7 @@ export function convertWowExportModel(objFilePath: string, wowExportAssetRoot: s
 
   const mdl = new MDL({
     formatVersion: 900,
-    name: path.relative(wowExportAssetRoot, objFilePath).replace('.obj', '.mdl'),
+    name: path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', '.mdl'),
   });
 
   if (obj.models.length === 0) {
@@ -59,7 +59,7 @@ export function convertWowExportModel(objFilePath: string, wowExportAssetRoot: s
       console.warn('Skipping texture not found', absPath, 'for model', objFilePath);
       return;
     }
-    const textureRelativePath = path.relative(wowExportAssetRoot, absPath);
+    const textureRelativePath = path.relative(config.wowExportAssetDir, absPath);
     texturePaths.add(textureRelativePath);
   });
 
@@ -70,7 +70,7 @@ export function convertWowExportModel(objFilePath: string, wowExportAssetRoot: s
 
     const mtlMaterial = mtl.materials.find((m) => m.name === matName);
 
-    const textureRelativePath = mtlMaterial ? path.relative(wowExportAssetRoot, path.join(parentDir, mtlMaterial.map_Kd!)) : undefined;
+    const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : undefined;
 
     if (mat) {
       mat.layers.forEach((l) => {

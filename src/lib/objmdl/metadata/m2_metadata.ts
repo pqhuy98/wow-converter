@@ -1,10 +1,8 @@
 import { readFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 
-import { wowExportPath } from '@/lib/global-config';
-
 import { BlizzardNull } from '../../constants';
-import { Config } from '../../converter/common';
+import { Config } from '../../global-config';
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { AnimationFile } from '../animation/animation';
 import {
@@ -177,7 +175,7 @@ export class M2MetadataFile {
 
   isLoaded = false;
 
-  constructor(private filePath: string, private options: Config) {
+  constructor(private filePath: string, private config: Config) {
     try {
       Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
       if (this.fileType === 'm2') {
@@ -299,7 +297,7 @@ export class M2MetadataFile {
     const textures: Texture[] = this.textures.map((tex) => ({
       id: 0,
       image: tex.fileNameExternal
-        ? join(texturePrefix, relative(wowExportPath.value, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
+        ? join(texturePrefix, relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
         : '',
       wrapHeight: (tex.flags & 1) > 0,
       wrapWidth: (tex.flags & 2) > 0,

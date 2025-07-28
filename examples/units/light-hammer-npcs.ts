@@ -1,7 +1,7 @@
 import esMain from 'es-main';
 import fs from 'fs-extra';
 
-import { wowhead } from '@/lib/converter/character';
+import { wowhead } from '@/lib/converter/character-exporter';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 
 import { ce } from './common';
