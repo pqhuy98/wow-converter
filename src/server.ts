@@ -57,13 +57,15 @@ async function main() {
     status: JobStatus;
     result?: unknown;
     error?: string;
+    submittedAt: number;
+    startedAt?: number;
     finishedAt?: number; // timestamp when job reached a terminal state
   }
 
   /**
    * Optimised queue data-structures
    */
-  const pendingQueue: Job[] = []; // FIFO queue of pending jobs
+  let pendingQueue: Job[] = []; // FIFO queue of pending jobs
   let queueHead = 0; // index of the next job to process – avoids costly array.shift()
   const pendingIndexMap = new Map<string, number>(); // jobId → index in pendingQueue (O(1) position look-up)
 
@@ -73,7 +75,10 @@ async function main() {
   const QUEUE_CONCURRENCY = Number(process.env.EXPORT_QUEUE_CONCURRENCY || 1);
   const MAX_PENDING_JOBS = Number(process.env.EXPORT_MAX_PENDING || 100);
   const JOB_TTL_MS = Number(process.env.EXPORT_JOB_TTL_MS || 5 * 60 * 1000); // default 5 min
+  const JOB_TIMEOUT_MS = Number(process.env.EXPORT_JOB_TIMEOUT_MS || 30 * 1000); // default 30s
   let activeJobs = 0;
+  let jobsDone = 0;
+  let jobsFailed = 0;
 
   /** Core export logic, extracted into its own function so the queue worker can reuse it */
   async function handleExport(request: ExportCharacterRequest) {
@@ -151,6 +156,11 @@ async function main() {
    * Uses queueHead pointer to dequeue without costly array mutations.
    */
   function tryProcessQueue(): void {
+    if (queueHead > 1000) {
+      pendingQueue = pendingQueue.slice(queueHead);
+      queueHead = 0;
+    }
+
     while (activeJobs < QUEUE_CONCURRENCY && queueHead < pendingQueue.length) {
       const job = pendingQueue[queueHead];
       queueHead++;
@@ -161,14 +171,22 @@ async function main() {
 
       void (async () => {
         try {
-          job.result = await handleExport(job.request);
+          job.result = await Promise.race([
+            handleExport(job.request),
+            new Promise<void>((_, reject) => {
+              setTimeout(() => reject(new Error('Job timeout')), JOB_TIMEOUT_MS);
+            }),
+          ]);
           job.status = 'done';
+          job.startedAt = Date.now();
           job.finishedAt = Date.now();
+          jobsDone++;
         } catch (err) {
           job.status = 'failed';
           job.error = err instanceof Error ? err.message : String(err);
           job.finishedAt = Date.now();
           console.error(err);
+          jobsFailed++;
         } finally {
           activeJobs--;
           // Process further jobs if capacity is available
@@ -192,7 +210,12 @@ async function main() {
 
       const jobId = randomUUID();
 
-      const job: Job = { id: jobId, request: parsedRequest, status: 'pending' };
+      const job: Job = {
+        id: jobId,
+        request: parsedRequest,
+        status: 'pending',
+        submittedAt: Date.now(),
+      };
       jobsMap.set(jobId, job);
 
       pendingQueue.push(job);
@@ -237,6 +260,13 @@ async function main() {
     return res.json({ status: 'processing', position: 0 });
   });
 
+  app.get('/export/character/status', (req, res: express.Response) => res.json({
+    jobsInQueue: pendingQueue.length - queueHead,
+    jobsInProcess: activeJobs,
+    jobsDone,
+    jobsFailed,
+  }));
+
   // ------------------------------------------------------------
   // Cleanup of old finished jobs
   // ------------------------------------------------------------
@@ -270,7 +300,7 @@ async function main() {
     const { fileName } = req.params;
 
     // Basic validation – filename must be alphanumeric/underscore/dash and end with .zip
-    if (!/^[\w-]+\.zip$/.test(fileName)) {
+    if (!/^[\w-]+\.(mdx|mdl|blp|zip)$/.test(fileName)) {
       return res.status(400).json({ error: 'Invalid file name' });
     }
 

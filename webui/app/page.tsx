@@ -59,14 +59,19 @@ const tooltips = {
   baseModel: "The base character model to use. Can be a Wowhead URL, local file inside wow.export folder, or Display ID number.",
   attackAnimation: "Determines which attack animations the character will use.",
   characterSize: "How tall the character is in the game.",
-  movementSpeed: "Base movement speed of the unit type",
-  scaleMultiplier: "Additional scale multiplier (1.0 = no change, optional)",
+  movementSpeed: "Animation - walk speed (\"uwal\") of the unit in World Editor. The tool will try to slow down/speed up the Walk animations to match the Warcraft movement speed. If you experience a bug with too fast or too slow walk animation, set to 0 to keep the original WoW animation speed.",
+  scaleMultiplier: "Additional scale multiplier (1.0 = no change, optional). Firstly the model will be scaled to match the character size, then this multiplier will be applied.",
   keepCinematic: "Preserve cinematic animation sequences in the exported model. Warning: WoW models have many cinematic sequences, this significantly increases file size.",
-  noDecay: "Do not automatically add Decay animations",
+  noDecay: "Do not automatically add Decay animations.",
   portraitCamera: "Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.",
   itemReference: "The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.",
   attachmentPoint: "Where on the character model this item will be attached",
   itemScale: "Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.",
+  sortSequences: "Sort animations by name in the order of: Stand, Walk, Attack, Spell, Death, Decay, Cinematic XXX.",
+  removeUnusedVertices: "Remove geoset vertices that are not used by any geoset faces.",
+  removeUnusedNodes: "Remove nodes that are not used in any geosets or do not contain used children nodes.",
+  removeUnusedMaterials: "Remove materials and textures that are not used in any geosets.",
+  optimizeKeyFrames: "Remove key frames that are not used in any animation, or are insignificant.",
 }
 
 enum WoWAttachmentID {
@@ -327,13 +332,13 @@ const attackTagOptions = [
   { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
   { value: "2HL", label: "2HL Weapon", description: "The model uses a 2H polearm" },
   { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
-  { value: "Bow", label: "Bow", description: "The model uses a bow" },
-  { value: "Rifle", label: "Rifle", description: "The model uses a rifle" },
-  { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon" },
+  // { value: "Bow", label: "Bow", description: "The model uses a bow." },
+  // { value: "Rifle", label: "Rifle", description: "The model uses a rifle." },
+  // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
 ]
 
 const sizeOptions = [
-  { value: "none", label: "Default", description: "Original WoW size times 60" },
+  { value: "none", label: "Default", description: "Original WoW size times 56" },
   { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
   { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
   { value: "large", label: "Large", description: "As tall as Undead Abomination" },
@@ -473,6 +478,39 @@ export default function WoWNPCExporter() {
     }
   }
 
+  // is window focused?
+  const [isWindowFocused, setIsWindowFocused] = useState(true)
+  useEffect(() => {
+    const handleFocus = () => setIsWindowFocused(true)
+    const handleBlur = () => setIsWindowFocused(false)
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('blur', handleBlur)
+  }, [])
+
+  const [status, setStatus] = useState<{
+    jobsInQueue: number
+    jobsInProcess: number
+    jobsDone: number
+    jobsFailed: number
+  } | null>(null)
+
+  const fetchStatus = async () => {
+    if (!isWindowFocused) return
+    const res = await fetch(`${host}/export/character/status`)
+    if (!res.ok) {
+      throw new Error(await res.text())
+    }
+    const data = await res.json()
+    setStatus(data)
+  }
+
+  useEffect(() => {
+    if (!isWindowFocused) return
+    const interval = setInterval(fetchStatus, 1000)
+    fetchStatus()
+    return () => clearInterval(interval)
+  }, [isWindowFocused])
+
   // Poll job status every 1s when a job is active
   useEffect(() => {
     if (!jobId || !jobStatus || jobStatus === 'done' || jobStatus === 'failed') return
@@ -514,15 +552,23 @@ export default function WoWNPCExporter() {
     fetchJobStatus()
 
     return () => clearInterval(interval)
-  }, [jobId, jobStatus])
+  }, [jobId, jobStatus, isWindowFocused])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-6xl mx-auto space-y-4">
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-gray-900">Huy's wow-converter</h1>
+          <h1 className="text-4xl font-bold text-gray-900">Huy's WOW-CONVERTER</h1>
           <p className="text-lg text-gray-600">Easily export WoW NPC models into Warcraft 3 MDL/MDX</p>
-          <span className="text-lg text-gray-600">Created by <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer">wc3-sandbox</a></span>
+          {status && (
+            <p className="text-sm text-gray-600">
+              Server status: {" "}
+              <b>{status.jobsInQueue}</b> exports in queue, {" "}
+              <b>{status.jobsInProcess}</b> exports in process, {" "}
+              <b>{status.jobsDone}</b> exports done, {" "}
+              <b>{status.jobsFailed}</b> exports failed
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -635,7 +681,7 @@ export default function WoWNPCExporter() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
                   <Label htmlFor="movespeed" className="text-sm min-w-fit">
-                    Movement Speed
+                    Animation Walk Speed
                   </Label>
                   <TooltipProvider>
                     <Tooltip>
@@ -651,9 +697,9 @@ export default function WoWNPCExporter() {
                     id="movespeed"
                     type="number"
                     step="1"
-                    value={character.inGameMovespeed}
+                    value={character.inGameMovespeed || ""}
                     onChange={(e) =>
-                      setCharacter({ ...character, inGameMovespeed: Number.parseInt(e.target.value) || 270 })
+                      setCharacter({ ...character, inGameMovespeed: Number.parseInt(e.target.value) || 0 })
                     }
                     className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
                   />
@@ -954,8 +1000,18 @@ export default function WoWNPCExporter() {
                       setOptimization({ ...optimization, sortSequences: checked as boolean })
                     }
                   />
-                  <Label htmlFor="sortSequences" className="text-sm">
+                  <Label htmlFor="sortSequences" className="text-sm flex items-center gap-2">
                     Sort Sequences
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">{tooltips.sortSequences}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </Label>
                 </div>
 
@@ -967,8 +1023,18 @@ export default function WoWNPCExporter() {
                       setOptimization({ ...optimization, removeUnusedVertices: checked as boolean })
                     }
                   />
-                  <Label htmlFor="removeUnusedVertices" className="text-sm">
+                  <Label htmlFor="removeUnusedVertices" className="text-sm flex items-center gap-2">
                     Remove Unused Vertices
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">{tooltips.removeUnusedVertices}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </Label>
                 </div>
 
@@ -980,8 +1046,18 @@ export default function WoWNPCExporter() {
                       setOptimization({ ...optimization, removeUnusedNodes: checked as boolean })
                     }
                   />
-                  <Label htmlFor="removeUnusedNodes" className="text-sm">
+                  <Label htmlFor="removeUnusedNodes" className="text-sm flex items-center gap-2">
                     Remove Unused Nodes
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">{tooltips.removeUnusedNodes}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </Label>
                 </div>
 
@@ -993,8 +1069,18 @@ export default function WoWNPCExporter() {
                       setOptimization({ ...optimization, removeUnusedMaterialsTextures: checked as boolean })
                     }
                   />
-                  <Label htmlFor="removeUnusedMaterials" className="text-sm">
+                  <Label htmlFor="removeUnusedMaterials" className="text-sm flex items-center gap-2">
                     Optimize Materials
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">{tooltips.removeUnusedMaterials}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </Label>
                 </div>
 
@@ -1004,8 +1090,18 @@ export default function WoWNPCExporter() {
                     disabled
                     checked={true}
                   />
-                  <Label htmlFor="optimizeKeyFrames">
+                  <Label htmlFor="optimizeKeyFrames" className="text-sm flex items-center gap-2">
                     Optimize Key Frames
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">{tooltips.optimizeKeyFrames}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </Label>
                 </div>
               </div>
@@ -1108,6 +1204,13 @@ export default function WoWNPCExporter() {
             </CardContent>
           </Card>
         )}
+      </div>
+      <div className="text-lg text-center text-gray-600 mt-4">
+        Created by <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">wc3-sandbox</a>
+        {" | "}
+        <a href="https://github.com/pqhuy98/wow-converter" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Source code</a>
+        {" | "}
+        <a href="https://www.youtube.com/@wc3-sandbox" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">YouTube</a>
       </div>
     </div>
   )

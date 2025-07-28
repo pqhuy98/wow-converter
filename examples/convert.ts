@@ -16,15 +16,17 @@ const WowMap = {
   Northrend: { id: 571, folder: 'northrend' },
   Outland: { id: 530, folder: 'outland' },
   IcecrownCitadel: { id: 631, folder: 'icecrowncitadel' },
+  TheMaw: { id: 2456, folder: '2456' },
 };
 
 const maps: [WowMap, [number, number], [number, number], string][] = [
   // [WowMap.Northrend, [28, 29], [22, 23], 'wrathgate.w3x'],
-  [WowMap.Northrend, [29, 30], [18, 19], 'icecrown.w3x'],
+  // [WowMap.Northrend, [29, 30], [18, 19], 'icecrown.w3x'],
   // [WowMap.IcecrownCitadel, [27, 28], [31, 33], 'icc-floor12.w3x'],
   // [WowMap.IcecrownCitadel, [25, 28], [21, 24], 'icc-floor34.w3x'],
   // [WowMap.IcecrownCitadel, [35, 36], [30, 31], 'frozen-throne.w3x'],
   // [WowMap.Azeroth, [32, 32], [48, 48], 'northshire-abbey.w3x'],
+  [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
 ];
 
 const chosenMap = maps[0];
@@ -49,12 +51,12 @@ const mapExportConfig: MapExportConfig = {
     clampPercent: {
       // lower: 0,
       // upper: 1,
-      lower: gameZToPercent(800),
-      upper: gameZToPercent(800) + 0.11459549564525706 * creatureScaleUp,
+      lower: gameZToPercent(2350),
+      upper: gameZToPercent(2350) + 0.10222716165561063 * creatureScaleUp,
     },
   },
   creatures: {
-    enable: true,
+    enable: false,
     allAreDoodads: false,
     scaleUp: creatureScaleUp,
   },
