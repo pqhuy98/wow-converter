@@ -2,15 +2,9 @@ import { rmSync } from 'fs';
 import fsExtra from 'fs-extra';
 
 import { CharacterExporter } from '@/lib/converter/character-exporter';
-import { Config } from '@/lib/converter/common/models';
+import { getDefaultConfig } from '@/lib/global-config';
 
-import { defaultConfig } from '../../src/lib/global-config';
-
-export const ceConfig: Config = {
-  ...defaultConfig,
-  assetPrefix: 'wow',
-  rawModelScaleUp: defaultConfig.rawModelScaleUp * 2,
-};
+export const ceConfig = await getDefaultConfig();
 export const ceOutputPath = 'exported-assets';
 fsExtra.ensureDirSync(ceOutputPath);
 
