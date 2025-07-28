@@ -1,8 +1,14 @@
 # Huy's Wow-Converter
 
-Export World of Warcraft creatures with weapons straight to Warcraft III's MDX/MDL models with just a few clicks.
+Export models of World of Warcraft NPCs straight to Warcraft III's MDX/MDL models with just a few clicks.
 
-Note: the tool works well for Wrath of the Lich King models and below. Later expansions also work but do expect bugs!
+Demo video: https://youtu.be/FLgBKT7c2TI?si=wdPLJ6pVaEVFE5iS
+
+[![IMAGE ALT TEXT](http://img.youtube.com/vi/FLgBKT7c2TI/0.jpg)](http://www.youtube.com/watch?v=FLgBKT7c2TI "Video Title")
+
+Note: the tool works well for Wrath of the Lich King models and below. Later expansions will work but do expect some bugs!
+
+Give this repo a ⭐ if you find it useful or interesting!
 
 ---
 
@@ -12,16 +18,16 @@ Note: the tool works well for Wrath of the Lich King models and below. Later exp
 2. Provide your desired NPC character and optionally attached items by giving Wowhead URLs. See prefilled example URLs.
 3. Adjust any options you like (animations, size, optimisations, etc.).
 4. Click the button **Export Character**.
-5. Wait until the export finishes, a download button will appear to download a **ZIP** containing the model (*MDX*/**MDL*) and all required BLP textures.
+5. Wait until the export finishes, a download button will appear to download a **ZIP** containing the model (MDX/MDL) and all required BLP textures.
 6. Import the files into your map with World Editor, or open it with WC3 modeling tools like Retera Model Studios.
 
-That’s it — enjoy! ✨
+That’s it - enjoy! ✨
 
 ---
 
 ## Using the Windows Binaries
 
-Prefer working offline and no waiting queue? Follow these simple steps.
+Prefer working offline, fast, without waiting queue, and no constant ZIP download and extraction? Follow these simple steps to run the app locally.
 
 ### 1. Get the tools
 
@@ -32,19 +38,19 @@ Download the latest release ZIP and extract it. You will see two files:
 | `wow.export.exe` | Talks to your WoW client / data files. This is forked of https://github.com/Kruithne/wow.export with extra enhacements |
 | `wow-converter.exe` | Serves the web UI & does the export  |
 
-### 2. Start **wow.export.exe**
+### 2. Start **wow.export**
 
-This is my fork of Kruithne's https://github.com/Kruithne/wow.export with the required enhanced capabilities.
+This is my fork of Kruithne's https://github.com/Kruithne/wow.export with the required enhanced capabilities. You will need to keep it open and turn on its RCP server functionality.
 
 1. Open `wow.export.exe`.
-2. Select your local **Open Local Installation** or **Use Blizzard CDN** and wait for it to load.
+2. Select **Open Local Installation** and your local WoW installation, or **Use Blizzard CDN** if you don't have one. Wait for it to load.
 3. Open setting page **Manage Settings**:
-    - Turn **ON** the RCP server with *Enable Remote Control Protocol* (leave port **17751**)
-    - Make sure **all** “Use Absolute … Paths” options are **OFF**.
+    - Turn **ON** the RCP server with `Enable Remote Control Protocol` (leave default port **17751**)
+    - Make sure **all** `Use Absolute … Paths` options are **OFF**.
 
 ### 3. Start **wow-converter**
 
-1. Run `wow-converter.exe`.
+1. Run `wow-converter.exe`. A command line window will open displaying all app messages.
 2. Wait for the message:
   ```
   ✅ Connected to wow.export RCP at 127.0.0.1:17751
@@ -58,11 +64,11 @@ This is my fork of Kruithne's https://github.com/Kruithne/wow.export with the re
 
 1. Open **http://127.0.0.1:3001/** in your browser.
 2. Use the app similarly to **https://wc.quangdel.com/**
-3. All exported assets will be stored in the `exported-assets` directory inside the folder where you extracted the app.
+3. All exported assets will be stored in the `exported-assets` directory inside the folder where you extracted the app. This is better than hosted version because you won't need to download or extract any ZIP file. 
 
 ---
 
-## ⚙️ Building From Source (Optional)
+## Building From Source (Optional)
 This section is for experienced programmers who want to build the app from source code. Requires **Node ≥18**, **NPM** and **Git**.
 
 Clone this repository and its wow.export submodule:
