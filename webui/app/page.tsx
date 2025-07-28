@@ -564,7 +564,7 @@ export default function WoWNPCExporter() {
             <p className="text-sm text-gray-600">
               Server status: {" "}
               <b>{status.jobsInQueue}</b> exports in queue, {" "}
-              <b>{status.jobsInProcess}</b> exports in process, {" "}
+              <b>{status.jobsInProcess}</b> exports in progress, {" "}
               <b>{status.jobsDone}</b> exports done, {" "}
               <b>{status.jobsFailed}</b> exports failed
             </p>
