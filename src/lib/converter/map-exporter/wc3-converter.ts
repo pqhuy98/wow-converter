@@ -12,7 +12,7 @@ import { calculateChildAbsoluteEulerRotation, degrees } from '../../math/rotatio
 import { V3 } from '../../math/vector';
 import { computeAbsoluteMinMaxExtents } from '../common/model-manager';
 import { WowObject } from '../common/models';
-import { MapExportConfig } from './map-converter';
+import { MapExportConfig } from './map-exporter';
 
 enum TerrainFlag {
   Unwalkable = 2,
@@ -23,8 +23,6 @@ enum TerrainFlag {
   Water = 64,
   Boundary = 128,
 }
-
-export const baseDoodadType = 'YOlb'; // Lightning Bolt
 
 export class Wc3Converter {
   constructor(private config: MapExportConfig) {
@@ -139,11 +137,11 @@ export class Wc3Converter {
 
         // Insert new doodad type if not exists
         if (!modelPathToDoodadType.has(hashKey)) {
-          const doodadType = map.addDoodadType(baseDoodadType, [
+          const doodadType = map.addDoodadType([
             {
               id: 'dfil', type: ModificationType.string, level: 0, column: 0, value: fileName,
             },
-          ]);
+          ], false);
           // Prefix generated doodads with ~ so that they are shown last in Object Editor.
           const doodadName = `~D ${path.basename(obj.model!.relativePath)} -- ${obj.type} -- ${doodadType.code}`;
 

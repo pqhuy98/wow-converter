@@ -4,6 +4,9 @@ import {
 import { MapTranslator } from '../translators';
 import { FourCCGenerator } from './war3-fourcc';
 
+export const baseDoodadType = 'YOlb'; // Lightning Bolt
+export const baseDestructibleType = 'OTds'; // Demon Storm
+
 export interface IUnitType {
   code: string
   parent: string
@@ -18,6 +21,7 @@ export interface IDoodadType {
   code: string
   parent: string
   data: Modification[]
+  isDestructible: boolean
 }
 
 export interface IDoodad extends Omit<Doodad, 'type'> {
@@ -32,6 +36,8 @@ export class MapManager {
   unitTypes: IUnitType[] = [];
 
   doodadTypes: IDoodadType[] = [];
+
+  destructibleTypes: IDoodadType[] = [];
 
   units: IUnit[] = [];
 
@@ -75,9 +81,19 @@ export class MapManager {
     return this.unitTypes[this.unitTypes.length - 1];
   }
 
-  addDoodadType(parent: string, data: Modification[]) {
-    this.doodadTypes.push({ code: this.fourCCGenerator.generate().codeString, parent, data });
-    return this.doodadTypes[this.doodadTypes.length - 1];
+  addDoodadType(data: Modification[], isDestructible: boolean) {
+    const doodadType: IDoodadType = {
+      code: this.fourCCGenerator.generate().codeString,
+      parent: isDestructible ? baseDestructibleType : baseDoodadType,
+      data,
+      isDestructible,
+    };
+    if (isDestructible) {
+      this.destructibleTypes.push(doodadType);
+    } else {
+      this.doodadTypes.push(doodadType);
+    }
+    return doodadType;
   }
 
   addUnit(type: IUnitType, unit: Omit<Unit, 'type'>) {
@@ -103,6 +119,9 @@ export class MapManager {
     this.doodadTypes.forEach((doodadType) => {
       this.mapData.doodadData.custom[`${doodadType.code}:${doodadType.parent}`] = doodadType.data;
     });
+    this.destructibleTypes.forEach((destructibleType) => {
+      this.mapData.destructibleData.custom[`${destructibleType.code}:${destructibleType.parent}`] = destructibleType.data;
+    });
     this.units.forEach((unit) => {
       this.mapData.units.push({
         ...unit,
@@ -120,5 +139,6 @@ export class MapManager {
     this.mapData.save('terrain');
     this.mapData.save('unitData');
     this.mapData.save('doodadData');
+    this.mapData.save('destructibleData');
   }
 }

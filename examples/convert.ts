@@ -1,6 +1,6 @@
 import {
   defaultMapExportConfig, gameZToPercent, MapExportConfig, MapExporter,
-} from '@/lib/converter/map-exporter/map-converter';
+} from '@/lib/converter/map-exporter/map-exporter';
 
 import { Config, getDefaultConfig } from '../src/lib/global-config';
 

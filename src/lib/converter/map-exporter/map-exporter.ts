@@ -12,7 +12,7 @@ import {
 import { computeAbsoluteMinMaxExtents } from '@/lib/converter/common/model-manager';
 import { WowObject, WowObjectType } from '@/lib/converter/common/models';
 import { WowObjectManager } from '@/lib/converter/common/wow-object-manager';
-import { baseDoodadType, getTerrainHeight, Wc3Converter } from '@/lib/converter/map-exporter/wc3-converter';
+import { getTerrainHeight, Wc3Converter } from '@/lib/converter/map-exporter/wc3-converter';
 import { Config } from '@/lib/global-config';
 import { EulerRotation, Vector2, Vector3 } from '@/lib/math/common';
 import { degrees, radians } from '@/lib/math/rotation';
@@ -261,15 +261,15 @@ export class MapExporter {
         if (mapConfig.creatures.allAreDoodads || !withinPlayableZone || notOnGround) {
           // Creature is out of playable map zone or not on ground, add it as doodad
 
-          debug && console.log('Add', c.template.name, 'as doodad because of', mapConfig.creatures.allAreDoodads ? 'overridden' : 'outside of allowed zone');
+          debug && console.log('Add', c.template.name, 'as destructible because of', mapConfig.creatures.allAreDoodads ? 'overridden' : 'outside of allowed zone');
 
           if (!templateIdToDoodadType.has(c.template.entry)) {
-            templateIdToDoodadType.set(c.template.entry, mapManager.addDoodadType(baseDoodadType, [
-              { id: 'dnam', type: ModificationType.string, value: `~U ${creatureName}` },
-              { id: 'dfil', type: ModificationType.string, value: creatureModel },
-              { id: 'dmas', type: ModificationType.unreal, value: creatureScale * 1.5 },
-              { id: 'dmis', type: ModificationType.unreal, value: creatureScale / 1.5 },
-            ]));
+            templateIdToDoodadType.set(c.template.entry, mapManager.addDoodadType([
+              { id: 'bnam', type: ModificationType.string, value: `~U ${creatureName}` },
+              { id: 'bfil', type: ModificationType.string, value: creatureModel },
+              { id: 'bmas', type: ModificationType.unreal, value: creatureScale * 1.5 },
+              { id: 'bmis', type: ModificationType.unreal, value: creatureScale / 1.5 },
+            ], true));
           }
           const doodadType = templateIdToDoodadType.get(c.template.entry)!;
 
