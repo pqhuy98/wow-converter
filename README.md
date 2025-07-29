@@ -4,7 +4,11 @@ Export models of World of Warcraft NPCs straight to Warcraft III's MDX/MDL model
 
 Demo video: https://youtu.be/FLgBKT7c2TI?si=wdPLJ6pVaEVFE5iS
 
-[![IMAGE ALT TEXT](http://img.youtube.com/vi/FLgBKT7c2TI/0.jpg)](http://www.youtube.com/watch?v=FLgBKT7c2TI "Video Title")
+HiveWorkshop thread: https://www.hiveworkshop.com/threads/wow-converter-export-wow-npcs-to-warcraft-3.363033/
+
+![screenshot 1](https://github.com/pqhuy98/wow-converter/blob/main/docs/elwin-forest-1.jpg?raw=true)
+
+![screenshot 2](https://github.com/pqhuy98/wow-converter/blob/main/docs/icecrown-1.jpg?raw=true)
 
 Note: the tool works well for Wrath of the Lich King models and below. Later expansions will work but do expect some bugs!
 
