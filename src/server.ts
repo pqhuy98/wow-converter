@@ -108,7 +108,7 @@ async function main() {
         fsExtra.writeFileSync(`${filePath}.mdx`, mdl.toMdx());
         exportedModels.push(`${filePath}.mdx`);
       } else {
-        fsExtra.writeFileSync(`${filePath}.mdl`, mdl.toString());
+        fsExtra.writeFileSync(`${filePath}.mdl`, mdl.toMdl());
         exportedModels.push(`${filePath}.mdl`);
       }
     });

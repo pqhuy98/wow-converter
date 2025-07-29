@@ -9,8 +9,8 @@ export interface Value {
   scaling: Vector3
 }
 
-export function buildNodesChildrenList(mdl: MDL) {
-  const childrenList = new Map<Node, Node[]>();
+export function buildChildrenLists(mdl: MDL) {
+  const childrenList = new Map<Node, Node[]>(); // { parent -> children[] }
   [...mdl.bones, ...mdl.attachmentPoints].forEach((node) => {
     if (!childrenList.has(node)) {
       childrenList.set(node, []);
@@ -26,7 +26,7 @@ export function buildNodesChildrenList(mdl: MDL) {
 }
 
 export function iterateNodesAtTimestamp(mdl: MDL, sequence: Sequence, timestamp: number, callback: (node: Node, value: Value) => unknown) {
-  const childrenList = buildNodesChildrenList(mdl);
+  const childrenList = buildChildrenLists(mdl);
 
   const dfs = (current: Node, currentValue: Value) => {
     callback(current, currentValue);

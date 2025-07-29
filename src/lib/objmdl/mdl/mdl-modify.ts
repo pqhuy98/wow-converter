@@ -10,7 +10,7 @@ import {
   Bone, Extents, Face, GeosetVertex, GlobalSequence, Material, MDL, Node, Sequence, SkinWeight, Texture, TransformAnimation,
 } from './mdl';
 import {
-  buildNodesChildrenList, interpolateTransformQuat, iterateNodesAtTimestamp, Value,
+  buildChildrenLists, interpolateTransformQuat, iterateNodesAtTimestamp, Value,
 } from './mdl-traverse';
 
 export class MDLModify {
@@ -331,7 +331,7 @@ export class MDLModify {
       v.matrix?.bones.forEach((b) => usedNodes.add(b));
     }));
 
-    const childrenList = buildNodesChildrenList(this.mdl);
+    const childrenList = buildChildrenLists(this.mdl);
     const dfs = (cur: Node) => {
       let isUsed = usedNodes.has(cur);
       // console.log(cur.name, "children:", childrenList.get(cur)!.map(n => n.name).join(", "))

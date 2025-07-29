@@ -41,7 +41,7 @@ export class AssetManager {
     console.log('Exporting models to', assetPath);
     mkdirSync(assetPath, { recursive: true });
     for (const [relativePath, model] of this.models.entries()) {
-      const fullPath = `${path.join(assetPath, this.config.assetPrefix, relativePath)}.${this.config.release ? 'mdx' : 'mdl'}`;
+      const fullPath = `${path.join(assetPath, this.config.assetPrefix, relativePath)}.${this.config.mdx ? 'mdx' : 'mdl'}`;
 
       if (!this.config.overrideModels && existsSync(fullPath)) {
         // console.log('Skipping model already exists', fullPath);
@@ -53,7 +53,7 @@ export class AssetManager {
         mdl.modify.setLargeExtents();
       }
       mkdirSync(path.dirname(fullPath), { recursive: true });
-      const data = this.config.release ? model.mdl.toMdx() : model.mdl.toString();
+      const data = this.config.mdx ? model.mdl.toMdx() : model.mdl.toString();
       writeFileSync(fullPath, data);
     }
   }

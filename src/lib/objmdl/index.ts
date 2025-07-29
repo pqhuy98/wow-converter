@@ -24,7 +24,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   const metadata = new M2MetadataFile(objFilePath.replace(/\.obj$/, '.json'), config);
 
   const mdl = new MDL({
-    formatVersion: 900,
+    formatVersion: 1000,
     name: path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', '.mdl'),
   });
 

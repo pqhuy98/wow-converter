@@ -149,7 +149,7 @@ export class CharacterExporter {
         debug && console.log(model.model.name, { wantedZ, maxStandZ });
         model.modify.scale((char.scale ?? 1) * wantedZ / maxStandZ);
       } else {
-        throw new Error(`Cannot find Stand animation of model ${model.model.name}`);
+        model.modify.scale((char.scale ?? 1) * wantedZ / model.model.maximumExtent[2]);
       }
     } else if (char.scale) {
       model.modify.scale(char.scale);

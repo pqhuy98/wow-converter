@@ -2,7 +2,7 @@ exported-assets
 build
 target
 dist
-dist.zip
+*.zip
 maps/**
 notes.txt
 maps

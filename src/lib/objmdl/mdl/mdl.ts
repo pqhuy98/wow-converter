@@ -262,6 +262,9 @@ Version {
 
   modelToString() {
     return `Model "${this.model.name}" {
+  NumGeosets ${this.geosets.length},
+  NumBones ${this.bones.length},
+  NumAttachments ${this.attachmentPoints.length},
   BlendTime ${this.model.blendTime},
   MinimumExtent { ${this.model.minimumExtent.map(f).join(', ')} },
   MaximumExtent { ${this.model.maximumExtent.map(f).join(', ')} },
@@ -390,9 +393,9 @@ ${geoset.vertices.map((vertex) => `		{ ${f(vertex.normal[0])}, ${f(vertex.normal
   TVertices ${geoset.vertices.length} {
 ${geoset.vertices.map((vertex) => `		{ ${f(vertex.texPosition[0])}, ${f(vertex.texPosition[1])} },`).join('\n')}
   }
-  VertexGroup {
-${useSkinWeights ? '' : geoset.vertices.filter((v) => v.matrix).map((vertex) => `		${vertex.matrix!.id},`).join('\n')}
-  }
+  ${useVertexGroup ? `VertexGroup {
+${geoset.vertices.filter((v) => v.matrix).map((vertex) => `\t\t${vertex.matrix!.id},`).join('\n')}
+  }` : ''}
   ${useSkinWeights ? `Tangents ${geoset.vertices.length} {
 ${geoset.vertices.filter((v) => v.skinWeights).map((v) => `\t\t{ ${v.normal.map(f).join(', ')}, ${f(Math.sign(Math.abs(_.sum(v.normal))))} },`).join('\n')}
   }
@@ -616,6 +619,13 @@ ${this.pivotPointsToString()}
     return m.saveMdx();
   }
 
+  toMdl() {
+    // const m = new parsers.mdlx.Model();
+    // m.loadMdx(this.toMdx());
+    // return m.saveMdl();
+    return this.toString();
+  }
+
   sync() {
     this.syncExtends();
 
@@ -706,6 +716,12 @@ ${this.pivotPointsToString()}
         geoset.material = this.materials[0];
       }
     });
+
+    // this.materials.forEach((material) => {
+    //   if (material.layers.length === 1) {
+    //     material.layers.push({ ...material.layers[0] });
+    //   }
+    // });
   }
 
   syncExtends() {

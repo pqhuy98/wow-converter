@@ -5,14 +5,14 @@ export interface Config {
   assetPrefix: string
   rawModelScaleUp: number
   overrideModels: boolean
-  release?: boolean
+  mdx?: boolean
   infiniteExtentBoundRadiusThreshold: number
 }
 
 export async function getDefaultConfig(): Promise<Config> {
   return {
     assetPrefix: 'wow',
-    release: true,
+    mdx: true,
     infiniteExtentBoundRadiusThreshold: 2000, // WC3 distance unit
     rawModelScaleUp: 56,
     overrideModels: true,
