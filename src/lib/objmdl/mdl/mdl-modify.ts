@@ -245,6 +245,12 @@ export class MDLModify {
         const v1 = anim.keyFrames.get(t)!;
         const v0 = anim.keyFrames.get(prevT)!;
 
+        const inside = inSequence(t, cursor);
+        if (!inside) { // always drop keys that sit in no sequence
+          anim.keyFrames.delete(t);
+          continue;
+        }
+
         // Early-exit diff calculation
         let diff = 0;
         for (let j = 0; j < v1.length && diff < threshold; j++) diff += Math.abs(v1[j] - v0[j]);
@@ -253,8 +259,6 @@ export class MDLModify {
           prevT = t;
           continue; // keep – movement above threshold
         }
-
-        const inside = inSequence(t, cursor);
 
         let firstFrame = false;
         for (let sIdx = 0; sIdx < seqIntervals.length; sIdx++) {
