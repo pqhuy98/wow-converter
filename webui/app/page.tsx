@@ -13,7 +13,6 @@ import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle } from "lu
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { host, isDev } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
-import Link from "next/link"
 
 type RefType = "local" | "wowhead" | "displayID"
 type AttackTag = "" | "1H" | "2H" | "2HL" | "Unarmed" | "Bow" | "Rifle" | "Thrown"
@@ -553,6 +552,48 @@ export default function WoWNPCExporter() {
 
     return () => clearInterval(interval)
   }, [jobId, jobStatus, isWindowFocused])
+
+  /**
+   * Download the exported assets as a ZIP by calling the new POST /download API.
+   */
+  const handleDownloadZip = async () => {
+    if (!exportResult) return
+
+    const files = [
+      ...(exportResult.exportedModels || []),
+      ...(exportResult.exportedTextures || []),
+    ]
+
+    if (files.length === 0) {
+      alert("Nothing to download – exported files list is empty")
+      return
+    }
+
+    try {
+      const res = await fetch(`${host}/download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files }),
+      })
+
+      if (!res.ok) {
+        throw new Error(await res.text())
+      }
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `${outputFileName || "export"}.zip`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      console.error("Download ZIP error:", e)
+      alert(e?.message || String(e))
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -1167,14 +1208,10 @@ export default function WoWNPCExporter() {
                       </div>
                       }
                       <div className="flex items-center gap-2 w-full pt-2">
-                        <Button variant="default" size="icon" onClick={() => {
-                          window.open(`${host}/download/${exportResult.zipFile}`, '_blank');
-                        }}>
+                        <Button variant="default" size="icon" onClick={handleDownloadZip}>
                           <Download className="h-4 w-4" />
                         </Button>
-                        <Link href={`${host}/download/${exportResult.zipFile}`} target="_blank">
-                          <span className="text-lg">{exportResult.zipFile} ({formatBytes(exportResult.zipFileSize)})</span>
-                        </Link>
+                        <span className="text-lg">Download: {outputFileName}.zip</span>
                       </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

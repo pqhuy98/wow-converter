@@ -119,31 +119,10 @@ async function main() {
     exportedModels = exportedModels.map((model) => path.relative(ce.outputPath, model));
     textures = textures.map((texture) => path.relative(ce.outputPath, texture));
 
-    // Create a zip archive that contains every exported model & texture
-    const randomSuffix = Math.random().toString(36).slice(2, 8);
-    const zipFileName = `${request.outputFileName}-${randomSuffix}.zip`;
-    const zipFilePath = path.join(ce.outputPath, zipFileName);
-
-    const output = fsExtra.createWriteStream(zipFilePath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
-
-    archive.pipe(output);
-
-    [...exportedModels, ...textures].forEach((relativePath) => {
-      archive.file(path.join(ce.outputPath, relativePath), { name: relativePath });
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      output.on('close', () => resolve());
-      archive.on('error', (err) => reject(err));
-      archive.finalize();
-    });
-
+    // Return the list of exported assets to the caller – zipping happens on-demand via the download API
     const resp = {
       exportedModels,
       exportedTextures: textures,
-      zipFile: zipFileName,
-      zipFileSize: fsExtra.statSync(zipFilePath).size,
       outputDirectory: path.resolve(ce.outputPath),
     };
 
@@ -295,27 +274,50 @@ async function main() {
     console.log(`No UI found, serving only REST API at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
   }
 
-  // Download endpoint for zipped assets – only serves .zip files located in the export directory
-  app.get('/download/:fileName', (req, res) => {
-    const { fileName } = req.params;
+  /**
+   * Download endpoint – receives a list of relative file paths, validates them, and streams
+   * a ZIP archive to the client. No temporary file is written to disk – everything is piped
+   * directly to the HTTP response.
+   */
+  const DownloadRequestSchema = z.object({
+    files: z.array(LocalRefValueSchema).min(1),
+  });
 
-    // Basic validation – filename must be alphanumeric/underscore/dash and end with .zip
-    if (!/^[\w-]+\.(mdx|mdl|blp|zip)$/.test(fileName)) {
-      return res.status(400).json({ error: 'Invalid file name' });
+  app.post('/download', (req, res) => {
+    try {
+      const { files } = DownloadRequestSchema.parse(req.body);
+
+      // Attach headers so browsers treat the response as a downloadable file
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="assets.zip"');
+
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.pipe(res);
+
+      for (const relativePath of files) {
+        const resolvedPath = path.resolve(ceOutputPath, relativePath);
+
+        // Prevent directory-traversal attacks
+        if (!resolvedPath.startsWith(path.resolve(ceOutputPath))) {
+          throw new Error('Invalid path');
+        }
+
+        if (!fsExtra.existsSync(resolvedPath)) {
+          throw new Error('File not found');
+        }
+
+        archive.file(resolvedPath, { name: relativePath });
+      }
+
+      archive.finalize().catch((err) => {
+        console.error(err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to create archive' });
+        }
+      });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
     }
-
-    const resolvedPath = path.resolve(ceOutputPath, fileName);
-
-    // Prevent directory-traversal attacks – path must stay inside ceOutputPath
-    if (!resolvedPath.startsWith(path.resolve(ceOutputPath))) {
-      return res.status(400).json({ error: 'Invalid path' });
-    }
-
-    if (!fsExtra.existsSync(resolvedPath)) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    return res.download(resolvedPath);
   });
 
   // Error-handling middleware (must be **after** all routes)
