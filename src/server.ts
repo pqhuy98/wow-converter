@@ -259,6 +259,9 @@ async function main() {
     }
   }, 60_000); // run every minute
 
+  // Serve exported assets statically at /asset/<path>
+  app.use('/asset', express.static(ceOutputPath));
+
   /**
    * Web server
    */

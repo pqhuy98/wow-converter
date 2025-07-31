@@ -28,7 +28,9 @@ const maps: [WowMap, [number, number], [number, number], string][] = [
   // [WowMap.Azeroth, [32, 32], [48, 48], 'northshire-abbey.w3x'],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
   // [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
-  [WowMap.TheMaw, [17, 19], [22, 23], 'themaw2.w3x'],
+  // [WowMap.TheMaw, [17, 19], [22, 23], 'themaw2.w3x'],
+  [WowMap.TheMaw, [19, 21], [22, 25], 'themaw3.w3x'],
+  // [WowMap.TheMaw, [17, 21], [22, 25], 'themaw4.w3x'],
 ];
 
 const chosenMap = maps[0];
@@ -52,10 +54,10 @@ const mapExportConfig: MapExportConfig = {
   mapAngleDeg,
   terrain: {
     clampPercent: {
-      lower: 0,
-      upper: 1,
-      // lower: gameZToPercent(2350),
-      // upper: 0.30329981786159804 * creatureScaleUp,
+      // lower: 0,
+      // upper: 1,
+      lower: gameZToPercent(1400),
+      upper: gameZToPercent(2600),
     },
   },
   creatures: {

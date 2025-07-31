@@ -3,11 +3,11 @@ import minimist from 'minimist';
 // Map generation configs
 export const defaultLayer = 15;
 // max height after override UI/MiscData.txt
-export const dataHeightMin = 0;
-export const dataHeightMax = 8192 * 2 - 1;
+// export const dataHeightMin = 0;
+// export const dataHeightMax = 8192 * 2 - 1;
 // max height for default UI/MiscData.txt
-// export const dataHeightMin = gameZToDataHeight(-128);
-// export const dataHeightMax = gameZToDataHeight(1536);
+export const dataHeightMin = 128;
+export const dataHeightMax = 8192 * 2 - 128;
 // console.log(dataHeightMin, dataHeightMax);
 
 export const maxGameHeightDiff = (dataHeightMax - dataHeightMin) / 4;

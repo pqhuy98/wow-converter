@@ -13,6 +13,7 @@ import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle } from "lu
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { host, isDev } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
+import ModelViewerUi from "./model-viewer"
 
 type RefType = "local" | "wowhead" | "displayID"
 type AttackTag = "" | "1H" | "2H" | "2HL" | "Unarmed" | "Bow" | "Rifle" | "Thrown"
@@ -1214,6 +1215,7 @@ export default function WoWNPCExporter() {
                         <span className="text-lg">Download: {outputFileName}.zip</span>
                       </div>
                   </div>
+                  <ModelViewerUi modelPath={exportResult.exportedModels[0]} />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <h4 className="font-semibold mb-2">Exported Models:</h4>
