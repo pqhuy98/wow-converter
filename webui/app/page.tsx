@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -295,7 +295,8 @@ function RefInput({
             }
             value={value.value}
             onChange={(e) => onChange({ ...value, value: e.target.value })}
-            className={`border-2 bg-white ${error ? "border-red-500" : "border-gray-300 focus:border-blue-500"}`}
+            className={`border-2 bg-white text-left ${error ? "border-red-500" : "border-gray-300 focus:border-blue-500"}`}
+            style={{ direction: "rtl" }}
           />
           {error && (
             <div className="flex items-center gap-1 mt-1 text-sm text-red-600">
@@ -350,14 +351,27 @@ const portraitSuggestions = ["Stand", "Stand Ready"]
 
 export default function WoWNPCExporter() {
   const [character, setCharacter] = useState<Character>({
-    base: { type: "wowhead", value: "https://www.wowhead.com/npc=88002/highlord-darion-mograine" },
-    size: "hero",
+    base: { type: 'wowhead', value: 'https://www.wowhead.com/npc=223722/thrall' },
+    size: 'hero',
+    attackTag: '1H',
     inGameMovespeed: 270,
-    attachItems: {},
-    portraitCameraSequenceName: "Stand",
+    attachItems: {
+      1: {
+        path: { type: 'wowhead', value: 'https://www.wowhead.com/item=128819/doomhammer' },
+      },
+    },
+    portraitCameraSequenceName: 'Stand',
   })
 
   const [outputFileName, setOutputFileName] = useState(getNpcNameFromWowheadUrl(character.base.value) ?? "")
+  useEffect(() => {
+    if (character.base.type !== "wowhead") return
+    const npcName = getNpcNameFromWowheadUrl(character.base.value)
+    if (npcName) {
+      setOutputFileName(npcName)
+    }
+  }, [character.base.value])
+
   const [format, setFormat] = useState<Format>("mdx")
   const [optimization, setOptimization] = useState({
     sortSequences: true,
@@ -375,6 +389,23 @@ export default function WoWNPCExporter() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const [exportResult, setExportResult] = useState<any>(null)
+
+  useEffect(() => {
+    const checkExportResult = async () => {
+      const res = await fetch(`${host}/startup-jobs`)
+      const jobs = await res.json()
+      if (jobs.length > 0) {
+        const chosenJob = jobs[Math.floor(Math.random() * jobs.length)]
+        setExportResult({
+          exportedModels: [chosenJob.request.outputFileName + '.' + chosenJob.request.format],
+          exportedTextures: [],
+          outputDirectory: "exported-assets",
+        })
+        setCharacter(chosenJob.request.character)
+      }
+    }
+    checkExportResult()
+  }, [])
 
   const addAttachItem = () => {
     // Find the first unused attachment ID, starting with common ones
@@ -506,7 +537,7 @@ export default function WoWNPCExporter() {
 
   useEffect(() => {
     if (!isWindowFocused) return
-    const interval = setInterval(fetchStatus, 1000)
+    const interval = setInterval(fetchStatus, 5000)
     fetchStatus()
     return () => clearInterval(interval)
   }, [isWindowFocused])
@@ -602,15 +633,19 @@ export default function WoWNPCExporter() {
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold text-gray-900">Huy's WOW-CONVERTER</h1>
           <p className="text-lg text-gray-600">Easily export WoW NPC models into Warcraft 3 MDL/MDX</p>
-          {status && (
-            <p className="text-sm text-gray-600">
-              Server status: {" "}
-              <b>{status.jobsInQueue}</b> exports in queue, {" "}
-              <b>{status.jobsInProcess}</b> exports in progress, {" "}
-              <b>{status.jobsDone}</b> exports done, {" "}
-              <b>{status.jobsFailed}</b> exports failed
-            </p>
-          )}
+          <p className="text-sm text-gray-600">
+            {status ? (
+              <>
+                Server status: {" "}
+                <b>{status.jobsInQueue}</b> exports in queue, {" "}
+                <b>{status.jobsInProcess}</b> exports in progress, {" "}
+                <b>{status.jobsDone}</b> exports done, {" "}
+                <b>{status.jobsFailed}</b> exports failed
+              </>
+            ) : (
+              <b>Server status:</b>
+            )}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -627,12 +662,6 @@ export default function WoWNPCExporter() {
               <RefInput
                 value={character.base}
                 onChange={(base) => {
-                  if (base.type==="wowhead") {
-                    const npcName = getNpcNameFromWowheadUrl(base.value)
-                    if (npcName) {
-                      setOutputFileName(npcName)
-                    }
-                  }
                   setCharacter({ ...character, base })
                 }}
                 label="Base Model"
@@ -1168,23 +1197,25 @@ export default function WoWNPCExporter() {
         )}
 
         {/* Finished result */}
-        {exportResult && jobStatus === 'done' && (
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                {exportResult.error ? (
-                  <>
-                    <div className="h-5 w-5 rounded-full bg-red-500" />
-                    Export Failed
-                  </>
-                ) : (
-                  <>
-                    <div className="h-5 w-5 rounded-full bg-green-500" />
-                    Export Successful
-                  </>
-                )}
-              </CardTitle>
-            </CardHeader>
+        {exportResult && (jobStatus === 'done' || jobStatus === null) && (
+          <Card className="pt-6">
+            {jobStatus !== null && (
+              <CardHeader className="pb-4 pt-0">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  {exportResult.error ? (
+                    <>
+                      <div className="h-5 w-5 rounded-full bg-red-500" />
+                      Export Failed
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-5 w-5 rounded-full bg-green-500" />
+                      Export Successful
+                    </>
+                  )}
+                </CardTitle>
+              </CardHeader>
+            )}
             <CardContent>
               {exportResult.error ? (
                 <p className="text-red-600">{exportResult.error}</p>

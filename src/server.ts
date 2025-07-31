@@ -12,73 +12,69 @@ import { getDefaultConfig } from './lib/global-config';
 import { printLogo } from './lib/logo';
 import { waitUntil } from './lib/utils';
 import { wowExportClient } from './lib/wowexport-client/wowexport-client';
+import { startupRequests } from './startup-requests';
+
+export const ExporCharacterRequestSchema = z.object({
+  character: CharacterSchema,
+  outputFileName: LocalRefValueSchema,
+  optimization: z.object({
+    sortSequences: z.boolean().optional(),
+    removeUnusedVertices: z.boolean().optional(),
+    removeUnusedNodes: z.boolean().optional(),
+    removeUnusedMaterialsTextures: z.boolean().optional(),
+  }).optional(),
+  format: z.enum(['mdx', 'mdl']).optional(),
+});
+
+export type ExportCharacterRequest = z.infer<typeof ExporCharacterRequestSchema>;
+
+// ------------------------------------------------------------
+// Queue implementation
+// ------------------------------------------------------------
+
+type JobStatus = 'pending' | 'processing' | 'done' | 'failed';
+
+interface Job {
+  id: string;
+  request: ExportCharacterRequest;
+  status: JobStatus;
+  result?: unknown;
+  error?: string;
+  submittedAt: number;
+  startedAt?: number;
+  finishedAt?: number; // timestamp when job reached a terminal state
+  noTimeout?: boolean;
+}
+
+/**
+   * Optimised queue data-structures
+   */
+let pendingQueue: Job[] = []; // FIFO queue of pending jobs
+let queueHead = 0; // index of the next job to process – avoids costly array.shift()
+const pendingIndexMap = new Map<string, number>(); // jobId → index in pendingQueue (O(1) position look-up)
+
+const jobsMap = new Map<string, Job>(); // jobId → Job (covers all statuses; O(1) access)
+
+// Concurrency (defaults to 1 → sequential processing). Overridable via env.
+const QUEUE_CONCURRENCY = Number(process.env.EXPORT_QUEUE_CONCURRENCY || 1);
+const MAX_PENDING_JOBS = Number(process.env.EXPORT_MAX_PENDING || 100);
+const JOB_TTL_MS = Number(process.env.EXPORT_JOB_TTL_MS || 5 * 60 * 1000); // default 5 min
+const JOB_TIMEOUT_MS = Number(process.env.EXPORT_JOB_TIMEOUT_MS || 30 * 1000); // default 30s
+let activeJobs = 0;
+let jobsDone = 0;
+let jobsFailed = 0;
+
+printLogo();
+const app = express();
+app.use(cors());
+app.use(express.json());
 
 async function main() {
-  printLogo();
   await waitUntil(() => wowExportClient.isReady);
-
-  const app = express();
-  app.use(cors());
-  app.use(express.json());
 
   const ceOutputPath = 'exported-assets';
   const ceConfig = await getDefaultConfig();
   fsExtra.ensureDirSync(ceOutputPath);
-
-  /**
-   * Schema for incoming export requests
-   */
-  /**
-   * Export character
-   */
-  const ExporCharacterRequestSchema = z.object({
-    character: CharacterSchema,
-    outputFileName: LocalRefValueSchema,
-    optimization: z.object({
-      sortSequences: z.boolean().optional(),
-      removeUnusedVertices: z.boolean().optional(),
-      removeUnusedNodes: z.boolean().optional(),
-      removeUnusedMaterialsTextures: z.boolean().optional(),
-    }).optional(),
-    format: z.enum(['mdx', 'mdl']).optional(),
-  });
-
-  // ------------------------------------------------------------
-  // Queue implementation
-  // ------------------------------------------------------------
-
-  type ExportCharacterRequest = z.infer<typeof ExporCharacterRequestSchema>;
-
-  type JobStatus = 'pending' | 'processing' | 'done' | 'failed';
-
-  interface Job {
-    id: string;
-    request: ExportCharacterRequest;
-    status: JobStatus;
-    result?: unknown;
-    error?: string;
-    submittedAt: number;
-    startedAt?: number;
-    finishedAt?: number; // timestamp when job reached a terminal state
-  }
-
-  /**
-   * Optimised queue data-structures
-   */
-  let pendingQueue: Job[] = []; // FIFO queue of pending jobs
-  let queueHead = 0; // index of the next job to process – avoids costly array.shift()
-  const pendingIndexMap = new Map<string, number>(); // jobId → index in pendingQueue (O(1) position look-up)
-
-  const jobsMap = new Map<string, Job>(); // jobId → Job (covers all statuses; O(1) access)
-
-  // Concurrency (defaults to 1 → sequential processing). Overridable via env.
-  const QUEUE_CONCURRENCY = Number(process.env.EXPORT_QUEUE_CONCURRENCY || 1);
-  const MAX_PENDING_JOBS = Number(process.env.EXPORT_MAX_PENDING || 100);
-  const JOB_TTL_MS = Number(process.env.EXPORT_JOB_TTL_MS || 5 * 60 * 1000); // default 5 min
-  const JOB_TIMEOUT_MS = Number(process.env.EXPORT_JOB_TIMEOUT_MS || 30 * 1000); // default 30s
-  let activeJobs = 0;
-  let jobsDone = 0;
-  let jobsFailed = 0;
 
   /** Core export logic, extracted into its own function so the queue worker can reuse it */
   async function handleExport(request: ExportCharacterRequest) {
@@ -150,12 +146,16 @@ async function main() {
 
       void (async () => {
         try {
-          job.result = await Promise.race([
-            handleExport(job.request),
-            new Promise<void>((_, reject) => {
-              setTimeout(() => reject(new Error('Job timeout')), JOB_TIMEOUT_MS);
-            }),
-          ]);
+          if (job.noTimeout) {
+            job.result = await handleExport(job.request);
+          } else {
+            job.result = await Promise.race([
+              handleExport(job.request),
+              new Promise<void>((_, reject) => {
+                setTimeout(() => reject(new Error('Job timeout')), JOB_TIMEOUT_MS);
+              }),
+            ]);
+          }
           job.status = 'done';
           job.startedAt = Date.now();
           job.finishedAt = Date.now();
@@ -260,7 +260,7 @@ async function main() {
   }, 60_000); // run every minute
 
   // Serve exported assets statically at /asset/<path>
-  app.use('/asset', express.static(ceOutputPath));
+  app.use('/assets', express.static(ceOutputPath));
 
   /**
    * Web server
@@ -327,6 +327,21 @@ async function main() {
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err);
     res.status(500).json({ error: err.message ?? err });
+  });
+
+  const startupJobs = startupRequests.map((job) => (<Job>{
+    id: randomUUID(),
+    request: job,
+    status: 'pending',
+    submittedAt: Date.now(),
+    noTimeout: true, // no timeout for startup jobs
+  }));
+  pendingQueue.push(...startupJobs);
+  tryProcessQueue();
+
+  // API to retrieve startup jobs params
+  app.get('/startup-jobs', (req, res) => {
+    res.json(startupJobs);
   });
 
   app.listen(port, () => {

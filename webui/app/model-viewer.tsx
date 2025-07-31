@@ -59,7 +59,7 @@ export default function ModelViewerUi({ modelPath }: ModelViewerProps) {
 
       // Path solver so the viewer fetches every dependant file via our /asset route
       const pathSolver = (src: unknown) => {
-        return `${host}/asset/${normalizePath(src as string)}`
+        return `${host}/assets/${normalizePath(src as string)}`
         }
 
       // Load the model (assumed to be in MDX|MDL format)
@@ -70,6 +70,7 @@ export default function ModelViewerUi({ modelPath }: ModelViewerProps) {
 
       const scene = viewer.addScene()
       const camera = scene.camera;
+      scene.color.fill(0.15);
 
       // Utility to update camera position from spherical coords
       const target = targetRef.current;
