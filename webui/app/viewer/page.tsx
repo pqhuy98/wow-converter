@@ -4,8 +4,18 @@ import { ArrowLeft } from "lucide-react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import ModelViewerUi from "../model-viewer"
+import { Suspense } from "react"
 
 export default function ViewerPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Viewer />
+    </Suspense>
+  )
+}
+
+
+function Viewer() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const modelPath = searchParams.get('model')

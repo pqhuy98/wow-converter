@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle, History } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { host, isDev } from "@/app/config"
+import { host, isSharedHosting } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
 import ModelViewerUi from "./model-viewer"
 import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus } from "@/lib/models/export-character.model"
@@ -1021,7 +1021,7 @@ export default function WoWNPCExporter() {
             {jobStatus?.error && <p className="text-red-600">{jobStatus.error}</p>}
             <div className="space-y-4">
               {jobStatus?.result && <div className="flex-col items-center gap-10">
-                {isDev && jobStatus.result.outputDirectory && <div className="flex items-center gap-2 w-full">
+                {!isSharedHosting && jobStatus.result.outputDirectory && <div className="flex items-center gap-2 w-full">
                   <Button
                     variant="outline"
                     size="icon"

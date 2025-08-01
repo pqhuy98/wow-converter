@@ -358,7 +358,7 @@ export default function RecentsPage() {
                                     <div className="w-32 flex items-center gap-1">
                                       <span className="font-medium">Duration: </span> 
                                       <span className="font-bold">
-                                        {calculateDuration(job.submittedAt, job.startedAt)}/{calculateDuration(job.startedAt, job.finishedAt)}
+                                        {calculateDuration(job.submittedAt, job.startedAt)} + {calculateDuration(job.startedAt, job.finishedAt)}
                                       </span>
                                     </div>
                                   )}

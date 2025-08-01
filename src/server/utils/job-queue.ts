@@ -56,7 +56,7 @@ export class JobQueue<T, V> {
     this.jobsMap.set(job.id, job);
     this.tryProcessQueue();
     this.recentJobs.push(job);
-    if (this.recentJobs.length > 25) {
+    if (this.recentJobs.length > 50) {
       this.recentJobs.shift();
     }
   }

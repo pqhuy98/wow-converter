@@ -17,6 +17,7 @@
   "scripts": {
     "lint": "eslint src/**/*.ts --fix",
     "dev": "tsx watch src/server/index.ts",
+    "start": "node build/src/server/index.js",
     "prisma:generate": "prisma generate",
     "build:webui": "cd webui && npm run build",
     "build:0": "shx rm -rf build && tsc && tsc-alias",

@@ -6,7 +6,7 @@ import z from 'zod';
 
 import { LocalRefValueSchema } from '@/lib/converter/character-exporter';
 
-import { ceOutputPath } from '../../../examples/units/common';
+import { ceOutputPath } from '../config';
 
 const DownloadRequestSchema = z.object({
   files: z.array(LocalRefValueSchema).min(1),

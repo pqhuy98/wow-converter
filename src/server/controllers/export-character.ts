@@ -11,7 +11,7 @@ import { stableStringify, waitUntil } from '@/lib/utils';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { Job, JobQueue, QueueConfig } from '@/server/utils/job-queue';
 
-import { isSharedHosting, serverDeployTime } from '../config';
+import { ceOutputPath, isSharedHosting, serverDeployTime } from '../config';
 import { startupRequests } from './export-character.startup';
 
 export const ExporCharacterRequestSchema = z.object({
@@ -46,10 +46,7 @@ type ExportCharacterJob = Job<ExportCharacterRequest, ExportCharacterResponse>;
 
 export async function ControllerExportCharacter(app: express.Application) {
   await waitUntil(() => wowExportClient.isReady);
-  const ceOutputPath = 'exported-assets';
   const ceConfig = await getDefaultConfig();
-
-  fsExtra.ensureDirSync(ceOutputPath);
   if (isSharedHosting) {
     console.log('Shared hosting mode enabled');
   }

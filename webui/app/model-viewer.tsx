@@ -142,7 +142,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
           const dy = e.clientY - lastY;
           lastX = e.clientX;
           lastY = e.clientY;
-          const ROT_SPEED = Math.PI / 180; // radians per pixel
+          const ROT_SPEED = Math.PI / 360; // radians per pixel
           horizontalAngle -= dx * ROT_SPEED;
           verticalAngle += dy * ROT_SPEED;
           verticalAngle = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, verticalAngle));
