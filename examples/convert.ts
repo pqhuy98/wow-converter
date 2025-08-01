@@ -55,7 +55,7 @@ const mapExportConfig: MapExportConfig = {
   terrain: {
     clampPercent: {
       lower: 0,
-      upper: 1,
+      upper: 0.3 * 2,
       // lower: gameZToPercent(1400),
       // upper: gameZToPercent(2600),
     },

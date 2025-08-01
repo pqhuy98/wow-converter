@@ -1,21 +1,31 @@
 import 'dotenv/config';
 
 import chalk from 'chalk';
+import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
 import fsExtra from 'fs-extra';
+import helmet from 'helmet';
 import path from 'path';
 
 import { printLogo } from '../lib/logo';
+import { isDev, isSharedHosting } from './config';
 import { ControllerDownload } from './controllers/download';
 import { ControllerExportCharacter } from './controllers/export-character';
 
 printLogo();
 const app = express();
-app.use(cors({
-  origin: process.env.UI_DOMAIN?.split(',') ?? '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-}));
+app.use(compression());
+app.use(helmet());
+
+// Only allow CORS for personal mode or local development
+if (!isSharedHosting || isDev) {
+  app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  }));
+}
+
 app.use(express.json());
 
 async function main() {
