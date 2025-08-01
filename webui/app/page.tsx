@@ -225,7 +225,7 @@ export default function WoWNPCExporter() {
 
   useEffect(() => {
     const checkExportResult = async () => {
-      const res = await fetch(`${host}/export/character/startup`)
+      const res = await fetch(`${host}/export/character/demos`)
       const jobs = await res.json()
       if (jobs.length > 0) {
         setViewerModelPath(jobs[Math.floor(Math.random() * jobs.length)].result.exportedModels[0])
@@ -1099,11 +1099,4 @@ function getNpcNameFromWowheadUrl(url: string) {
     }
   }
   return undefined
-}
-
-function formatBytes(bytes: number) {
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  if (bytes === 0) return '0 B';
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
 }

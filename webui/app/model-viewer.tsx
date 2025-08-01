@@ -36,8 +36,17 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     setViewer(viewer)
   }, [canvasRef.current])
 
+  // Keep track of which model path has already been loaded to avoid the extra
+  // invocation that happens under React 18 Strict Mode while still allowing
+  // re-loading when the `modelPath` prop actually changes.
+  const lastLoadedPathRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!modelPath || !canvasRef.current || !viewer) return
+    if (lastLoadedPathRef.current === modelPath) {
+      console.log('Model already loaded, skipping');
+      return
+    }
+    lastLoadedPathRef.current = modelPath;
 
     let animationFrameId: number
     let lastTime = performance.now();

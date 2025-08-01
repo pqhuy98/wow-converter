@@ -109,20 +109,7 @@ export async function ControllerExportCharacter(app: express.Application) {
   );
 
   app.get('/export/character/recent', (req, res) => {
-    let recentJobs = jobQueue.recentJobs;
-
-    // if there are jobs with same outputFileName, remove all but the last one, O(N)
-    const outputFileNames = new Set<string>();
-    recentJobs.reverse();
-    recentJobs = recentJobs.filter((job) => {
-      if (outputFileNames.has(job.request.outputFileName)) {
-        return false;
-      }
-      outputFileNames.add(job.request.outputFileName);
-      return true;
-    });
-
-    res.json(recentJobs);
+    res.json(jobQueue.recentJobs);
   });
 
   app.post('/export/character', (req, res) => {
@@ -194,13 +181,14 @@ export async function ControllerExportCharacter(app: express.Application) {
         request,
         status: 'pending',
         submittedAt: Date.now(),
+        isDemo: true,
       };
       jobQueue.addJob(job);
       return job;
     });
   }
 
-  app.get('/export/character/startup', (req, res) => {
+  app.get('/export/character/demos', (req, res) => {
     res.json(jobs.map((job) => jobQueue.getJob(job.id)).filter((job) => job?.status === 'done'));
   });
 }

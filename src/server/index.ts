@@ -13,7 +13,7 @@ import { ControllerExportCharacter } from './controllers/export-character';
 printLogo();
 const app = express();
 app.use(cors({
-  origin: process.env.UI_DOMAIN ?? '*',
+  origin: process.env.UI_DOMAIN?.split(',') ?? '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
 app.use(express.json());

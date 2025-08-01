@@ -87,16 +87,6 @@ export default function RecentsPage() {
     fetchRecentJobs()
   }, [])
 
-  const toggleExpanded = (jobId: string) => {
-    const newExpanded = new Set(expandedJobs)
-    if (newExpanded.has(jobId)) {
-      newExpanded.delete(jobId)
-    } else {
-      newExpanded.add(jobId)
-    }
-    setExpandedJobs(newExpanded)
-  }
-
   const getSimplifiedWowheadUrl = (url: string, type: 'npc' | 'item'): string => {
     try {
       const urlObj = new URL(url)
@@ -175,7 +165,7 @@ export default function RecentsPage() {
   const selectedJob = jobs.find(job => job.id === selectedJobId)
   const selectedModelPath = useMemo(() => {
     if (selectedJob?.status === 'done' && selectedJob?.result?.exportedModels?.[0]) {
-      return `${selectedJob.result.exportedModels[0]}?v=${selectedJob.id}`
+      return selectedJob.result.exportedModels[0]
     }
     return undefined
   }, [selectedJob?.id, selectedJob?.status, selectedJob?.result?.exportedModels?.[0]])
@@ -222,7 +212,7 @@ export default function RecentsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="mx-auto">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">Recent Exports</h1>
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
@@ -234,7 +224,7 @@ export default function RecentsPage() {
 
   return (
     <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col">
+      <div className="mx-auto flex-1 flex flex-col">
         <div className="flex justify-between items-center mb-6">
           <div className="text-center flex-1">
             <h1 className="text-4xl font-bold text-gray-900">Recent Exports</h1>

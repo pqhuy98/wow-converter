@@ -9,7 +9,7 @@ export interface Job<T, V> {
   submittedAt: number;
   startedAt?: number;
   finishedAt?: number; // timestamp when job reached a terminal state
-  noTimeout?: boolean;
+  isDemo?: boolean;
 }
 
 export interface QueueConfig {
@@ -43,6 +43,9 @@ export class JobQueue<T, V> {
     setInterval(() => {
       const now = Date.now();
       for (const [id, job] of this.jobsMap) {
+        if (job.isDemo) {
+          continue;
+        }
         if ((job.status === 'done' || job.status === 'failed') && job.finishedAt && now - job.finishedAt > this.config.jobTTL) {
           this.jobsMap.delete(id);
         }
@@ -104,7 +107,7 @@ export class JobQueue<T, V> {
       void (async () => {
         job.startedAt = Date.now();
         try {
-          if (job.noTimeout) {
+          if (job.isDemo) {
             job.result = await this.handler(job);
           } else {
             job.result = await Promise.race<V>([
