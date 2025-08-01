@@ -26,10 +26,10 @@ const maps: [WowMap, [number, number], [number, number], string][] = [
   // [WowMap.IcecrownCitadel, [25, 28], [21, 24], 'icc-floor34.w3x'],
   // [WowMap.IcecrownCitadel, [35, 36], [30, 31], 'frozen-throne.w3x'],
   // [WowMap.Azeroth, [32, 32], [48, 48], 'northshire-abbey.w3x'],
-  // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
+  [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
   // [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
   // [WowMap.TheMaw, [17, 19], [22, 23], 'themaw2.w3x'],
-  [WowMap.TheMaw, [19, 21], [22, 25], 'themaw3.w3x'],
+  // [WowMap.TheMaw, [19, 21], [22, 25], 'themaw3.w3x'],
   // [WowMap.TheMaw, [17, 21], [22, 25], 'themaw4.w3x'],
 ];
 
@@ -54,15 +54,15 @@ const mapExportConfig: MapExportConfig = {
   mapAngleDeg,
   terrain: {
     clampPercent: {
-      // lower: 0,
-      // upper: 1,
-      lower: gameZToPercent(1400),
-      upper: gameZToPercent(2600),
+      lower: 0,
+      upper: 1,
+      // lower: gameZToPercent(1400),
+      // upper: gameZToPercent(2600),
     },
   },
   creatures: {
-    enable: false,
-    allAreDoodads: true,
+    enable: true,
+    allAreDoodads: false,
     scaleUp: creatureScaleUp,
   },
 };
