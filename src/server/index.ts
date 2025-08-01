@@ -16,7 +16,16 @@ import { ControllerExportCharacter } from './controllers/export-character';
 printLogo();
 const app = express();
 app.use(compression());
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      // defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      // styleSrc: ["'self'", "'unsafe-inline'"],
+    },
+  },
+}));
 
 // Only allow CORS for personal mode or local development
 if (!isSharedHosting || isDev) {
