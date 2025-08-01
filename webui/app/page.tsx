@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,50 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle } from "lucide-react"
+import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle, History } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { host, isDev } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
 import ModelViewerUi from "./model-viewer"
+import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus } from "@/lib/models/export-character.model"
 
-type RefType = "local" | "wowhead" | "displayID"
-type AttackTag = "" | "1H" | "2H" | "2HL" | "Unarmed" | "Bow" | "Rifle" | "Thrown"
-type Size = "small" | "medium" | "large" | "hero" | "giant"
-type Format = "mdx" | "mdl"
-
-interface RefSchema {
-  type: RefType
-  value: string
-}
-
-interface AttachItem {
-  path: RefSchema
-  scale?: number
-}
-
-interface Character {
-  base: RefSchema
-  attackTag?: AttackTag
-  keepCinematic?: boolean
-  inGameMovespeed: number
-  size?: Size
-  scale?: number
-  attachItems?: Record<number, AttachItem>
-  noDecay?: boolean
-  portraitCameraSequenceName?: string
-}
-
-interface ExportRequest {
-  character: Character
-  outputFileName: string
-  optimization?: {
-    sortSequences?: boolean
-    removeUnusedVertices?: boolean
-    removeUnusedNodes?: boolean
-    removeUnusedMaterialsTextures?: boolean
-  }
-  format?: Format
-}
 
 // Tooltips organized in a record
 const tooltips = {
@@ -74,132 +37,6 @@ const tooltips = {
   optimizeKeyFrames: "Remove key frames that are not used in any animation, or are insignificant.",
 }
 
-enum WoWAttachmentID {
-  Shield = 0,
-  HandRight = 1,
-  HandLeft = 2,
-  ElbowRight = 3,
-  ElbowLeft = 4,
-  ShoulderRight = 5,
-  ShoulderLeft = 6,
-  KneeRight = 7,
-  KneeLeft = 8,
-  HipRight = 9,
-  HipLeft = 10,
-  Helm = 11,
-  Back = 12,
-  ShoulderFlapRight = 13,
-  ShoulderFlapLeft = 14,
-  ChestBloodFront = 15,
-  ChestBloodBack = 16,
-  Breath = 17,
-  PlayerName = 18,
-  Base = 19,
-  Head = 20,
-  SpellLeftHand = 21,
-  SpellRightHand = 22,
-  Special1 = 23,
-  Special2 = 24,
-  Special3 = 25,
-  SheathMainHand = 26,
-  SheathOffHand = 27,
-  SheathShield = 28,
-  PlayerNameMounted = 29,
-  LargeWeaponLeft = 30,
-  LargeWeaponRight = 31,
-  HipWeaponLeft = 32,
-  HipWeaponRight = 33,
-  Chest = 34,
-  HandArrow = 35,
-  Bullet = 36,
-  SpellHandOmni = 37,
-  SpellHandDirected = 38,
-  VehicleSeat1 = 39,
-  VehicleSeat2 = 40,
-  VehicleSeat3 = 41,
-  VehicleSeat4 = 42,
-  VehicleSeat5 = 43,
-  VehicleSeat6 = 44,
-  VehicleSeat7 = 45,
-  VehicleSeat8 = 46,
-  LeftFoot = 47,
-  RightFoot = 48,
-  ShieldNoGlove = 49,
-  SpineLow = 50,
-  AlteredShoulderR = 51,
-  AlteredShoulderL = 52,
-  BeltBuckle = 53,
-  SheathCrossbow = 54,
-  HeadTop = 55,
-  VirtualSpellDirected = 56,
-  Backpack = 57,
-  Unknown = 60,
-}
-
-const commonAttachments = [
-  { id: WoWAttachmentID.HandRight, name: "Hand Right" },
-  { id: WoWAttachmentID.HandLeft, name: "Hand Left" },
-  { id: WoWAttachmentID.Shield, name: "Shield" },
-]
-
-const otherAttachments = [
-  { id: WoWAttachmentID.ElbowRight, name: "Elbow Right" },
-  { id: WoWAttachmentID.ElbowLeft, name: "Elbow Left" },
-  { id: WoWAttachmentID.ShoulderRight, name: "Shoulder Right" },
-  { id: WoWAttachmentID.ShoulderLeft, name: "Shoulder Left" },
-  { id: WoWAttachmentID.KneeRight, name: "Knee Right" },
-  { id: WoWAttachmentID.KneeLeft, name: "Knee Left" },
-  { id: WoWAttachmentID.HipRight, name: "Hip Right" },
-  { id: WoWAttachmentID.HipLeft, name: "Hip Left" },
-  { id: WoWAttachmentID.Helm, name: "Helm" },
-  { id: WoWAttachmentID.Back, name: "Back" },
-  { id: WoWAttachmentID.ShoulderFlapRight, name: "Shoulder Flap Right" },
-  { id: WoWAttachmentID.ShoulderFlapLeft, name: "Shoulder Flap Left" },
-  { id: WoWAttachmentID.ChestBloodFront, name: "Chest Blood Front" },
-  { id: WoWAttachmentID.ChestBloodBack, name: "Chest Blood Back" },
-  { id: WoWAttachmentID.Breath, name: "Breath" },
-  { id: WoWAttachmentID.PlayerName, name: "Player Name" },
-  { id: WoWAttachmentID.Base, name: "Base" },
-  { id: WoWAttachmentID.Head, name: "Head" },
-  { id: WoWAttachmentID.SpellLeftHand, name: "Spell Left Hand" },
-  { id: WoWAttachmentID.SpellRightHand, name: "Spell Right Hand" },
-  { id: WoWAttachmentID.Special1, name: "Special 1" },
-  { id: WoWAttachmentID.Special2, name: "Special 2" },
-  { id: WoWAttachmentID.Special3, name: "Special 3" },
-  { id: WoWAttachmentID.SheathMainHand, name: "Sheath Main Hand" },
-  { id: WoWAttachmentID.SheathOffHand, name: "Sheath Off Hand" },
-  { id: WoWAttachmentID.SheathShield, name: "Sheath Shield" },
-  { id: WoWAttachmentID.PlayerNameMounted, name: "Player Name Mounted" },
-  { id: WoWAttachmentID.LargeWeaponLeft, name: "Large Weapon Left" },
-  { id: WoWAttachmentID.LargeWeaponRight, name: "Large Weapon Right" },
-  { id: WoWAttachmentID.HipWeaponLeft, name: "Hip Weapon Left" },
-  { id: WoWAttachmentID.HipWeaponRight, name: "Hip Weapon Right" },
-  { id: WoWAttachmentID.Chest, name: "Chest" },
-  { id: WoWAttachmentID.HandArrow, name: "Hand Arrow" },
-  { id: WoWAttachmentID.Bullet, name: "Bullet" },
-  { id: WoWAttachmentID.SpellHandOmni, name: "Spell Hand Omni" },
-  { id: WoWAttachmentID.SpellHandDirected, name: "Spell Hand Directed" },
-  { id: WoWAttachmentID.VehicleSeat1, name: "Vehicle Seat 1" },
-  { id: WoWAttachmentID.VehicleSeat2, name: "Vehicle Seat 2" },
-  { id: WoWAttachmentID.VehicleSeat3, name: "Vehicle Seat 3" },
-  { id: WoWAttachmentID.VehicleSeat4, name: "Vehicle Seat 4" },
-  { id: WoWAttachmentID.VehicleSeat5, name: "Vehicle Seat 5" },
-  { id: WoWAttachmentID.VehicleSeat6, name: "Vehicle Seat 6" },
-  { id: WoWAttachmentID.VehicleSeat7, name: "Vehicle Seat 7" },
-  { id: WoWAttachmentID.VehicleSeat8, name: "Vehicle Seat 8" },
-  { id: WoWAttachmentID.LeftFoot, name: "Left Foot" },
-  { id: WoWAttachmentID.RightFoot, name: "Right Foot" },
-  { id: WoWAttachmentID.ShieldNoGlove, name: "Shield No Glove" },
-  { id: WoWAttachmentID.SpineLow, name: "Spine Low" },
-  { id: WoWAttachmentID.AlteredShoulderR, name: "Altered Shoulder R" },
-  { id: WoWAttachmentID.AlteredShoulderL, name: "Altered Shoulder L" },
-  { id: WoWAttachmentID.BeltBuckle, name: "Belt Buckle" },
-  { id: WoWAttachmentID.SheathCrossbow, name: "Sheath Crossbow" },
-  { id: WoWAttachmentID.HeadTop, name: "Head Top" },
-  { id: WoWAttachmentID.VirtualSpellDirected, name: "Virtual Spell Directed" },
-  { id: WoWAttachmentID.Backpack, name: "Backpack" },
-  { id: WoWAttachmentID.Unknown, name: "Unknown" },
-]
 
 function AttachmentSelector({
   value,
@@ -327,7 +164,7 @@ const validateRef = (ref: RefSchema, category: RefCategory): string | null => {
   return null
 }
 
-const attackTagOptions = [
+const attackTagOptions: { value: AttackTag | "all", label: string, description: string }[] = [
   { value: "all", label: "All", description: "Include all attack animations" },
   { value: "1H", label: "1H Weapon", description: "The model uses 1H weapon(s)" },
   { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
@@ -338,7 +175,7 @@ const attackTagOptions = [
   // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
 ]
 
-const sizeOptions = [
+const sizeOptions: { value: ModelSize | "none", label: string, description: string }[] = [
   { value: "none", label: "Default", description: "Original WoW size times 56" },
   { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
   { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
@@ -351,13 +188,13 @@ const portraitSuggestions = ["Stand", "Stand Ready"]
 
 export default function WoWNPCExporter() {
   const [character, setCharacter] = useState<Character>({
-    base: { type: 'wowhead', value: 'https://www.wowhead.com/npc=223722/thrall' },
+    base: { type: 'wowhead', value: 'https://www.wowhead.com/npc=71865/garrosh-hellscream' },
     size: 'hero',
-    attackTag: '1H',
+    attackTag: '2H',
     inGameMovespeed: 270,
     attachItems: {
       1: {
-        path: { type: 'wowhead', value: 'https://www.wowhead.com/item=128819/doomhammer' },
+        path: { type: 'wowhead', value: 'https://www.wowhead.com/item=28773/gorehowl' },
       },
     },
     portraitCameraSequenceName: 'Stand',
@@ -372,7 +209,7 @@ export default function WoWNPCExporter() {
     }
   }, [character.base.value])
 
-  const [format, setFormat] = useState<Format>("mdx")
+  const [format, setFormat] = useState<ModelFormat>("mdx")
   const [optimization, setOptimization] = useState({
     sortSequences: true,
     removeUnusedVertices: true,
@@ -383,25 +220,15 @@ export default function WoWNPCExporter() {
   const [isExporting, setIsExporting] = useState(false)
 
   // Job/queue tracking
-  const [jobId, setJobId] = useState<string | null>(null)
-  const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'done' | 'failed' | null>(null)
-  const [queuePosition, setQueuePosition] = useState<number | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  const [exportResult, setExportResult] = useState<any>(null)
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
+  const [viewerModelPath, setViewerModelPath] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     const checkExportResult = async () => {
-      const res = await fetch(`${host}/startup-jobs`)
+      const res = await fetch(`${host}/export/character/startup`)
       const jobs = await res.json()
       if (jobs.length > 0) {
-        const chosenJob = jobs[Math.floor(Math.random() * jobs.length)]
-        setExportResult({
-          exportedModels: [chosenJob.request.outputFileName + '.' + chosenJob.request.format],
-          exportedTextures: [],
-          outputDirectory: "exported-assets",
-        })
-        setCharacter(chosenJob.request.character)
+        setViewerModelPath(jobs[Math.floor(Math.random() * jobs.length)].result.exportedModels[0])
       }
     }
     checkExportResult()
@@ -465,11 +292,7 @@ export default function WoWNPCExporter() {
 
   const handleExport = async () => {
     setIsExporting(true)
-    setExportResult(null)
-    setJobId(null)
     setJobStatus(null)
-    setQueuePosition(null)
-    setErrorMessage(null)
 
     try {
       // Prepare request
@@ -497,13 +320,18 @@ export default function WoWNPCExporter() {
         throw new Error(await response.text())
       }
 
-      const result = await response.json() // { jobId }
-      setJobId(result.jobId)
-      setJobStatus('pending')
+      const result = await response.json()
+      setJobStatus(result)
     } catch (error: any) {
       console.error("Export error:", error)
-      setErrorMessage(error?.message || String(error))
-      setJobStatus('failed')
+      setJobStatus({
+        id: '',
+        status: 'failed',
+        position: null,
+        result: null,
+        error: error?.message || String(error),
+        submittedAt: Date.now(),
+      })
     } finally {
       setIsExporting(false)
     }
@@ -518,61 +346,41 @@ export default function WoWNPCExporter() {
     window.addEventListener('blur', handleBlur)
   }, [])
 
-  const [status, setStatus] = useState<{
-    jobsInQueue: number
-    jobsInProcess: number
-    jobsDone: number
-    jobsFailed: number
-  } | null>(null)
-
-  const fetchStatus = async () => {
-    if (!isWindowFocused) return
-    const res = await fetch(`${host}/export/character/status`)
-    if (!res.ok) {
-      throw new Error(await res.text())
-    }
-    const data = await res.json()
-    setStatus(data)
-  }
-
-  useEffect(() => {
-    if (!isWindowFocused) return
-    const interval = setInterval(fetchStatus, 5000)
-    fetchStatus()
-    return () => clearInterval(interval)
-  }, [isWindowFocused])
-
   // Poll job status every 1s when a job is active
   useEffect(() => {
-    if (!jobId || !jobStatus || jobStatus === 'done' || jobStatus === 'failed') return
+    if (!jobStatus || jobStatus.status === 'done' || jobStatus.status === 'failed') return
 
     let pendingFetches = 0
     const fetchJobStatus = async () => {
+      console.log('fetching job status', jobStatus)
       try {
         pendingFetches++
         if (pendingFetches > 1) return
-        const res = await fetch(`${host}/export/character/status/${jobId}`)
+        const res = await fetch(`${host}/export/character/status/${jobStatus.id}`)
         if (!res.ok) {
           throw new Error(await res.text())
         }
         const data = await res.json()
-        setJobStatus(data.status)
+        setJobStatus(data)
 
         if (data.status === 'pending') {
-          setQueuePosition(data.position)
         } else if (data.status === 'processing') {
-          setQueuePosition(0)
         } else if (data.status === 'done') {
-          setExportResult(data.result)
+          setViewerModelPath(`${data.result.exportedModels[0]}?v=${Date.now()}`)
           clearInterval(interval)
         } else if (data.status === 'failed') {
-          setErrorMessage(data.error || 'Job failed')
           clearInterval(interval)
         }
       } catch (e: any) {
         console.error('Polling error:', e)
-        setErrorMessage(e?.message || String(e))
-        setJobStatus('failed')
+        setJobStatus({
+          id: '',
+          status: 'failed',
+          position: null,
+          result: null,
+          error: e?.message || String(e),
+          submittedAt: Date.now(),
+        })
         clearInterval(interval)
       } finally {
         pendingFetches--
@@ -583,17 +391,17 @@ export default function WoWNPCExporter() {
     fetchJobStatus()
 
     return () => clearInterval(interval)
-  }, [jobId, jobStatus, isWindowFocused])
+  }, [jobStatus?.id, isWindowFocused])
 
   /**
    * Download the exported assets as a ZIP by calling the new POST /download API.
    */
   const handleDownloadZip = async () => {
-    if (!exportResult) return
+    if (!jobStatus?.result) return
 
     const files = [
-      ...(exportResult.exportedModels || []),
-      ...(exportResult.exportedTextures || []),
+      ...(jobStatus.result.exportedModels || []),
+      ...(jobStatus.result.exportedTextures || []),
     ]
 
     if (files.length === 0) {
@@ -630,22 +438,20 @@ export default function WoWNPCExporter() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-6xl mx-auto space-y-4">
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-gray-900">Huy's WOW-CONVERTER</h1>
-          <p className="text-lg text-gray-600">Easily export WoW NPC models into Warcraft 3 MDL/MDX</p>
-          <p className="text-sm text-gray-600">
-            {status ? (
-              <>
-                Server status: {" "}
-                <b>{status.jobsInQueue}</b> exports in queue, {" "}
-                <b>{status.jobsInProcess}</b> exports in progress, {" "}
-                <b>{status.jobsDone}</b> exports done, {" "}
-                <b>{status.jobsFailed}</b> exports failed
-              </>
-            ) : (
-              <b>Server status:</b>
-            )}
-          </p>
+        {/* Navigation Header */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="text-center flex-1">
+            <h1 className="text-4xl font-bold text-gray-900">Huy's WOW-CONVERTER</h1>
+            <p className="text-lg text-gray-600">Easily export WoW NPC models into Warcraft 3 MDL/MDX</p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => window.location.href = '/recents'}
+            className="flex items-center gap-2"
+          >
+            <History className="h-4 w-4" />
+            Recent Exports
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -728,7 +534,7 @@ export default function WoWNPCExporter() {
                     onValueChange={(value: string) =>
                       setCharacter({
                         ...character,
-                        size: value === "none" ? undefined : (value as Size),
+                        size: value === "none" ? undefined : (value as ModelSize),
                       })
                     }
                   >
@@ -1030,7 +836,7 @@ export default function WoWNPCExporter() {
 
               <div className="space-y-2">
                 <Label className="text-sm">Export Format</Label>
-                <Select value={format} onValueChange={(value: Format) => setFormat(value)}>
+                <Select value={format} onValueChange={(value: ModelFormat) => setFormat(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -1042,7 +848,7 @@ export default function WoWNPCExporter() {
               </div>
 
               <div className="md:col-span-2">
-                <Button onClick={handleExport} disabled={isExporting || !isValidForExport || jobStatus==='pending' || jobStatus==='processing'} className="w-full" size="lg">
+                <Button onClick={handleExport} disabled={isExporting || !isValidForExport || jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} className="w-full" size="lg">
                   {isExporting ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -1180,100 +986,94 @@ export default function WoWNPCExporter() {
           </CardContent>
         </Card>
 
-        {jobStatus && jobStatus !== 'done' && (
-          <Card>
+        <Card className="pt-6">
+          {jobStatus && jobStatus.status !== 'done' && (
             <CardContent className="py-6">
-              {jobStatus === 'pending' && (
-                <p className="text-center">Your request is queued. Current position: {queuePosition ?? 'N/A'}</p>
+              {jobStatus.status === 'pending' && (
+                <p className="text-center">Your request is queued. {jobStatus.position ? `Position: ${jobStatus.position}` : ''}</p>
               )}
-              {jobStatus === 'processing' && (
+              {jobStatus.status === 'processing' && (
                 <p className="text-center">Your request is being processed...</p>
               )}
-              {jobStatus === 'failed' && (
-                <p className="text-center text-red-600">{errorMessage || 'Job failed'}</p>
+              {jobStatus.status === 'failed' && (
+                <p className="text-center text-red-600">{jobStatus.error || 'Job failed'}</p>
               )}
             </CardContent>
-          </Card>
-        )}
-
-        {/* Finished result */}
-        {exportResult && (jobStatus === 'done' || jobStatus === null) && (
-          <Card className="pt-6">
-            {jobStatus !== null && (
-              <CardHeader className="pb-4 pt-0">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  {exportResult.error ? (
-                    <>
-                      <div className="h-5 w-5 rounded-full bg-red-500" />
-                      Export Failed
-                    </>
-                  ) : (
-                    <>
-                      <div className="h-5 w-5 rounded-full bg-green-500" />
-                      Export Successful
-                    </>
-                  )}
-                </CardTitle>
-              </CardHeader>
-            )}
-            <CardContent>
-              {exportResult.error ? (
-                <p className="text-red-600">{exportResult.error}</p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex-col items-center gap-10">
-                      {isDev && <div className="flex items-center gap-2 w-full">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => {
-                            navigator.clipboard.writeText(exportResult.outputDirectory)
-                          }}
-                          title="Copy output directory"
-                        >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" />
-                            <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" />
-                          </svg>
-                        </Button>
-                        <span className="text-lg font-mono select-all">{exportResult.outputDirectory}</span> 
-                      </div>
-                      }
-                      <div className="flex items-center gap-2 w-full pt-2">
-                        <Button variant="default" size="icon" onClick={handleDownloadZip}>
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <span className="text-lg">Download: {outputFileName}.zip</span>
-                      </div>
-                  </div>
-                  <ModelViewerUi modelPath={exportResult.exportedModels[0]} />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h4 className="font-semibold mb-2">Exported Models:</h4>
-                      <ul className="list-disc list-inside space-y-1">
-                        {exportResult.exportedModels?.map((model: string, index: number) => (
-                          <li key={index} className="text-sm">
-                            {model}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold mb-2">Exported Textures:</h4>
-                      <ul className="list-disc list-inside space-y-1">
-                        {exportResult.exportedTextures?.map((texture: string, index: number) => (
-                          <li key={index} className="text-sm">
-                            {texture}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+          )}
+          {jobStatus?.result && (
+            <CardHeader className="pb-4 pt-0">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                {jobStatus.error ? (
+                  <>
+                    <div className="h-5 w-5 rounded-full bg-red-500" />
+                    Export Failed
+                  </>
+                ) : (
+                  <>
+                    <div className="h-5 w-5 rounded-full bg-green-500" />
+                    Export Successful
+                  </>
+                )}
+              </CardTitle>
+            </CardHeader>
+          )}
+          <CardContent>
+            {jobStatus?.error && <p className="text-red-600">{jobStatus.error}</p>}
+            <div className="space-y-4">
+              {jobStatus?.result && <div className="flex-col items-center gap-10">
+                {isDev && jobStatus.result.outputDirectory && <div className="flex items-center gap-2 w-full">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      navigator.clipboard.writeText(jobStatus.result!.outputDirectory)
+                    }}
+                    title="Copy output directory"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" />
+                      <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" />
+                    </svg>
+                  </Button>
+                  <span className="text-lg font-mono select-all">{jobStatus.result!.outputDirectory}</span> 
+                </div>}
+                <div className="flex items-center gap-2 w-full pt-2">
+                  <Button variant="default" size="icon" onClick={handleDownloadZip}>
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <span className="text-lg">Download: {outputFileName}.zip</span>
+                </div>
+              </div>}
+              {viewerModelPath && (
+                <div className="h-[600px]">
+                  <ModelViewerUi key={viewerModelPath} modelPath={viewerModelPath} />
                 </div>
               )}
-            </CardContent>
-          </Card>
-        )}
+              {jobStatus?.result && <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-semibold mb-2">Exported Models:</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    {jobStatus.result.exportedModels?.map((model: string, index: number) => (
+                      <li key={index} className="text-sm">
+                        {jobStatus.result!.versionId ? model.replace("__" + jobStatus.result!.versionId, '') : model}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-2">Exported Textures:</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    {jobStatus.result.exportedTextures?.map((texture: string, index: number) => (
+                      <li key={index} className="text-sm">
+                        {texture}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>}
+            </div>
+          </CardContent>
+        </Card>
       </div>
       <div className="text-lg text-center text-gray-600 mt-4">
         Created by <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">wc3-sandbox</a>

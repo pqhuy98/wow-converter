@@ -26,3 +26,22 @@ export function waitUntil(condition: () => boolean) {
     }, 100);
   });
 }
+
+// Produce a stable, order-independent JSON string.
+export function stableStringify(value: unknown): string {
+  const sorter = (val: unknown): unknown => {
+    if (Array.isArray(val)) {
+      return val.map(sorter);
+    }
+    if (val && typeof val === 'object' && !(val instanceof Date)) {
+      const sorted: Record<string, unknown> = {};
+      for (const key of Object.keys(val).sort()) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sorted[key] = sorter((val as any)[key]);
+      }
+      return sorted;
+    }
+    return val;
+  };
+  return JSON.stringify(sorter(value));
+}

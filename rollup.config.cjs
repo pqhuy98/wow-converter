@@ -1,5 +1,5 @@
 module.exports = {
-  input: 'build/src/server.js',
+  input: 'build/src/server/index.js',
   output: {
       file: 'build/server.bundle.js',
       format: 'cjs',

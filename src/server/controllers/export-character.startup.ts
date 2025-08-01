@@ -1,4 +1,4 @@
-import { ExportCharacterRequest } from './server';
+import { ExportCharacterRequest } from './export-character';
 
 export const startupRequests: ExportCharacterRequest[] = [
   {
@@ -13,6 +13,12 @@ export const startupRequests: ExportCharacterRequest[] = [
         },
       },
       portraitCameraSequenceName: 'Stand',
+    },
+    optimization: {
+      sortSequences: true,
+      removeUnusedVertices: true,
+      removeUnusedNodes: true,
+      removeUnusedMaterialsTextures: true,
     },
     outputFileName: 'demo-garrosh',
     format: 'mdx',
