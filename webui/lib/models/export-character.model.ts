@@ -42,7 +42,7 @@ export interface ExportRequest {
 export interface ExportCharacterResponse {
   exportedModels: string[]
   exportedTextures: string[]
-  outputDirectory: string
+  outputDirectory?: string
   versionId: string
 }
 

@@ -31,7 +31,7 @@ export type ExportCharacterRequest = z.infer<typeof ExporCharacterRequestSchema>
 export type ExportCharacterResponse = {
   exportedModels: string[]
   exportedTextures: string[]
-  outputDirectory: string
+  outputDirectory?: string
   versionId: string
 }
 
@@ -95,7 +95,7 @@ export async function ControllerExportCharacter(app: express.Application) {
     const resp: ExportCharacterResponse = {
       exportedModels,
       exportedTextures: textures,
-      outputDirectory: path.resolve(ce.outputPath),
+      outputDirectory: !isSharedHosting ? path.resolve(ce.outputPath) : undefined,
       versionId: job.id,
     };
 

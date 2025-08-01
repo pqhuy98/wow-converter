@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle, History } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { host, isSharedHosting } from "@/app/config"
+import { host } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
 import ModelViewerUi from "./model-viewer"
 import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus } from "@/lib/models/export-character.model"
@@ -366,6 +366,8 @@ export default function WoWNPCExporter() {
         if (data.status === 'pending') {
         } else if (data.status === 'processing') {
         } else if (data.status === 'done') {
+          // we need to use ?v=now to force reload the model in the viewer when file name doesn't change
+          // only needed in personal mode, because shared hosting always has file name with random UUID. 
           setViewerModelPath(`${data.result.exportedModels[0]}?v=${Date.now()}`)
           clearInterval(interval)
         } else if (data.status === 'failed') {
@@ -1021,12 +1023,12 @@ export default function WoWNPCExporter() {
             {jobStatus?.error && <p className="text-red-600">{jobStatus.error}</p>}
             <div className="space-y-4">
               {jobStatus?.result && <div className="flex-col items-center gap-10">
-                {!isSharedHosting && jobStatus.result.outputDirectory && <div className="flex items-center gap-2 w-full">
+                {jobStatus.result.outputDirectory && <div className="flex items-center gap-2 w-full">
                   <Button
                     variant="outline"
                     size="icon"
                     onClick={() => {
-                      navigator.clipboard.writeText(jobStatus.result!.outputDirectory)
+                      navigator.clipboard.writeText(jobStatus.result!.outputDirectory!)
                     }}
                     title="Copy output directory"
                   >
