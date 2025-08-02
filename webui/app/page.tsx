@@ -346,6 +346,8 @@ export default function WoWNPCExporter() {
     window.addEventListener('blur', handleBlur)
   }, [])
 
+  const [doneCount, setDoneCount] = useState(0)
+
   // Poll job status every 1s when a job is active
   useEffect(() => {
     if (!jobStatus || jobStatus.status === 'done' || jobStatus.status === 'failed') return
@@ -366,9 +368,8 @@ export default function WoWNPCExporter() {
         if (data.status === 'pending') {
         } else if (data.status === 'processing') {
         } else if (data.status === 'done') {
-          // we need to use ?v=now to force reload the model in the viewer when file name doesn't change
-          // only needed in personal mode, because shared hosting always has file name with random UUID. 
-          setViewerModelPath(`${data.result.exportedModels[0]}?v=${Date.now()}`)
+          setDoneCount(doneCount + 1)
+          setViewerModelPath(data.result.exportedModels[0])
           clearInterval(interval)
         } else if (data.status === 'failed') {
           clearInterval(interval)
@@ -1048,7 +1049,7 @@ export default function WoWNPCExporter() {
               </div>}
               {viewerModelPath && (
                 <div className="h-[600px]">
-                  <ModelViewerUi key={viewerModelPath} modelPath={viewerModelPath} />
+                  <ModelViewerUi key={viewerModelPath + ":" + doneCount} modelPath={viewerModelPath} />
                 </div>
               )}
               {jobStatus?.result && <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
