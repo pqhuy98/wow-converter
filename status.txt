@@ -18,3 +18,4 @@ DONE:
 BLOCKED:
 - Blood elf model's attachment not working
   Reason: wow.export bones and attachment data is wrong, not sure if any other data source for replacement.
+- Some later models have advanced materials e.g. firehawk that requires UV2 layer that Wc3 doesn't have.
