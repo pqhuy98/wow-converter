@@ -126,10 +126,12 @@ export class JobQueue<T, V> {
           console.error(err);
           this.jobsFailed++;
         } finally {
-          this.recentJobs.push(job);
-          this.recentJobs.sort((a, b) => b.submittedAt - a.submittedAt);
-          if (this.recentJobs.length > 50) {
-            this.recentJobs.shift();
+          if (!job.isDemo) {
+            this.recentJobs.push(job);
+            this.recentJobs.sort((a, b) => b.submittedAt - a.submittedAt);
+            if (this.recentJobs.length > 50) {
+              this.recentJobs.shift();
+            }
           }
           this.activeJobs--;
           this.tryProcessQueue();
