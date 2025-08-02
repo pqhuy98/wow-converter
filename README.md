@@ -97,3 +97,4 @@ npm run build   # outputs the same binaries found in the release ZIP into the `d
 - https://github.com/ChiefOfGxBxL/WC3MapTranslator
 - https://github.com/4eb0da/war3-model
 - https://github.com/flowtsohg/mdx-m3-viewer
+- https://github.com/ilimei/vscode-plugin-blp-preview
