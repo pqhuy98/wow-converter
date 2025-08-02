@@ -250,9 +250,9 @@ export class WowExportClient extends EventEmitter {
     const requestId = randomUUID();
     const payload = { id: command, ...data, requestId };
 
-    let timeoutS = 30000;
-    if (command === 'LOAD_CASC_BUILD') {
-      timeoutS = 300000; // load casc build can take a long time
+    let timeoutS: number | undefined = 30000;
+    if (command === 'LOAD_CASC_BUILD' || command === 'HOOK_REGISTER') {
+      timeoutS = undefined; // load casc build can take a long time
     }
 
     return new Promise((resolve, reject) => {
@@ -327,11 +327,12 @@ export class WowExportClient extends EventEmitter {
       // Send the command
       this.write(payload);
 
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        this.removeListener('response', responseHandler);
-        reject(new Error(`Command ${command} timed out`));
-      }, timeoutS);
+      if (timeoutS) {
+        setTimeout(() => {
+          this.removeListener('response', responseHandler);
+          reject(new Error(`Command ${command} timed out`));
+        }, timeoutS);
+      }
     });
   }
 
