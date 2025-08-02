@@ -1819,8 +1819,13 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'Sleep': return { wc3Name: 'Sleep', attackTag: '' };
     case 'Whirlwind': return { wc3Name: 'Attack Walk Stand Spin', attackTag: '' };
     // case 'StandWound': return { wc3Name: 'Stand Hit', attackTag: '' };
-    case 'CombatCritical': return { wc3Name: 'Stand Hit', attackTag: '' };
+    // case 'CombatCritical': return { wc3Name: 'Stand Hit', attackTag: '' };
+
     case 'EmoteTalk': return { wc3Name: 'Portrait Talk', attackTag: '' };
+    case 'EmoteTalkExclamation': return { wc3Name: 'Portrait Talk', attackTag: '' };
+    case 'EmoteTalkQuestion': return { wc3Name: 'Portrait Talk', attackTag: '' };
+    case 'EmoteTalkSubdued': return { wc3Name: 'Portrait Talk', attackTag: '' };
+    case 'EmoteTalkFrustrated': return { wc3Name: 'Portrait Talk', attackTag: '' };
 
     case 'Walk': return { wc3Name: 'Cinematic Walk', attackTag: '' };
     case 'Run': return { wc3Name: 'Walk', attackTag: '' };
