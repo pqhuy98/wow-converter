@@ -11,6 +11,8 @@ TODO (not in any priority order):
 - Some creatures using textures not in DB skin list cannot be exported because skin not found.
 - Map generation crashes when map too big and height min-max diff so high
 - Support for wowhead dressing room.
+- Auto-updater for wow-converter to keep users up-to-date.
+- Collect anonymous analytics to understand common usage patterns.
 
 DONE:
 - Feet and trouser geoset wrong in some cases
