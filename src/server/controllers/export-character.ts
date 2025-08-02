@@ -35,7 +35,7 @@ export type ExportCharacterResponse = {
   versionId: string
 }
 
-const queueConfig: QueueConfig = {
+const queueConfig: QueueConfig<ExportCharacterRequest, ExportCharacterResponse> = {
   concurrency: 1,
   maxPendingJobs: 100,
   jobTTL: 5 * 60 * 1000,
@@ -103,10 +103,26 @@ export async function ControllerExportCharacter(app: express.Application) {
     return resp;
   }
 
+  queueConfig.jobCompletedCallback = () => {
+    fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentJobs, null, 2));
+  };
+
   const jobQueue = new JobQueue<ExportCharacterRequest, ExportCharacterResponse>(
     queueConfig,
     (job) => handleExport(job),
   );
+
+  // Load recent exports from file so that it survives server restart
+  try {
+    const recentExports = JSON.parse(fsExtra.readFileSync('recent-exports.json', 'utf8')) as ExportCharacterJob[];
+    jobQueue.recentJobs = recentExports;
+  } catch (err) {
+    // Ignore
+  }
+
+  setInterval(() => {
+    fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentJobs, null, 2));
+  }, 60000);
 
   app.get('/export/character/recent', (req, res) => {
     res.json(jobQueue.recentJobs);

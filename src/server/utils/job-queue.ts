@@ -12,11 +12,12 @@ export interface Job<T, V> {
   isDemo?: boolean;
 }
 
-export interface QueueConfig {
+export interface QueueConfig<T, V> {
   concurrency: number;
   maxPendingJobs: number;
   jobTTL: number;
   jobTimeout: number;
+  jobCompletedCallback?: (job: Job<T, V>) => void;
 }
 
 export class JobQueue<T, V> {
@@ -37,7 +38,7 @@ export class JobQueue<T, V> {
   public recentJobs: Job<T, V>[] = [];
 
   constructor(
-    private config: QueueConfig,
+    private config: QueueConfig<T, V>,
     private handler: (job: Job<T, V>) => Promise<V>,
   ) {
     setInterval(() => {
@@ -58,11 +59,6 @@ export class JobQueue<T, V> {
     this.pendingIndexMap.set(job.id, this.pendingQueue.length - 1);
     this.jobsMap.set(job.id, job);
     this.tryProcessQueue();
-    this.recentJobs.push(job);
-    this.recentJobs.sort((a, b) => b.submittedAt - a.submittedAt);
-    if (this.recentJobs.length > 50) {
-      this.recentJobs.shift();
-    }
   }
 
   public getJobStatus(jobId: string) {
@@ -120,6 +116,9 @@ export class JobQueue<T, V> {
           job.status = 'done';
           job.finishedAt = Date.now();
           this.jobsDone++;
+          if (this.config.jobCompletedCallback) {
+            this.config.jobCompletedCallback(job);
+          }
         } catch (err) {
           job.status = 'failed';
           job.error = err instanceof Error ? err.message : String(err);
@@ -127,6 +126,11 @@ export class JobQueue<T, V> {
           console.error(err);
           this.jobsFailed++;
         } finally {
+          this.recentJobs.push(job);
+          this.recentJobs.sort((a, b) => b.submittedAt - a.submittedAt);
+          if (this.recentJobs.length > 50) {
+            this.recentJobs.shift();
+          }
           this.activeJobs--;
           this.tryProcessQueue();
         }
