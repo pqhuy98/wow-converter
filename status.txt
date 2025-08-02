@@ -1,0 +1,20 @@
+TODO (not in any priority order):
+- Some users want matrix model version 800
+- In later expansions. some NPCs with collection e.g. mechagnome, earthen,... cannot be fully exported.
+- NPCs don't close hand when holding items
+- Multi-step workflow in web to tune the model:
+  - First export for full model with all data
+  - Select different animations before final export
+    - Basic animations auto-chosen, also smaller list, currently a lot of Spell/Spell Slam...
+    - List of extra anims grouped by theme, e.g. attack, custom spell...
+- Collision box right now too big. Try to choose best that fit the Stand anim.
+- Some creatures using textures not in DB skin list cannot be exported because skin not found.
+- Map generation crashes when map too big and height min-max diff so high
+- Support for wowhead dressing room.
+
+DONE:
+- Feet and trouser geoset wrong in some cases
+
+BLOCKED:
+- Blood elf model's attachment not working
+  Reason: wow.export bones and attachment data is wrong, not sure if any other data source for replacement.

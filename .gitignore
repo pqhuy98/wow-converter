@@ -5,7 +5,6 @@ target
 dist
 *.zip
 maps/**
-notes.txt
 maps
 !maps/template-empty.w3x/*
 !maps/template-empty.w3x/**/*
