@@ -120,11 +120,15 @@ enum EquipmentSlot {
   Tabard = 19,
 }
 
+// wow.export\src\js\3D\GeosetMapper.js
 const GEOSET_GROUPS = {
-  [EquipmentSlot.Chest]: [800],
+  [EquipmentSlot.Chest]: [800, 0, 1300],
   [EquipmentSlot.Belt]: [1800],
   [EquipmentSlot.Legs]: [1100, 0, 1300],
-  [EquipmentSlot.Boots]: [500],
+  [EquipmentSlot.Boots]: [
+    500,
+    2000 + 1, // If has boot, autochoose the 2nd feet
+  ],
   [EquipmentSlot.Gloves]: [400],
   [EquipmentSlot.Back]: [1500],
   [EquipmentSlot.Tabard]: [1200],
@@ -184,8 +188,18 @@ function filterFilesByRaceGender(
 function resolveGeosetId(slotId: number, itemData: ItemData) {
   const result = new Set<number>();
   itemData.Item.GeosetGroup.forEach((value, i) => {
-    if (value === 0 || !GEOSET_GROUPS[slotId]?.[i]) return;
+    if (slotId === EquipmentSlot.Boots) {
+      console.log('Boots', value, i, GEOSET_GROUPS[slotId][i]);
+    }
+
+    if (
+      !GEOSET_GROUPS[slotId]?.[i]
+      || value === 0 && (GEOSET_GROUPS[slotId][i] % 100) === 0
+    ) return;
     const geosetId = (GEOSET_GROUPS[slotId][i]) + value + 1;
+    if (slotId === EquipmentSlot.Boots) {
+      console.log('Boots geosetId', geosetId);
+    }
     result.add(geosetId);
   });
   return Array.from(result);

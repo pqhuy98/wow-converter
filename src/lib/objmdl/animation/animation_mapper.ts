@@ -1818,7 +1818,7 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'Birth': return { wc3Name: 'Birth', attackTag: '' };
     case 'Sleep': return { wc3Name: 'Sleep', attackTag: '' };
     case 'Whirlwind': return { wc3Name: 'Attack Walk Stand Spin', attackTag: '' };
-    case 'StandWound': return { wc3Name: 'Stand Hit', attackTag: '' };
+    // case 'StandWound': return { wc3Name: 'Stand Hit', attackTag: '' };
     case 'CombatCritical': return { wc3Name: 'Stand Hit', attackTag: '' };
     case 'EmoteTalk': return { wc3Name: 'Portrait Talk', attackTag: '' };
 
@@ -1894,6 +1894,8 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'CastSweepRight': return { wc3Name: 'Spell', attackTag: '' };
     case 'CastTwistUpBoth': return { wc3Name: 'Spell', attackTag: '' };
     case 'ChannelCastOmniUp': return { wc3Name: 'Spell', attackTag: '' };
+    case 'ReadySpellDirected': return { wc3Name: 'Stand Channel', attackTag: '' };
+    case 'ReadySpellOmni': return { wc3Name: 'Stand Channel', attackTag: '' };
 
     case 'SpellCastDirected': return { wc3Name: 'Spell Throw', attackTag: '' };
     case 'ChannelCastDirected': return { wc3Name: 'Spell Channel Throw', attackTag: '' };

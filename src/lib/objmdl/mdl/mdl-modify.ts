@@ -123,16 +123,16 @@ export class MDLModify {
       const bone = wowAttachment.bone;
       const wowAttachmentId = wowAttachment.wowAttachmentId as WoWAttachmentID;
       const wc3Key = WoWToWC3AttachmentMap[wowAttachmentId];
-      if (wc3Key) {
-        this.mdl.attachmentPoints.push({
-          attachmentId: 0,
-          type: 'AttachmentPoint',
-          name: `${wc3Key} Ref`,
-          parent: bone,
-          pivotPoint: wowAttachment.pivotPoint,
-          flags: [],
-        });
-      }
+      this.mdl.attachmentPoints.push({
+        attachmentId: 0,
+        type: 'AttachmentPoint',
+        name: wc3Key
+          ? `${wc3Key} Ref`
+          : `Wow:${wowAttachmentId}:${Object.keys(WoWAttachmentID)[Object.values(WoWAttachmentID).indexOf(wowAttachmentId)]}`,
+        parent: bone,
+        pivotPoint: wowAttachment.pivotPoint,
+        flags: [],
+      });
     });
     return this;
   }
