@@ -195,13 +195,6 @@ export async function ControllerExportCharacter(app: express.Application) {
 
   let jobs: ExportCharacterJob[] = [];
   if (isSharedHosting) {
-    // remove all models file with version suffix
-    fsExtra.readdirSync(ceOutputPath).forEach((file) => {
-      if (/__\w{32}\.(mdx|mdl)$/.test(file)) {
-        fsExtra.removeSync(path.join(ceOutputPath, file));
-      }
-    });
-
     jobs = startupRequests.map((request) => {
       const job: ExportCharacterJob = {
         id: randomUUID(),
