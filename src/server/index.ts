@@ -16,16 +16,18 @@ import { ControllerExportCharacter } from './controllers/export-character';
 printLogo();
 const app = express();
 app.use(compression());
-app.use(helmet({
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
+if (process.env.NO_CSP !== 'true') {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
       // defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
       // styleSrc: ["'self'", "'unsafe-inline'"],
+      },
     },
-  },
-}));
+  }));
+}
 
 // Only allow CORS for personal mode or local development
 if (!isSharedHosting || isDev) {
