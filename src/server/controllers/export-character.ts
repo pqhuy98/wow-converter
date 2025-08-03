@@ -58,6 +58,7 @@ export async function ControllerExportCharacter(app: express.Application) {
     const ce = new CharacterExporter(ceOutputPath, ceConfig);
     console.log(`Processing job for ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
 
+    await wowExportClient.syncConfig();
     await ce.exportCharacter(request.character, request.outputFileName);
 
     let exportedModels: string[] = [];

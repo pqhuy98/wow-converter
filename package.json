@@ -26,7 +26,7 @@
     "build:3": "cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin",
     "build:app": "npm run prisma:generate && npm run build:0 && npm run build:1 && npm run build:2 && npm run build:3",
     "build:server": "npm run prisma:generate && npm run build:webui && npm run build:0",
-    "build:wow.export": "cd wow.export && node build win-x64 && cd .. && shx cp -r wow.export/bin/win-x64/* dist && shx rm dist/update dist/update.json",
+    "build:wow.export": "cd wow.export && npm run build && cd .. && shx cp -r wow.export/bin/win-x64/* dist && shx rm dist/update dist/update.json",
     "build": "npm run build:webui && npm run build:app && npm run build:wow.export && npm run zip",
     "zip": "powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath wow-converter.zip -Force\""
   },

@@ -127,7 +127,6 @@ export class WowExportClient extends EventEmitter {
       return;
     }
     await waitUntil(() => this.isReady);
-    await this.syncConfig();
   }
 
   constructor(host: string = '127.0.0.1', port: number = 17751) {
@@ -141,6 +140,7 @@ export class WowExportClient extends EventEmitter {
         try {
           if (!this.status.connected) {
             await this.connect(host, port);
+            await this.syncConfig();
             console.log(chalk.green('✅ Connected to wow.export RCP'), chalk.gray(`at ${host}:${port}`));
             failedAttempts = 0;
           }
@@ -232,17 +232,13 @@ export class WowExportClient extends EventEmitter {
     });
   }
 
-  private async syncConfig(): Promise<void> {
-    await Promise.all(Object.entries(desiredConfig).map(([key, value]) => this.setConfig(key, value)));
-  }
-
   /**
      * Send a command to the server and wait for response
      * @param command - Command ID
      * @param data - Command data
      * @returns Promise that resolves with response data
      */
-  async sendCommand(command: string, data: any = {}): Promise<RCPResponse> {
+  private async sendCommand(command: string, data: any = {}): Promise<RCPResponse> {
     if (!this.status.connected) {
       await this.waitForConnection();
     }
@@ -410,14 +406,14 @@ export class WowExportClient extends EventEmitter {
 
   // ===== HIGH-LEVEL API METHODS =====
 
-  /**
-     * Get server information
-     * @returns Promise with server info
-     */
-  async getServerInfo(): Promise<ServerInfo> {
-    return new Promise((resolve) => {
-      this.once('CONNECTED', resolve);
-    });
+  public async syncConfig(): Promise<void> {
+    const config = await this.getConfig();
+    await Promise.all(Object.entries(desiredConfig).map(([key, value]) => {
+      if (config[key] !== value) {
+        return this.setConfig(key, value);
+      }
+      return Promise.resolve();
+    }));
   }
 
   /**
@@ -445,6 +441,7 @@ export class WowExportClient extends EventEmitter {
      * @returns Promise with updated config
      */
   async setConfig(key: string, value: any): Promise<ConfigResponse> {
+    console.log('setConfig', key, value);
     const response = await this.sendCommand('CONFIG_SET', { key, value });
 
     if (response.id === 'CONFIG_SET_DONE') {
