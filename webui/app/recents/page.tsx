@@ -375,6 +375,9 @@ export default function RecentsPage() {
                                 <span className="font-medium">Format:</span> <span className="font-bold">{job.request.format}</span>
                               </div>
                               <div className="w-48 flex items-center gap-1">
+                                <span className="font-medium">Model Version:</span> <span className="font-bold">{job.request.formatVersion || '1000'}</span>
+                              </div>
+                              <div className="w-48 flex items-center gap-1">
                                 <span className="font-medium">Keep Cinematic:</span> <span className="font-bold">{character.keepCinematic ? 'Yes' : 'No'}</span>
                               </div>
                               <div className="w-48 flex items-center gap-1">

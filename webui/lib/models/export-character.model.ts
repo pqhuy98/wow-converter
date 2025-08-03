@@ -27,6 +27,8 @@ export interface Character {
   portraitCameraSequenceName?: string
 }
 
+export type ModelFormatVersion = '800' | '1000'
+
 export interface ExportRequest {
   character: Character
   outputFileName: string
@@ -37,6 +39,7 @@ export interface ExportRequest {
     removeUnusedMaterialsTextures?: boolean
   }
   format?: ModelFormat
+  formatVersion?: ModelFormatVersion
 }
 
 export interface ExportCharacterResponse {

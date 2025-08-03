@@ -73,7 +73,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       }
 
       // Load the model (assumed to be in MDX|MDL format)
-      const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver, {reforged: true, hd: true})
+      const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver)
       if (!(model instanceof MdxModel)) return
       const modelInstance = model.addInstance()
 

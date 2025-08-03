@@ -381,6 +381,21 @@ ${this.textureAnims.map((texAnim) => `\tTVertexAnim {
       if (useSkinWeights === useVertexGroup) {
         throw new Error('Geoset must not use skin weight and vertex group at the same time.');
       }
+      if (useSkinWeights) {
+        const missingSwVert = geoset.vertices.filter((v) => !v.skinWeights);
+        if (missingSwVert.length > 0) {
+          throw new Error(`Geoset ${geoset.name} has ${missingSwVert.length} vertices without skin weights.`);
+        }
+      }
+      if (useVertexGroup) {
+        const missingMatVert = geoset.vertices.filter((v) => !v.matrix);
+        if (missingMatVert.length > 0) {
+          throw new Error(`Geoset ${geoset.name} has ${missingMatVert.length} vertices without vertex group.`);
+        }
+      }
+
+      geoset.vertices.forEach((v, j) => v.id = j);
+      geoset.matrices.forEach((mat, j) => mat.id = j);
 
       return `
 Geoset {
@@ -394,13 +409,13 @@ ${geoset.vertices.map((vertex) => `		{ ${f(vertex.normal[0])}, ${f(vertex.normal
 ${geoset.vertices.map((vertex) => `		{ ${f(vertex.texPosition[0])}, ${f(vertex.texPosition[1])} },`).join('\n')}
   }
   ${useVertexGroup ? `VertexGroup {
-${geoset.vertices.filter((v) => v.matrix).map((vertex) => `\t\t${vertex.matrix!.id},`).join('\n')}
+${geoset.vertices.map((v) => `\t\t${v.matrix!.id},`).join('\n')}
   }` : ''}
   ${useSkinWeights ? `Tangents ${geoset.vertices.length} {
-${geoset.vertices.filter((v) => v.skinWeights).map((v) => `\t\t{ ${v.normal.map(f).join(', ')}, ${f(Math.sign(Math.abs(_.sum(v.normal))))} },`).join('\n')}
+${geoset.vertices.map((v) => `\t\t{ ${v.normal.map(f).join(', ')}, ${f(Math.sign(Math.abs(_.sum(v.normal))))} },`).join('\n')}
   }
   SkinWeights ${geoset.vertices.length} {
-${geoset.vertices.filter((v) => v.skinWeights).map(getSkinWeight).join('\n')}
+${geoset.vertices.map(getSkinWeight).join('\n')}
   }
   Groups ${this.bones.length} ${this.bones.length} {
 ${this.bones.map((bone) => `\t\tMatrices { ${bone.objectId} },`).join('\n')}
@@ -564,8 +579,6 @@ ${event.track.map((e) => `\t\t${e.sequence.interval[0] + e.offset},`).join('\n')
     this.geosetAnims.forEach((v, i) => v.id = i);
     this.geosets.forEach((geoset, i) => {
       geoset.id = i;
-      geoset.vertices.forEach((v, j) => v.id = j);
-      geoset.matrices.forEach((mat, j) => mat.id = j);
     });
     [
       ...this.bones,

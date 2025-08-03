@@ -24,6 +24,7 @@ export const ExporCharacterRequestSchema = z.object({
     removeUnusedMaterialsTextures: z.boolean().optional(),
   }),
   format: z.enum(['mdx', 'mdl']),
+  formatVersion: z.enum(['800', '1000']).optional(),
 });
 
 export type ExportCharacterRequest = z.infer<typeof ExporCharacterRequestSchema>;
@@ -61,6 +62,9 @@ export async function ControllerExportCharacter(app: express.Application) {
 
     let exportedModels: string[] = [];
     ce.models.forEach(([mdl, filePath]) => {
+      if (request.formatVersion === '800') {
+        mdl.modify.convertToSd800();
+      }
       if (request.optimization?.sortSequences) {
         mdl.modify.sortSequences();
       }

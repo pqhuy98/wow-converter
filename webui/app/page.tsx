@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { host } from "@/app/config"
 import { isLocalRef } from "@/lib/utils"
 import ModelViewerUi from "./model-viewer"
-import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus } from "@/lib/models/export-character.model"
+import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus, ModelFormatVersion } from "@/lib/models/export-character.model"
 
 
 // Tooltips organized in a record
@@ -35,6 +35,8 @@ const tooltips = {
   removeUnusedNodes: "Remove nodes that are not used in any geosets or do not contain used children nodes.",
   removeUnusedMaterials: "Remove materials and textures that are not used in any geosets.",
   optimizeKeyFrames: "Remove key frames that are not used in any animation, or are insignificant.",
+  format: "Model format (MDX vs MDL). MDX is the binary format, the file is most compact and lowest file size. MDL is the text format for debugging purposes, the file is human readable when opened in text editors, at the cost of larger file size.",
+  formatVersion: "Model format version (HD vs SD). HD models work in all Warcraft 3 Retail's Reforged and Classic graphics modes, it has the highest fidelity with precise WoW model data. However HD models cannot be opened in legacy modeling tools like Magos Model Editor. If you want to use those legacy tools for post-processing, choose SD 800 instead. WARNING: wow-converter might export very broken SD models on complex WoW models. SD conversion does not guaranteed to work, use at your own risk.",
 }
 
 
@@ -210,6 +212,7 @@ export default function WoWNPCExporter() {
   }, [character.base.value])
 
   const [format, setFormat] = useState<ModelFormat>("mdx")
+  const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>("1000")
   const [optimization, setOptimization] = useState({
     sortSequences: true,
     removeUnusedVertices: true,
@@ -306,6 +309,7 @@ export default function WoWNPCExporter() {
         outputFileName,
         optimization,
         format,
+        formatVersion,
       }
 
       const response = await fetch(`${host}/export/character`, {
@@ -823,8 +827,8 @@ export default function WoWNPCExporter() {
             <CardDescription>Configure output settings and optimizations</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-8 gap-4 items-end">
+              <div className="space-y-2 md:col-span-3">
                 <Label htmlFor="filename" className="text-sm">
                   Output File Name
                 </Label>
@@ -837,20 +841,57 @@ export default function WoWNPCExporter() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-sm">Export Format</Label>
+              <div className="space-y-2 md:col-span-1">
+                <Label className="text-sm flex items-center gap-2">
+                  Export Format
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">{tooltips.format}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  </Label>
                 <Select value={format} onValueChange={(value: ModelFormat) => setFormat(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="start">
-                    <SelectItem value="mdx">.mdx (Binary)</SelectItem>
-                    <SelectItem value="mdl">.mdl (Text)</SelectItem>
+                    <SelectItem value="mdx">.mdx</SelectItem>
+                    <SelectItem value="mdl">.mdl</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="md:col-span-2">
+              <div className="space-y-2 md:col-span-1">
+                <Label className="text-sm flex items-center gap-2">
+                  Model Version
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">{tooltips.formatVersion}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <Select value={formatVersion} onValueChange={(value: ModelFormatVersion) => setFormatVersion(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    <SelectItem value="1000">1000 (HD)</SelectItem>
+                    <SelectItem value="800">800 (SD, experimental)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="md:col-span-3">
                 <Button onClick={handleExport} disabled={isExporting || !isValidForExport || jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} className="w-full" size="lg">
                   {isExporting ? (
                     <>
