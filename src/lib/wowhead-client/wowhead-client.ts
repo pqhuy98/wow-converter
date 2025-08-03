@@ -170,7 +170,7 @@ export function getPreferredBaseFromWowheadUrl(url: string): string | undefined 
   return undefined;
 }
 
-const debug = false;
+const debug = true;
 
 const fetchCache = new LRUCache<string, object>({ max: 1000 });
 
@@ -190,7 +190,7 @@ async function fetchJson(url: string, preferredBaseUrl?: string) {
       const response = await fetch(cacheKey);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const json = await response.json();
-      console.log(url, cacheKey);
+      debug && console.log(url, cacheKey);
       fetchCache.set(cacheKey, json as object);
       return json;
     } catch {

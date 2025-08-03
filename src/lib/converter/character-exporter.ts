@@ -75,7 +75,7 @@ const wantedZPerSize = {
   giant: 350,
 };
 
-const debug = false;
+const debug = true;
 
 export class CharacterExporter {
   public models: [MDL, string][] = [];

@@ -94,7 +94,7 @@ export interface ExportCharacterParams {
 
 export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COMPLETE';
 
-const debug = false;
+const debug = true;
 
 export class WowExportClient extends EventEmitter {
   private socket: Socket;
