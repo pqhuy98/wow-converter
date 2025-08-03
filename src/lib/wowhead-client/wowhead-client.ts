@@ -148,34 +148,53 @@ const GEOSET_GROUPS = {
 // Slots that have model files (not just textures)
 const MODEL_SLOTS = new Set([EquipmentSlot.Head.toString(), EquipmentSlot.Shoulder.toString()]);
 
-export const baseUrls = [
-  'https://wow.zamimg.com/modelviewer/classic',
-  'https://wow.zamimg.com/modelviewer/tbc',
-  'https://wow.zamimg.com/modelviewer/wrath',
-  'https://wow.zamimg.com/modelviewer/cata',
-  'https://wow.zamimg.com/modelviewer/mists',
-  'https://wow.zamimg.com/modelviewer/live',
-  'https://wow.zamimg.com/modelviewer/ptr',
-  'https://wow.zamimg.com/modelviewer/ptr2',
-  'https://wow.zamimg.com/modelviewer/live',
-].reverse();
+export const wowhead2wowZaming = Object.entries({
+  classic: 'classic',
+  tbc: 'tbc',
+  wotlk: 'wrath',
+  cata: 'cata',
+  'mop-classic': 'mists',
+  retail: 'live',
+  ptr: 'ptr',
+  'ptr-2': 'ptr2',
+  '': 'live',
+}).reduce((acc, [key, value]) => {
+  acc[`https://www.wowhead.com/${key ? `${key}/` : ''}`] = `https://wow.zamimg.com/modelviewer/${value}`;
+  return acc;
+}, {} as Record<string, string>);
+
+export function getPreferredBaseFromWowheadUrl(url: string): string | undefined {
+  for (const [prefix, zamBase] of Object.entries(wowhead2wowZaming)) {
+    if (url.startsWith(prefix)) return zamBase;
+  }
+  return undefined;
+}
 
 const debug = false;
 
 const fetchCache = new LRUCache<string, object>({ max: 1000 });
 
-async function fetchJson(url: string) {
-  const cached = fetchCache.get(url);
-  if (cached) return cached;
+async function fetchJson(url: string, preferredBaseUrl?: string) {
+  // Build candidate list – caller preference first, then global defaults.
+  const candidates = [
+    ...(preferredBaseUrl ? [preferredBaseUrl] : []),
+    ...Object.values(wowhead2wowZaming),
+  ].filter((v, i, arr) => arr.indexOf(v) === i); // unique
 
-  for (const baseUrl of baseUrls) {
+  for (const baseUrl of candidates) {
+    const cacheKey = `${baseUrl}${url}`;
+    const cached = fetchCache.get(cacheKey);
+    if (cached) return cached;
+
     try {
-      const response = await fetch(`${baseUrl}${url}`);
+      const response = await fetch(cacheKey);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const json = await response.json();
-      fetchCache.set(url, json as object);
+      console.log(url, cacheKey);
+      fetchCache.set(cacheKey, json as object);
       return json;
-    } catch (error) {
-      // swallow error
+    } catch {
+      // Ignore this error and try next candidate.
     }
   }
   throw new Error(`No valid response from ${url}`);
@@ -238,13 +257,14 @@ export async function processItemData(
   itemDisplayId: number,
   targetRace: number,
   targetGender: number,
+  preferredBaseUrl?: string,
 ): Promise<ItemResult> {
   let url = `/meta/armor/${slotId}/${itemDisplayId}.json`;
   if (slotId === -1) {
     url = `/meta/item/${itemDisplayId}.json`;
   }
   debug && console.log('Fetching item data for', url);
-  const armorData = await fetchJson(url) as ItemData;
+  const armorData = await fetchJson(url, preferredBaseUrl) as ItemData;
   debug && console.log('Fetched item data successfully for', itemDisplayId);
   return {
     modelFiles: filterFilesByRaceGender(armorData.ModelFiles || {}, targetRace, targetGender),
@@ -260,7 +280,7 @@ export async function processItemData(
   };
 }
 
-async function getExportCharacterRpcParams(characterData: CharacterData): Promise<ExportCharacterParams> {
+async function getExportCharacterRpcParams(characterData: CharacterData, preferredBaseUrl?: string): Promise<ExportCharacterParams> {
   const customizations: { [optionId: string]: number } = {};
   for (const cust of characterData.customizations) { customizations[cust.optionId] = cust.choiceId; }
 
@@ -270,7 +290,7 @@ async function getExportCharacterRpcParams(characterData: CharacterData): Promis
   for (const slotId of slotIds) {
     if (!characterData.equipment || !characterData.equipment[slotId.toString()]) continue;
     const itemId = characterData.equipment[slotId.toString()];
-    const slotData = await processItemData(slotId, itemId, characterData.raceId, characterData.genderId);
+    const slotData = await processItemData(slotId, itemId, characterData.raceId, characterData.genderId, preferredBaseUrl);
     if ([
       EquipmentSlot.Head,
       EquipmentSlot.Shoulder,
@@ -303,11 +323,13 @@ async function getExportCharacterRpcParams(characterData: CharacterData): Promis
 
 export { EquipmentSlot };
 
-export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparation> {
+export async function prepareNpcExport(npcId: number, wowheadUrl?: string): Promise<NpcExportPreparation> {
   // Fetch NPC metadata only ONCE.
   const npcMetaUrl = `/meta/npc/${npcId}.json`;
   debug && console.log('Fetching NPC metadata for', npcMetaUrl);
-  const npcData = await fetchJson(npcMetaUrl) as NPCData;
+
+  const preferredBase = wowheadUrl ? getPreferredBaseFromWowheadUrl(wowheadUrl) : undefined;
+  const npcData = await fetchJson(npcMetaUrl, preferredBase) as NPCData;
   debug && console.log('Fetched NPC metadata successfully for', npcId);
 
   // ==== Character-based NPC ====
@@ -331,7 +353,7 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
     for (const slotId of slotIds) {
       if (!characterData.equipment || !characterData.equipment[slotId.toString()]) continue;
       const itemId = characterData.equipment[slotId.toString()];
-      const slotData = await processItemData(slotId, itemId, characterData.raceId, characterData.genderId);
+      const slotData = await processItemData(slotId, itemId, characterData.raceId, characterData.genderId, preferredBase);
       equipmentSlots.push({
         slotId: slotId.toString(),
         hasModel: MODEL_SLOTS.has(slotId.toString()),
@@ -340,7 +362,7 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
     }
 
     // Generate RPC parameters
-    const rpcParams = await getExportCharacterRpcParams(characterData);
+    const rpcParams = await getExportCharacterRpcParams(characterData, preferredBase);
 
     // Extract NPC base texture
     const npcTextureFile = characterData.textureFiles
@@ -380,7 +402,7 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
 
       for (const [slotIdStr, itemId] of Object.entries(npcData.Equipment as Record<string, number>)) {
         const slotId = parseInt(slotIdStr, 10);
-        const slotData = await processItemData(slotId, itemId, targetRace, targetGender);
+        const slotData = await processItemData(slotId, itemId, targetRace, targetGender, preferredBase);
 
         equipmentSlots.push({
           slotId: slotId.toString(),
@@ -406,20 +428,16 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
 export async function getDisplayIdFromUrl(url: string) {
   debug && console.log('getDisplayIdFromUrl start', url);
   const text = await fetch(url).then((res) => res.text());
-  // data-mv-type-id="42928"
-  const displayId = text.match(/data-mv-display-id="(\d+)"/)?.[1];
-  if (!displayId) {
+  // data-mv-display-id="42928"
+  const displayIdMatch = text.match(/data-mv-display-id="(\d+)"/);
+  if (!displayIdMatch) {
     if (/npc\/\d+.json/.test(url)) {
       return parseInt(url.match(/npc\/(\d+).json/)?.[1] ?? '0', 10);
     }
     throw new Error(`Cannot find display id for ${url}`);
   }
-  return parseInt(displayId, 10);
-}
 
-export async function getItemFileModelIdFromUrl(url: string) {
-  const displayId = await getDisplayIdFromUrl(url);
-  const itemData = await fetchJson(`/meta/item/${displayId}.json`) as ItemData;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Object.values(itemData.ModelFiles)[0][0].FileDataId;
+  const displayId = parseInt(displayIdMatch[1], 10);
+
+  return displayId;
 }

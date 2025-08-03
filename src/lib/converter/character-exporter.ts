@@ -7,6 +7,7 @@ import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import {
   EquipmentSlot,
   getDisplayIdFromUrl,
+  getPreferredBaseFromWowheadUrl,
   prepareNpcExport,
   processItemData,
 } from '@/lib/wowhead-client/wowhead-client';
@@ -95,11 +96,7 @@ export class CharacterExporter {
       return this.exportModel({ ...char, base: baseRef, attachItems: resolvedAttach }, outputFile);
     }
 
-    const displayId = baseRef.type === 'wowhead'
-      ? await getDisplayIdFromUrl(baseRef.value)
-      : Number(baseRef.value);
-
-    return this.exportWowheadModel(displayId, char, outputFile);
+    return this.exportWowheadModel(baseRef, char, outputFile);
   }
 
   public includeMdlToOutput(mdl: MDL, outputFile: string) {
@@ -194,12 +191,15 @@ export class CharacterExporter {
   // ---------------------------------------------------------------------------
 
   private async exportWowheadModel(
-    npcDisplayId: number,
+    baseRef: Ref,
     originalChar: Character,
     outputFile: string,
   ) {
     const start = performance.now();
-    const prep = await prepareNpcExport(npcDisplayId);
+    const npcDisplayId = baseRef.type === 'wowhead' ? await getDisplayIdFromUrl(baseRef.value) : Number(baseRef.value);
+
+    const baseWowheadUrl = baseRef.type === 'wowhead' ? baseRef.value : undefined;
+    const prep = await prepareNpcExport(npcDisplayId, baseWowheadUrl);
 
     const slotModelPaths = new Map<string, [string, number]>();
     const slotModelPathsR = new Map<string, [string, number]>();
@@ -478,9 +478,11 @@ export class CharacterExporter {
     if (ref.type === 'local') return ref.value;
 
     debug && console.log('resolveItemRef getDisplayIdFromUrl start', ref);
+    const preferredBase = ref.type === 'wowhead' ? getPreferredBaseFromWowheadUrl(ref.value) : undefined;
+
     const displayId = ref.type === 'wowhead' ? await getDisplayIdFromUrl(ref.value) : Number(ref.value);
-    debug && console.log('resolveItemRef getDisplayIdFromUrl end', displayID);
-    const itemData = await processItemData(-1, displayId, 0, 0);
+    debug && console.log('resolveItemRef getDisplayIdFromUrl end', displayId);
+    const itemData = await processItemData(-1, displayId, 0, 0, preferredBase);
     const skinName = await this.getSkinName(itemData.modelFiles[0].fileDataId, itemData.textureFiles);
     const exported = (await wowExportClient.exportModels([
       { fileDataID: itemData.modelFiles[0].fileDataId, skinName },
