@@ -627,7 +627,7 @@ export default function WoWNPCExporter() {
                     onCheckedChange={(checked) => setCharacter({ ...character, keepCinematic: checked as boolean })}
                   />
                   <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
-                    Keep Cinematic Sequences
+                    Keep Cinematic Animations
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
