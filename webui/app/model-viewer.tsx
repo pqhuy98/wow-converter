@@ -10,6 +10,8 @@ import { host } from "./config";
 import { Button } from "@/components/ui/button";
 import { default as mdlx } from "@pqhuy98/mdx-m3-viewer/dist/cjs/utils/mdlx";
 import Scene from "@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/scene";
+import Camera from "@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/camera";
+import MdxModelInstance from "@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/modelinstance";
 
 interface ModelViewerProps {
   modelPath?: string
@@ -24,16 +26,56 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
   const [sequences, setSequences] = useState<string[]>([])
   const [currentSeq, setCurrentSeq] = useState<number>(0)
   const instanceRef = useRef<any>(null)
-  const targetRef = useRef(vec3.fromValues(0,0,0));
   const vecHeap = vec3.create();
 
   const [viewer, setViewer] = useState<ModelViewer | null>(null)
+  const [scene, setScene] = useState<Scene | null>(null)
+  const [camera, setCamera] = useState<Camera | null>(null)
   useEffect(() => {
     if (!canvasRef.current) return
     const viewer = new ModelViewer(canvasRef.current)
     viewer.addHandler(mdxHandler)
     viewer.addHandler(blpHandler)
     setViewer(viewer)
+
+    const scene = viewer.addScene()
+    setScene(scene)
+    scene.color.fill(0.15);
+    createGridModel(viewer, scene, 10, 100);
+
+    const camera = scene.camera;
+    setCamera(camera)
+    
+    viewer.on('loadstart', (e) => {
+      console.log(`[Viewer] Loading ${e.fetchUrl}`);
+    });
+
+    viewer.on('loadend', (e) => {
+      console.log(`[Viewer] Loaded ${e.fetchUrl}`);
+    });
+
+    viewer.on('error', (e) => {
+      if (e.fetchUrl) {
+        console.error(`[Viewer] ${e.error}: ${e.fetchUrl}`);
+      } else {
+        console.error(`[Viewer] ${e.error}: ${e.reason}`);
+      }
+    });
+
+    let animationFrameId: number
+    let lastTime = performance.now();
+    const step = () => {
+      const now = performance.now();
+      const dt = now - lastTime;
+      lastTime = now;
+      viewer.updateAndRender(dt);
+      animationFrameId = requestAnimationFrame(step);
+    };
+    step();
+    canvasRef.current.addEventListener('contextmenu', (e)=> e.preventDefault());
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    }
   }, [canvasRef.current])
 
   // Keep track of which model path has already been loaded to avoid the extra
@@ -41,15 +83,12 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
   // re-loading when the `modelPath` prop actually changes.
   const lastLoadedPathRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!modelPath || !canvasRef.current || !viewer) return
-    if (lastLoadedPathRef.current === modelPath) {
-      console.log('Model already loaded, skipping');
-      return
-    }
+    if (!modelPath || !canvasRef.current || !viewer || !scene || !camera) return
+    // if (lastLoadedPathRef.current === modelPath) {
+    //   console.log('Model already loaded, skipping');
+    //   return
+    // }
     lastLoadedPathRef.current = modelPath;
-
-    let animationFrameId: number
-    let lastTime = performance.now();
 
     // references for cleanup
     const canvas = canvasRef.current;
@@ -58,13 +97,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     let endDrag: (() => void) | null = null;
     let onWheel: ((e: WheelEvent) => void) | null = null;
     let resizeCanvas: (() => void) | null = null;
-    // Orbit camera state
-    let isDragging = false;
-    let lastX = 0;
-    let lastY = 0;
-    let horizontalAngle = 0
-    let verticalAngle = Math.PI / 6
-    let distance = 1000;
+
+    let modelInstance: MdxModelInstance | null = null;
 
     (async () => {
       // Path solver so the viewer fetches every dependant file via our /asset route
@@ -75,7 +109,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       // Load the model (assumed to be in MDX|MDL format)
       const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver)
       if (!(model instanceof MdxModel)) return
-      const modelInstance = model.addInstance()
+      modelInstance = model.addInstance()
 
       instanceRef.current = modelInstance
       modelInstance.setSequence(0)
@@ -83,16 +117,18 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       setSequences(model.sequences.map((s) => s.name || `Sequence ${model.sequences.indexOf(s)}`))
 
       // Add scene and basic camera, grid setup
-      const scene = viewer.addScene()
-      const camera = scene.camera;
-      scene.color.fill(0.15);
-      createGridModel(viewer, scene, 10, 100);
       scene.addInstance(modelInstance)
 
       // Utility to update camera position from spherical coords
-      const target = targetRef.current;
-      distance = 500;
-      target[2] = 0;
+      let isDragging = false;
+      let lastX = 0;
+      let lastY = 0;
+      let horizontalAngle = 0
+      let verticalAngle = Math.PI / 6
+      let distance = 500;
+      const target = vec3.fromValues(0,0,0);
+      target[2] = modelInstance.getBounds().z;
+
       const updateCamera = () => {
         const x = distance * Math.cos(verticalAngle) * Math.cos(horizontalAngle);
         const y = distance * Math.cos(verticalAngle) * Math.sin(horizontalAngle);
@@ -101,16 +137,6 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         camera.moveToAndFace(camPos, target, [0, 0, 1]);
       };
       updateCamera();
-
-      // Start render loop
-      const step = () => {
-        const now = performance.now();
-        const dt = now - lastTime;
-        lastTime = now;
-        viewer.updateAndRender(dt);
-        animationFrameId = requestAnimationFrame(step);
-      };
-      step();
 
       // ensure canvas always matches element size
       resizeCanvas = () => {
@@ -130,7 +156,6 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         }
       };
       resizeCanvas();
-      window.addEventListener('resize', resizeCanvas);
 
       // Mouse & wheel controls
       let button = 0
@@ -192,42 +217,27 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
       if (canvas) {
         canvas.addEventListener('mousedown', onMouseDown);
-        canvas.addEventListener('contextmenu', (e)=> e.preventDefault());
+        canvas.addEventListener('wheel', onWheel!, { passive: false });
       }
-      
+
+      window.addEventListener('resize', resizeCanvas);
       window.addEventListener('mousemove', onMouseMove!);
       window.addEventListener('mouseup', endDrag!);
-      canvas?.addEventListener('wheel', onWheel!, { passive: false });
-
-      viewer.on('loadstart', (e) => {
-        console.log(`[Viewer] Loading ${e.fetchUrl}`);
-      });
-  
-      viewer.on('loadend', (e) => {
-        console.log(`[Viewer] Loaded ${e.fetchUrl}`);
-      });
-  
-      viewer.on('error', (e) => {
-        if (e.fetchUrl) {
-          console.error(`[Viewer] ${e.error}: ${e.fetchUrl}`);
-        } else {
-          console.error(`[Viewer] ${e.error}: ${e.reason}`);
-        }
-      });
     })()
 
     return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      if (canvas) {
-        if (onMouseDown) canvas.removeEventListener('mousedown', onMouseDown);
-        if (onWheel) canvas.removeEventListener('wheel', onWheel);
+      if (canvas && onMouseDown && onWheel && onMouseMove && endDrag && resizeCanvas) {
+        canvas.removeEventListener('mousedown', onMouseDown);
+        canvas.removeEventListener('wheel', onWheel);
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', endDrag!);
+        window.removeEventListener('resize', resizeCanvas!);
       }
-      if (resizeCanvas) window.removeEventListener('resize', resizeCanvas);
-      if (onMouseMove) window.removeEventListener('mousemove', onMouseMove);
-      if (endDrag) window.removeEventListener('mouseup', endDrag);
-      viewer.clear();
+      if (modelInstance) {
+        scene.removeInstance(modelInstance);
+      }
     }
-  }, [modelPath, canvasRef.current, viewer])
+  }, [modelPath, canvasRef.current, viewer, scene])
 
   // Apply sequence when currentSeq updates
   useEffect(() => {

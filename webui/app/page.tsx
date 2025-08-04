@@ -358,7 +358,6 @@ export default function WoWNPCExporter() {
 
     let pendingFetches = 0
     const fetchJobStatus = async () => {
-      console.log('fetching job status', jobStatus)
       try {
         pendingFetches++
         if (pendingFetches > 1) return

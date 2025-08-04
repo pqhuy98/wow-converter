@@ -437,7 +437,7 @@ export default function RecentsPage() {
           {/* Right Column - Model Viewer */}
           <div className="lg:col-span-2 h-full overflow-hidden">
             <div className="p-0 h-full relative overflow-hidden">
-              <ModelViewerUi key={selectedModelPath} modelPath={selectedModelPath} />
+              <ModelViewerUi modelPath={selectedModelPath} />
               {!selectedModelPath && (
                 <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
                   <div className="text-center text-gray-500">
