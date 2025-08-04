@@ -109,7 +109,7 @@ export async function ControllerExportCharacter(app: express.Application) {
   }
 
   queueConfig.jobCompletedCallback = () => {
-    fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentJobs, null, 2));
+    fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentCompletedJobs, null, 2));
   };
 
   const jobQueue = new JobQueue<ExportCharacterRequest, ExportCharacterResponse>(
@@ -120,17 +120,13 @@ export async function ControllerExportCharacter(app: express.Application) {
   // Load recent exports from file so that it survives server restart
   try {
     const recentExports = JSON.parse(fsExtra.readFileSync('recent-exports.json', 'utf8')) as ExportCharacterJob[];
-    jobQueue.recentJobs = recentExports;
+    jobQueue.recentCompletedJobs = recentExports;
   } catch (err) {
     // Ignore
   }
 
-  setInterval(() => {
-    fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentJobs, null, 2));
-  }, 60000);
-
   app.get('/export/character/recent', (req, res) => {
-    res.json(jobQueue.recentJobs);
+    res.json(jobQueue.recentCompletedJobs);
   });
 
   app.post('/export/character', (req, res) => {

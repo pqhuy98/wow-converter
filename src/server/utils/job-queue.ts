@@ -35,7 +35,7 @@ export class JobQueue<T, V> {
 
   private jobsFailed = 0;
 
-  public recentJobs: Job<T, V>[] = [];
+  public recentCompletedJobs: Job<T, V>[] = [];
 
   constructor(
     private config: QueueConfig<T, V>,
@@ -116,6 +116,13 @@ export class JobQueue<T, V> {
           job.status = 'done';
           job.finishedAt = Date.now();
           this.jobsDone++;
+          if (!job.isDemo) {
+            this.recentCompletedJobs.push(job);
+            this.recentCompletedJobs.sort((a, b) => b.submittedAt - a.submittedAt);
+            if (this.recentCompletedJobs.length > 50) {
+              this.recentCompletedJobs.shift();
+            }
+          }
           if (this.config.jobCompletedCallback) {
             this.config.jobCompletedCallback(job);
           }
@@ -126,13 +133,6 @@ export class JobQueue<T, V> {
           console.error(err);
           this.jobsFailed++;
         } finally {
-          if (!job.isDemo) {
-            this.recentJobs.push(job);
-            this.recentJobs.sort((a, b) => b.submittedAt - a.submittedAt);
-            if (this.recentJobs.length > 50) {
-              this.recentJobs.shift();
-            }
-          }
           this.activeJobs--;
           this.tryProcessQueue();
         }
