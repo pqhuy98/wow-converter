@@ -188,18 +188,11 @@ function filterFilesByRaceGender(
 function resolveGeosetId(slotId: number, itemData: ItemData) {
   const result = new Set<number>();
   itemData.Item.GeosetGroup.forEach((value, i) => {
-    if (slotId === EquipmentSlot.Boots) {
-      console.log('Boots', value, i, GEOSET_GROUPS[slotId][i]);
-    }
-
     if (
       !GEOSET_GROUPS[slotId]?.[i]
       || value === 0 && (GEOSET_GROUPS[slotId][i] % 100) === 0
     ) return;
     const geosetId = (GEOSET_GROUPS[slotId][i]) + value + 1;
-    if (slotId === EquipmentSlot.Boots) {
-      console.log('Boots geosetId', geosetId);
-    }
     result.add(geosetId);
   });
   return Array.from(result);
