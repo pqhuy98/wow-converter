@@ -119,7 +119,7 @@ export class JobQueue<T, V> {
           if (!job.isDemo) {
             this.recentCompletedJobs.push(job);
             this.recentCompletedJobs.sort((a, b) => b.submittedAt - a.submittedAt);
-            if (this.recentCompletedJobs.length > 50) {
+            if (this.recentCompletedJobs.length > 500) {
               this.recentCompletedJobs.pop();
             }
           }
