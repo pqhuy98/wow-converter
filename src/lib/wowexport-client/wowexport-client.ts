@@ -867,6 +867,8 @@ export class WowExportClient extends EventEmitter {
 export const wowExportClient = new WowExportClient();
 
 export const desiredConfig = {
+  copyMode: 'FULL',
+  listfileShowFileDataIDs: true,
   enableM2Skins: true,
   enableSharedTextures: true,
   enableSharedChildren: true,
