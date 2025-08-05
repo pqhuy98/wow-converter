@@ -719,7 +719,7 @@ ${this.pivotPointsToString()}
               noDepthSet: false,
             },
           ],
-          constantColor: true,
+          constantColor: false,
         },
       ];
     }

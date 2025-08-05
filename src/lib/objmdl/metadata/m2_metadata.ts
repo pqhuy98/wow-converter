@@ -397,7 +397,7 @@ export class M2MetadataFile {
       if (!submeshMaterials.has(submeshId)) {
         submeshMaterials.set(submeshId, {
           id: 0,
-          constantColor: true,
+          constantColor: false,
           layers: [],
         });
       }

@@ -101,7 +101,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
       };
       const material: Material = {
         id: 0,
-        constantColor: true,
+        constantColor: false,
         layers: [
           {
             texture,
