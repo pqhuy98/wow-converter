@@ -114,7 +114,7 @@ export class WowExportClient extends EventEmitter {
       return this.assetDir;
     }
     const config = await this.getConfig();
-    this.assetDir = config.exportDirectory.replace('\\', '/');
+    this.assetDir = config.exportDirectory;
     return this.assetDir;
   }
 
@@ -146,7 +146,7 @@ export class WowExportClient extends EventEmitter {
           }
           if (!this.status.configLoaded) {
             const config = await this.getConfig();
-            this.assetDir = config.exportDirectory.replace('\\', '/');
+            this.assetDir = config.exportDirectory;
             this.status.configLoaded = true;
             console.log(chalk.green('✅ Retrieved wow.export asset dir:'), chalk.gray(this.assetDir));
             failedAttempts = 0;

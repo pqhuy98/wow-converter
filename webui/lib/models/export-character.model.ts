@@ -1,4 +1,7 @@
-
+export interface Config {
+  wowExportAssetDir: string
+  isSharedHosting: boolean
+}
 
 export type RefType = "local" | "wowhead" | "displayID"
 export type AttackTag = "" | "1H" | "2H" | "2HL" | "Unarmed" | "Bow" | "Rifle" | "Thrown"

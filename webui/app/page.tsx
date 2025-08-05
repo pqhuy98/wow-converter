@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,12 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle, History } from "lucide-react"
+import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle, History, CheckCircle } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { host } from "@/app/config"
-import { isLocalRef } from "@/lib/utils"
 import ModelViewerUi from "./model-viewer"
-import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus, ModelFormatVersion } from "@/lib/models/export-character.model"
+import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus, ModelFormatVersion, Config } from "@/lib/models/export-character.model"
 
 
 // Tooltips organized in a record
@@ -38,6 +37,28 @@ const tooltips = {
   format: "Model format (MDX vs MDL). MDX is the binary format, the file is most compact and lowest file size. MDL is the text format for debugging purposes, the file is human readable when opened in text editors, at the cost of larger file size.",
   formatVersion: "Model format version (HD vs SD). HD models work in all Warcraft 3 Retail's Reforged and Classic graphics modes, it has the highest fidelity with precise WoW model data. However HD models cannot be opened in legacy modeling tools like Magos Model Editor. If you want to use those legacy tools for post-processing, choose SD 800 instead. WARNING: wow-converter might export very broken SD models on complex WoW models. SD conversion does not guarantee to work, after exporting you need to check if each animation is working.",
 }
+
+const attackTagOptions: { value: AttackTag | "all", label: string, description: string }[] = [
+  { value: "all", label: "All", description: "Include all attack animations" },
+  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapon(s)" },
+  { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
+  { value: "2HL", label: "2HL Weapon", description: "The model uses a 2H polearm" },
+  { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
+  // { value: "Bow", label: "Bow", description: "The model uses a bow." },
+  // { value: "Rifle", label: "Rifle", description: "The model uses a rifle." },
+  // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
+]
+
+const sizeOptions: { value: ModelSize | "none", label: string, description: string }[] = [
+  { value: "none", label: "Default", description: "Original WoW size times 56" },
+  { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
+  { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
+  { value: "large", label: "Large", description: "As tall as Undead Abomination" },
+  { value: "hero", label: "Hero", description: "As tall as Tauren Chieftain" },
+  { value: "giant", label: "Giant", description: "As tall as Flesh Golem" },
+]
+
+let serverConfig: Config | null = null
 
 
 function AttachmentSelector({
@@ -93,7 +114,44 @@ function RefInput({
   tooltipKey: keyof typeof tooltips
   category: RefCategory
 }) {
-  const error = validateRef(value, category)
+  const [currentValue, setCurrentValue] = useState<RefSchema>(value)
+  
+  const [clientValidationResult, setClientValidationResult] = useState<{ ok: boolean, error: string | null } | null>(null)
+  const [serverValidationResult, setServerValidationResult] = useState<{ ok: boolean, similarFiles: string[], error: string | null } | null>(null)
+
+  const clientValidation = useCallback((value: RefSchema, fix: boolean) => {
+    console.log("clientValidation", {...value})
+    const error = validateRef(value, category, fix)
+    if (fix) {
+      console.log("fix", {...value})
+      setCurrentValue({...value})
+      onChange({...value})
+    }
+    if (error) {
+      setClientValidationResult({ ok: false, error })
+      return false
+    }
+    setClientValidationResult({ ok: true, error: null })
+    return true
+  }, [])
+
+  const fullValidAndFix = useCallback(async (value: RefSchema) => {
+    if (!clientValidation(value, true)) return
+    if (value.type === "local") {
+      fetch(`${host}/export/character/check-local-file?localPath=${value.value}`)
+        .then(res => res.json())
+        .then(data => setServerValidationResult(data))
+    } else {
+      setServerValidationResult({ ok: true, similarFiles: [], error: null })
+    }
+  }, [])
+
+  const localFileNotFound = serverValidationResult && value.type === "local" && !serverValidationResult.ok
+  const otherSkins = serverValidationResult?.similarFiles.filter(file => file !== currentValue.value) ?? []
+  const hasOtherSkins = serverValidationResult && value.type === "local"
+    && otherSkins.length > 0
+    && otherSkins.every(file => file.startsWith(currentValue.value.replaceAll('.obj', '').replaceAll("/", "\\")))
+
 
   return (
     <div className="space-y-2">
@@ -112,13 +170,17 @@ function RefInput({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <Select value={value.type} onValueChange={(type: RefType) => onChange({ ...value, type })}>
+        <Select value={value.type} onValueChange={(type: RefType) => {
+          fullValidAndFix({ ...currentValue, type })
+        }}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="start">
             <SelectItem value="wowhead">Wowhead URL</SelectItem>
-            <SelectItem value="local">Local File</SelectItem>
+            {!serverConfig?.isSharedHosting ? (
+              <SelectItem value="local">Local File</SelectItem>
+            ) : null}
             <SelectItem value="displayID">Display ID</SelectItem>
           </SelectContent>
         </Select>
@@ -127,68 +189,136 @@ function RefInput({
           <Input
             placeholder={
               value.type === "local"
-                ? "Enter file name..."
+                ? "Enter relative OBJ file name..."
                 : value.type === "wowhead"
                   ? `https://www.wowhead.com/${category}=12345/...`
                   : "Enter Display ID number..."
             }
-            value={value.value}
-            onChange={(e) => onChange({ ...value, value: e.target.value })}
-            className={`border-2 bg-white text-left ${error ? "border-red-500" : "border-gray-300 focus:border-blue-500"}`}
-            style={{ direction: "rtl" }}
+            value={currentValue.value}
+            onChange={(e) => {
+              console.log("new", e.target.value)
+              const newValue = { ...currentValue, value: e.target.value }
+              setCurrentValue(newValue)
+              clientValidation(newValue, false)
+            }}
+            // detect paste
+            onPaste={(e) => {
+              const newValue = { ...currentValue, value: e.clipboardData.getData('text').trim() }
+              e.preventDefault()
+              e.stopPropagation()
+              fullValidAndFix(newValue)
+            }}
+            onBlur={() => {
+              fullValidAndFix(currentValue)
+            }}
+            className={`border-2 bg-white text-left ${clientValidationResult && !clientValidationResult.ok ? "border-red-500" : "border-gray-300 focus:border-blue-500"}`}
           />
-          {error && (
+          {clientValidationResult && clientValidationResult.error && (
             <div className="flex items-center gap-1 mt-1 text-sm text-red-600">
               <AlertCircle className="h-3 w-3" />
-              {error}
+              {clientValidationResult.error}
             </div>
           )}
+
+          {localFileNotFound ? (
+            <div className="flex items-center gap-1 mt-1 text-sm text-red-600">
+              <AlertCircle className="h-3 w-3" />
+              Local file not found
+            </div>
+          ) : null}
+
+          {hasOtherSkins
+            ? (<div className="flex flex-col  ">
+                <div className={`flex items-center gap-1 mt-1 text-sm ${localFileNotFound ? "text-red-600" : "text-green-600"}`}>
+                  {!localFileNotFound && <CheckCircle className="h-3 w-3" />}
+                  {localFileNotFound ? "Do you mean:" : "Other related skins:"}
+                </div>
+                <ul className="list-disc list-outside text-left mx-auto max-w-md text-sm">
+                  {serverValidationResult.similarFiles.filter(file => file !== currentValue.value).map(file =>
+                    <li key={file}
+                      onClick={() => {
+                        const newValue = { ...value, value: file.replaceAll('"', '') }
+                        setCurrentValue(newValue)
+                        onChange(newValue)
+                        clientValidation(newValue, true)
+                        fullValidAndFix(newValue)
+                      }}
+                      className="text-blue-500 cursor-pointer hover:underline">
+                        {file}
+                    </li>
+                  )}
+                </ul>
+              </div>)
+            : null
+          }
         </div>
       </div>
     </div>
   )
 }
 
-const validateRef = (ref: RefSchema, category: RefCategory): string | null => {
+const localRefPattern = /^[a-zA-Z0-9_\-\/\\]+(\.obj)?$/
+
+export function isLocalRef(val: string) {
+  if (!localRefPattern.test(val)) return false;
+  // Must not be absolute path
+  // Must not contain ".." as a path segment
+  if (val.split("/").some((seg) => seg === "..")) return false;
+  // Must not start with "/" or "\"
+  if (val.startsWith("/") || val.startsWith("\\")) return false;
+  // Must not contain null bytes or suspicious chars
+  if (val.includes("\0")) return false;
+  return true;
+}
+
+const wowheadPattern = {
+  npc: new RegExp(`^https://www\\.wowhead\\.com/(?:[a-z\-]+/)?npc=`),
+  item: new RegExp(`^https://www\\.wowhead\\.com/(?:[a-z\-]+/)?item=`),
+}
+
+const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean): string | null => {
   if (ref.type === "wowhead") {
     // Allow URLs with expansion prefixes like /wotlk/, /classic/, etc. (only a-z characters)
-    const wowheadPattern = new RegExp(`^https://www\\.wowhead\\.com/(?:[a-z\-]+/)?${category}=`)
-    if (!wowheadPattern.test(ref.value)) {
+    if (!wowheadPattern[category].test(ref.value)) {
       return "Invalid Wowhead URL, must contain /" + category + "=..."
     }
   }
-  if (ref.type === "local" && !isLocalRef(ref.value)) {
-    return "Invalid local file path"
+  if (ref.type === "local") {
+    if (fix) {
+      if (ref.value.startsWith("\"")) ref.value = ref.value.slice(1)
+      if (ref.value.endsWith("\"")) ref.value = ref.value.slice(0, -1)
+      if (serverConfig?.wowExportAssetDir && ref.value.startsWith(serverConfig.wowExportAssetDir)) {
+        ref.value = ref.value.slice(serverConfig.wowExportAssetDir.length)
+      }
+      if (ref.value.startsWith("/") || ref.value.startsWith("\\")) ref.value = ref.value.slice(1)
+      if (/\[[0-9]+\]/.test(ref.value)) ref.value = ref.value.replace(/\[[0-9]+\]/, "")
+      if (ref.value.endsWith(".m2")) ref.value = ref.value.slice(0, -3) + ".obj"
+      if (ref.value.endsWith(".wmo")) ref.value = ref.value.slice(0, -3) + ".obj"
+      if (!ref.value.endsWith(".obj")) ref.value += ".obj"
+      if (ref.value.includes("/")) ref.value = ref.value.replaceAll("/", "\\")
+    }
+    if (!isLocalRef(ref.value)) {
+      return "Invalid local file path"
+    }
   }
   if (ref.type === "displayID" && isNaN(Number(ref.value))) {
-    return "Invalid Display ID"
+    return "Invalid Display ID, must be a number"
   }
   return null
 }
 
-const attackTagOptions: { value: AttackTag | "all", label: string, description: string }[] = [
-  { value: "all", label: "All", description: "Include all attack animations" },
-  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapon(s)" },
-  { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
-  { value: "2HL", label: "2HL Weapon", description: "The model uses a 2H polearm" },
-  { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
-  // { value: "Bow", label: "Bow", description: "The model uses a bow." },
-  // { value: "Rifle", label: "Rifle", description: "The model uses a rifle." },
-  // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
-]
-
-const sizeOptions: { value: ModelSize | "none", label: string, description: string }[] = [
-  { value: "none", label: "Default", description: "Original WoW size times 56" },
-  { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
-  { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
-  { value: "large", label: "Large", description: "As tall as Undead Abomination" },
-  { value: "hero", label: "Hero", description: "As tall as Tauren Chieftain" },
-  { value: "giant", label: "Giant", description: "As tall as Flesh Golem" },
-]
-
 const portraitSuggestions = ["Stand", "Stand Ready"]
 
 export default function WoWNPCExporter() {
+  useEffect(() => {
+    fetch(`${host}/export/character/config`)
+      .then(res => res.json())
+      .then((config) => {
+        serverConfig = config
+      })
+  }, [])
+
+
   const [character, setCharacter] = useState<Character>({
     base: { type: 'wowhead', value: 'https://www.wowhead.com/npc=71865/garrosh-hellscream' },
     size: 'hero',
@@ -276,24 +406,30 @@ export default function WoWNPCExporter() {
     })
   }
 
-  const isValidForExport = useMemo(() => {
+  const [isValidForExport, setIsValidForExport] = useState(true)
+  const checkExportValid = useCallback(() => {
     // Check base model
-    if (validateRef(character.base, "npc")) return false
+    if (validateRef(character.base, "npc", true)) return "Invalid base model"
 
     // Check output filename
-    if (!outputFileName.trim()) return false
-    if (!isLocalRef(outputFileName)) return false
+    if (!outputFileName.trim()) return "Output filename is required"
+    if (!isLocalRef(outputFileName)) return "Invalid output filename"
 
     // Check all attach items have valid references
     const attachItems = character.attachItems || {}
     for (const item of Object.values(attachItems)) {
-      if (validateRef(item.path, "item")) return false
+      if (validateRef(item.path, "item", true)) return "Invalid attach item"
     }
 
-    return true
+    return null
   }, [character, outputFileName])
 
   const handleExport = async () => {
+    const error = checkExportValid()
+    if (error) {
+      alert(error)
+      return
+    }
     setIsExporting(true)
     setJobStatus(null)
 
@@ -1061,7 +1197,6 @@ export default function WoWNPCExporter() {
             </CardHeader>
           )}
           <CardContent>
-            {jobStatus?.error && <p className="text-red-600">{jobStatus.error}</p>}
             <div className="space-y-4">
               {jobStatus?.result && <div className="flex-col items-center gap-10">
                 {jobStatus.result.outputDirectory && <div className="flex items-center gap-2 w-full">

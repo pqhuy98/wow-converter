@@ -5,8 +5,10 @@ import fsExtra from 'fs-extra';
 import path from 'path';
 import z from 'zod';
 
-import { CharacterExporter, CharacterSchema, LocalRefValueSchema } from '@/lib/converter/character-exporter';
-import { getDefaultConfig } from '@/lib/global-config';
+import {
+  CharacterExporter, CharacterSchema, LocalRefSchema, LocalRefValueSchema,
+} from '@/lib/converter/character-exporter';
+import { Config, getDefaultConfig } from '@/lib/global-config';
 import { stableStringify, waitUntil } from '@/lib/utils';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { Job, JobQueue, QueueConfig } from '@/server/utils/job-queue';
@@ -45,9 +47,11 @@ const queueConfig: QueueConfig<ExportCharacterRequest, ExportCharacterResponse> 
 
 type ExportCharacterJob = Job<ExportCharacterRequest, ExportCharacterResponse>;
 
+let ceConfig: Config;
+
 export async function ControllerExportCharacter(app: express.Application) {
   await waitUntil(() => wowExportClient.isReady);
-  const ceConfig = await getDefaultConfig();
+  ceConfig = await getDefaultConfig();
   if (isSharedHosting) {
     console.log('Shared hosting mode enabled');
   }
@@ -211,5 +215,59 @@ export async function ControllerExportCharacter(app: express.Application) {
 
   app.get('/export/character/demos', (req, res) => {
     res.json(jobs.map((job) => jobQueue.getJob(job.id)).filter((job) => job?.status === 'done'));
+  });
+
+  app.get('/export/character/config', (req, res) => {
+    res.json({
+      wowExportAssetDir: ceConfig.wowExportAssetDir,
+      isSharedHosting,
+    });
+  });
+
+  app.get('/export/character/check-local-file', (req, res) => {
+    try {
+      const { localPath } = req.query as { localPath: string };
+      const parsed = LocalRefSchema.safeParse({ type: 'local', value: localPath });
+      if (!parsed.success) {
+        return res.json({
+          ok: false,
+          similarFiles: [],
+        });
+      }
+
+      let baseModelPath = path.resolve(ceConfig.wowExportAssetDir, localPath);
+      // prevent traversal attacks
+      if (!baseModelPath.startsWith(ceConfig.wowExportAssetDir)) {
+        return res.json({
+          ok: false,
+          similarFiles: [],
+        });
+      }
+      if (!baseModelPath.endsWith('.obj')) {
+        baseModelPath += '.obj';
+      }
+      const searchPrefix = baseModelPath.replace('.obj', '');
+      const dirName = path.dirname(baseModelPath);
+      if (!fsExtra.existsSync(dirName)) {
+        return res.json({
+          ok: false,
+          similarFiles: [],
+        });
+      }
+      const allFiles = fsExtra.readdirSync(dirName).map((file) => path.join(dirName, file));
+      const similarFiles = allFiles
+        .filter((file) => file.startsWith(searchPrefix) && file.endsWith('.obj') && !file.endsWith('.phys.obj'))
+        .map((file) => path.relative(ceConfig.wowExportAssetDir, file));
+
+      return res.json({
+        ok: fsExtra.existsSync(baseModelPath),
+        similarFiles,
+      });
+    } catch (err) {
+      return res.json({
+        ok: false,
+        similarFiles: [],
+      });
+    }
   });
 }
