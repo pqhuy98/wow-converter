@@ -1,3 +1,5 @@
+import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+
 type JobStatus = 'pending' | 'processing' | 'done' | 'failed';
 
 export interface Job<T, V> {
@@ -132,6 +134,9 @@ export class JobQueue<T, V> {
           job.finishedAt = Date.now();
           console.error(err);
           this.jobsFailed++;
+          if (err instanceof Error && err.message.includes('Job timeout')) {
+            await wowExportClient.restart();
+          }
         } finally {
           this.activeJobs--;
           this.tryProcessQueue();
