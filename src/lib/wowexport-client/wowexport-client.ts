@@ -86,6 +86,7 @@ export interface ExportCharacterParams {
   gender: number;
   customizations: { [optionId: string]: number };
   geosetIds: number[];
+  hideGeosetIds: number[];
   format: string;
   include_animations: boolean;
   include_base_clothing: boolean;
@@ -202,6 +203,11 @@ export class WowExportClient extends EventEmitter {
           failedAttempts = 0;
         }
         if (this.isReady) {
+          this.on('disconnected', () => {
+            this.disconnect();
+            console.log('wow.export client disconnected, reconnecting...');
+            void this.connect(host, port);
+          });
           return;
         }
       } catch (err) {

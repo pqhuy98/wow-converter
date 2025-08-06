@@ -53,6 +53,16 @@ interface ItemData {
   TextureFiles: TextureFiles;
   Item: {
     GeosetGroup: number[];
+    HideGeosetMale?: {
+      RaceId: number;
+      GeosetGroup: number;
+      RaceBitSelection: number;
+    }[];
+    HideGeosetFemale?: {
+      RaceId: number;
+      GeosetGroup: number;
+      RaceBitSelection: number;
+    }[];
   }
 }
 
@@ -71,6 +81,7 @@ interface ItemResult {
   modelFiles: FilteredFile[];
   textureFiles: FilteredFile[];
   geosetIds?: number[];
+  hideGeosetIds?: number[];
 }
 
 interface FilteredFile {
@@ -198,6 +209,23 @@ function resolveGeosetId(slotId: number, itemData: ItemData) {
   return Array.from(result);
 }
 
+function resolveHideGeosetId(itemData: ItemData, targetRace: number, targetGender: number) {
+  const result = new Set<number>();
+  let hideGeosets = itemData.Item.HideGeosetMale;
+  if (targetGender === 1) {
+    hideGeosets = itemData.Item.HideGeosetFemale;
+  }
+  (hideGeosets ?? []).forEach((value) => {
+    if (value.RaceId === targetRace) {
+      const band = value.GeosetGroup;
+      for (let i = 1; i < 100; i++) {
+        result.add(band * 100 + i);
+      }
+    }
+  });
+  return Array.from(result);
+}
+
 export async function processItemData(
   slotId: number,
   itemDisplayId: number,
@@ -221,6 +249,7 @@ export async function processItemData(
         }))),
     ],
     geosetIds: resolveGeosetId(slotId, armorData),
+    hideGeosetIds: resolveHideGeosetId(armorData, targetRace, targetGender),
   };
 }
 
@@ -228,13 +257,16 @@ async function getExportCharacterRpcParams(characterData: CharacterData): Promis
   const customizations: { [optionId: string]: number } = {};
   for (const cust of characterData.customizations) { customizations[cust.optionId] = cust.choiceId; }
 
-  const customGeosetIds = new Set<number>();
+  const geosetIds = new Set<number>();
+  const hideGeosetIds = new Set<number>();
   const slotIds = Object.values(EquipmentSlot).filter((value) => typeof value === 'number') as number[];
   for (const slotId of slotIds) {
     if (!characterData.equipment || !characterData.equipment[slotId.toString()]) continue;
     const itemId = characterData.equipment[slotId.toString()];
     const slotData = await processItemData(slotId, itemId, characterData.raceId, characterData.genderId);
     if ([
+      EquipmentSlot.Head,
+      EquipmentSlot.Shoulder,
       EquipmentSlot.Legs,
       EquipmentSlot.Boots,
       EquipmentSlot.Chest,
@@ -243,7 +275,8 @@ async function getExportCharacterRpcParams(characterData: CharacterData): Promis
       EquipmentSlot.Back,
       EquipmentSlot.Tabard,
     ].includes(slotId)) {
-      slotData?.geosetIds?.forEach((geosetId) => customGeosetIds.add(geosetId));
+      slotData?.geosetIds?.forEach((geosetId) => geosetIds.add(geosetId));
+      slotData?.hideGeosetIds?.forEach((hideGeosetId) => hideGeosetIds.add(hideGeosetId));
     }
   }
 
@@ -254,7 +287,8 @@ async function getExportCharacterRpcParams(characterData: CharacterData): Promis
     format: 'obj',
     include_animations: true,
     include_base_clothing: false,
-    geosetIds: Array.from(customGeosetIds),
+    geosetIds: Array.from(geosetIds),
+    hideGeosetIds: Array.from(hideGeosetIds),
   };
 
   return rpcParams;
