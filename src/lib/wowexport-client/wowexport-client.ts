@@ -242,10 +242,7 @@ export class WowExportClient extends EventEmitter {
     this.socket.removeAllListeners();
     this.socket.end();
     this.socket.destroy();
-    this.status.connected = false;
-    this.status.configLoaded = false;
-    this.status.cascLoaded = false;
-    this.emit('disconnected');
+    this.onConnectionClose();
   }
 
   async restart(): Promise<void> {
@@ -430,6 +427,7 @@ export class WowExportClient extends EventEmitter {
     this.status.connected = false;
     this.status.configLoaded = false;
     this.status.cascLoaded = false;
+    this.status.exportHookRegistered = false;
     this.emit('disconnected');
   }
 
