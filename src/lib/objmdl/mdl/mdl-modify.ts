@@ -358,7 +358,7 @@ export class MDLModify {
       const usedNodes = new Set(geoset.faces.flatMap((face) => face.vertices));
       geoset.vertices = geoset.vertices.filter((v) => usedNodes.has(v));
     });
-    this.mdl.syncExtends();
+    this.mdl.syncExtents();
     return this;
   }
 

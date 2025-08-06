@@ -53,7 +53,7 @@ export class AssetManager {
         mdl.modify.setLargeExtents();
       }
       mkdirSync(path.dirname(fullPath), { recursive: true });
-      const data = this.config.mdx ? model.mdl.toMdx() : model.mdl.toString();
+      const data = this.config.mdx ? model.mdl.toMdx() : model.mdl.toMdl();
       writeFileSync(fullPath, data);
     }
   }

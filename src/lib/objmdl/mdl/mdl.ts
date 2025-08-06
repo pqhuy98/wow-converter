@@ -1,5 +1,5 @@
+import { parsers } from '@pqhuy98/mdx-m3-viewer';
 import _ from 'lodash';
-import { parsers } from 'mdx-m3-viewer';
 
 import { QuaternionRotation, Vector2, Vector3 } from '../../math/common';
 import { sortMapByKeyAsc } from '../../math/utils';
@@ -253,14 +253,14 @@ export class MDL {
     this.modify = new MDLModify(this);
   }
 
-  versionToString() {
+  private versionToString() {
     return `
 Version {
   FormatVersion ${this.version.formatVersion},
 }`;
   }
 
-  modelToString() {
+  private modelToString() {
     return `Model "${this.model.name}" {
   NumGeosets ${this.geosets.length},
   NumBones ${this.bones.length},
@@ -272,14 +272,14 @@ Version {
 }`;
   }
 
-  globalSequencesToString() {
+  private globalSequencesToString() {
     if (this.globalSequences.length === 0) return '';
     return `GlobalSequences ${this.globalSequences.length} {
 ${this.globalSequences.map((gs) => `\tDuration ${gs.duration},`).join('\n')}
 }`;
   }
 
-  sequencesToString() {
+  private sequencesToString() {
     if (this.sequences.length === 0) return '';
 
     // Add number suffix to sequences with same name
@@ -304,7 +304,7 @@ ${this.sequences.map((sequence) => `
 }`;
   }
 
-  texturesToString() {
+  private texturesToString() {
     if (this.textures.length === 0) return '';
     return `Textures ${this.textures.length} {
 ${this.textures.map((texture) => `
@@ -316,7 +316,7 @@ ${this.textures.map((texture) => `
 }`;
   }
 
-  materialsToString() {
+  private materialsToString() {
     if (this.materials.length === 0) return '';
     return `Materials ${this.materials.length} {
 ${this.materials.map((material) => `
@@ -337,7 +337,7 @@ ${this.materials.map((material) => `
 }`;
   }
 
-  textureAnimsToString() {
+  private textureAnimsToString() {
     if (this.textureAnims.length === 0) return '';
     return `TextureAnims ${this.textureAnims.length} {
 ${this.textureAnims.map((texAnim) => `\tTVertexAnim {
@@ -368,7 +368,7 @@ ${this.textureAnims.map((texAnim) => `\tTVertexAnim {
 }`;
   }
 
-  geosetsToString() {
+  private geosetsToString() {
     const getSkinWeight = (vertex: GeosetVertex) => {
       const boneIndices = Array(4).fill(0).map((__, i) => (vertex.skinWeights![i] ? vertex.skinWeights![i].bone.objectId : 0));
       const weights = Array(4).fill(0).map((__, i) => (vertex.skinWeights![i] ? vertex.skinWeights![i].weight : 0));
@@ -446,7 +446,7 @@ ${this.sequences.map((seq) => `\tAnim {
     }).join('\n');
   }
 
-  geosetAnimsToString() {
+  private geosetAnimsToString() {
     return this.geosetAnims.map((geosetAnim) => {
       let colorBlock = '';
       if (geosetAnim.color) {
@@ -485,7 +485,7 @@ ${[...sortMapByKeyAsc(alpha.keyFrames).entries()].map(([timestamp, value]) => `\
     }).join('\n');
   }
 
-  bonesToString() {
+  private bonesToString() {
     return this.bones.map((bone) => `Bone "${bone.name}" {
   ObjectId ${bone.objectId},
   ${bone.parent != null ? `Parent ${bone.parent.objectId},` : ''}
@@ -518,7 +518,7 @@ ${[...sortMapByKeyAsc(alpha.keyFrames).entries()].map(([timestamp, value]) => `\
 }`).join('\n');
   }
 
-  attachmentPointsToString() {
+  private attachmentPointsToString() {
     return this.attachmentPoints.map((attachment) => `Attachment "${attachment.name}" {
   ObjectId ${attachment.objectId},
   ${attachment.parent != null ? `Parent ${attachment.parent.objectId},` : ''}
@@ -526,14 +526,14 @@ ${[...sortMapByKeyAsc(alpha.keyFrames).entries()].map(([timestamp, value]) => `\
 }`).join('\n');
   }
 
-  pivotPointsToString() {
+  private pivotPointsToString() {
     return `PivotPoints ${this.bones.length + this.attachmentPoints.length + this.eventObjects.length + this.collisionShapes.length} {
 ${[...this.bones, ...this.attachmentPoints, ...this.eventObjects, ...this.collisionShapes]
     .map(({ pivotPoint }) => `	{ ${f(pivotPoint[0])}, ${f(pivotPoint[1])}, ${f(pivotPoint[2])} },`).join('\n')}
 }`;
   }
 
-  collisionShapesToString() {
+  private collisionShapesToString() {
     return this.collisionShapes.map((shape) => `CollisionShape "${shape.name}" {
   ObjectId ${shape.objectId},
   ${shape.type},
@@ -544,7 +544,7 @@ ${shape.vertices.map((v) => `\t\t{ ${v.map(f).join(', ')} },`).join('\n')}
 }`).join('\n');
   }
 
-  eventObjectsToString() {
+  private eventObjectsToString() {
     this.eventObjects.forEach((e) => e.track.sort((a, b) => a.sequence.interval[0] - b.sequence.interval[1]));
     return this.eventObjects.map((event) => `EventObject "${event.name}" {
   ObjectId ${event.objectId},
@@ -554,7 +554,7 @@ ${event.track.map((e) => `\t\t${e.sequence.interval[0] + e.offset},`).join('\n')
 }`).join('\n');
   }
 
-  camerasToString() {
+  private camerasToString() {
     const res: string[] = [];
     this.cameras.forEach((cam) => {
       res.push(`Camera "${cam.name}" {`);
@@ -570,7 +570,7 @@ ${event.track.map((e) => `\t\t${e.sequence.interval[0] + e.offset},`).join('\n')
     return res.join('\n');
   }
 
-  toString() {
+  private toString() {
     // Reindex everything with `id`
     this.globalSequences.forEach((v, i) => v.id = i);
     this.textures.forEach((v, i) => v.id = i);
@@ -619,7 +619,7 @@ ${this.pivotPointsToString()}
 
     // Restore
     if (this.extendsOverriden) {
-      this.syncExtends();
+      this.syncExtents();
     }
 
     return result;
@@ -640,7 +640,7 @@ ${this.pivotPointsToString()}
   }
 
   sync() {
-    this.syncExtends();
+    this.syncExtents();
 
     // Update global sequence timestamps
     this.textureAnims.forEach((texAnim) => {
@@ -737,7 +737,7 @@ ${this.pivotPointsToString()}
     // });
   }
 
-  syncExtends() {
+  syncExtents() {
     this.geosets = this.geosets.filter((geoset) => geoset.vertices.length > 0 && geoset.faces.length > 0);
     this.geosets.forEach((geoset) => {
       const min: Vector3 = [Infinity, Infinity, Infinity];
