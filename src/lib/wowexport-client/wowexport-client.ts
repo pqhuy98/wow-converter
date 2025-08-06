@@ -105,6 +105,7 @@ export class WowExportClient extends EventEmitter {
     connected: false,
     configLoaded: false,
     cascLoaded: false,
+    exportHookRegistered: false,
   };
 
   private assetDir = '';
@@ -119,7 +120,7 @@ export class WowExportClient extends EventEmitter {
   }
 
   public get isReady() {
-    return this.status.connected && this.status.configLoaded && this.status.cascLoaded;
+    return this.status.connected && this.status.configLoaded && this.status.cascLoaded && this.status.exportHookRegistered;
   }
 
   public async waitUntilReady() {
@@ -135,8 +136,6 @@ export class WowExportClient extends EventEmitter {
 
     this.socket = new Socket();
     void this.connect(host, port);
-
-    void this.registerHook('HOOK_EXPORT_COMPLETE');
   }
 
   /**
@@ -167,6 +166,7 @@ export class WowExportClient extends EventEmitter {
 
             this.socket.connect(port, host, () => {
               this.status.connected = true;
+              this.emit('CONNECTED');
               debug && console.log('Connected to wow.export RCP server');
               this.socket.on('error', () => {
                 this.status.connected = false;
@@ -195,7 +195,15 @@ export class WowExportClient extends EventEmitter {
           console.log(chalk.green('✅ Retrieved wow.export CASC info:'), info.buildName);
           failedAttempts = 0;
         }
-        if (this.isReady) return;
+        if (!this.status.exportHookRegistered) {
+          await this.registerHook('HOOK_EXPORT_COMPLETE');
+          this.status.exportHookRegistered = true;
+          console.log(chalk.green('✅ Registered export hook'));
+          failedAttempts = 0;
+        }
+        if (this.isReady) {
+          return;
+        }
       } catch (err) {
         if (failedAttempts === 0) {
           if (!this.status.connected || !this.status.configLoaded) {
