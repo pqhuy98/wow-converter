@@ -40,6 +40,7 @@ async function character() {
       797: 8998,
     },
     geosetIds: [],
+    hideGeosetIds: [],
     format: 'obj',
     include_animations: true,
     include_base_clothing: false,
