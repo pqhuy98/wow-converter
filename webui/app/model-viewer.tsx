@@ -246,7 +246,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       inst.setSequence(currentSeq)
       inst.sequenceLoopMode = 2
     }
-  }, [currentSeq])
+  }, [currentSeq, instanceRef.current])
 
   const [isFullscreen, setIsFullscreen] = useState(alwaysFullscreen ?? false)
   const scrollPositionRef = useRef<{ x: number; y: number } | null>(null)
