@@ -14,7 +14,6 @@ import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { Socket } from 'net';
 
-import { args } from '../constants';
 import { waitUntil } from '../utils';
 
 // Type definitions
@@ -215,8 +214,8 @@ export class WowExportClient extends EventEmitter {
           if (!this.status.connected || !this.status.configLoaded) {
             console.error(chalk.yellow(`⏳ Cannot connecting to wow.export RCP server at ${host}:${port}, did you run it?`));
           } else if (!this.status.cascLoaded) {
-            if (args.cascRemote) {
-              const [region, product] = args.cascRemote.split(':');
+            if (process.env.CASC_REMOTE_REGION && process.env.CASC_REMOTE_PRODUCT) {
+              const [region, product] = [process.env.CASC_REMOTE_REGION, process.env.CASC_REMOTE_PRODUCT];
               console.log({ region, product });
               const cascRemote = await this.loadCASCRemote(region);
               const buildIdx = cascRemote.findIndex((build: any) => build.Product === product);

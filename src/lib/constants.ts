@@ -1,5 +1,3 @@
-import minimist from 'minimist';
-
 // Map generation configs
 export const defaultLayer = 15;
 // max height after override UI/MiscData.txt
@@ -14,7 +12,6 @@ export const maxGameHeightDiff = (dataHeightMax - dataHeightMin) / 4;
 
 export const distancePerTile = 4096 / 32;
 export const BlizzardNull = 65535;
-export const args = minimist(process.argv.slice(2));
 
 // Source: https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain
 
