@@ -5,13 +5,13 @@ import { BlizzardNull } from '../../constants';
 import { Config } from '../../global-config';
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { AnimationFile } from '../animation/animation';
-import { wowToWc3Interpolation } from '../mdl/components/animation';
 import { Geoset } from '../mdl/components/geoset';
 import { GlobalSequence } from '../mdl/components/global-sequence';
-import { m2BlendModeToWc3FilterMode, Material } from '../mdl/components/material';
+import { Material } from '../mdl/components/material';
 import { Texture } from '../mdl/components/texture';
 import { TextureAnim } from '../mdl/components/texture-anim';
 import { MDL } from '../mdl/mdl';
+import { m2BlendModeToWc3FilterMode, wowToWc3Interpolation } from '../utils';
 
 namespace Data {
   export interface Texture {
@@ -215,16 +215,24 @@ export class M2MetadataFile {
         return;
       }
 
+      const color: Vector3 = [
+        // MDL color order is blue, green, red, but WoW uses red, green, blue
+        wowColor.color.values[0][0][2],
+        wowColor.color.values[0][0][1],
+        wowColor.color.values[0][0][0],
+      ];
+      const alpha = wowColor.alpha.values[0][0];
+
       const geosetAnim: MDL['geosetAnims'][number] = {
         id: 0,
         geoset: geosets[tu.skinSectionIndex],
         color: {
           static: true,
-          value: wowColor.color.values[0][0],
+          value: color,
         },
         alpha: {
           static: true,
-          value: wowColor.alpha.values[0][0],
+          value: alpha,
         },
       };
 
@@ -397,11 +405,13 @@ export class M2MetadataFile {
       const textureId = this.textureCombos[tu.textureComboIndex];
       const material = this.materials[tu.materialIndex];
       const textAnimId = this.textureTransformsLookup[tu.textureTransformComboIndex];
+      const twoSided = (material.flags & 0x04) > 0;
 
       if (!submeshMaterials.has(submeshId)) {
         submeshMaterials.set(submeshId, {
           id: 0,
           constantColor: false,
+          twoSided,
           layers: [],
         });
       }
@@ -412,11 +422,17 @@ export class M2MetadataFile {
         tvertexAnim: textAnimId !== BlizzardNull ? textureAnims[textAnimId] : undefined,
 
         // https://wowdev.wiki/M2#Render_flags_and_blending_modes
+        unshaded: false,
+        sphereEnvMap: false,
         unlit: (material.flags & 0x01) > 0,
         unfogged: (material.flags & 0x02) > 0,
         twoSided: (material.flags & 0x04) > 0,
         noDepthTest: (material.flags & 0x08) > 0,
         noDepthSet: (material.flags & 0x10) > 0,
+        alpha: {
+          static: true,
+          value: 1,
+        },
       });
     });
 

@@ -6,7 +6,7 @@ export interface Sequence extends Bound {
   name: string;
   interval: [number, number];
   nonLooping: boolean;
-  movementSpeed: number,
+  moveSpeed: number,
   data: SequenceData,
   rarity?: number
   keep?: boolean;
@@ -28,7 +28,7 @@ export function sequencesToString(sequences: Sequence[]) {
       Anim "${seqName.get(sequence)}" {
         Interval { ${sequence.interval[0]}, ${sequence.interval[1]} },
         ${sequence.nonLooping ? 'NonLooping,' : ''}
-        ${sequence.movementSpeed > 0 ? `MoveSpeed ${sequence.movementSpeed},` : ''}
+        ${sequence.moveSpeed > 0 ? `MoveSpeed ${sequence.moveSpeed},` : ''}
         ${(sequence.rarity ?? 0) > 0 ? `Rarity ${sequence.rarity},` : ''}
         MinimumExtent { ${sequence.minimumExtent.map(f).join(', ')} },
         MaximumExtent { ${sequence.maximumExtent.map(f).join(', ')} },

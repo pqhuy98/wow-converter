@@ -102,15 +102,19 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
       const material: Material = {
         id: 0,
         constantColor: false,
+        twoSided: false,
         layers: [
           {
             texture,
             filterMode: textureRelativePath ? guessFilterMode(textureRelativePath) : 'None',
+            unshaded: false,
+            sphereEnvMap: false,
             twoSided: false,
             unfogged: false,
             unlit: false,
             noDepthTest: false,
             noDepthSet: false,
+            alpha: {static: true, value:1},
           },
         ],
       };

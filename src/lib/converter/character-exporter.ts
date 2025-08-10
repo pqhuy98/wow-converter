@@ -164,14 +164,14 @@ export class CharacterExporter {
     }
 
     if (char.inGameMovespeed) {
-      model.sequences.filter((seq) => seq.movementSpeed > 0 && seq.name.includes('Walk')
+      model.sequences.filter((seq) => seq.moveSpeed > 0 && seq.name.includes('Walk')
       && !seq.name.includes('Spin')
       && !seq.name.includes('Swim')
       && !seq.name.includes('Alternate')).forEach((seq) => {
-        debug && console.log(model.model.name, `${seq.name} (${seq.data.wowName})`, 'old moveSpeed', seq.movementSpeed, 'new moveSpeed', char.inGameMovespeed);
-        const scale = (seq.movementSpeed || 450) / char.inGameMovespeed; // duration is inverse of speed
+        debug && console.log(model.model.name, `${seq.name} (${seq.data.wowName})`, 'old moveSpeed', seq.moveSpeed, 'new moveSpeed', char.inGameMovespeed);
+        const scale = (seq.moveSpeed || 450) / char.inGameMovespeed; // duration is inverse of speed
         model.modify.scaleSequenceDuration(seq, scale);
-        seq.movementSpeed = char.inGameMovespeed;
+        seq.moveSpeed = char.inGameMovespeed;
       });
     }
 
@@ -436,15 +436,22 @@ export class CharacterExporter {
       mdl.materials.push({
         id: mdl.materials.length,
         constantColor: false,
+        twoSided: cfg.twoSided ?? false,
         layers: [
           {
             filterMode: 'Transparent',
             texture: mdl.textures.at(-1)!,
             twoSided: cfg.twoSided ?? false,
+            unshaded: false,
+            sphereEnvMap: false,
             unfogged: false,
             unlit: false,
             noDepthTest: false,
             noDepthSet: false,
+            alpha: {
+              static: true,
+              value: 1,
+            },
           },
         ],
       });

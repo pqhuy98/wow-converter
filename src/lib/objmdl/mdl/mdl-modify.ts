@@ -11,6 +11,7 @@ import { Bound } from './components/extent';
 import {
   Face, Geoset, GeosetVertex, Matrix, SkinWeight,
 } from './components/geoset';
+import { GlobalSequence } from './components/global-sequence';
 import { Material } from './components/material';
 import { Bone, Node } from './components/node';
 import { Sequence } from './components/sequence';
@@ -80,7 +81,7 @@ export class MDLModify {
       cam.position = V3.scale(cam.position, value);
       cam.target.position = V3.scale(cam.target.position, value);
     });
-    this.mdl.sequences.forEach((seq) => seq.movementSpeed *= value);
+    this.mdl.sequences.forEach((seq) => seq.moveSpeed *= value);
     return this;
   }
 
@@ -127,6 +128,7 @@ export class MDLModify {
       const wc3Key = WoWToWC3AttachmentMap[wowAttachmentId];
       this.mdl.attachmentPoints.push({
         attachmentId: 0,
+        path: '',
         type: 'AttachmentPoint',
         name: wc3Key
           ? `${wc3Key} Ref`
@@ -291,6 +293,27 @@ export class MDLModify {
       if (bone.rotation && !bone.rotation.globalSeq) optimiseAnim(bone.rotation, 0.001);
       if (bone.scaling && !bone.scaling.globalSeq) optimiseAnim(bone.scaling, 0.01);
     }
+
+    // remove unused global sequences
+    const usedGlobalSequences = new Set<GlobalSequence>();
+    [
+      ...this.mdl.bones,
+      ...this.mdl.attachmentPoints,
+      ...this.mdl.eventObjects,
+      ...this.mdl.collisionShapes,
+      ...this.mdl.cameras,
+      ...this.mdl.materials,
+      ...this.mdl.textureAnims,
+      ...this.mdl.geosetAnims,
+    ].forEach((animationObj) => {
+      if ('translation' in animationObj && animationObj.translation?.globalSeq) usedGlobalSequences.add(animationObj.translation.globalSeq);
+      if ('rotation' in animationObj && animationObj.rotation?.globalSeq) usedGlobalSequences.add(animationObj.rotation.globalSeq);
+      if ('scaling' in animationObj && animationObj.scaling?.globalSeq) usedGlobalSequences.add(animationObj.scaling.globalSeq);
+      if ('color' in animationObj && animationObj.color && 'globalSeq' in animationObj.color && animationObj.color.globalSeq) usedGlobalSequences.add(animationObj.color.globalSeq);
+      if ('alpha' in animationObj && animationObj.alpha && 'globalSeq' in animationObj.alpha && animationObj.alpha.globalSeq) usedGlobalSequences.add(animationObj.alpha.globalSeq);
+    });
+
+    this.mdl.globalSequences = this.mdl.globalSequences.filter((gs) => usedGlobalSequences.has(gs));
 
     return this;
   }
@@ -501,7 +524,7 @@ export class MDLModify {
       },
       interval: [deathTimestamp + 1, deathTimestamp + 1 + decayDuration],
       nonLooping: true,
-      movementSpeed: 0,
+      moveSpeed: 0,
       minimumExtent: deathSequence.minimumExtent,
       maximumExtent: deathSequence.maximumExtent,
       boundsRadius: deathSequence.boundsRadius,
@@ -517,7 +540,7 @@ export class MDLModify {
       },
       interval: [decayFleshSequence.interval[1] + 1, decayFleshSequence.interval[1] + 1 + decayDuration],
       nonLooping: true,
-      movementSpeed: 0,
+      moveSpeed: 0,
       minimumExtent: deathSequence.minimumExtent,
       maximumExtent: deathSequence.maximumExtent,
       boundsRadius: deathSequence.boundsRadius,
@@ -646,7 +669,7 @@ export class MDLModify {
     const debug = false;
 
     this.mdl.sequences.forEach((seq) => {
-      if (seq.movementSpeed === 0 && ([
+      if (seq.moveSpeed === 0 && ([
         'Walk', 'Run', 'Sprint', 'FlyWalk',
       ].includes(seq.data.wowName))) {
         console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
@@ -795,10 +818,10 @@ export class MDLModify {
         }
         if (moveSpeed > 0.2 * diag && moveSpeed < diag) {
           debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed', moveSpeed);
-          seq.movementSpeed = moveSpeed;
+          seq.moveSpeed = moveSpeed;
         } else {
           debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed to 0');
-          seq.movementSpeed = 0;
+          seq.moveSpeed = 0;
         }
       }
     });
@@ -842,7 +865,9 @@ export class MDLModify {
     let event = this.mdl.eventObjects.find((e) => e.name === name);
     this.mdl.sequences.filter((s) => s.name === sequenceName).forEach((sequence) => {
       if (!event) {
-        event = { name, track: [], pivotPoint: [0, 0, 0] };
+        event = {
+          name, track: [], pivotPoint: [0, 0, 0], flags: [],
+        };
         this.mdl.eventObjects.push(event);
       }
       event.track.push({ sequence, offset });

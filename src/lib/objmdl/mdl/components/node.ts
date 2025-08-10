@@ -15,13 +15,10 @@ export enum NodeFlag {
   BILLBOARD_LOCK_Z = 'BillboardedLockZ,',
 }
 
-export interface IdObject {
+export interface Node {
   name: string;
   objectId?: number;
   pivotPoint: Vector3;
-}
-
-export interface Node extends IdObject {
   parent?: Node;
   flags: NodeFlag[];
   translation?: Animation<Vector3>;
@@ -37,14 +34,15 @@ export interface Bone extends Node {
 
 export interface AttachmentPoint extends Node {
   type: 'AttachmentPoint'
+  path?: string;
   attachmentId: number;
 }
 
-export interface EventObject extends IdObject {
+export interface EventObject extends Node {
   track: {sequence: Sequence, offset: number}[] // which sequence, and duration offset from sequence's start time
 }
 
-export interface CollisionShape extends IdObject {
+export interface CollisionShape extends Node {
   type: 'Sphere' | 'Cylinder'
   vertices: Vector3[]
   boundRadius: number
@@ -53,55 +51,34 @@ export interface CollisionShape extends IdObject {
 export function bonesToString(bones: Bone[]): string {
   return bones.map((bone) => `
     Bone "${bone.name}" {
-      ObjectId ${bone.objectId},
-
-      ${bone.parent != null ? `Parent ${bone.parent.objectId},` : ''}
-
+      ${nodeHeaders(bone)}
       ${bone.geoset != null ? `GeosetId ${bone.geoset === 'Multiple' ? bone.geoset : bone.geoset.id},` : ''}
-
-      ${bone.geosetAnim != null ? `GeosetAnimId ${bone.geosetAnim.id},` : 'GeosetAnimId None,'}
-
-      ${bone.flags.join('\n\t')}
-
-      ${animationToString('Translation', bone.translation)}
-
-      ${animationToString('Rotation', bone.rotation)}
-
-      ${animationToString('Scaling', bone.scaling)}
+      ${bone.geosetAnim ? `GeosetAnimId ${bone.geosetAnim.id},` : 'GeosetAnimId None,'}
+      ${nodeAnimations(bone)}
     }`).join('\n');
 }
 
 export function attachmentPointsToString(attachmentPoints: AttachmentPoint[]): string {
   return attachmentPoints.map((attachment) => `
     Attachment "${attachment.name}" {
-
-      ObjectId ${attachment.objectId},
-
-      ${attachment.parent != null ? `Parent ${attachment.parent.objectId},` : ''}
-
+      ${nodeHeaders(attachment)}
       AttachmentID ${attachment.attachmentId},
-
-      ${animationToString('Translation', attachment.translation)}
-
-      ${animationToString('Rotation', attachment.rotation)}
-
-      ${animationToString('Scaling', attachment.scaling)}
+      ${attachment.path ? `Path "${attachment.path}",` : ''}
+      ${nodeAnimations(attachment)}
     }`).join('\n');
 }
 
 export function collisionShapesToString(collisionShapes: CollisionShape[]): string {
   return collisionShapes.map((shape) => `
     CollisionShape "${shape.name}" {
-
-      ObjectId ${shape.objectId},
-
+      ${nodeHeaders(shape)}
       ${shape.type},
-
+      BoundsRadius ${f(shape.boundRadius)},
       Vertices ${shape.vertices.length} {
         ${shape.vertices.map((v) => `{ ${fVector(v)} },`).join('\n')}
       }
-  
-      BoundsRadius ${f(shape.boundRadius)},
+
+      ${nodeAnimations(shape)}
     }`).join('\n');
 }
 
@@ -109,18 +86,41 @@ export function eventObjectsToString(eventObjects: EventObject[]): string {
   eventObjects.forEach((e) => e.track.sort((a, b) => a.sequence.interval[0] - b.sequence.interval[0]));
   return eventObjects.map((event) => `
     EventObject "${event.name}" {
-
-      ObjectId ${event.objectId},
-
+      ${nodeHeaders(event)}
       EventTrack ${event.track.length} {
         ${event.track.map((e) => `${e.sequence.interval[0] + e.offset},`).join('\n')}
       }
+      ${nodeAnimations(event)}
     }`).join('\n');
 }
 
-export function pivotPointsToString(objects: IdObject[]): string {
+export function pivotPointsToString(nodes: Node[]): string {
   return `
-    PivotPoints ${objects.length} {
-      ${objects.map(({ pivotPoint }) => `{ ${fVector(pivotPoint)} },`).join('\n')}
+    PivotPoints ${nodes.length} {
+      ${nodes.map(({ pivotPoint }) => `{ ${fVector(pivotPoint)} },`).join('\n')}
     }`;
+}
+
+function nodeHeaders(node: Node): string {
+  return `
+      ObjectId ${node.objectId},
+
+      ${node.parent != null ? `Parent ${node.parent.objectId},` : ''}
+
+      ${node.flags.join('\n')}
+
+      ${animationToString('Translation', node.translation)}
+
+      ${animationToString('Rotation', node.rotation)}
+
+      ${animationToString('Scaling', node.scaling)}
+  `;
+}
+
+function nodeAnimations(node: Node): string {
+  return `
+    ${animationToString('Translation', node.translation)}
+    ${animationToString('Rotation', node.rotation)}
+    ${animationToString('Scaling', node.scaling)}
+  `;
 }

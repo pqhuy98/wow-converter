@@ -16,7 +16,6 @@ import { Sequence, sequencesToString } from './components/sequence';
 import { Texture, texturesToString } from './components/texture';
 import { TextureAnim, textureAnimsToString } from './components/texture-anim';
 import { MDLModify } from './mdl-modify';
-import { iterateNodesAtTimestamp } from './mdl-traverse';
 
 export interface WowAttachment {
   wowAttachmentId: number;
@@ -134,9 +133,9 @@ export class MDL {
       ${sequencesToString(this.sequences)}
       ${globalSequencesToString(this.globalSequences)}
       ${texturesToString(this.textures)}
-      ${materialsToString(this.materials)}
+      ${materialsToString(this.version.formatVersion, this.materials)}
       ${textureAnimsToString(this.textureAnims)}
-      ${geosetsToString(this.geosets, this.bones, this.sequences)}
+      ${geosetsToString(this.version.formatVersion, this.geosets, this.bones, this.sequences)}
       ${geosetAnimsToString(this.geosetAnims)}
       ${bonesToString(this.bones)}
       ${attachmentPointsToString(this.attachmentPoints)}
@@ -159,11 +158,16 @@ export class MDL {
         if (l.endsWith('}')) {
           depth--;
         }
-        const newLine = Array(depth).fill('\t').join('') + l;
-        if (l.endsWith('{')) {
-          depth++;
+        try {
+          const newLine = Array(depth).fill('\t').join('') + l;
+          if (l.endsWith('{')) {
+            depth++;
+          }
+          return newLine;
+        } catch (e) {
+          console.error({ depth });
+          return l;
         }
-        return newLine;
       })
       .join('\n');
 
@@ -224,7 +228,6 @@ export class MDL {
     });
 
     // Compute simple collision shape
-    iterateNodesAtTimestamp;
     this.collisionShapes = [
       {
         name: 'Collision Sphere01',
@@ -232,6 +235,7 @@ export class MDL {
         vertices: [[0, 0, this.model.boundsRadius / 2]],
         boundRadius: this.model.boundsRadius / 2,
         pivotPoint: [0, 0, 0],
+        flags: [],
       },
     ];
 
@@ -248,15 +252,22 @@ export class MDL {
       this.materials = [
         {
           id: 0,
+          twoSided: false,
           layers: [
             {
               filterMode: 'None',
               texture: this.textures[0],
+              unshaded: false,
+              sphereEnvMap: false,
               twoSided: false,
               unfogged: false,
               unlit: false,
               noDepthTest: false,
               noDepthSet: false,
+              alpha: {
+                static: true,
+                value: 1,
+              },
             },
           ],
           constantColor: false,

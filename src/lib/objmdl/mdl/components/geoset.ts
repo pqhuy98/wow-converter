@@ -2,7 +2,9 @@ import _ from 'lodash';
 
 import { Vector2, Vector3 } from '@/lib/math/common';
 
-import { animationToString, Interpolation } from './animation';
+import {
+  animatedValueToString, AnimationOrStatic,
+} from './animation';
 import { Bound } from './extent';
 import { f, fVector } from './formatter';
 import { Material } from './material';
@@ -31,6 +33,7 @@ export interface Geoset extends Bound {
   material: Material;
   matrices: Matrix[]
   selectionGroup: number;
+  unselectable?: boolean;
 }
 
 export interface GeosetVertex {
@@ -45,19 +48,12 @@ export interface GeosetVertex {
 export interface GeosetAnim {
   id: number
   geoset: Geoset;
-  alpha?: AnimatedValue<number>;
-  color?: AnimatedValue<Vector3>;
+  dropShadow?: boolean;
+  alpha?: AnimationOrStatic<number>;
+  color?: AnimationOrStatic<Vector3>;
 }
 
-export type AnimatedValue<T> = {
-  static: true;
-  value: T;
-} | {
-  interpolation: Interpolation;
-  keyFrames: Map<number, T>;
-};
-
-export function geosetsToString(geosets: Geoset[], bones: Bone[], sequences: Sequence[]): string {
+export function geosetsToString(version: number, geosets: Geoset[], bones: Bone[], sequences: Sequence[]): string {
   const getSkinWeight = (vertex: GeosetVertex) => {
     const boneIndices = Array(4).fill(0).map((__, i) => (vertex.skinWeights![i] ? vertex.skinWeights![i].bone.objectId : 0));
     const weights = Array(4).fill(0).map((__, i) => (vertex.skinWeights![i] ? vertex.skinWeights![i].weight : 0));
@@ -66,6 +62,10 @@ export function geosetsToString(geosets: Geoset[], bones: Bone[], sequences: Seq
 
   return geosets.map((geoset) => {
     const useSkinWeights = geoset.vertices.some((v) => v.skinWeights);
+    if (version <= 800 && useSkinWeights) {
+      throw new Error('Skin weights are not supported in MDL 800 or below');
+    }
+
     const useVertexGroup = geoset.vertices.some((v) => v.matrix);
     if (useSkinWeights === useVertexGroup) {
       throw new Error('Geoset must not use skin weight and vertex group at the same time.');
@@ -155,45 +155,19 @@ export function geosetsToString(geosets: Geoset[], bones: Bone[], sequences: Seq
 
       MaterialID ${geoset.material.id},
       SelectionGroup ${geoset.selectionGroup},
-      LevelOfDetail 0,
-      Name "${geoset.name}",
+      ${geoset.unselectable ? 'Unselectable,' : ''}
+      ${version > 800 ? 'LevelOfDetail 0,' : ''}
+      ${version > 800 ? `Name "${geoset.name}",` : ''}
     }`;
   }).join('\n');
 }
 
 export function geosetAnimsToString(geosetAnims: GeosetAnim[]): string {
-  return geosetAnims.map((geosetAnim) => {
-    let colorBlock = '';
-    if (geosetAnim.color) {
-      if ('static' in geosetAnim.color) {
-        colorBlock = `
-          static Color { ${fVector([
-    // MDL color order is blue, green, red
-    geosetAnim.color.value[2],
-    geosetAnim.color.value[1],
-    geosetAnim.color.value[0],
-  ])} },`;
-      } else {
-        const color = geosetAnim.color;
-        colorBlock = animationToString('Color', color);
-      }
-    }
-
-    let alphaBlock = '';
-    if (geosetAnim.alpha) {
-      if ('static' in geosetAnim.alpha) {
-        alphaBlock = `static Alpha ${f(geosetAnim.alpha.value / 32767)},`;
-      } else {
-        const alpha = geosetAnim.alpha;
-        alphaBlock = animationToString('Alpha', alpha);
-      }
-    }
-
-    return `
+  return geosetAnims.map((geosetAnim) => `
     GeosetAnim {
       GeosetId ${geosetAnim.geoset.id},
-      ${colorBlock}
-      ${alphaBlock}
-    }`;
-  }).join('\n');
+      ${geosetAnim.dropShadow ? 'DropShadow,' : ''}
+      ${animatedValueToString('Color', geosetAnim.color)}
+      ${animatedValueToString('Alpha', geosetAnim.alpha)}
+    }`).join('\n');
 }

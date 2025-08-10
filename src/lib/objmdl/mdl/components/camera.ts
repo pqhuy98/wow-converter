@@ -1,5 +1,6 @@
-import { Vector3 } from '@/lib/math/common';
+import { QuaternionRotation, Vector3 } from '@/lib/math/common';
 
+import { Animation, animationToString } from './animation';
 import { fVector } from './formatter';
 
 export interface Camera {
@@ -11,6 +12,9 @@ export interface Camera {
   target: {
     position: Vector3
   }
+  translation?: Animation<Vector3>;
+  scaling?: Animation<Vector3>;
+  rotation?: Animation<QuaternionRotation>;
 }
 
 export function camerasToString(cameras: Camera[]): string {
@@ -23,5 +27,8 @@ export function camerasToString(cameras: Camera[]): string {
       Target {
         Position { ${fVector(cam.target.position)} },
       }
+      ${animationToString('Translation', cam.translation)}
+      ${animationToString('Rotation', cam.rotation)}
+      ${animationToString('Scaling', cam.scaling)}
     }`).join('\n');
 }

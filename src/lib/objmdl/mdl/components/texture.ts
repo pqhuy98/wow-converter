@@ -1,5 +1,6 @@
 export interface Texture {
   id: number
+  replaceableId?: number;
   image: string;
   wrapWidth: boolean;
   wrapHeight: boolean;
@@ -11,6 +12,7 @@ export function texturesToString(textures: Texture[]) {
     ${textures.map((texture) => `
       Bitmap {
         Image "${texture.image}",
+        ${texture.replaceableId ? `ReplaceableId ${texture.replaceableId},` : ''}
         ${texture.wrapWidth ? 'WrapWidth,' : ''}
         ${texture.wrapHeight ? 'WrapHeight,' : ''}
       }`).join('\n')}

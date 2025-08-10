@@ -6,11 +6,11 @@ import _ from 'lodash';
 import { Vector3 } from '@/lib/math/common';
 
 import { BlizzardNull } from '../../constants';
-import { wowToWc3Interpolation } from '../mdl/components/animation';
 import { SkinWeight } from '../mdl/components/geoset';
 import { GlobalSequence } from '../mdl/components/global-sequence';
 import { Bone, NodeFlag } from '../mdl/components/node';
 import { MDL, WowAttachment } from '../mdl/mdl';
+import { wowToWc3Interpolation } from '../utils';
 import { getWacraftSequenceData, getWowAnimName, isLoopAnimation } from './animation_mapper';
 import { getBoneName } from './bones_mapper';
 
@@ -177,8 +177,14 @@ export class AnimationFile implements AnimationData {
       if (bone.flags & 0x40) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_X); // X and Z are swapped?
 
       function isValidTimestamps(timestamps: number[] | null): timestamps is number[] {
-        if (timestamps == null) return false;
-        return !timestamps.some((__, i) => i > 0 && timestamps[i] < timestamps[i - 1] || timestamps[i] > 99999);
+        const isNull = timestamps == null;
+        const isNotIncreasing = timestamps != null
+          && timestamps.some((_, i) => i > 0 && timestamps[i] < timestamps[i - 1] || timestamps[i] > 99999);
+        const isInvalid = isNull || isNotIncreasing;
+        if (isInvalid) {
+          // console.warn(`Invalid timestamps ${timestamps} for bone ${bone.boneNameCRC}`, { isNull, isNotIncreasing});
+        }
+        return !isInvalid;
       }
 
       // Translation
@@ -205,7 +211,12 @@ export class AnimationFile implements AnimationData {
 
         let maxTimestamp = -Infinity;
         timestamps.forEach((timestamp, timestampI) => {
-          const [x, y, z] = bone.translation.values[animId][timestampI];
+          const values = bone.translation.values[animId][timestampI];
+          if (values.length !== 3) {
+            throw new Error(`Invalid Vector3 ${values} for bone ${bone.boneNameCRC} in animation ${this.animations?.[animId]?.id}`);
+          }
+
+          const [x, y, z] = values;
           if (x == null || y == null || z == null) return;
           if (Math.abs(x) > 999999 || Math.abs(y) > 999999 || Math.abs(z) > 999999) return;
           mdlBone.translation!.keyFrames.set(timestamp + startTime, [x, -z, y]);
@@ -262,9 +273,14 @@ export class AnimationFile implements AnimationData {
         }
         if (!isValidTimestamps(timestamps)) {
           if (timestamps != null) {
-            excludedAnimation.add(animId);
+            const ts = timestamps as number[];
+            for (let i = 0; i < ts.length; i++) {
+              ts[i] = Math.round(i / ((ts.length - 1) || 1) * animation.duration);
+            }
+            // excludedAnimation.add(animId);
+          } else {
+            return;
           }
-          return;
         }
         let maxTimestamp = -Infinity;
         timestamps.forEach((timestamp, timestampI) => {
@@ -327,7 +343,7 @@ export class AnimationFile implements AnimationData {
         name: seqData.wc3Name,
         data: seqData,
         interval: [seqAccumTime, seqAccumTime + animation.duration],
-        movementSpeed: animation.movespeed,
+        moveSpeed: animation.movespeed,
         minimumExtent: [animation.boxPosMin[0], -animation.boxPosMax[2], animation.boxPosMin[1]],
         maximumExtent: [animation.boxPosMax[0], -animation.boxPosMin[2], animation.boxPosMax[1]],
         boundsRadius: animation.boxRadius,
@@ -353,7 +369,7 @@ export class AnimationFile implements AnimationData {
           wowName: '', attackTag: '', wc3Name: 'Stand', wowVariant: 0, wowFrequency: 0,
         },
         interval: [0, 1000],
-        movementSpeed: 0,
+        moveSpeed: 0,
         minimumExtent: [-1, -1, -1],
         maximumExtent: [1, 1, 1],
         boundsRadius: 1,
