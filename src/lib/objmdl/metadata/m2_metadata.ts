@@ -5,9 +5,13 @@ import { BlizzardNull } from '../../constants';
 import { Config } from '../../global-config';
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { AnimationFile } from '../animation/animation';
-import {
-  Geoset, GlobalSequence, m2BlendModeToWc3FilterMode, Material, MDL, Texture, TextureAnim, wowToWc3Interpolation,
-} from '../mdl/mdl';
+import { wowToWc3Interpolation } from '../mdl/components/animation';
+import { Geoset } from '../mdl/components/geoset';
+import { GlobalSequence } from '../mdl/components/global-sequence';
+import { m2BlendModeToWc3FilterMode, Material } from '../mdl/components/material';
+import { Texture } from '../mdl/components/texture';
+import { TextureAnim } from '../mdl/components/texture-anim';
+import { MDL } from '../mdl/mdl';
 
 namespace Data {
   export interface Texture {
@@ -265,7 +269,7 @@ export class M2MetadataFile {
           let maxTimestamp = -Infinity;
           values.forEach((value, i) => {
             if (!('keyFrames' in geosetAnim.alpha!)) throw new Error('Field keyframes is missing in geosetAnim.alpha. This should never happen.');
-            geosetAnim.alpha.keyFrames.set(timestamps[i] + accumTime, value);
+            geosetAnim.alpha.keyFrames.set(timestamps[i] + accumTime, value / 32767);
             maxTimestamp = Math.max(maxTimestamp, timestamps[i] + accumTime);
           });
           if (maxTimestamp >= -1) {

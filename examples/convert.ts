@@ -21,12 +21,12 @@ const WowMap = {
 
 const maps: [WowMap, [number, number], [number, number], string][] = [
   // [WowMap.Northrend, [28, 29], [22, 23], 'wrathgate.w3x'],
-  // [WowMap.Northrend, [29, 30], [18, 19], 'icecrown.w3x'],
+  [WowMap.Northrend, [29, 30], [18, 19], 'icecrown.w3x'],
   // [WowMap.IcecrownCitadel, [27, 28], [31, 33], 'icc-floor12.w3x'],
   // [WowMap.IcecrownCitadel, [25, 28], [21, 24], 'icc-floor34.w3x'],
   // [WowMap.IcecrownCitadel, [35, 36], [30, 31], 'frozen-throne.w3x'],
   // [WowMap.Azeroth, [32, 32], [48, 48], 'northshire-abbey.w3x'],
-  [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
+  // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
   // [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
   // [WowMap.TheMaw, [17, 19], [22, 23], 'themaw2.w3x'],
   // [WowMap.TheMaw, [19, 21], [22, 25], 'themaw3.w3x'],
@@ -55,7 +55,7 @@ const mapExportConfig: MapExportConfig = {
   terrain: {
     clampPercent: {
       lower: 0,
-      upper: 0.3 * 2,
+      upper: 1,
       // lower: gameZToPercent(1400),
       // upper: gameZToPercent(2600),
     },

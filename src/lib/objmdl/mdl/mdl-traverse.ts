@@ -1,7 +1,9 @@
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, quatNoRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
-import { MDL, Node, Sequence } from './mdl';
+import { Node } from './components/node';
+import { Sequence } from './components/sequence';
+import { MDL } from './mdl';
 
 export interface Value {
   position: Vector3
@@ -61,7 +63,7 @@ export function iterateNodesAtTimestamp(mdl: MDL, sequence: Sequence, timestamp:
   });
 }
 
-export function interpolateTransformEuler(node: Node, sequence: Sequence, timestamp: number): Value {
+function interpolateTransformEuler(node: Node, sequence: Sequence, timestamp: number): Value {
   const value = interpolateTransformQuat(node, sequence, timestamp);
   return {
     position: value.position,

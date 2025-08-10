@@ -6,9 +6,11 @@ import _ from 'lodash';
 import { Vector3 } from '@/lib/math/common';
 
 import { BlizzardNull } from '../../constants';
-import {
-  Bone, GlobalSequence, MDL, NodeFlag, SkinWeight, WowAttachment, wowToWc3Interpolation,
-} from '../mdl/mdl';
+import { wowToWc3Interpolation } from '../mdl/components/animation';
+import { SkinWeight } from '../mdl/components/geoset';
+import { GlobalSequence } from '../mdl/components/global-sequence';
+import { Bone, NodeFlag } from '../mdl/components/node';
+import { MDL, WowAttachment } from '../mdl/mdl';
 import { getWacraftSequenceData, getWowAnimName, isLoopAnimation } from './animation_mapper';
 import { getBoneName } from './bones_mapper';
 

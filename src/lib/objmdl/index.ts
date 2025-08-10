@@ -5,10 +5,10 @@ import path from 'path';
 
 import { Config } from '../global-config';
 import { AnimationFile } from './animation/animation';
-import {
-  GeosetVertex, Material, Matrix, MDL, SkinWeight,
-  Texture,
-} from './mdl/mdl';
+import { GeosetVertex, Matrix, SkinWeight } from './mdl/components/geoset';
+import { Material } from './mdl/components/material';
+import { Texture } from './mdl/components/texture';
+import { MDL } from './mdl/mdl';
 import { M2MetadataFile } from './metadata/m2_metadata';
 import { MTLFile } from './mtl';
 import { IFace, IGroup, OBJFile } from './obj';

@@ -24,7 +24,6 @@ export class AssetManager {
 
     const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
     const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
-    // console.log('Parsing model', objFullPath);
     const { mdl, texturePaths } = convertWowExportModel(objFullPath, this.config);
     const model: Model = {
       relativePath: path.join(this.config.assetPrefix, `${objectPath}.mdl`),
@@ -50,7 +49,7 @@ export class AssetManager {
 
       const mdl = model.mdl;
       if (mdl.model.boundsRadius > this.config.infiniteExtentBoundRadiusThreshold) {
-        mdl.modify.setLargeExtents();
+        mdl.modify.setLargeBounds();
       }
       mkdirSync(path.dirname(fullPath), { recursive: true });
       const data = this.config.mdx ? model.mdl.toMdx() : model.mdl.toMdl();

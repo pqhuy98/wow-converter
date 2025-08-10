@@ -1,4 +1,4 @@
-import { BlendMode } from './mdl/mdl';
+import { BlendMode } from './mdl/components/material';
 
 const noneFilterPatterns = [
   'textures\\walls',

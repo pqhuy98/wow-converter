@@ -6,9 +6,16 @@ import { EulerRotation, Vector2, Vector3 } from '../../math/common';
 import { V3 } from '../../math/vector';
 import { WowAnimName } from '../animation/animation_mapper';
 import { WoWAttachmentID, WoWToWC3AttachmentMap } from '../animation/bones_mapper';
+import { Animation } from './components/animation';
+import { Bound } from './components/extent';
 import {
-  Bone, Extents, Face, Geoset, GeosetVertex, GlobalSequence, Material, Matrix, MDL, Node, Sequence, SkinWeight, Texture, TransformAnimation,
-} from './mdl';
+  Face, Geoset, GeosetVertex, Matrix, SkinWeight,
+} from './components/geoset';
+import { Material } from './components/material';
+import { Bone, Node } from './components/node';
+import { Sequence } from './components/sequence';
+import { Texture } from './components/texture';
+import { MDL } from './mdl';
 import {
   buildChildrenLists, interpolateTransformQuat, iterateNodesAtTimestamp, Value,
 } from './mdl-traverse';
@@ -17,8 +24,8 @@ export class MDLModify {
   constructor(public mdl: MDL) {
   }
 
-  setLargeExtents() {
-    this.mdl.extendsOverriden = (obj: Extents) => {
+  setLargeBounds() {
+    this.mdl.boundsOverriden = (obj: Bound) => {
       const min = obj.minimumExtent;
       const max = obj.maximumExtent;
       for (let i = 0; i < 3; i++) {
@@ -31,8 +38,8 @@ export class MDLModify {
     return this;
   }
 
-  setInfiniteExtents() {
-    this.mdl.extendsOverriden = (obj: Extents) => {
+  setInfiniteBounds() {
+    this.mdl.boundsOverriden = (obj: Bound) => {
       const min = obj.minimumExtent;
       const max = obj.maximumExtent;
       for (let i = 0; i < 3; i++) {
@@ -108,11 +115,6 @@ export class MDLModify {
       cam.target.position = V3.rotate(cam.target.position, eulerRotation);
     });
     this.mdl.sync();
-    return this;
-  }
-
-  updateGlobalSequenceDuration(globalSeq: GlobalSequence, ...values: number[]) {
-    globalSeq.duration = Math.max(globalSeq.duration, ...values);
     return this;
   }
 
@@ -233,7 +235,7 @@ export class MDLModify {
       return i < seqIntervals.length && seqIntervals[i][0] <= timestamp;
     };
 
-    const optimiseAnim = <T extends number[]>(anim: TransformAnimation<T>, threshold: number) => {
+    const optimiseAnim = <T extends number[]>(anim: Animation<T>, threshold: number) => {
       if (!anim || anim.keyFrames.size <= 2) return; // nothing to prune
 
       const times = Array.from(anim.keyFrames.keys()).sort((a, b) => a - b);
