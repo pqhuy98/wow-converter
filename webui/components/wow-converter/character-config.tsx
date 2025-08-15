@@ -1,0 +1,288 @@
+import { AttackTag, Character, ModelSize } from "@/lib/models/export-character.model"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
+import { TooltipProvider, TooltipTrigger, TooltipContent, Tooltip } from "@/components/ui/tooltip"
+import { User, HelpCircle } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { RefInput } from "./ref-input"
+
+const attackTagOptions: { value: AttackTag | "all", label: string, description: string }[] = [
+  { value: "all", label: "All", description: "Include all attack animations" },
+  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapon(s)" },
+  { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
+  { value: "2HL", label: "2HL Weapon", description: "The model uses a 2H polearm" },
+  { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
+  // { value: "Bow", label: "Bow", description: "The model uses a bow." },
+  // { value: "Rifle", label: "Rifle", description: "The model uses a rifle." },
+  // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
+]
+
+const sizeOptions: { value: ModelSize | "none", label: string, description: string }[] = [
+  { value: "none", label: "Default", description: "Original WoW size times 56" },
+  { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
+  { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
+  { value: "large", label: "Large", description: "As tall as Undead Abomination" },
+  { value: "hero", label: "Hero", description: "As tall as Tauren Chieftain" },
+  { value: "giant", label: "Giant", description: "As tall as Flesh Golem" },
+]
+
+const portraitSuggestions = ["Stand", "Stand Ready"]
+
+export function CharacterConfig({
+  character,
+  setCharacter,
+  tooltips,
+}: {
+  character: Character
+  setCharacter: React.Dispatch<React.SetStateAction<Character>>
+  tooltips: {
+    baseModel: string
+    attackAnimation: string
+    characterSize: string
+    movementSpeed: string
+    scaleMultiplier: string
+    keepCinematic: string
+    noDecay: string
+    portraitCamera: string
+  }
+}) {
+  return <Card>
+    <CardHeader className="pb-4">
+      <CardTitle className="flex items-center gap-2 text-lg">
+        <User className="h-5 w-5" />
+        Character Configuration
+      </CardTitle>
+      <CardDescription>Configure the base character model and its properties</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <RefInput
+        value={character.base}
+        onChange={(base) => {
+          setCharacter((prev) => ({ ...prev, base }))
+        }}
+        label="Base Model"
+        tooltip={tooltips.baseModel}
+        category="npc"
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm">Attack Animation</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">{tooltips.attackAnimation}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <Select
+            value={character.attackTag || "all"}
+            onValueChange={(value: AttackTag | "all") =>
+              setCharacter((prev) => ({
+                ...prev,
+                attackTag: value === "all" ? undefined : (value as AttackTag),
+              }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select attack type" />
+            </SelectTrigger>
+            <SelectContent align="start">
+              {attackTagOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <div className="flex flex-col">
+                    <span className="text-left">{option.label}</span>
+                    <span className="text-xs text-muted-foreground">{option.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm">Character Size</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">{tooltips.characterSize}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <Select
+            value={character.size || "none"}
+            onValueChange={(value: string) =>
+              setCharacter((prev) => ({
+                ...prev,
+                size: value === "none" ? undefined : (value as ModelSize),
+              }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select size" />
+            </SelectTrigger>
+            <SelectContent align="start">
+              {sizeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <div className="flex flex-col">
+                    <span className="text-left">{option.label}</span>
+                    <span className="text-xs text-muted-foreground">{option.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex items-center gap-3">
+          <Label htmlFor="movespeed" className="text-sm min-w-fit">
+            Animation Walk Speed
+          </Label>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">{tooltips.movementSpeed}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Input
+            id="movespeed"
+            type="number"
+            step="1"
+            value={character.inGameMovespeed || ""}
+            onChange={(e) =>
+              setCharacter((prev) => ({ ...prev, inGameMovespeed: Number.parseInt(e.target.value) || 0 }))
+            }
+            className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Label htmlFor="scale" className="text-sm min-w-fit">
+            Scale Multiplier
+          </Label>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">{tooltips.scaleMultiplier}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Input
+            id="scale"
+            type="number"
+            step="0.1"
+            placeholder="1.0"
+            value={character.scale || ""}
+            onChange={(e) =>
+              setCharacter((prev) => ({ ...prev, scale: Number.parseFloat(e.target.value) || undefined }))
+            }
+            className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <div className="space-y-3">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="keepCinematic"
+            checked={character.keepCinematic || false}
+            onCheckedChange={(checked) => setCharacter((prev) => ({ ...prev, keepCinematic: checked as boolean }))}
+          />
+          <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
+            Keep Cinematic Animations
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">{tooltips.keepCinematic}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="noDecay"
+            checked={character.noDecay || false}
+            onCheckedChange={(checked) => setCharacter((prev) => ({ ...prev, noDecay: checked as boolean }))}
+          />
+          <Label htmlFor="noDecay" className="flex items-center gap-2 text-sm">
+            No Decay
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">{tooltips.noDecay}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="portraitCamera" className="text-sm">
+            Portrait Camera Sequence
+          </Label>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">{tooltips.portraitCamera}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <div className="relative">
+          <Input
+            id="portraitCamera"
+            placeholder="Enter sequence name..."
+            value={character.portraitCameraSequenceName || ""}
+            onChange={(e) =>
+              setCharacter((prev) => ({ ...prev, portraitCameraSequenceName: e.target.value || undefined }))
+            }
+            list="portrait-suggestions"
+            className="border-2 border-gray-300 bg-white focus:border-blue-500"
+          />
+          <datalist id="portrait-suggestions">
+            {portraitSuggestions.map((suggestion) => (
+              <option key={suggestion} value={suggestion} />
+            ))}
+          </datalist>
+        </div>
+      </div>
+      </div>
+    </CardContent>
+  </Card>
+}

@@ -7,13 +7,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Plus, Trash2, Download, User, Sword, HelpCircle, AlertCircle, History, CheckCircle } from "lucide-react"
+import { Download, HelpCircle, History } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { host } from "@/app/config"
 import ModelViewerUi from "./model-viewer"
-import { commonAttachments, otherAttachments, RefSchema, RefType, Character, AttachItem, ExportRequest, AttackTag, ModelFormat, ModelSize, JobStatus, ModelFormatVersion, Config } from "@/lib/models/export-character.model"
+import { commonAttachments, otherAttachments, Character, AttachItem, ExportRequest, ModelFormat, JobStatus, ModelFormatVersion, RefSchema } from "@/lib/models/export-character.model"
+import _ from "lodash"
+import { validateRef, isLocalRef } from "@/components/wow-converter/ref-input"
+import { setServerConfig } from "@/lib/config"
+import { CharacterConfig } from "@/components/wow-converter/character-config"
+import { AttachItems } from "@/components/wow-converter/attach-items"
 
 
 // Tooltips organized in a record
@@ -38,306 +42,39 @@ const tooltips = {
   formatVersion: "Model format version (HD vs SD). HD models work in all Warcraft 3 Retail's Reforged and Classic graphics modes, it has the highest fidelity with precise WoW model data. However HD models cannot be opened in legacy modeling tools like Magos Model Editor. If you want to use those legacy tools for post-processing, choose SD 800 instead. WARNING: wow-converter might export very broken SD models on complex WoW models. SD conversion does not guarantee to work, after exporting you need to check if each animation is working.",
 }
 
-const attackTagOptions: { value: AttackTag | "all", label: string, description: string }[] = [
-  { value: "all", label: "All", description: "Include all attack animations" },
-  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapon(s)" },
-  { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
-  { value: "2HL", label: "2HL Weapon", description: "The model uses a 2H polearm" },
-  { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
-  // { value: "Bow", label: "Bow", description: "The model uses a bow." },
-  // { value: "Rifle", label: "Rifle", description: "The model uses a rifle." },
-  // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
-]
-
-const sizeOptions: { value: ModelSize | "none", label: string, description: string }[] = [
-  { value: "none", label: "Default", description: "Original WoW size times 56" },
-  { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
-  { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
-  { value: "large", label: "Large", description: "As tall as Undead Abomination" },
-  { value: "hero", label: "Hero", description: "As tall as Tauren Chieftain" },
-  { value: "giant", label: "Giant", description: "As tall as Flesh Golem" },
-]
-
-let serverConfig: Config | null = null
 
 
-function AttachmentSelector({
-  value,
-  onChange,
-  usedIds,
-}: {
-  value: number
-  onChange: (id: number) => void
-  usedIds: Set<number>
-}) {
-  const availableCommon = commonAttachments.filter((att) => att.id === value || !usedIds.has(att.id))
-  const availableOther = otherAttachments.filter((att) => att.id === value || !usedIds.has(att.id))
+const defaultCharacter = {
+  base: { type: 'wowhead', value: 'https://www.wowhead.com/npc=71865/garrosh-hellscream' },
+  size: 'hero',
+  attackTag: '2H',
+  inGameMovespeed: 270,
+  attachItems: {
+    1: {
+      path: { type: 'wowhead', value: 'https://www.wowhead.com/item=28773/gorehowl' },
+    },
+  },
+  portraitCameraSequenceName: 'Stand',
+} as const
 
-  return (
-    <Select value={value.toString()} onValueChange={(val) => onChange(Number(val))}>
-      <SelectTrigger>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent align="start">
-        {availableCommon.map((attachment) => (
-          <SelectItem key={attachment.id} value={attachment.id.toString()}>
-            {attachment.name} ({attachment.id})
-          </SelectItem>
-        ))}
-        {availableOther.length > 0 && (
-          <>
-            <div className="px-2 py-1.5 text-xs text-muted-foreground border-t">Other attachments (untested):</div>
-            {availableOther.map((attachment) => (
-              <SelectItem key={attachment.id} value={attachment.id.toString()}>
-                {attachment.name} ({attachment.id})
-              </SelectItem>
-            ))}
-          </>
-        )}
-      </SelectContent>
-    </Select>
-  )
-}
-
-type RefCategory = "npc" | "item"
-
-function RefInput({
-  value,
-  onChange,
-  label,
-  tooltipKey,
-  category,
-}: {
-  value: RefSchema
-  onChange: (ref: RefSchema) => void
-  label: string
-  tooltipKey: keyof typeof tooltips
-  category: RefCategory
-}) {
-  const [currentValue, setCurrentValue] = useState<RefSchema>(value)
-  
-  const [clientValidationResult, setClientValidationResult] = useState<{ ok: boolean, error: string | null } | null>(null)
-  const [serverValidationResult, setServerValidationResult] = useState<{ ok: boolean, similarFiles: string[], error: string | null } | null>(null)
-
-  const clientValidation = useCallback((value: RefSchema, fix: boolean) => {
-    console.log("clientValidation", {...value})
-    const error = validateRef(value, category, fix)
-    if (fix) {
-      console.log("fix", {...value})
-      setCurrentValue({...value})
-      onChange({...value})
-    }
-    if (error) {
-      setClientValidationResult({ ok: false, error })
-      return false
-    }
-    setClientValidationResult({ ok: true, error: null })
-    return true
-  }, [])
-
-  const fullValidAndFix = useCallback(async (value: RefSchema) => {
-    if (!clientValidation(value, true)) return
-    if (value.type === "local") {
-      fetch(`${host}/export/character/check-local-file?localPath=${value.value}`)
-        .then(res => res.json())
-        .then(data => setServerValidationResult(data))
-    } else {
-      setServerValidationResult({ ok: true, similarFiles: [], error: null })
-    }
-  }, [])
-
-  const localFileNotFound = serverValidationResult && value.type === "local" && !serverValidationResult.ok
-  const otherSkins = serverValidationResult?.similarFiles.filter(file => file !== currentValue.value) ?? []
-  const hasOtherSkins = serverValidationResult && value.type === "local"
-    && otherSkins.length > 0
-    && otherSkins.every(file => file.startsWith(currentValue.value.replaceAll('.obj', '').replaceAll("/", "\\")))
-
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Label className="text-sm font-medium">{label}</Label>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <HelpCircle className="h-4 w-4 text-muted-foreground" />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="max-w-xs">{tooltips[tooltipKey]}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <Select value={value.type} onValueChange={(type: RefType) => {
-          fullValidAndFix({ ...currentValue, type })
-        }}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="start">
-            <SelectItem value="wowhead">Wowhead URL</SelectItem>
-            {!serverConfig?.isSharedHosting ? (
-              <SelectItem value="local">Local File</SelectItem>
-            ) : null}
-            <SelectItem value="displayID">Display ID</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <div className="md:col-span-2">
-          <Input
-            placeholder={
-              value.type === "local"
-                ? "Enter relative OBJ file name..."
-                : value.type === "wowhead"
-                  ? `https://www.wowhead.com/${category}=12345/...`
-                  : "Enter Display ID number..."
-            }
-            value={currentValue.value}
-            onChange={(e) => {
-              console.log("new", e.target.value)
-              const newValue = { ...currentValue, value: e.target.value }
-              setCurrentValue(newValue)
-              clientValidation(newValue, false)
-            }}
-            // detect paste
-            onPaste={(e) => {
-              const newValue = { ...currentValue, value: e.clipboardData.getData('text').trim() }
-              e.preventDefault()
-              e.stopPropagation()
-              fullValidAndFix(newValue)
-            }}
-            onBlur={() => {
-              fullValidAndFix(currentValue)
-            }}
-            className={`border-2 bg-white text-left ${clientValidationResult && !clientValidationResult.ok ? "border-red-500" : "border-gray-300 focus:border-blue-500"}`}
-          />
-          {clientValidationResult && clientValidationResult.error && (
-            <div className="flex items-center gap-1 mt-1 text-sm text-red-600">
-              <AlertCircle className="h-3 w-3" />
-              {clientValidationResult.error}
-            </div>
-          )}
-
-          {localFileNotFound ? (
-            <div className="flex items-center gap-1 mt-1 text-sm text-red-600">
-              <AlertCircle className="h-3 w-3" />
-              Local file not found
-            </div>
-          ) : null}
-
-          {hasOtherSkins
-            ? (<div className="flex flex-col  ">
-                <div className={`flex items-center gap-1 mt-1 text-sm ${localFileNotFound ? "text-red-600" : "text-green-600"}`}>
-                  {!localFileNotFound && <CheckCircle className="h-3 w-3" />}
-                  {localFileNotFound ? "Do you mean:" : "Other related skins:"}
-                </div>
-                <ul className="list-disc list-outside text-left mx-auto max-w-md text-sm">
-                  {serverValidationResult.similarFiles.filter(file => file !== currentValue.value).map(file =>
-                    <li key={file}
-                      onClick={() => {
-                        const newValue = { ...value, value: file.replaceAll('"', '') }
-                        setCurrentValue(newValue)
-                        onChange(newValue)
-                        clientValidation(newValue, true)
-                        fullValidAndFix(newValue)
-                      }}
-                      className="text-blue-500 cursor-pointer hover:underline">
-                        {file}
-                    </li>
-                  )}
-                </ul>
-              </div>)
-            : null
-          }
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const localRefPattern = /^[a-zA-Z0-9_\-\/\\]+(\.obj)?$/
-
-export function isLocalRef(val: string) {
-  if (!localRefPattern.test(val)) return false;
-  // Must not be absolute path
-  // Must not contain ".." as a path segment
-  if (val.split("/").some((seg) => seg === "..")) return false;
-  // Must not start with "/" or "\"
-  if (val.startsWith("/") || val.startsWith("\\")) return false;
-  // Must not contain null bytes or suspicious chars
-  if (val.includes("\0")) return false;
-  return true;
-}
-
-const wowheadPattern = {
-  npc: new RegExp(`^https://www\\.wowhead\\.com/(?:[a-z\-]+/)?npc=`),
-  item: new RegExp(`^https://www\\.wowhead\\.com/(?:[a-z\-]+/)?item=`),
-}
-
-const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean): string | null => {
-  if (ref.type === "wowhead") {
-    // Allow URLs with expansion prefixes like /wotlk/, /classic/, etc. (only a-z characters)
-    if (!wowheadPattern[category].test(ref.value)) {
-      return "Invalid Wowhead URL, must contain /" + category + "=..."
-    }
-  }
-  if (ref.type === "local") {
-    if (fix) {
-      if (ref.value.startsWith("\"")) ref.value = ref.value.slice(1)
-      if (ref.value.endsWith("\"")) ref.value = ref.value.slice(0, -1)
-      if (serverConfig?.wowExportAssetDir && ref.value.startsWith(serverConfig.wowExportAssetDir)) {
-        ref.value = ref.value.slice(serverConfig.wowExportAssetDir.length)
-      }
-      if (ref.value.startsWith("/") || ref.value.startsWith("\\")) ref.value = ref.value.slice(1)
-      if (/\[[0-9]+\]/.test(ref.value)) ref.value = ref.value.replace(/\[[0-9]+\]/, "")
-      if (ref.value.endsWith(".m2")) ref.value = ref.value.slice(0, -3) + ".obj"
-      if (ref.value.endsWith(".wmo")) ref.value = ref.value.slice(0, -3) + ".obj"
-      if (!ref.value.endsWith(".obj")) ref.value += ".obj"
-      if (ref.value.includes("/")) ref.value = ref.value.replaceAll("/", "\\")
-    }
-    if (!isLocalRef(ref.value)) {
-      return "Invalid local file path"
-    }
-  }
-  if (ref.type === "displayID" && isNaN(Number(ref.value))) {
-    return "Invalid Display ID, must be a number"
-  }
-  return null
-}
-
-const portraitSuggestions = ["Stand", "Stand Ready"]
 
 export default function WoWNPCExporter() {
   useEffect(() => {
     fetch(`${host}/export/character/config`)
       .then(res => res.json())
       .then((config) => {
-        serverConfig = config
+        setServerConfig(config)
       })
   }, [])
 
+  const [character, setCharacter] = useState<Character>(_.cloneDeep(defaultCharacter))
 
-  const [character, setCharacter] = useState<Character>({
-    base: { type: 'wowhead', value: 'https://www.wowhead.com/npc=71865/garrosh-hellscream' },
-    size: 'hero',
-    attackTag: '2H',
-    inGameMovespeed: 270,
-    attachItems: {
-      1: {
-        path: { type: 'wowhead', value: 'https://www.wowhead.com/item=28773/gorehowl' },
-      },
-    },
-    portraitCameraSequenceName: 'Stand',
-  })
-
-  const [outputFileName, setOutputFileName] = useState(getNpcNameFromWowheadUrl(character.base.value) ?? "")
+  // Guess output file name from base model value
+  const [outputFileName, setOutputFileName] = useState(guessOutputFileWowhead(character.base.value) ?? "")
   useEffect(() => {
-    if (character.base.type !== "wowhead") return
-    const npcName = getNpcNameFromWowheadUrl(character.base.value)
-    if (npcName) {
-      setOutputFileName(npcName)
+    const guessed = guessOutputFile(character.base)
+    if (guessed) {
+      setOutputFileName(guessed)
     }
   }, [character.base.value])
 
@@ -379,34 +116,39 @@ export default function WoWNPCExporter() {
       }
     }
 
-    setCharacter({
-      ...character,
+    setCharacter((prev) => ({
+      ...prev,
       attachItems: {
-        ...character.attachItems,
+        ...prev.attachItems,
         [newId]: {
-          path: { type: "wowhead", value: Object.keys(character.attachItems || {}).length === 0 ? "https://www.wowhead.com/item=40276/monster-sword-1h-highlord-darion-mograine-non-instanced" : "" },
+          path: {
+            type: "wowhead",
+            value: Object.keys(prev.attachItems || {}).length === 0
+            ? defaultCharacter.attachItems[1].path.value
+            : "" },
         },
       },
-    })
+    }))
   }
 
   const removeAttachItem = (id: number) => {
-    const newAttachItems = { ...character.attachItems }
-    delete newAttachItems[id]
-    setCharacter({ ...character, attachItems: newAttachItems })
-  }
-
-  const updateAttachItem = (id: number, item: AttachItem) => {
-    setCharacter({
-      ...character,
-      attachItems: {
-        ...character.attachItems,
-        [id]: item,
-      },
+    return setCharacter((prev) => {
+      const newAttachItems = { ...prev.attachItems }
+      delete newAttachItems[id]
+      return { ...prev, attachItems: newAttachItems }
     })
   }
 
-  const [isValidForExport, setIsValidForExport] = useState(true)
+  const updateAttachItem = (id: number, item: AttachItem) => {
+    return setCharacter((prev) => ({
+      ...prev,
+      attachItems: {
+        ...prev.attachItems,
+        [id]: {...item},
+      },
+    }))
+  }
+
   const checkExportValid = useCallback(() => {
     // Check base model
     if (validateRef(character.base, "npc", true)) return "Invalid base model"
@@ -597,362 +339,19 @@ export default function WoWNPCExporter() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Character Configuration */}
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <User className="h-5 w-5" />
-                Character Configuration
-              </CardTitle>
-              <CardDescription>Configure the base character model and its properties</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <RefInput
-                value={character.base}
-                onChange={(base) => {
-                  setCharacter({ ...character, base })
-                }}
-                label="Base Model"
-                tooltipKey="baseModel"
-                category="npc"
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">Attack Animation</Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.attackAnimation}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Select
-                    value={character.attackTag || "all"}
-                    onValueChange={(value: AttackTag | "all") =>
-                      setCharacter({
-                        ...character,
-                        attackTag: value === "all" ? undefined : (value as AttackTag),
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select attack type" />
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      {attackTagOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          <div className="flex flex-col">
-                            <span className="text-left">{option.label}</span>
-                            <span className="text-xs text-muted-foreground">{option.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">Character Size</Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.characterSize}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Select
-                    value={character.size || "none"}
-                    onValueChange={(value: string) =>
-                      setCharacter({
-                        ...character,
-                        size: value === "none" ? undefined : (value as ModelSize),
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select size" />
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      {sizeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          <div className="flex flex-col">
-                            <span className="text-left">{option.label}</span>
-                            <span className="text-xs text-muted-foreground">{option.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="movespeed" className="text-sm min-w-fit">
-                    Animation Walk Speed
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-xs">{tooltips.movementSpeed}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Input
-                    id="movespeed"
-                    type="number"
-                    step="1"
-                    value={character.inGameMovespeed || ""}
-                    onChange={(e) =>
-                      setCharacter({ ...character, inGameMovespeed: Number.parseInt(e.target.value) || 0 })
-                    }
-                    className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="scale" className="text-sm min-w-fit">
-                    Scale Multiplier
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-xs">{tooltips.scaleMultiplier}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Input
-                    id="scale"
-                    type="number"
-                    step="0.1"
-                    placeholder="1.0"
-                    value={character.scale || ""}
-                    onChange={(e) =>
-                      setCharacter({ ...character, scale: Number.parseFloat(e.target.value) || undefined })
-                    }
-                    className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="keepCinematic"
-                    checked={character.keepCinematic || false}
-                    onCheckedChange={(checked) => setCharacter({ ...character, keepCinematic: checked as boolean })}
-                  />
-                  <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
-                    Keep Cinematic Animations
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.keepCinematic}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="noDecay"
-                    checked={character.noDecay || false}
-                    onCheckedChange={(checked) => setCharacter({ ...character, noDecay: checked as boolean })}
-                  />
-                  <Label htmlFor="noDecay" className="flex items-center gap-2 text-sm">
-                    No Decay
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.noDecay}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="portraitCamera" className="text-sm">
-                    Portrait Camera Sequence
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-xs">{tooltips.portraitCamera}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <div className="relative">
-                  <Input
-                    id="portraitCamera"
-                    placeholder="Enter sequence name..."
-                    value={character.portraitCameraSequenceName || ""}
-                    onChange={(e) =>
-                      setCharacter({ ...character, portraitCameraSequenceName: e.target.value || undefined })
-                    }
-                    list="portrait-suggestions"
-                    className="border-2 border-gray-300 bg-white focus:border-blue-500"
-                  />
-                  <datalist id="portrait-suggestions">
-                    {portraitSuggestions.map((suggestion) => (
-                      <option key={suggestion} value={suggestion} />
-                    ))}
-                  </datalist>
-                </div>
-              </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Attached Items */}
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Sword className="h-5 w-5" />
-                Attached Items
-              </CardTitle>
-              <CardDescription>Add weapons and other items to attach to the character</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-3">
-                {Object.entries(character.attachItems || {}).map(([id, item]) => {
-                  const attachmentId = Number(id)
-                  const usedIds = new Set(Object.keys(character.attachItems || {}).map(Number))
-                  const attachmentName =
-                    [...commonAttachments, ...otherAttachments].find((att) => att.id === attachmentId)?.name ||
-                    "Unknown"
-
-                  return (
-                    <Card key={id} className="p-3 bg-blue-50 border-blue-200">
-                      <div className="flex items-start justify-between mb-3">
-                        <Badge variant="secondary" className="text-xs">
-                          {attachmentName} ({attachmentId})
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeAttachItem(attachmentId)}
-                          className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-
-                      <div className="space-y-3">
-                        <RefInput
-                          value={item.path}
-                          onChange={(path) => updateAttachItem(attachmentId, { ...item, path })}
-                          label="Item Reference"
-                          tooltipKey="itemReference"
-                          category="item"
-                        />
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <Label className="text-sm">Attachment Point</Label>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="max-w-xs">{tooltips.attachmentPoint}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                            <AttachmentSelector
-                              value={attachmentId}
-                              onChange={(newId) => {
-                                // Move the item to the new attachment ID
-                                const newAttachItems = { ...character.attachItems }
-                                delete newAttachItems[attachmentId]
-                                newAttachItems[newId] = item
-                                setCharacter({ ...character, attachItems: newAttachItems })
-                              }}
-                              usedIds={usedIds}
-                            />
-                          </div>
-
-                          <div className="flex items-end gap-3">
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <Label htmlFor={`scale-${id}`} className="text-sm">
-                                  Scale
-                                </Label>
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger>
-                                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="max-w-xs">{tooltips.itemScale}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
-                              <Input
-                                id={`scale-${id}`}
-                                type="number"
-                                step="0.1"
-                                placeholder="1.0"
-                                value={item.scale || ""}
-                                onChange={(e) =>
-                                  updateAttachItem(attachmentId, {
-                                    ...item,
-                                    scale: Number.parseFloat(e.target.value) || undefined,
-                                  })
-                                }
-                                className="border-2 border-gray-300 bg-white focus:border-blue-500"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
-
-              <Button onClick={addAttachItem} variant="outline" className="w-full bg-transparent">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Attached Item
-              </Button>
-            </CardContent>
-          </Card>
+          <CharacterConfig
+            character={character}
+            setCharacter={setCharacter}
+            tooltips={tooltips}
+          />
+          <AttachItems
+            character={character}
+            setCharacter={setCharacter}
+            tooltips={tooltips}
+            removeAttachItem={removeAttachItem}
+            updateAttachItem={updateAttachItem}
+            addAttachItem={addAttachItem}
+          />
         </div>
 
         {/* Export Settings */}
@@ -1027,7 +426,7 @@ export default function WoWNPCExporter() {
               </div>
 
               <div className="md:col-span-3">
-                <Button onClick={handleExport} disabled={isExporting || !isValidForExport || jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} className="w-full" size="lg">
+                <Button onClick={handleExport} disabled={isExporting || jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} className="w-full" size="lg">
                   {isExporting ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -1264,7 +663,20 @@ export default function WoWNPCExporter() {
   )
 }
 
-function getNpcNameFromWowheadUrl(url: string) {
+function guessOutputFile(ref: RefSchema) {
+  if (ref.type === "wowhead") {
+    return guessOutputFileWowhead(ref.value)
+  }
+  if (ref.type === "local") {
+    return guessOutputFileLocalPath(ref.value)
+  }
+  if (ref.type === "displayID") {
+    return guessOutputFileDisplayId(Number(ref.value))
+  }
+  return undefined
+}
+
+function guessOutputFileWowhead(url: string) {
   // extract npc name from ...npc=1234/name, handling expansion prefixes
   url = url.split("#")[0].split("?")[0]
   const parts = url.split("/")
@@ -1277,4 +689,14 @@ function getNpcNameFromWowheadUrl(url: string) {
     }
   }
   return undefined
+}
+
+function guessOutputFileLocalPath(path: string) {
+  // extract item name from creature\druidcat2\druidcat2_artifact3_green.obj
+  return path.split("\\").pop()?.split(".")[0]
+}
+
+function guessOutputFileDisplayId(displayId: number) {
+  // get npc name from display id
+  return `creature-${displayId}`
 }

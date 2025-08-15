@@ -149,9 +149,16 @@ const GEOSET_GROUPS = {
 const MODEL_SLOTS = new Set([EquipmentSlot.Head.toString(), EquipmentSlot.Shoulder.toString()]);
 
 export const baseUrls = [
-  'https://wow.zamimg.com/modelviewer/live',
+  'https://wow.zamimg.com/modelviewer/classic',
+  'https://wow.zamimg.com/modelviewer/tbc',
   'https://wow.zamimg.com/modelviewer/wrath',
-];
+  'https://wow.zamimg.com/modelviewer/cata',
+  'https://wow.zamimg.com/modelviewer/mists',
+  'https://wow.zamimg.com/modelviewer/live',
+  'https://wow.zamimg.com/modelviewer/ptr',
+  'https://wow.zamimg.com/modelviewer/ptr2',
+  'https://wow.zamimg.com/modelviewer/live',
+].reverse();
 
 const debug = false;
 

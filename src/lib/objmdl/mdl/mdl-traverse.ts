@@ -1,6 +1,7 @@
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, quatNoRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
+import { Geoset, GeosetVertex } from './components/geoset';
 import { Node } from './components/node';
 import { Sequence } from './components/sequence';
 import { MDL } from './mdl';
@@ -13,7 +14,7 @@ export interface Value {
 
 export function buildChildrenLists(mdl: MDL) {
   const childrenList = new Map<Node, Node[]>(); // { parent -> children[] }
-  [...mdl.bones, ...mdl.attachmentPoints].forEach((node) => {
+  [...mdl.bones, ...mdl.attachments].forEach((node) => {
     if (!childrenList.has(node)) {
       childrenList.set(node, []);
     }
@@ -60,6 +61,37 @@ export function iterateNodesAtTimestamp(mdl: MDL, sequence: Sequence, timestamp:
         scaling: transform.scaling,
       });
     }
+  });
+}
+
+export function iterateVerticesAtTimestamp(mdl: MDL, sequence: Sequence, timestamp: number, callback: (v: GeosetVertex, vPos: Vector3, geoset: Geoset) => unknown) {
+  const nodeValues = new Map<Node, Value>();
+  iterateNodesAtTimestamp(mdl, sequence, timestamp, (node, value) => {
+    nodeValues.set(node, value);
+  });
+
+  const vertices = new Set<GeosetVertex>();
+  const geosets = new Map<GeosetVertex, Geoset>();
+  mdl.geosets.forEach((geoset) => {
+    geoset.faces.forEach((f) => {
+      f.vertices.forEach((v) => {
+        vertices.add(v);
+        geosets.set(v, geoset);
+      });
+    });
+  });
+
+  vertices.forEach((v) => {
+    let translation: Vector3 = [0, 0, 0];
+    v.skinWeights?.forEach(({ bone, weight }) => {
+      const boneValue = nodeValues.get(bone)!;
+      const vPosDeltaToBone = V3.mul(V3.rotate(V3.sub(v.position, bone.pivotPoint), boneValue.rotation), boneValue.scaling);
+      const vPos = V3.sum(boneValue.position, vPosDeltaToBone);
+      const vPosDelta = V3.sub(vPos, v.position);
+      translation = V3.sum(translation, V3.scale(vPosDelta, weight / 255));
+    });
+    const vPos = V3.sum(v.position, translation);
+    callback(v, vPos, geosets.get(v)!);
   });
 }
 

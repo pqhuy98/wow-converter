@@ -1,6 +1,7 @@
 import { parsers } from '@pqhuy98/mdx-m3-viewer';
 
 import { Vector3 } from '../../math/common';
+import { Animation } from './components/animation';
 import { Camera, camerasToString } from './components/camera';
 import { Bound } from './components/extent';
 import { f } from './components/formatter';
@@ -15,7 +16,7 @@ import {
 import { Sequence, sequencesToString } from './components/sequence';
 import { Texture, texturesToString } from './components/texture';
 import { TextureAnim, textureAnimsToString } from './components/texture-anim';
-import { MDLModify } from './mdl-modify';
+import { MDLModify } from './modify';
 
 export interface WowAttachment {
   wowAttachmentId: number;
@@ -49,7 +50,7 @@ export class MDL {
 
   bones: Bone[] = [];
 
-  attachmentPoints: AttachmentPoint[] = [];
+  attachments: AttachmentPoint[] = [];
 
   cameras: Camera[] = [];
 
@@ -86,12 +87,39 @@ export class MDL {
     return `Model "${this.model.name}" {
       NumGeosets ${this.geosets.length},
       NumBones ${this.bones.length},
-      NumAttachments ${this.attachmentPoints.length},
+      NumAttachments ${this.attachments.length},
       BlendTime ${this.model.blendTime},
       MinimumExtent { ${this.model.minimumExtent.map(f).join(', ')} },
       MaximumExtent { ${this.model.maximumExtent.map(f).join(', ')} },
       BoundsRadius ${f(this.model.boundsRadius)},
     }`;
+  }
+
+  getNodes() {
+    return [
+      ...this.bones,
+      ...this.attachments,
+      ...this.eventObjects,
+      ...this.collisionShapes,
+    ];
+  }
+
+  getAnimated(): Animation<number[] | number>[] {
+    return [
+      ...this.getNodes().flatMap((node) => [node.translation, node.rotation, node.scaling]),
+      ...this.cameras.flatMap((cam) => [cam.translation, cam.rotation, cam.scaling]),
+      ...this.textureAnims.flatMap((texAnim) => [texAnim.translation, texAnim.rotation, texAnim.scaling]),
+      ...this.materials.flatMap((mat) => mat.layers.flatMap((layer) => [
+        layer.alpha && 'keyFrames' in layer.alpha ? layer.alpha : null,
+        layer.tvertexAnim?.translation,
+        layer.tvertexAnim?.rotation,
+        layer.tvertexAnim?.scaling,
+      ])),
+      ...this.geosetAnims.flatMap((geosetAnim) => [
+        geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha ? geosetAnim.alpha : null,
+        geosetAnim.color && 'keyFrames' in geosetAnim.color ? geosetAnim.color : null,
+      ]),
+    ].filter((anim) => anim != null);
   }
 
   private updateIds() {
@@ -106,11 +134,11 @@ export class MDL {
     });
     [
       ...this.bones,
-      ...this.attachmentPoints,
+      ...this.attachments,
       ...this.eventObjects,
       ...this.collisionShapes,
     ].forEach((node, i) => node.objectId = i);
-    this.attachmentPoints.forEach((p, i) => p.attachmentId = i);
+    this.attachments.forEach((p, i) => p.attachmentId = i);
   }
 
   private toString() {
@@ -138,13 +166,13 @@ export class MDL {
       ${geosetsToString(this.version.formatVersion, this.geosets, this.bones, this.sequences)}
       ${geosetAnimsToString(this.geosetAnims)}
       ${bonesToString(this.bones)}
-      ${attachmentPointsToString(this.attachmentPoints)}
+      ${attachmentPointsToString(this.attachments)}
       ${camerasToString(this.cameras)}
       ${eventObjectsToString(this.eventObjects)}
       ${collisionShapesToString(this.collisionShapes)}
       ${pivotPointsToString([
     ...this.bones,
-    ...this.attachmentPoints,
+    ...this.attachments,
     ...this.eventObjects,
     ...this.collisionShapes,
   ])}
@@ -226,18 +254,6 @@ export class MDL {
         bone.geoset = geosets.size > 1 ? 'Multiple' : geosets.values().next().value;
       }
     });
-
-    // Compute simple collision shape
-    this.collisionShapes = [
-      {
-        name: 'Collision Sphere01',
-        type: 'Sphere',
-        vertices: [[0, 0, this.model.boundsRadius / 2]],
-        boundRadius: this.model.boundsRadius / 2,
-        pivotPoint: [0, 0, 0],
-        flags: [],
-      },
-    ];
 
     // If no material is defined, create a default one
     if (this.materials.length === 0) {

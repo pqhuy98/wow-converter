@@ -45,6 +45,10 @@ export class V3 {
     return [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])];
   }
 
+  static distance(a: Vector3, b: Vector3): number {
+    return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  }
+
   static lerp(v0: Vector3, v1: Vector3, t: number): Vector3 {
     return [
       v0[0] + t * (v1[0] - v0[0]),

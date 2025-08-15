@@ -111,6 +111,7 @@ export class CharacterExporter {
     console.log('Base model:', path.join(this.config.wowExportAssetDir, char.base.value));
     const model = this.assetManager.parse(char.base.value, true).mdl;
     debug && console.log('Parsed wow.export model took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+    this.includeMdlToOutput(model, outputFile);
 
     if (char.attackTag != null) {
       model.sequences = model.sequences.filter((seq) => !char.attackTag || seq.data.attackTag === '' || seq.data.attackTag === char.attackTag);
@@ -131,7 +132,13 @@ export class CharacterExporter {
           if (itemPath.scale) {
             itemMdl.modify.scale(itemPath.scale);
           }
-          model.modify.addMdlItemToBone(itemMdl, wowAttachment.bone.name);
+          const useAttachmentPath = false;
+          if (!useAttachmentPath) {
+            model.modify.addMdlItemToBone(itemMdl, wowAttachment.bone.name);
+          } else {
+            this.models.push([itemMdl, join(this.outputPath, itemPath.path.value)]);
+            model.modify.addItemPathToBone(`${itemPath.path.value}.mdx`, wowAttachment.bone.name);
+          }
         } else {
           console.error(chalk.red(`Cannot find bone for wow attachment ${wowAttachmentId}`));
           if (model.wowAttachments.length === 0) {
@@ -178,7 +185,6 @@ export class CharacterExporter {
     if (!char.noDecay) {
       model.modify.addDecayAnimation();
     }
-    this.includeMdlToOutput(model, outputFile);
     return model;
   }
 

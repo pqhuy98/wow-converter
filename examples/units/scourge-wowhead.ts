@@ -150,6 +150,7 @@ function hideWeapon(mdl: MDL, attachmentId: WoWAttachmentID, sequenceNames: stri
       const scale: Vector3 = sequenceNames.some((name) => seq.name.includes(name)) ? [0, 0, 0] : [...oldScaling];
       return [[seq.interval[0], [...scale]], [seq.interval[1], [...scale]]];
     })),
+    type: 'scaling',
   };
 }
 

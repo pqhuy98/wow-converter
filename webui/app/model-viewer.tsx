@@ -31,6 +31,12 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
   const [viewer, setViewer] = useState<ModelViewer | null>(null)
   const [scene, setScene] = useState<Scene | null>(null)
   const [camera, setCamera] = useState<Camera | null>(null)
+  // Collision toggling and primitive refs
+  const [collisionsVisible, setCollisionsVisible] = useState(false)
+  const collisionInstancesRef = useRef<any[]>([])
+  const boxModelRef = useRef<MdxModel | undefined>(undefined)
+  const sphereModelRef = useRef<MdxModel | undefined>(undefined)
+  const primsReadyRef = useRef<Promise<void> | undefined>(undefined)
   useEffect(() => {
     if (!canvasRef.current) return
     const viewer = new ModelViewer(canvasRef.current)
@@ -45,6 +51,19 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
     const camera = scene.camera;
     setCamera(camera)
+    // Prepare primitive models for collision visualization
+    primsReadyRef.current = (async () => {
+      try {
+        const [boxM, sphereM] = await Promise.all([
+          mdlx.createPrimitive(viewer, mdlx.primitives.createUnitCube(), { lines: true }),
+          mdlx.createPrimitive(viewer, mdlx.primitives.createUnitSphere(12, 12), { lines: true }),
+        ])
+        boxModelRef.current = boxM
+        sphereModelRef.current = sphereM
+      } catch (e) {
+        // Fallbacks handled above; ignore
+      }
+    })()
     
     viewer.on('loadstart', (e) => {
       console.log(`[Viewer] Loading ${e.fetchUrl}`);
@@ -101,6 +120,10 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     let modelInstance: MdxModelInstance | null = null;
 
     (async () => {
+      // Ensure collision primitives are ready before loading shapes
+      if (primsReadyRef.current) {
+        try { await primsReadyRef.current } catch {}
+      }
       // Path solver so the viewer fetches every dependant file via our /asset route
       const pathSolver = (src: unknown) => {
         return `${host}/assets/${normalizePath(src as string)}`
@@ -118,6 +141,45 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
       // Add scene and basic camera, grid setup
       scene.addInstance(modelInstance)
+
+      // Build collision shape instances (hidden by default)
+      collisionInstancesRef.current = []
+      const boxModel = boxModelRef.current
+      const sphereModel = sphereModelRef.current
+      try {
+        const shapes = model.collisionShapes || []
+        for (const shape of shapes) {
+          // Shape types: 0=Box, 1=Cylinder, 2=Sphere (per mdx-m3-viewer)
+          if (shape.type === 0 && boxModel) {
+            const inst = boxModel.addInstance()
+            const [min, max] = shape.vertices
+            const x = (max[0] + min[0]) / 2
+            const y = (max[1] + min[1]) / 2
+            const z = (max[2] + min[2]) / 2
+            const w = (max[0] - min[0]) / 2
+            const d = (max[1] - min[1]) / 2
+            const h = (max[2] - min[2]) / 2
+            inst.setLocation([x, y, z])
+            inst.setScale([w, d, h])
+            inst.dontInheritScaling = false
+            inst.setParent(modelInstance.nodes[shape.index])
+            inst.setScene(scene)
+            inst[collisionsVisible ? 'show' : 'hide']()
+            collisionInstancesRef.current.push(inst)
+          } else if (shape.type === 2 && sphereModel) {
+            const inst = sphereModel.addInstance()
+            inst.setLocation([0, 0, 0])
+            inst.uniformScale(shape.boundsRadius)
+            inst.dontInheritScaling = false
+            inst.setParent(modelInstance.nodes[shape.index])
+            inst.setScene(scene)
+            inst[collisionsVisible ? 'show' : 'hide']()
+            collisionInstancesRef.current.push(inst)
+          } else {
+            console.log('COLLISION SHAPE NOT SUPPOTED', shape)
+          }
+        }
+      } catch {}
 
       // Utility to update camera position from spherical coords
       let isDragging = false;
@@ -236,6 +298,11 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       if (modelInstance) {
         scene.removeInstance(modelInstance);
       }
+      // Clean up collision visuals
+      for (const inst of collisionInstancesRef.current) {
+        try { inst.hide?.() } catch {}
+      }
+      collisionInstancesRef.current = []
     }
   }, [modelPath, canvasRef.current, viewer, scene])
 
@@ -268,6 +335,17 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error('Failed to copy link:', err)
+    }
+  }
+
+  const handleToggleCollisions = () => {
+    const next = !collisionsVisible
+    setCollisionsVisible(next)
+    for (const inst of collisionInstancesRef.current) {
+      try {
+        if (next) inst.show?.()
+        else inst.hide?.()
+      } catch {}
     }
   }
 
@@ -316,8 +394,18 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
               size="sm"
               onClick={handleFullscreenToggle}
               className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl"
+              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
             >
               {isFullscreen ? '✕' : '⛶'}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleToggleCollisions}
+              className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
+              title={collisionsVisible ? 'Hide collisions' : 'Show collisions'}
+            >
+              {collisionsVisible ? '•' : '◱'}
             </Button>
             <Button
                 variant="secondary"

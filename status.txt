@@ -14,6 +14,7 @@ TODO (not in any priority order):
 - Auto-updater for wow-converter to keep users up-to-date.
 - Collect anonymous analytics to understand common usage patterns.
 - Use correct model ID for character export based on wowhead URL of different expansions.
+- Bug: inputting new URLs into base/itme input box doesn't update React state.
 
 DONE:
 - Feet and trouser geoset wrong in some cases

@@ -1,0 +1,40 @@
+import { Vector3 } from "@/lib/math/common";
+import chalk from "chalk";
+import { MDLModify } from ".";
+import { WoWAttachmentID, WoWToWC3AttachmentMap } from "../../animation/bones_mapper";
+
+export function addWc3AttachmentPoint(this: MDLModify) {
+  // Only map WoW attachment points that have a valid WC3 equivalent.
+  // E.g. WoW ArmL/ArmR do not exist in WC3, so we use Medium/Large as proxies.
+  this.mdl.wowAttachments.forEach((wowAttachment) => {
+    const bone = wowAttachment.bone;
+    const wowAttachmentId = wowAttachment.wowAttachmentId as WoWAttachmentID;
+    const wc3Key = WoWToWC3AttachmentMap[wowAttachmentId];
+    this.mdl.attachments.push({
+      attachmentId: 0,
+      path: '',
+      type: 'AttachmentPoint',
+      name: wc3Key
+        ? `${wc3Key} Ref`
+        : `Wow:${wowAttachmentId}:${Object.keys(WoWAttachmentID)[Object.values(WoWAttachmentID).indexOf(wowAttachmentId)]}`,
+      parent: bone,
+      pivotPoint: wowAttachment.pivotPoint,
+      flags: [],
+    });
+  });
+  return this;
+}
+
+export function setWowAttachmentScale(this: MDLModify, wowAttachmentId: WoWAttachmentID, scale: number) {
+  const attachment = this.mdl.wowAttachments.find((a) => a.wowAttachmentId === wowAttachmentId);
+  if (!attachment) {
+    console.error(chalk.red(`Cannot find wow attachment ${wowAttachmentId}`));
+    return this;
+  }
+  attachment.bone.scaling = {
+    interpolation: 'DontInterp',
+    keyFrames: new Map(this.mdl.sequences.map((s) => <[number, Vector3]>[s.interval[0], [scale, scale, scale]])),
+    type: 'scaling',
+  };
+  return this;
+} 

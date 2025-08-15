@@ -153,16 +153,19 @@ export class AnimationFile implements AnimationData {
           interpolation: wowToWc3Interpolation(bone.translation.interpolation),
           globalSeq: bone.translation.globalSeq !== BlizzardNull ? getGlobalSeq(bone.translation.globalSeq) : undefined,
           keyFrames: new Map(),
+          type: 'translation',
         },
         rotation: {
           interpolation: wowToWc3Interpolation(bone.rotation.interpolation),
           globalSeq: bone.rotation.globalSeq !== BlizzardNull ? getGlobalSeq(bone.rotation.globalSeq) : undefined,
           keyFrames: new Map(),
+          type: 'rotation',
         },
         scaling: {
           interpolation: wowToWc3Interpolation(bone.scale.interpolation),
           globalSeq: bone.scale.globalSeq !== BlizzardNull ? getGlobalSeq(bone.scale.globalSeq) : undefined,
           keyFrames: new Map(),
+          type: 'scaling',
         },
         pivotPoint: [bone.pivot[0], -bone.pivot[2], bone.pivot[1]],
       };

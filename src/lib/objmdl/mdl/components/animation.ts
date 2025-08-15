@@ -1,5 +1,3 @@
-import { Vector3 } from '@/lib/math/common';
-
 import { f, fVector } from './formatter';
 import { GlobalSequence } from './global-sequence';
 
@@ -9,7 +7,8 @@ export type Animation<T> = {
   globalSeq?: GlobalSequence;
   interpolation: Interpolation;
   keyFrames: Map<number, T>;
-  inOutTans?: Map<number, {inTan: Vector3, outTan: Vector3}>;
+  // inOutTans?: Map<number, {inTan: Vector3, outTan: Vector3}>;
+  type: 'translation' | 'rotation' | 'scaling' | 'alpha' | 'color' | 'tvertex' | 'tvertexAnim';
 };
 
 export type AnimationOrStatic<T> = {
@@ -29,9 +28,9 @@ export function animationToString<T extends number[] | number>(type: string, ani
 
     ${[...sortMapByKeyAsc(animation.keyFrames).entries()].map(([timestamp, value]) => `
       ${timestamp}: ${Array.isArray(value) ? `{ ${fVector(value)} }` : f(value)},
-      ${animation.inOutTans?.get(timestamp) != null ? `
+      ${/* ${animation.inOutTans?.get(timestamp) != null ? `
         InTan { ${fVector(animation.inOutTans.get(timestamp)!.inTan)} },
-        OutTan { ${fVector(animation.inOutTans.get(timestamp)!.outTan)} },` : ''}
+        OutTan { ${fVector(animation.inOutTans.get(timestamp)!.outTan)} },` : ''} */''}
       `).join('\n')}
   }`;
 }

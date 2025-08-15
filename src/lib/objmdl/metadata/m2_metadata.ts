@@ -221,7 +221,7 @@ export class M2MetadataFile {
         wowColor.color.values[0][0][1],
         wowColor.color.values[0][0][0],
       ];
-      const alpha = wowColor.alpha.values[0][0];
+      const alpha = wowColor.alpha.values[0][0] / 32767;
 
       const geosetAnim: MDL['geosetAnims'][number] = {
         id: 0,
@@ -241,6 +241,7 @@ export class M2MetadataFile {
         geosetAnim.color = {
           interpolation: wowToWc3Interpolation(wowColor.alpha.interpolation),
           keyFrames: new Map(),
+          type: 'color',
         };
         let accumTime = 0;
 
@@ -267,6 +268,7 @@ export class M2MetadataFile {
         geosetAnim.alpha = {
           interpolation: wowToWc3Interpolation(wowColor.alpha.interpolation),
           keyFrames: new Map(),
+          type: 'alpha',
         };
         let accumTime = 0;
 
@@ -335,16 +337,19 @@ export class M2MetadataFile {
           interpolation: wowToWc3Interpolation(transform.translation.interpolation),
           globalSeq: transform.translation.globalSeq !== BlizzardNull ? getGlobalSeq(transform.translation.globalSeq) : undefined,
           keyFrames: new Map(),
+          type: 'translation',
         },
         rotation: {
           interpolation: wowToWc3Interpolation(transform.rotation.interpolation),
           globalSeq: transform.rotation.globalSeq !== BlizzardNull ? getGlobalSeq(transform.rotation.globalSeq) : undefined,
           keyFrames: new Map(),
+          type: 'rotation',
         },
         scaling: {
           interpolation: wowToWc3Interpolation(transform.scaling.interpolation),
           globalSeq: transform.scaling.globalSeq !== BlizzardNull ? getGlobalSeq(transform.scaling.globalSeq) : undefined,
           keyFrames: new Map(),
+          type: 'scaling',
         },
       };
 

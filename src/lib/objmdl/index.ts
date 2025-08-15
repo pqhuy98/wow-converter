@@ -114,7 +114,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
             unlit: false,
             noDepthTest: false,
             noDepthSet: false,
-            alpha: {static: true, value:1},
+            alpha: { static: true, value: 1 },
           },
         ],
       };
@@ -240,6 +240,10 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   start = performance.now();
   mdl.modify.scale(config.rawModelScaleUp);
   debug && console.log('scale took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+
+  start = performance.now();
+  mdl.modify.addCollisionShapes();
+  debug && console.log('computeCollisionShape took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   start = performance.now();
   mdl.sync();

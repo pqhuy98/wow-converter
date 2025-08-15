@@ -43,7 +43,7 @@ export interface EventObject extends Node {
 }
 
 export interface CollisionShape extends Node {
-  type: 'Sphere' | 'Cylinder'
+  type: 'Sphere' | 'Box'
   vertices: Vector3[]
   boundRadius: number
 }
@@ -108,12 +108,6 @@ function nodeHeaders(node: Node): string {
       ${node.parent != null ? `Parent ${node.parent.objectId},` : ''}
 
       ${node.flags.join('\n')}
-
-      ${animationToString('Translation', node.translation)}
-
-      ${animationToString('Rotation', node.rotation)}
-
-      ${animationToString('Scaling', node.scaling)}
   `;
 }
 
