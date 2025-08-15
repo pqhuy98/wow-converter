@@ -193,7 +193,6 @@ export class MDL {
           }
           return newLine;
         } catch (e) {
-          console.error({ depth });
           return l;
         }
       })

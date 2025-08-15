@@ -21,7 +21,6 @@ export function mergeMapsLeftToRight(maps: [Wc3Map, Wc3Map], padding: number) {
 
   const newHeight = Math.max(maps[0].terrain.map.height, maps[1].terrain.map.height);
   const newWidth = Math.ceil((maps[0].terrain.map.width + maps[1].terrain.map.width + padding) / 4) * 4;
-  console.log(newWidth);
   const terrain = getInitialTerrain(newHeight, newWidth);
 
   const xyDelta = [

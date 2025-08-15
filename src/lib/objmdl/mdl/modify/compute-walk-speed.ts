@@ -4,10 +4,10 @@ import { Node } from "../components/node";
 import { iterateNodesAtTimestamp } from "../mdl-traverse";
 import { V3 } from "@/lib/math/vector";
 
-  // TODO: this doesn't work with Undead character!!
-export function computeWalkMovespeed(this: MDLModify) {
-    const debug = false;
+const debug = false;
 
+// TODO: this doesn't work with Undead character!!
+export function computeWalkMovespeed(this: MDLModify) {
     this.mdl.sequences.forEach((seq) => {
       if (seq.moveSpeed === 0 && ([
         'Walk', 'Run', 'Sprint', 'FlyWalk',

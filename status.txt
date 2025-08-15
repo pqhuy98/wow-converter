@@ -1,5 +1,4 @@
 TODO (not in any priority order):
-- Some users want matrix model version 800
 - In later expansions. some NPCs with collection e.g. mechagnome, earthen,... cannot be fully exported.
 - NPCs don't close hand when holding items
 - Multi-step workflow in web to tune the model:
@@ -7,17 +6,18 @@ TODO (not in any priority order):
   - Select different animations before final export
     - Basic animations auto-chosen, also smaller list, currently a lot of Spell/Spell Slam...
     - List of extra anims grouped by theme, e.g. attack, custom spell...
-- Collision box right now too big. Try to choose best that fit the Stand anim.
 - Some creatures using textures not in DB skin list cannot be exported because skin not found.
 - Map generation crashes when map too big and height min-max diff so high
 - Support for wowhead dressing room.
 - Auto-updater for wow-converter to keep users up-to-date.
 - Collect anonymous analytics to understand common usage patterns.
 - Use correct model ID for character export based on wowhead URL of different expansions.
-- Bug: inputting new URLs into base/itme input box doesn't update React state.
 
 DONE:
 - Feet and trouser geoset wrong in some cases
+- Bug: inputting new URLs into base/itme input box doesn't update React state.
+- Collision box right now too big. Try to choose best that fit the Stand anim.
+- Some users want matrix model version 800
 
 BLOCKED:
 - Blood elf model's attachment not working

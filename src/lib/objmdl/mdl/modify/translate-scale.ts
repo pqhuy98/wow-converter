@@ -79,7 +79,6 @@ export function scaleSequenceDuration(this: MDLModify, sequence: Sequence, scali
   };
 
   const animated = this.mdl.getAnimated();
-  console.log(animated.length);
   animated.forEach((anim) => {
     if (anim.globalSeq) return;
     anim.keyFrames = updateKeyFrame(anim.keyFrames);
