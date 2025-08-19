@@ -1,13 +1,19 @@
 import { readFileSync } from 'fs';
+import _ from 'lodash';
 import { dirname, join, relative } from 'path';
+
+import { degrees } from '@/lib/math/rotation';
 
 import { BlizzardNull } from '../../constants';
 import { Config } from '../../global-config';
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { AnimationFile } from '../animation/animation';
-import { Geoset } from '../mdl/components/geoset';
+import { Animation, AnimationOrStatic, AnimationType } from '../mdl/components/animation';
 import { GlobalSequence } from '../mdl/components/global-sequence';
 import { Material } from '../mdl/components/material';
+import {
+  FilterMode as WC3FilterMode, HeadOrTail as WC3HeadOrTail, ParticleEmitter2, ParticleEmitter2Flag,
+} from '../mdl/components/node/particle-emitter-2';
 import { Texture } from '../mdl/components/texture';
 import { TextureAnim } from '../mdl/components/texture-anim';
 import { MDL } from '../mdl/mdl';
@@ -33,27 +39,32 @@ namespace Data {
     fileDataID: number
   }
 
-  export interface Color {
-    color: {
-      globalSeq: number
-      interpolation: number
-      timestamps: number[][]
-      values: Vector3[][]
-    }
-    alpha: {
-      globalSeq: number
-      interpolation: number
-      timestamps: number[][]
-      values: number[][]
-    }
-  }
-
-  export interface TextureWeight {
+  // Generic animation track
+  // - timestamps/values are 2D array, first dimension is per animation, second dimension is per keyframe
+  export interface M2Track<T> {
     globalSeq: number
     interpolation: number
     timestamps: number[][]
-    values: number[][]
+    values: T[][]
   }
+
+  // Age-based track over a particle's lifetime
+  // - timestamps are fixed16 fractions: 0..32767 maps to 0..100% of lifespan linearly
+  // - values are looked up by agePercent = clamp(ageSeconds / lifespanSeconds, 0..1)
+  // - interpolation is linear between the given keys
+  export interface PartTrack<T> {
+    timestamps: number[]
+    values: T[]
+  }
+
+  export interface Color {
+    color: M2Track<Vector3>
+    alpha: M2Track<number>
+  }
+
+  type Translation = M2Track<Vector3>
+  type Rotation = M2Track<QuaternionRotation>
+  type Scaling = M2Track<Vector3>
 
   export interface TextureTransform {
     translation: Translation
@@ -61,25 +72,120 @@ namespace Data {
     scaling: Scaling
   }
 
-  export interface Translation {
-    globalSeq: number
-    interpolation: number
-    timestamps: number[][]
-    values: Vector3[][]
-  }
+  // Coordinate system and units
+  // - Coordinates: Z is up; XY is the ground plane. Positions are already converted to [x, z, -y].
+  // - Angles: radians.
+  // - Time: seconds unless noted.
+  export interface ParticleEmitter {
+    particleId: number // identifier from the model; kept for reference
 
-  export interface Rotation {
-    globalSeq: number
-    interpolation: number
-    timestamps: number[][]
-    values: QuaternionRotation[][]
-  }
+    flags: number // behavior switches used by the renderer (e.g. head/tail on/off, model-space, random start cell)
 
-  export interface Scaling {
-    globalSeq: number
-    interpolation: number
-    timestamps: number[][]
-    values: Vector3[][]
+    position: Vector3 // emitter pivot relative to its bone, in [x, z, -y] space
+    bone: number // bone index to attach the emitter to
+
+    // Blending mode (0..7):
+    //   0 Opaque (no blending, depth write on, alpha test off)
+    //   1 AlphaKey (alpha test at ~0.5 threshold, no blending)
+    //   2 Alpha (standard srcAlpha, oneMinusSrcAlpha)
+    //   3 Add(NoAlpha)
+    //   4 Additive (srcAlpha, one)
+    //   5 Modulate
+    //   6 Modulate2x
+    //   7 BlendAdd
+    blendingType: number
+    emitterType: number // 1 = rectangle area, 2 = spherical shell, 3 = spline path, 4 = bone
+    particleColorIndex: number // 0 or 11..13 to use model-provided Start/Mid/End color sets
+
+    // Texture grid on a single image (sprite sheet)
+
+    // Texture selection:
+    // - Single-texture: texturePacked is an index into the model's textures array.
+    // - Multi-texture (Cata+): the same 16-bit field packs three indices:
+    //     t0 = texturePacked & 0x1F; t1 = (texturePacked >> 5) & 0x1F; t2 = (texturePacked >> 10) & 0x1F
+    //   These select the primary and the two extra layer textures from the model's textures array.
+    //   This metadata leaves them packed; your renderer can unpack as above when multi-texture is active.
+    // Detecting multi-texture in use:
+    // - Prefer flags bit: (flags & 0x10000000) !== 0 indicates multi-texturing.
+    // - Alternatively, presence of multiTextureParam0/multiTextureParam1 implies multi-texture support on this emitter.
+    texturePacked: number // older files: single texture index on the model; multi-texture: 3 indices packed into 16 bits
+
+    textureRows: number // number of rows in the texture grid
+    textureCols: number // number of columns in the texture grid
+
+    // Motion and emission
+    emissionSpeed: M2Track<number> // initial speed of spawned particles (units per second)
+    speedVariation: M2Track<number> // random variation applied to the speed (per particle and/or burst)
+    // Direction ranges (radians):
+    // - Rectangle (1): verticalRange = max polar tilt from +Z; horizontalRange = azimuth around +Z.
+    // - Sphere (2): verticalRange = max elevation of the spawn point; horizontalRange = azimuth around +Z.
+    verticalRange: M2Track<number>
+    horizontalRange: M2Track<number>
+
+    // Gravity: downward acceleration magnitude along Z (units per second^2). Positive values accelerate toward -Z.
+    // if flags & 0x8000000 then gravity is a vector3 compressed to float, otherwise it's a scalar
+    gravity: M2Track<number>
+    lifespan: M2Track<number> // seconds each particle lives
+    emissionRate: M2Track<number> // particles per second
+
+    // Emitter size:
+    // - Rectangle: left/right (local X) = emissionAreaLength; forward/backward (local Y) = emissionAreaWidth.
+    //   Spawn position is uniform over the rectangle area.
+    // - Sphere: inner radius = emissionAreaLength; outer radius = emissionAreaWidth (uniform in shell).
+    emissionAreaWidth: M2Track<number>
+    emissionAreaLength: M2Track<number>
+
+    // Initial direction override:
+    // If zSource > 0, set initial direction dir = normalize(spawnPos - [0,0,zSource]),
+    // then velocity = dir * emissionSpeed. Otherwise:
+    //   Rectangle: sample direction by polar in [0, verticalRange], azimuth in [0, horizontalRange].
+    //   Sphere:    if not forced-up, initial direction points outward from the sphere.
+    zSource: M2Track<number>
+
+    tailLength: number // seconds of recent motion to show when drawing a trail
+    enabledIn: M2Track<number> // optional on/off track used as a visibility hint per animation
+
+    // Age-based appearance (ageSeconds starts at 0; agePercent = ageSeconds / lifespanSeconds)
+    colorTrack: PartTrack<Vector3> // RGB 0..255 per key; renderer divides by 255
+    alphaTrack: PartTrack<number> // fixed16 alpha 0..32767 per key; renderer divides by 32767
+    scaleTrack: PartTrack<[number, number]> // quad width/height multipliers over life
+
+    // Selecting a cell on the texture grid (one frame on the sprite sheet):
+    // Given rows, cols, and a head/tail index:
+    //   total = rows * cols; require 0 <= index < total
+    //   col = index % cols; row = Math.floor(index / cols)
+    //   uvMin = [col/cols, row/rows], uvMax = [(col+1)/cols, (row+1)/rows]
+    // The renderer picks that UV rect for the corresponding quad.
+    // Additionally, per-emitter a 16-bit random offset may be added (and masked by total-1) to vary start cells,
+    // and if no headCellTrack is present but a model flag requests it, the starting cell is chosen randomly.
+    headCellTrack: PartTrack<number>
+    tailCellTrack: PartTrack<number>
+
+    // Multi-texture (Cata+): two extra overlaid textures controlled by scroll/tiling parameters.
+    // These do not select images; they control scrolling/tiling of the extra layers.
+    // - multiTextureParam0: base scroll rates (dU/dt, dV/dt) for extra textures 1 and 2.
+    // - multiTextureParam1: extra randomizable scroll rates (dU/dt, dV/dt) for extra textures 1 and 2.
+    //   Per particle at spawn: scrollRate = param0 + rand[0..1] * param1; UV offset accumulates each frame: uv += scrollRate * dt.
+    // - multiTextureParamX: per-texture tiling factor (packed byte). Convert to float scale by:
+    //     scale = (byte & 31) / 32 + (byte >> 5)
+    // To use: unpack t0/t1/t2 from texturePacked (see above) to pick three textures; then apply these scroll/tiling params
+    // to the two extra layers (t1, t2) when sampling.
+    multiTextureParam0: [[number, number], [number, number]] // [[du/dt,dv/dt] for tex1, [du/dt,dv/dt] for tex2]
+    multiTextureParam1: [[number, number], [number, number]] // [[du/dt,dv/dt] for tex1, [du/dt,dv/dt] for tex2]
+    multiTextureParamX: [number, number] // packed bytes for tex1/tex2; use formula above for tiling scale
+
+    // Optional model emitters
+    geometryModel: string // if not empty string, this spawns a model instead of a flat quad
+    recursionModel: string // if not empty string, this is an alias for another emitter set
+
+    lifespanVary: number
+    emissionRateVary: number
+    scaleVary: [number, number]
+
+    baseSpin: number
+    baseSpinVary: number
+    spin: number
+    spinVary: number
   }
 
   export interface BoundingBox {
@@ -154,7 +260,7 @@ export class M2MetadataFile {
 
   colors: Data.Color[];
 
-  textureWeights: Data.TextureWeight[];
+  textureWeights: Data.M2Track<number>;
 
   transparencyLookup: number[];
 
@@ -170,6 +276,9 @@ export class M2MetadataFile {
 
   collisionSphereRadius: number;
 
+  // New: particles exported by wow.export
+  particleEmitters?: Data.ParticleEmitter[];
+
   skin: Data.Skin = {
     subMeshes: [],
     textureUnits: [],
@@ -179,8 +288,11 @@ export class M2MetadataFile {
 
   isLoaded = false;
 
-  constructor(private filePath: string, private config: Config) {
+  globalSequenceMap: Map<number, GlobalSequence>;
+
+  constructor(private filePath: string, private config: Config, private animFile: AnimationFile, private mdl: MDL) {
     try {
+      console.log("Loading metadata file", this.filePath);
       Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
       if (this.fileType === 'm2') {
       // ADT files (terrain) won't have metadata JSON.
@@ -199,9 +311,65 @@ export class M2MetadataFile {
       }
       throw e;
     }
+    this.globalSequenceMap = new Map<number, GlobalSequence>(this.mdl.globalSequences.map((gs) => [gs.id, gs]));
   }
 
-  extractMDLGeosetAnim(animFile: AnimationFile, geosets: Geoset[]): MDL['geosetAnims'] {
+  private getGlobalSeq(id: number) {
+    if (!this.globalSequenceMap.has(id)) {
+      const newGs: GlobalSequence = {
+        id, duration: 1,
+      };
+      this.globalSequenceMap.set(id, newGs);
+      this.mdl.globalSequences.push(newGs);
+    }
+    return this.globalSequenceMap.get(id);
+  }
+
+  private m2trackToAnimation<T>(
+    m2track: Data.M2Track<T>,
+    type: AnimationType,
+    transformation: (v: T) => T = (v) => v,
+  ): Animation<T> | undefined {
+    const result: Animation<T> = {
+      interpolation: wowToWc3Interpolation(m2track.interpolation),
+      globalSeq: m2track.globalSeq !== BlizzardNull ? this.getGlobalSeq(m2track.globalSeq) : undefined,
+      keyFrames: new Map(),
+      type,
+    };
+
+    let accumTime = 0;
+    m2track.timestamps.forEach((timestamps, animId) => {
+      let maxTimestamp = -Infinity;
+      timestamps.forEach((timestamp, timestampI) => {
+        const value = transformation(m2track.values[animId][timestampI]);
+        result.keyFrames.set(timestamp + accumTime, value);
+        maxTimestamp = Math.max(maxTimestamp, timestamp + accumTime);
+      });
+      if (maxTimestamp >= -1 && !result.globalSeq) {
+        // Add the last key frame to the end of the animation to not lose the last frame of the animation
+        result.keyFrames.set(
+          accumTime + this.animFile.animations![animId].duration,
+          _.cloneDeep(result.keyFrames.get(maxTimestamp)!),
+        );
+      }
+      accumTime += this.animFile.animations![animId].duration + 1;
+    });
+    if (!result.keyFrames.size) return undefined;
+    return result;
+  }
+
+  private m2trackToAnimationOrStatic<T>(
+    m2track: Data.M2Track<T>,
+    type: AnimationType,
+    transformation: (v: T) => T = (v) => v,
+  ): AnimationOrStatic<T> | undefined {
+    if (m2track.values.length === 1 && m2track.values[0].length === 1) {
+      return { static: true, value: transformation(m2track.values[0][0]) };
+    }
+    return this.m2trackToAnimation(m2track, type, transformation);
+  }
+
+  extractMDLGeosetAnim() {
     if (!this.isLoaded) {
       throw new Error(`Metadata file is not loaded: ${this.filePath}`);
     }
@@ -210,99 +378,33 @@ export class M2MetadataFile {
     const result: MDL['geosetAnims'] = [];
     textureUnits.forEach((tu) => {
       const wowColor = this.colors[tu.colorIndex];
-      if (!geosets[tu.skinSectionIndex]) {
-        console.log('geoset not found', tu.skinSectionIndex, geosets.length);
+      if (!this.mdl.geosets[tu.skinSectionIndex]) {
+        console.log('geoset not found', tu.skinSectionIndex, this.mdl.geosets.length);
         return;
       }
 
-      const color: Vector3 = [
-        // MDL color order is blue, green, red, but WoW uses red, green, blue
-        wowColor.color.values[0][0][2],
-        wowColor.color.values[0][0][1],
-        wowColor.color.values[0][0][0],
-      ];
-      const alpha = wowColor.alpha.values[0][0] / 32767;
-
       const geosetAnim: MDL['geosetAnims'][number] = {
         id: 0,
-        geoset: geosets[tu.skinSectionIndex],
-        color: {
-          static: true,
-          value: color,
-        },
-        alpha: {
-          static: true,
-          value: alpha,
-        },
+        geoset: this.mdl.geosets[tu.skinSectionIndex],
+
+        // MDL color order is blue, green, red, but WoW uses red, green, blue
+        color: this.m2trackToAnimationOrStatic(wowColor.color, 'color', (v) => [v[2], v[1], v[0]]),
+
+        // MDL alpha is 0..1, but WoW is 0..32767
+        alpha: this.m2trackToAnimationOrStatic(wowColor.alpha, 'alpha', (v) => v / 32767),
       };
-
-      // Color
-      if (wowColor.color.timestamps.length > 1 || wowColor.color.timestamps[0].length > 1) {
-        geosetAnim.color = {
-          interpolation: wowToWc3Interpolation(wowColor.alpha.interpolation),
-          keyFrames: new Map(),
-          type: 'color',
-        };
-        let accumTime = 0;
-
-        animFile.animations!.forEach((anim, animId) => {
-          const timestamps = wowColor.color.timestamps[animId] ?? wowColor.color.timestamps[0];
-          const values = wowColor.color.values[animId] ?? wowColor.color.values[0];
-
-          let maxTimestamp = -Infinity;
-          values.forEach((value, i) => {
-            if (!('keyFrames' in geosetAnim.color!)) throw new Error('Field keyframes is missing in geosetAnim.color. This should never happen.');
-            geosetAnim.color.keyFrames.set(timestamps[i] + accumTime, value);
-            maxTimestamp = Math.max(maxTimestamp, timestamps[i] + accumTime);
-          });
-          if (maxTimestamp >= -1) {
-            if (!('keyFrames' in geosetAnim.color!)) throw new Error('Field keyframes is missing in geosetAnim.color. This should never happen.');
-            geosetAnim.color.keyFrames.set(accumTime + anim.duration, [...geosetAnim!.color!.keyFrames.get(maxTimestamp)!]);
-          }
-          accumTime += anim.duration + 1;
-        });
-      }
-
-      // Alpha
-      if (wowColor.alpha.timestamps.length > 1 || wowColor.alpha.timestamps[0].length > 1) {
-        geosetAnim.alpha = {
-          interpolation: wowToWc3Interpolation(wowColor.alpha.interpolation),
-          keyFrames: new Map(),
-          type: 'alpha',
-        };
-        let accumTime = 0;
-
-        animFile.animations!.forEach((anim, animId) => {
-          const timestamps = wowColor.alpha.timestamps[animId] ?? wowColor.alpha.timestamps[0];
-          const values = wowColor.alpha.values[animId] ?? wowColor.alpha.values[0];
-
-          let maxTimestamp = -Infinity;
-          values.forEach((value, i) => {
-            if (!('keyFrames' in geosetAnim.alpha!)) throw new Error('Field keyframes is missing in geosetAnim.alpha. This should never happen.');
-            geosetAnim.alpha.keyFrames.set(timestamps[i] + accumTime, value / 32767);
-            maxTimestamp = Math.max(maxTimestamp, timestamps[i] + accumTime);
-          });
-          if (maxTimestamp >= -1) {
-            if (!('keyFrames' in geosetAnim.alpha!)) throw new Error('Field keyframes is missing in geosetAnim.alpha. This should never happen.');
-            geosetAnim.alpha.keyFrames.set(accumTime + anim.duration, geosetAnim.alpha!.keyFrames.get(maxTimestamp)!);
-          }
-          accumTime += anim.duration + 1;
-        });
-      }
-
       result.push(geosetAnim);
+      if (geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha) {
+        geosetAnim.alpha.interpolation = 'DontInterp';
+      }
     });
-    return result;
+    this.mdl.geosetAnims = result;
   }
 
-  extractMDLTexturesMaterials(
-    texturePrefix: string,
-    animFile: AnimationFile,
-    globalSequences: GlobalSequence[],
-  ): Pick<MDL, 'textureAnims'> & {submeshIdToMat: Map<number, Material>} {
+  extractMDLTexturesMaterials(): {textures: Texture[], submeshIdToMat: Map<number, Material>} {
     if (!this.isLoaded) {
       return {
-        textureAnims: [],
+        textures: [],
         submeshIdToMat: new Map(),
       };
     }
@@ -311,96 +413,20 @@ export class M2MetadataFile {
     const textures: Texture[] = this.textures.map((tex) => ({
       id: 0,
       image: tex.fileNameExternal
-        ? join(texturePrefix, relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
+        ? join(this.config.assetPrefix, relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
         : '',
       wrapHeight: (tex.flags & 1) > 0,
       wrapWidth: (tex.flags & 2) > 0,
     }));
 
     // Texture anims
-    const globalSequenceMap = new Map<number, GlobalSequence>(globalSequences.map((gs) => [gs.id, gs]));
-    function getGlobalSeq(id: number) {
-      if (!globalSequenceMap.has(id)) {
-        const newGs: GlobalSequence = {
-          id, duration: 1,
-        };
-        globalSequenceMap.set(id, newGs);
-        globalSequences.push(newGs);
-      }
-      return globalSequenceMap.get(id);
-    }
-
-    const textureAnims: MDL['textureAnims'] = this.textureTransforms.map((transform) => {
-      const mdlTxAnim: TextureAnim = {
-        id: 0,
-        translation: {
-          interpolation: wowToWc3Interpolation(transform.translation.interpolation),
-          globalSeq: transform.translation.globalSeq !== BlizzardNull ? getGlobalSeq(transform.translation.globalSeq) : undefined,
-          keyFrames: new Map(),
-          type: 'translation',
-        },
-        rotation: {
-          interpolation: wowToWc3Interpolation(transform.rotation.interpolation),
-          globalSeq: transform.rotation.globalSeq !== BlizzardNull ? getGlobalSeq(transform.rotation.globalSeq) : undefined,
-          keyFrames: new Map(),
-          type: 'rotation',
-        },
-        scaling: {
-          interpolation: wowToWc3Interpolation(transform.scaling.interpolation),
-          globalSeq: transform.scaling.globalSeq !== BlizzardNull ? getGlobalSeq(transform.scaling.globalSeq) : undefined,
-          keyFrames: new Map(),
-          type: 'scaling',
-        },
-      };
-
-      // Translation
-      let accumTime = 0;
-      transform.translation.timestamps.forEach((timestamps, animId) => {
-        let maxTimestamp = -Infinity;
-        timestamps.forEach((timestamp, timestampI) => {
-          const [x, y, z] = transform.translation.values[animId][timestampI];
-          mdlTxAnim.translation!.keyFrames.set(timestamp + accumTime, [x, y, z]);
-          maxTimestamp = Math.max(maxTimestamp, timestamp + accumTime);
-        });
-        if (maxTimestamp >= -1 && !mdlTxAnim.translation?.globalSeq) {
-          mdlTxAnim.translation!.keyFrames.set(accumTime + animFile.animations![animId].duration, mdlTxAnim.translation!.keyFrames.get(maxTimestamp)!);
-        }
-        accumTime += animFile.animations![animId].duration + 1;
-      });
-      // Rotation
-      accumTime = 0;
-      transform.rotation.timestamps.forEach((timestamps, animId) => {
-        let maxTimestamp = -Infinity;
-        timestamps.forEach((timestamp, timestampI) => {
-          const [w, x, y, z] = transform.rotation.values[animId][timestampI];
-          mdlTxAnim.rotation!.keyFrames.set(timestamp + accumTime, [w, -y, x, z]);
-          maxTimestamp = Math.max(maxTimestamp, timestamp + accumTime);
-        });
-        if (maxTimestamp >= -1 && !mdlTxAnim.rotation?.globalSeq) {
-          mdlTxAnim.rotation!.keyFrames.set(accumTime + animFile.animations![animId].duration, mdlTxAnim.rotation!.keyFrames.get(maxTimestamp)!);
-        }
-        accumTime += animFile.animations![animId].duration + 1;
-      });
-
-      // Scaling
-      accumTime = 0;
-      transform.scaling.timestamps.forEach((timestamps, animId) => {
-        let maxTimestamp = -Infinity;
-        timestamps.forEach((timestamp, timestampI) => {
-          const [x, y, z] = transform.scaling.values[animId][timestampI];
-          mdlTxAnim.scaling!.keyFrames.set(timestamp + accumTime, [x, z, y]);
-          maxTimestamp = Math.max(maxTimestamp, timestamp + accumTime);
-        });
-        if (maxTimestamp >= -1 && !mdlTxAnim.scaling?.globalSeq) {
-          mdlTxAnim.scaling!.keyFrames.set(accumTime + animFile.animations![animId].duration, mdlTxAnim.scaling!.keyFrames.get(maxTimestamp)!);
-        }
-        accumTime += animFile.animations![animId].duration + 1;
-      });
-      if (!mdlTxAnim.translation?.keyFrames.size) mdlTxAnim.translation = undefined;
-      if (!mdlTxAnim.rotation?.keyFrames.size) mdlTxAnim.rotation = undefined;
-      if (!mdlTxAnim.scaling?.keyFrames.size) mdlTxAnim.scaling = undefined;
-      return mdlTxAnim;
-    });
+    const textureAnims: TextureAnim[] = this.textureTransforms.map((transform) => ({
+      id: 0,
+      translation: this.m2trackToAnimation(transform.translation, 'others'),
+      rotation: this.m2trackToAnimation(transform.rotation, 'rotation'),
+      scaling: this.m2trackToAnimation(transform.scaling, 'scaling'),
+    }));
+    this.mdl.textureAnims = textureAnims;
 
     // Materials
     const submeshMaterials = new Map<number, Material>();
@@ -442,9 +468,255 @@ export class M2MetadataFile {
     });
 
     return {
+      textures,
       submeshIdToMat: submeshMaterials,
-      textureAnims,
     };
+  }
+
+  extractMDLParticlesEmitters(textures: Texture[]) {
+    if (!this.isLoaded || !Array.isArray(this.particleEmitters)) {
+      return;
+    }
+
+    const mapBlend = (b?: number): WC3FilterMode => {
+      switch (b) {
+        case 0: return WC3FilterMode.Blend;
+        case 1: return WC3FilterMode.AlphaKey;
+        case 2: return WC3FilterMode.Blend;
+        case 3: return WC3FilterMode.Additive;
+        case 4: return WC3FilterMode.Additive;
+        case 5: return WC3FilterMode.Modulate;
+        case 6: return WC3FilterMode.Modulate2x;
+        case 7: return WC3FilterMode.Additive;
+        default: return WC3FilterMode.Blend;
+      }
+    };
+
+    const particleEmitter2s: ParticleEmitter2[] = [];
+
+    this.particleEmitters.forEach((p, i) => {
+      const hasHead = (p.flags & 0x20000) > 0;
+      const hasTail = (p.flags & 0x40000) > 0;
+
+      let textureId = p.texturePacked;
+      if (p.flags & 0x10000000) { // multi-texture then use only the first texture
+        textureId &= 0x1F;
+      }
+
+      const parent = this.mdl.bones[(p.bone ?? 0)] ?? this.mdl.bones[0];
+
+      const partTimestamps = Array.from(new Set(<Data.M2Track<number>['timestamps'][0]>[
+        // ...p.colorTrack.timestamps,
+        ...p.alphaTrack.timestamps,
+        // ...p.scaleTrack.timestamps,
+        // ...p.headCellTrack.timestamps,
+        // ...p.tailCellTrack.timestamps,
+      ])).sort((a, b) => a - b);
+
+      const timeMid = partTimestamps[Math.floor(partTimestamps.length / 2)];
+      const timeEnd = partTimestamps[partTimestamps.length - 1];
+
+      const getValueAt = <T>(partTrack: Data.PartTrack<T>, time: number): T | undefined => {
+        const index = partTrack.timestamps.findIndex((t) => t >= time);
+        if (index === -1) return undefined;
+        return partTrack.values[index];
+      };
+
+      const decompressGravity = (vUint32: number) => {
+        // Try float first
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        view.setUint32(0, vUint32, true);
+        const f = view.getFloat32(0, true);
+        // Heuristic: valid scalar gravity tends to be finite and |f| < ~1000 in model units.
+        // If f is NaN/Inf/abs too big, or the lower 16 bits are unlikely for IEEE-754,
+        // fallback to compressed decode.
+        const saneFloat = Number.isFinite(f) && Math.abs(f) < 1e4;
+
+        if (saneFloat) {
+          // WoW scalar uses -float on Z (viewer applies downward accel). Keep as-is for WC3.
+          return f;
+        }
+
+        // Decompression to vector3: https://wowdev.wiki/M2#Compressed_Particle_Gravity
+        const bx = vUint32 & 0xFF;
+        const by = (vUint32 >>> 8) & 0xFF;
+        let bz = (vUint32 >>> 16) & 0xFFFF;
+
+        // unsign int8 to signed int8
+        const x = (bx & 0x80) ? bx - 0x100 : bx;
+        const y = (by & 0x80) ? by - 0x100 : by;
+
+        // unsign int16 to signed int16
+        if (bz & 0x8000) bz -= 0x10000;
+
+        const dirX = x * (1 / 128);
+        const dirY = y * (1 / 128);
+        const dot = dirX * dirX + dirY * dirY;
+        let z = Math.sqrt(Math.max(0, 1 - dot));
+        let mag = bz * 0.04238648;
+        if (mag < 0) {
+          z = -z;
+          mag = -mag;
+        }
+        z *= mag;
+        return -z;
+      };
+
+      const node: ParticleEmitter2 = {
+        objectId: -1,
+        type: 'ParticleEmitter2',
+        name: `ParticleEmitter_${i}`,
+        pivotPoint: [p.position[0], -p.position[2], p.position[1]], // x -z y
+        parent,
+        flags: [],
+        flags2: [],
+        filterMode: mapBlend(p.blendingType),
+        width: this.m2trackToAnimationOrStatic(p.emissionAreaWidth, 'others')!,
+        length: this.m2trackToAnimationOrStatic(p.emissionAreaLength, 'others')!,
+        speed: this.m2trackToAnimationOrStatic(p.emissionSpeed, 'others')!,
+        variation: this.m2trackToAnimationOrStatic(p.speedVariation, 'others')!,
+        emissionRate: this.m2trackToAnimationOrStatic(p.emissionRate, 'others')!,
+        latitude: this.m2trackToAnimationOrStatic(p.verticalRange, 'others', degrees)!,
+        visibility: this.m2trackToAnimation(p.enabledIn, 'others')!,
+        texture: textures[textureId],
+        tailLength: p.tailLength,
+        columns: Math.max(1, p.textureCols),
+        rows: Math.max(1, p.textureRows),
+        headOrTail: hasHead && hasTail ? WC3HeadOrTail.Both : hasTail ? WC3HeadOrTail.Tail : WC3HeadOrTail.Head,
+        priorityPlane: 0,
+        replaceableId: 0,
+        gravity: this.m2trackToAnimationOrStatic(p.gravity, 'others', decompressGravity)!,
+        lifeSpan: p.lifespan.values[0][0],
+        timeMiddle: timeMid / timeEnd,
+        squirt: (p.flags & 0x40) > 0,
+
+        segmentColors: (() => {
+          const track = p.colorTrack;
+          const v0 = getValueAt(track, 0) ?? [255, 255, 255];
+          const v1 = getValueAt(track, timeMid) ?? v0;
+          const v2 = getValueAt(track, timeEnd) ?? v1;
+          const f = (v: Vector3): Vector3 => [v[2] / 255, v[1] / 255, v[0] / 255];
+          return [f(v0), f(v1), f(v2)];
+        })(),
+        segmentAlphas: (() => {
+          const track = p.alphaTrack;
+          const v0 = getValueAt(track, 0) ?? 32767;
+          const v1 = getValueAt(track, timeMid) ?? v0;
+          const v2 = getValueAt(track, timeEnd) ?? v1;
+          const f = (v: number) => Math.round(255 * v / 32767);
+          return [f(v0), f(v1), f(v2)];
+        })(),
+        segmentScaling: (() => {
+          const track = p.scaleTrack;
+          const v0 = getValueAt(track, 0) ?? [1, 1];
+          const v1 = getValueAt(track, timeMid) ?? v0;
+          const v2 = getValueAt(track, timeEnd) ?? v1;
+          const f = (v: [number, number]) => Math.min(v[0], v[1]);
+          return [f(v0), f(v1), f(v2)];
+        })(),
+        headIntervals: (() => {
+          const track = p.headCellTrack;
+          const v0 = getValueAt(track, 0) ?? 0;
+          const v1 = getValueAt(track, timeMid) ?? v0;
+          return [v0, v1, 1];
+        })(),
+        decayIntervals: (() => {
+          const track = p.headCellTrack;
+          const v1 = getValueAt(track, timeMid) ?? 0;
+          const v2 = getValueAt(track, timeEnd) ?? v1;
+          return [v1, v2, 1];
+        })(),
+        tailIntervals: (() => {
+          const track = p.tailCellTrack;
+          const v0 = getValueAt(track, 0) ?? 0;
+          const v1 = getValueAt(track, timeMid) ?? v0;
+          return [v0, v1, 1];
+        })(),
+        tailDecayIntervals: (() => {
+          const track = p.tailCellTrack;
+          const v1 = getValueAt(track, timeMid) ?? 0;
+          const v2 = getValueAt(track, timeEnd) ?? v1;
+          return [v1, v2, 1];
+        })(),
+      };
+
+      // Some flags are different than documented in https://wowdev.wiki/M2#Particle_Flags
+      // Because it follows the rendering code in the https://github.com/Deamon87/WebWowViewerCpp
+      if (p.flags & 0x1) node.flags2.push(ParticleEmitter2Flag.Unshaded);
+      if (p.flags & 0x10) node.flags2.push(ParticleEmitter2Flag.ModelSpace);
+      // if (p.flags & 0x1000) node.flags2.push(ParticleEmitter2Flag.XYQuad);
+
+      const varyThreshold = 0.1;
+      const chooseRandomTexture = p.flags & 0x10000
+        && p.headCellTrack.timestamps.length === 0
+        && p.textureCols * p.textureRows > 1;
+      const scaleVary = (p.scaleVary[0] + p.scaleVary[1]) / 2;
+      const hasVary = chooseRandomTexture || p.lifespanVary >= varyThreshold || scaleVary >= varyThreshold;
+
+      const diableVariants = false;
+      if (!hasVary || diableVariants) {
+        particleEmitter2s.push(node);
+        return;
+      }
+
+      // sample N different variants of the particle emitter
+      let maxVariants = 1;
+      if (chooseRandomTexture) maxVariants *= p.textureRows * p.textureCols;
+      if (p.lifespanVary >= varyThreshold) maxVariants *= 3;
+      if (scaleVary >= varyThreshold) maxVariants *= 3;
+
+      // TODO: replace / this.particleEmitters!.length with only PEs that need variants
+      const variantCount = Math.round(Math.min(maxVariants, 1000 / this.particleEmitters!.length));
+      if (variantCount < 1) {
+        particleEmitter2s.push(node);
+        return;
+      }
+
+      const rand = () => Math.random() * 2 - 1;
+      // Sample N variants
+      for (let i = 0; i < variantCount; i++) {
+        node.parent = undefined; // remove to avoid cloning the parent
+        const variant = _.cloneDeep(node);
+        variant.parent = parent;
+
+        if (chooseRandomTexture) {
+          const cell = Math.floor(Math.random() * p.textureRows * p.textureCols);
+          variant.headIntervals = [cell, cell, 1];
+          variant.decayIntervals = [cell, cell, 1];
+          variant.tailIntervals = [cell, cell, 1];
+          variant.tailDecayIntervals = [cell, cell, 1];
+        }
+
+        if (scaleVary >= varyThreshold) {
+          const scaleMult = Math.max(1 + Math.random() * scaleVary);
+          for (let j = 0; j < 3; j++) {
+            variant.segmentScaling[j] *= scaleMult;
+          }
+        }
+
+        if (p.lifespanVary >= varyThreshold) {
+          variant.lifeSpan += [0, 0.5, 1][Math.floor(Math.random() * 3)] * p.lifespanVary;
+        }
+
+        // we need to randomize the emission rate to avoid the same value for all variants
+        // causing all particles to spawn at the same time
+        const emissionRateFactor = 1 / variantCount * (1 + rand() * 0.5);
+        if ('static' in variant.emissionRate) {
+          variant.emissionRate.value *= emissionRateFactor;
+        } else if ('keyFrames' in variant.emissionRate) {
+          const keyFrames = variant.emissionRate.keyFrames;
+          keyFrames.forEach((v, k) => {
+            keyFrames.set(k, v * emissionRateFactor);
+          });
+        }
+        particleEmitter2s.push(variant);
+      }
+    });
+
+    this.mdl.particleEmitter2s = particleEmitter2s;
+    this.mdl.textures.push(...particleEmitter2s.map((e) => e.texture));
+    console.log('Particle emitters 2:', this.mdl.particleEmitter2s.length);
   }
 
   objToSubmesh = new Map<number, number>();

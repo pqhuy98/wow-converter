@@ -3,13 +3,13 @@ import { ExportCharacterRequest } from './export-character';
 export const startupRequests: ExportCharacterRequest[] = [
   {
     character: {
-      base: { type: 'wowhead', value: 'https://www.wowhead.com/npc=71865/garrosh-hellscream' },
+      base: { type: 'wowhead', value: 'https://www.wowhead.com/wotlk/npc=36597/the-lich-king' },
       size: 'hero',
       attackTag: '2H',
       inGameMovespeed: 270,
       attachItems: {
         1: {
-          path: { type: 'wowhead', value: 'https://www.wowhead.com/item=28773/gorehowl' },
+          path: { type: 'wowhead', value: 'https://www.wowhead.com/classic/item=231885/frostmourne' },
         },
       },
       portraitCameraSequenceName: 'Stand',
@@ -20,7 +20,7 @@ export const startupRequests: ExportCharacterRequest[] = [
       removeUnusedNodes: true,
       removeUnusedMaterialsTextures: true,
     },
-    outputFileName: 'demo-garrosh',
+    outputFileName: 'demo-lichking',
     format: 'mdx',
   },
   // {

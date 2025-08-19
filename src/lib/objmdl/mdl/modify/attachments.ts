@@ -1,7 +1,9 @@
-import { Vector3 } from "@/lib/math/common";
-import chalk from "chalk";
-import { MDLModify } from ".";
-import { WoWAttachmentID, WoWToWC3AttachmentMap } from "../../animation/bones_mapper";
+import chalk from 'chalk';
+
+import { Vector3 } from '@/lib/math/common';
+
+import { WoWAttachmentID, WoWToWC3AttachmentMap } from '../../animation/bones_mapper';
+import { MDLModify } from '.';
 
 export function addWc3AttachmentPoint(this: MDLModify) {
   // Only map WoW attachment points that have a valid WC3 equivalent.
@@ -37,4 +39,4 @@ export function setWowAttachmentScale(this: MDLModify, wowAttachmentId: WoWAttac
     type: 'scaling',
   };
   return this;
-} 
+}

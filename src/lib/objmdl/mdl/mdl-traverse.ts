@@ -2,7 +2,7 @@ import { QuaternionRotation, Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, quatNoRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
 import { Geoset, GeosetVertex } from './components/geoset';
-import { Node } from './components/node';
+import { Node } from './components/node/node';
 import { Sequence } from './components/sequence';
 import { MDL } from './mdl';
 
@@ -14,7 +14,7 @@ export interface Value {
 
 export function buildChildrenLists(mdl: MDL) {
   const childrenList = new Map<Node, Node[]>(); // { parent -> children[] }
-  [...mdl.bones, ...mdl.attachments].forEach((node) => {
+  mdl.getNodes().forEach((node) => {
     if (!childrenList.has(node)) {
       childrenList.set(node, []);
     }

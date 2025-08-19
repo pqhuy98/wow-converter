@@ -20,13 +20,14 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   let start = performance.now();
   const obj = new OBJFile(objFilePath).parse();
   const mtl = new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'));
-  const animation = new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'));
-  const metadata = new M2MetadataFile(objFilePath.replace(/\.obj$/, '.json'), config);
 
   const mdl = new MDL({
     formatVersion: 1000,
     name: path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', '.mdl'),
   });
+
+  const animation = new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'));
+  const metadata = new M2MetadataFile(objFilePath.replace(/\.obj$/, '.json'), config, animation, mdl);
 
   if (obj.models.length === 0) {
     return { mdl, texturePaths: new Set<string>() };
@@ -47,11 +48,10 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   const texturePaths = new Set<string>();
 
   const {
-    textureAnims, submeshIdToMat,
-  } = metadata.extractMDLTexturesMaterials(config.assetPrefix, animation, mdl.globalSequences);
+    submeshIdToMat, textures,
+  } = metadata.extractMDLTexturesMaterials();
   mdl.textures = [];
   mdl.materials = [];
-  mdl.textureAnims = textureAnims;
   metadata.textures.forEach((tex) => {
     if (!tex.fileNameExternal) return;
     const absPath = path.join(parentDir, tex.fileNameExternal);
@@ -214,7 +214,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   // Assign materials to geosets
 
   if (metadata.isLoaded) {
-    mdl.geosetAnims = metadata.extractMDLGeosetAnim(animation, mdl.geosets);
+    metadata.extractMDLGeosetAnim();
 
     // Validate submeshes equals to geosets
     debug && console.log('Geoset count:', mdl.geosets.length, 'Submesh count:', enabledSubmeshes.length);
@@ -229,6 +229,11 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
       }
       debug && console.log(geoset.name, metadata.skin.subMeshes.findIndex((s) => s === subMesh), geoset.material.layers[0].texture.image);
     });
+  }
+
+  // New: particles emitters
+  if (metadata.isLoaded) {
+    metadata.extractMDLParticlesEmitters(textures);
   }
 
   debug && console.log('basic parse took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');

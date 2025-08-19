@@ -1,7 +1,8 @@
-import { MDLModify } from ".";
-import { Bone } from "../components/node";
-import { Geoset, GeosetVertex, Matrix } from "../components/geoset";
-import { Face } from "../components/geoset";
+import {
+  Face, Geoset, GeosetVertex, Matrix,
+} from '../components/geoset';
+import { Bone } from '../components/node/node';
+import { MDLModify } from '.';
 
 export function convertToSd800(this: MDLModify) {
   const mdl = this.mdl;
@@ -220,8 +221,7 @@ export function convertToSd800(this: MDLModify) {
     throw new Error('Geoset matrices are not unique');
   }
 
-  console.log("Largest matrix size", mdl.geosets.reduce((max, gs) =>
-    Math.max(max, ...gs.matrices.map((m) => m.bones.length)), 0));
+  console.log('Largest matrix size', mdl.geosets.reduce((max, gs) => Math.max(max, ...gs.matrices.map((m) => m.bones.length)), 0));
 
   mdl.sync();
 

@@ -1,7 +1,9 @@
-import { V3 } from "@/lib/math/vector";
-import { MDLModify } from ".";
-import { Vector3 } from "@/lib/math/common";
-import { Sequence } from "../components/sequence";
+import { Vector3 } from '@/lib/math/common';
+import { V3 } from '@/lib/math/vector';
+
+import { AnimationOrStatic } from '../components/animation';
+import { Sequence } from '../components/sequence';
+import { MDLModify } from '.';
 
 export function scale(this: MDLModify, value: number) {
   this.mdl.geosets.forEach((geoset) => {
@@ -35,6 +37,26 @@ export function scale(this: MDLModify, value: number) {
     shape.pivotPoint = V3.scale(shape.pivotPoint, value);
   });
   this.mdl.sequences.forEach((seq) => seq.moveSpeed *= value);
+
+  // Scale particle emitters
+  const scaleAnimOrStatic = (a?: AnimationOrStatic<number>) => {
+    if (!a) return;
+    if ('static' in a) a.value *= value;
+    else if ('keyFrames' in a) a.keyFrames.forEach((v: number, k: number) => a.keyFrames.set(k, v * value));
+  };
+
+  this.mdl.particleEmitter2s.forEach((e) => {
+    scaleAnimOrStatic(e.width);
+    scaleAnimOrStatic(e.length);
+    scaleAnimOrStatic(e.speed);
+    scaleAnimOrStatic(e.gravity);
+    e.segmentScaling = [
+      e.segmentScaling[0] * value,
+      e.segmentScaling[1] * value,
+      e.segmentScaling[2] * value,
+    ];
+  });
+
   return this;
 }
 
@@ -54,7 +76,6 @@ export function translate(this: MDLModify, delta: Vector3) {
   this.mdl.sync();
   return this;
 }
-
 
 export function scaleSequenceDuration(this: MDLModify, sequence: Sequence, scalingFactor: number) {
   const durationOffset = Math.floor((sequence.interval[1] - sequence.interval[0]) * (scalingFactor - 1));

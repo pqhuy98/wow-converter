@@ -37,6 +37,11 @@ export class V3 {
     return rotateVector(v, eulerAngleRadians);
   }
 
+  static normalize(v: Vector3): Vector3 {
+    const mag = Math.hypot(v[0], v[1], v[2]);
+    return [v[0] / mag, v[1] / mag, v[2] / mag];
+  }
+
   static min(a: Vector3, b: Vector3): Vector3 {
     return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])];
   }

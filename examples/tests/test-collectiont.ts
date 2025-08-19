@@ -53,8 +53,8 @@ async function character() {
   writeFileSync(path.join('exported-assets', 'test.mdl'), model.mdl.toMdl());
   await assetManager.exportTextures('exported-assets');
   console.log(result);
-  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), config);
   const animation = new AnimationFile(objPath.replace(/\.obj$/, '_bones.json'));
+  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), config, animation, model.mdl);
 
   return { model, metadata, animation };
 }
@@ -66,8 +66,8 @@ export async function collection() {
   const model = assetManager.parse(path.relative(config.wowExportAssetDir, objPath), true);
   writeFileSync(path.join('exported-assets', 'collection.mdl'), model.mdl.toMdl());
   await assetManager.exportTextures('exported-assets');
-  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), config);
   const animation = new AnimationFile(objPath.replace(/\.obj$/, '_bones.json'));
+  const metadata = new M2MetadataFile(objPath.replace(/\.obj$/, '.json'), config, animation, model.mdl);
   return { model, metadata, animation };
 }
 

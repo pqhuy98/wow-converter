@@ -1,19 +1,20 @@
-import { Vector3 } from "@/lib/math/common";
-import { MDLModify } from ".";
-import { Node } from "../components/node";
-import { iterateNodesAtTimestamp } from "../mdl-traverse";
-import { V3 } from "@/lib/math/vector";
+import { Vector3 } from '@/lib/math/common';
+import { V3 } from '@/lib/math/vector';
+
+import { Node } from '../components/node/node';
+import { iterateNodesAtTimestamp } from '../mdl-traverse';
+import { MDLModify } from '.';
 
 const debug = false;
 
 // TODO: this doesn't work with Undead character!!
 export function computeWalkMovespeed(this: MDLModify) {
-    this.mdl.sequences.forEach((seq) => {
-      if (seq.moveSpeed === 0 && ([
-        'Walk', 'Run', 'Sprint', 'FlyWalk',
-      ].includes(seq.data.wowName))) {
-        console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
-        const SAMPLE_STEPS = 30;
+  this.mdl.sequences.forEach((seq) => {
+    if (seq.moveSpeed === 0 && ([
+      'Walk', 'Run', 'Sprint', 'FlyWalk',
+    ].includes(seq.data.wowName))) {
+      console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
+      const SAMPLE_STEPS = 30;
 
         // -------------------------------------------------------------------
         // 1. Sample frames and capture node positions
@@ -163,7 +164,7 @@ export function computeWalkMovespeed(this: MDLModify) {
           debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed to 0');
           seq.moveSpeed = 0;
         }
-      }
-    });
-    return this;
-  }
+    }
+  });
+  return this;
+}

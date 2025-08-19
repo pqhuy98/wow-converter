@@ -1,8 +1,12 @@
-import { MDLModify } from ".";
-import { WowAnimName } from "../../animation/animation_mapper";
-import { Sequence } from "../components/sequence";
-import { interpolateTransformQuat } from "../mdl-traverse";
-import { Vector3 } from "@/lib/math/common";
+import _ from 'lodash';
+
+import { Vector3 } from '@/lib/math/common';
+
+import { WowAnimName } from '../../animation/animation_mapper';
+import { Animation } from '../components/animation';
+import { Sequence } from '../components/sequence';
+import { interpolateTransformQuat } from '../mdl-traverse';
+import { MDLModify } from '.';
 
 const animPrefixOrder = ['Stand', 'Walk', 'Attack', 'Spell', 'Death', 'Decay'];
 
@@ -66,7 +70,7 @@ export function addEventObjectBySequenceName(this: MDLModify, name: string, sequ
   this.mdl.sequences.filter((s) => s.name === sequenceName).forEach((sequence) => {
     if (!event) {
       event = {
-        name, track: [], pivotPoint: [0, 0, 0], flags: [],
+        name, track: [], pivotPoint: [0, 0, 0], flags: [], type: 'EventObject',
       };
       this.mdl.eventObjects.push(event);
     }
@@ -155,39 +159,58 @@ export function addDecayAnimation(this: MDLModify) {
   this.mdl.sequences.push(decayBoneSequence);
 
   // Copy geoset animation
+  const updateAnimKeyFrames = <T>(anim: Animation<T>, timestampFrom: number, timestampTo: number) => {
+    const value = anim.keyFrames.get(timestampFrom);
+    if (value) {
+      anim.keyFrames.set(timestampTo, _.cloneDeep(value));
+    }
+  };
+  const copyAnimKeyFrames = <T>(anim: Animation<T>) => {
+    updateAnimKeyFrames(anim, deathTimestamp, decayFleshSequence.interval[0]);
+    updateAnimKeyFrames(anim, deathTimestamp, decayFleshSequence.interval[1]);
+    updateAnimKeyFrames(anim, deathTimestamp, decayBoneSequence.interval[0]);
+    updateAnimKeyFrames(anim, deathTimestamp, decayBoneSequence.interval[1]);
+  };
+
   this.mdl.geosetAnims.forEach((geosetAnim) => {
     if (geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha) {
-      geosetAnim.alpha.keyFrames.set(decayFleshSequence.interval[0], geosetAnim.alpha.keyFrames.get(deathTimestamp)!);
-      geosetAnim.alpha.keyFrames.set(decayFleshSequence.interval[1], geosetAnim.alpha.keyFrames.get(deathTimestamp)!);
-      geosetAnim.alpha.keyFrames.set(decayBoneSequence.interval[0], geosetAnim.alpha.keyFrames.get(deathTimestamp)!);
-      geosetAnim.alpha.keyFrames.set(decayBoneSequence.interval[1], geosetAnim.alpha.keyFrames.get(deathTimestamp)!);
+      copyAnimKeyFrames(geosetAnim.alpha);
     }
     if (geosetAnim.color && 'keyFrames' in geosetAnim.color) {
-      geosetAnim.color.keyFrames.set(decayFleshSequence.interval[0], [...geosetAnim.color.keyFrames.get(deathTimestamp)!]);
-      geosetAnim.color.keyFrames.set(decayFleshSequence.interval[1], [...geosetAnim.color.keyFrames.get(deathTimestamp)!]);
-      geosetAnim.color.keyFrames.set(decayBoneSequence.interval[0], [...geosetAnim.color.keyFrames.get(deathTimestamp)!]);
-      geosetAnim.color.keyFrames.set(decayBoneSequence.interval[1], [...geosetAnim.color.keyFrames.get(deathTimestamp)!]);
+      copyAnimKeyFrames(geosetAnim.color);
     }
   });
 
   // Copy texture anim
   this.mdl.textureAnims.forEach((texAnim) => {
     if (texAnim.translation && !texAnim.translation.globalSeq && texAnim.translation.keyFrames.get(deathTimestamp)) {
-      texAnim.translation.keyFrames.set(decayFleshSequence.interval[0], [...texAnim.translation.keyFrames.get(deathTimestamp)!]);
-      texAnim.translation.keyFrames.set(decayFleshSequence.interval[1], [...texAnim.translation.keyFrames.get(deathTimestamp)!]);
-      texAnim.translation.keyFrames.set(decayBoneSequence.interval[0], [...texAnim.translation.keyFrames.get(deathTimestamp)!]);
-      texAnim.translation.keyFrames.set(decayBoneSequence.interval[1], [...texAnim.translation.keyFrames.get(deathTimestamp)!]);
+      copyAnimKeyFrames(texAnim.translation);
     }
     if (texAnim.rotation && !texAnim.rotation.globalSeq && texAnim.rotation.keyFrames.get(deathTimestamp)) {
-      texAnim.rotation.keyFrames.set(decayFleshSequence.interval[0], [...texAnim.rotation.keyFrames.get(deathTimestamp)!]);
-      texAnim.rotation.keyFrames.set(decayFleshSequence.interval[1], [...texAnim.rotation.keyFrames.get(deathTimestamp)!]);
+      copyAnimKeyFrames(texAnim.rotation);
     }
     if (texAnim.scaling && !texAnim.scaling.globalSeq && texAnim.scaling.keyFrames.get(deathTimestamp)) {
-      texAnim.scaling.keyFrames.set(decayFleshSequence.interval[0], [...texAnim.scaling.keyFrames.get(deathTimestamp)!]);
-      texAnim.scaling.keyFrames.set(decayFleshSequence.interval[1], [...texAnim.scaling.keyFrames.get(deathTimestamp)!]);
-      texAnim.scaling.keyFrames.set(decayBoneSequence.interval[0], [...texAnim.scaling.keyFrames.get(deathTimestamp)!]);
-      texAnim.scaling.keyFrames.set(decayBoneSequence.interval[1], [...texAnim.scaling.keyFrames.get(deathTimestamp)!]);
+      copyAnimKeyFrames(texAnim.scaling);
     }
+  });
+
+  // Disable particle emitters
+  this.mdl.particleEmitter2s.forEach((p) => {
+    if (!p.visibility) {
+      p.visibility = {
+        interpolation: 'Linear',
+        keyFrames: new Map(),
+        type: 'others',
+      };
+      this.mdl.sequences.filter((s) => ![decayFleshSequence, decayBoneSequence].includes(s)).forEach((s) => {
+        p.visibility!.keyFrames.set(s.interval[0], 1);
+        p.visibility!.keyFrames.set(s.interval[1], 1);
+      });
+    }
+    p.visibility.keyFrames.set(decayFleshSequence.interval[0], 0);
+    p.visibility.keyFrames.set(decayFleshSequence.interval[1], 0);
+    p.visibility.keyFrames.set(decayBoneSequence.interval[0], 0);
+    p.visibility.keyFrames.set(decayBoneSequence.interval[1], 0);
   });
 
   // Find the highest vertex in Death animation

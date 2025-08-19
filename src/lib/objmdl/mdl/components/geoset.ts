@@ -8,7 +8,7 @@ import {
 import { Bound } from './extent';
 import { f, fVector } from './formatter';
 import { Material } from './material';
-import { Bone } from './node';
+import { Bone } from './node/node';
 import { Sequence } from './sequence';
 
 export interface Face {

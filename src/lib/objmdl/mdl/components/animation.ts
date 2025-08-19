@@ -1,14 +1,18 @@
+import { QuaternionRotation, Vector3 } from '@/lib/math/common';
+
 import { f, fVector } from './formatter';
 import { GlobalSequence } from './global-sequence';
 
 export type Interpolation = 'Linear' | 'DontInterp' | 'Hermite' | 'Bezier'
+
+export type AnimationType = 'translation' | 'rotation' | 'scaling' | 'alpha' | 'color' | 'tvertex' | 'tvertexAnim' | 'others';
 
 export type Animation<T> = {
   globalSeq?: GlobalSequence;
   interpolation: Interpolation;
   keyFrames: Map<number, T>;
   // inOutTans?: Map<number, {inTan: Vector3, outTan: Vector3}>;
-  type: 'translation' | 'rotation' | 'scaling' | 'alpha' | 'color' | 'tvertex' | 'tvertexAnim';
+  type: AnimationType;
 };
 
 export type AnimationOrStatic<T> = {
@@ -41,6 +45,30 @@ export function animatedValueToString<T extends number[] | number>(type: string,
     return `static ${type} ${Array.isArray(animatedValue.value) ? `{ ${fVector(animatedValue.value)} }` : f(animatedValue.value)},`;
   }
   return animationToString(type, animatedValue);
+}
+
+export function staticTranslation(): Animation<Vector3> {
+  return {
+    interpolation: 'DontInterp',
+    keyFrames: new Map([[0, [0, 0, 0]]]),
+    type: 'translation',
+  };
+}
+
+export function staticRotation(): Animation<QuaternionRotation> {
+  return {
+    interpolation: 'DontInterp',
+    keyFrames: new Map([[0, [0, 0, 0, 1]]]),
+    type: 'rotation',
+  };
+}
+
+export function staticScaling(): Animation<Vector3> {
+  return {
+    interpolation: 'DontInterp',
+    keyFrames: new Map([[0, [1, 1, 1]]]),
+    type: 'scaling',
+  };
 }
 
 function sortMapByKeyAsc<K, V>(map: Map<K, V>): Map<K, V> {

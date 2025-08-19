@@ -232,14 +232,9 @@ export class CharacterExporter {
         const modelId = data.modelFiles[0].fileDataId;
         const exp = exportedModels.find((m) => m.fileDataID === modelId);
 
-        // For some reason, Orc models have smaller shoulder bones than other races
-        const raceOrc = 2;
-        const genderMale = 0;
-        const isOrcMale = prep.exportCharRpcParams.race === raceOrc && prep.exportCharRpcParams.gender === genderMale;
-
         slotModelPaths.set(slot.slotId, [
           this.relativeToExport(exp?.files.find((f) => f.type === 'OBJ')?.file)!,
-          slot.slotId === EquipmentSlot.Shoulder.toString() && isOrcMale ? 1.75 : 1,
+          1,
         ]);
 
         if (slot.slotId === EquipmentSlot.Shoulder.toString() && data.modelFiles?.[1]?.fileDataId) {
@@ -247,7 +242,7 @@ export class CharacterExporter {
           const expR = exportedModels.find((m) => m.fileDataID === modelIdR);
           slotModelPathsR.set(slot.slotId, [
             this.relativeToExport(expR?.files.find((f) => f.type === 'OBJ')?.file)!,
-            slot.slotId === EquipmentSlot.Shoulder.toString() && isOrcMale ? 1.75 : 1,
+            1,
           ]);
         }
       }

@@ -8,7 +8,7 @@ import { Vector3 } from '@/lib/math/common';
 import { BlizzardNull } from '../../constants';
 import { SkinWeight } from '../mdl/components/geoset';
 import { GlobalSequence } from '../mdl/components/global-sequence';
-import { Bone, NodeFlag } from '../mdl/components/node';
+import { Bone, NodeFlag } from '../mdl/components/node/node';
 import { MDL, WowAttachment } from '../mdl/mdl';
 import { wowToWc3Interpolation } from '../utils';
 import { getWacraftSequenceData, getWowAnimName, isLoopAnimation } from './animation_mapper';
@@ -105,6 +105,7 @@ export class AnimationFile implements AnimationData {
 
   constructor(public filePath: string) {
     try {
+      console.log("Loading animation file", this.filePath);
       const start = performance.now();
       Object.assign(this, JSON.parse(readFileSync(filePath, 'utf-8')));
       debug && console.log('AnimationFile load took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
@@ -179,13 +180,13 @@ export class AnimationFile implements AnimationData {
       if (bone.flags & 0x20) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_Y);
       if (bone.flags & 0x40) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_X); // X and Z are swapped?
 
-      function isValidTimestamps(timestamps: number[] | null): timestamps is number[] {
+      const isValidTimestamps = (timestamps: number[] | null, animId: number): timestamps is number[] => {
         const isNull = timestamps == null;
         const isNotIncreasing = timestamps != null
-          && timestamps.some((_, i) => i > 0 && timestamps[i] < timestamps[i - 1] || timestamps[i] > 99999);
+          && timestamps.some((_, i) => i > 0 && timestamps[i] < timestamps[i - 1] || timestamps[i] > 9999999);
         const isInvalid = isNull || isNotIncreasing;
         if (isInvalid) {
-          // console.warn(`Invalid timestamps ${timestamps} for bone ${bone.boneNameCRC}`, { isNull, isNotIncreasing});
+          console.warn(`Invalid timestamps ${timestamps} for bone ${bone.boneNameCRC} in animation ${this.animations?.[animId]?.id}`, { isNull, isNotIncreasing});
         }
         return !isInvalid;
       }
@@ -205,7 +206,7 @@ export class AnimationFile implements AnimationData {
           return;
         }
 
-        if (!isValidTimestamps(timestamps)) {
+        if (!isValidTimestamps(timestamps, animId)) {
           if (timestamps != null) {
             excludedAnimation.add(animId);
           }
@@ -216,7 +217,7 @@ export class AnimationFile implements AnimationData {
         timestamps.forEach((timestamp, timestampI) => {
           const values = bone.translation.values[animId][timestampI];
           if (values.length !== 3) {
-            throw new Error(`Invalid Vector3 ${values} for bone ${bone.boneNameCRC} in animation ${this.animations?.[animId]?.id}`);
+            throw new Error(`Invalid Vector3 ${values.toString()} for bone ${bone.boneNameCRC} in animation ${this.animations?.[animId]?.id}`);
           }
 
           const [x, y, z] = values;
@@ -242,7 +243,7 @@ export class AnimationFile implements AnimationData {
         if (excludedAnimation.has(animId)) {
           return;
         }
-        if (!isValidTimestamps(timestamps)) {
+        if (!isValidTimestamps(timestamps, animId)) {
           if (timestamps != null) {
             excludedAnimation.add(animId);
           }
@@ -274,16 +275,11 @@ export class AnimationFile implements AnimationData {
         if (excludedAnimation.has(animId)) {
           return;
         }
-        if (!isValidTimestamps(timestamps)) {
+        if (!isValidTimestamps(timestamps, animId)) {
           if (timestamps != null) {
-            const ts = timestamps as number[];
-            for (let i = 0; i < ts.length; i++) {
-              ts[i] = Math.round(i / ((ts.length - 1) || 1) * animation.duration);
-            }
-            // excludedAnimation.add(animId);
-          } else {
-            return;
+            excludedAnimation.add(animId);
           }
+          return;
         }
         let maxTimestamp = -Infinity;
         timestamps.forEach((timestamp, timestampI) => {

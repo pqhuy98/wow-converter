@@ -1,7 +1,8 @@
-import { Vector3 } from "@/lib/math/common";
-import { MDLModify } from ".";
-import { GeosetVertex } from "../components/geoset";
-import { iterateVerticesAtTimestamp } from "../mdl-traverse";
+import { Vector3 } from '@/lib/math/common';
+
+import { GeosetVertex } from '../components/geoset';
+import { iterateVerticesAtTimestamp } from '../mdl-traverse';
+import { MDLModify } from '.';
 
 export function addCollisionShapes(this: MDLModify) {
   // Iterate all vertices at Stand sequence (or first sequence)
@@ -92,12 +93,16 @@ export function addCollisionShapes(this: MDLModify) {
     const dy = Math.max(0, max[1] - min[1]);
     const dz = Math.max(0, max[2] - min[2]);
     const volume = dx * dy * dz;
-    return { rawMin, rawMax, min, max, volume };
+    return {
+      rawMin, rawMax, min, max, volume,
+    };
   };
 
   const initialIdxs = cloud.map((_, i) => i);
   const initialBox = computeAABB(initialIdxs);
-  const clusters: Cluster[] = [{ pointsIdx: initialIdxs, rawMin: initialBox.rawMin, rawMax: initialBox.rawMax, min: initialBox.min, max: initialBox.max, volume: initialBox.volume }];
+  const clusters: Cluster[] = [{
+    pointsIdx: initialIdxs, rawMin: initialBox.rawMin, rawMax: initialBox.rawMax, min: initialBox.min, max: initialBox.max, volume: initialBox.volume,
+  }];
 
   const MAX_SHAPES = 3;
   const NUM_BINS = 16; // candidate split thresholds per axis
@@ -132,8 +137,12 @@ export function addCollisionShapes(this: MDLModify) {
             bestGain = gain;
             bestSplit = {
               clusterIndex: ci,
-              left: { pointsIdx: leftIdx, rawMin: l.rawMin, rawMax: l.rawMax, min: l.min, max: l.max, volume: l.volume },
-              right: { pointsIdx: rightIdx, rawMin: r.rawMin, rawMax: r.rawMax, min: r.min, max: r.max, volume: r.volume },
+              left: {
+                pointsIdx: leftIdx, rawMin: l.rawMin, rawMax: l.rawMax, min: l.min, max: l.max, volume: l.volume,
+              },
+              right: {
+                pointsIdx: rightIdx, rawMin: r.rawMin, rawMax: r.rawMax, min: r.min, max: r.max, volume: r.volume,
+              },
             };
           }
         }

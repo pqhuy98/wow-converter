@@ -12,7 +12,8 @@ import { GlobalSequence, globalSequencesToString } from './components/global-seq
 import { Material, materialsToString } from './components/material';
 import {
   AttachmentPoint, attachmentPointsToString, Bone, bonesToString, CollisionShape, collisionShapesToString, EventObject, eventObjectsToString, pivotPointsToString,
-} from './components/node';
+} from './components/node/node';
+import { ParticleEmitter2, particleEmitter2sToString } from './components/node/particle-emitter-2';
 import { Sequence, sequencesToString } from './components/sequence';
 import { Texture, texturesToString } from './components/texture';
 import { TextureAnim, textureAnimsToString } from './components/texture-anim';
@@ -51,6 +52,10 @@ export class MDL {
   bones: Bone[] = [];
 
   attachments: AttachmentPoint[] = [];
+
+  // particleEmitters: ParticleEmitter[] = [];
+  particleEmitter2s: ParticleEmitter2[] = [];
+  // particleEmitterPopcorns: ParticleEmitterPopcorn[] = [];
 
   cameras: Camera[] = [];
 
@@ -99,6 +104,9 @@ export class MDL {
     return [
       ...this.bones,
       ...this.attachments,
+      // ...this.particleEmitters,
+      ...this.particleEmitter2s,
+      // ...this.particleEmitterPopcorns,
       ...this.eventObjects,
       ...this.collisionShapes,
     ];
@@ -119,6 +127,16 @@ export class MDL {
         geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha ? geosetAnim.alpha : null,
         geosetAnim.color && 'keyFrames' in geosetAnim.color ? geosetAnim.color : null,
       ]),
+      ...this.particleEmitter2s.flatMap((p) => [
+        p.visibility,
+        p.emissionRate && 'keyFrames' in p.emissionRate ? p.emissionRate : null,
+        p.latitude && 'keyFrames' in p.latitude ? p.latitude : null,
+        p.speed && 'keyFrames' in p.speed ? p.speed : null,
+        p.variation && 'keyFrames' in p.variation ? p.variation : null,
+        p.gravity && 'keyFrames' in p.gravity ? p.gravity : null,
+        p.width && 'keyFrames' in p.width ? p.width : null,
+        p.length && 'keyFrames' in p.length ? p.length : null,
+      ]),
     ].filter((anim) => anim != null);
   }
 
@@ -132,12 +150,7 @@ export class MDL {
     this.geosets.forEach((geoset, i) => {
       geoset.id = i;
     });
-    [
-      ...this.bones,
-      ...this.attachments,
-      ...this.eventObjects,
-      ...this.collisionShapes,
-    ].forEach((node, i) => node.objectId = i);
+    this.getNodes().forEach((node, i) => node.objectId = i);
     this.attachments.forEach((p, i) => p.attachmentId = i);
   }
 
@@ -167,15 +180,11 @@ export class MDL {
       ${geosetAnimsToString(this.geosetAnims)}
       ${bonesToString(this.bones)}
       ${attachmentPointsToString(this.attachments)}
+      ${particleEmitter2sToString(this.particleEmitter2s)}
       ${camerasToString(this.cameras)}
       ${eventObjectsToString(this.eventObjects)}
       ${collisionShapesToString(this.collisionShapes)}
-      ${pivotPointsToString([
-    ...this.bones,
-    ...this.attachments,
-    ...this.eventObjects,
-    ...this.collisionShapes,
-  ])}
+      ${pivotPointsToString(this.getNodes())}
     `;
 
     let depth = 0;
@@ -183,7 +192,7 @@ export class MDL {
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
       .map((l) => {
-        if (l.endsWith('}')) {
+        if (l === '}' || l === '},') {
           depth--;
         }
         try {

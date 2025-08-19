@@ -1,13 +1,11 @@
-import { Vector2, Vector3 } from "@/lib/math/common";
-import { MDLModify } from ".";
-import { GeosetVertex, SkinWeight } from "../components/geoset";
-import { Face } from "../components/geoset";
-import { V3 } from "@/lib/math/vector";
-import { Bone } from "../components/node";
+import { Vector2, Vector3 } from '@/lib/math/common';
+import { V3 } from '@/lib/math/vector';
 
+import { Face, GeosetVertex, SkinWeight } from '../components/geoset';
+import { Bone } from '../components/node/node';
+import { MDLModify } from '.';
 
 type Plane = { axis: 0 | 1 | 2; min: boolean; value: number };
-
 
 export function deleteVerticesIf(
   this: MDLModify,

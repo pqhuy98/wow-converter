@@ -1917,10 +1917,11 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
 
     // Flying
     case 'FlyStand': return { wc3Name: 'Stand Alternate', attackTag: '' };
-    case 'FlyStandWound': return { wc3Name: 'Stand Alternate Hit', attackTag: '' };
+    case 'Hover': return { wc3Name: 'Stand Alternate', attackTag: '' };
+    case 'Fly': return { wc3Name: 'Walk Alternate', attackTag: '' };
     case 'FlyWalk': return { wc3Name: 'Walk Alternate', attackTag: '' };
-    case 'FlySettle': return { wc3Name: 'Morph Alternate', attackTag: '' };
-    case 'ToFly': return { wc3Name: 'Morph', attackTag: '' };
+    case 'Land': return { wc3Name: 'Morph Alternate', attackTag: '' };
+    case 'LiftOff': return { wc3Name: 'Morph', attackTag: '' };
     case 'FlyChannelCastDirected': return { wc3Name: 'Spell Channel Alternate Throw', attackTag: '' };
     case 'FlyChannelCastOmni': return { wc3Name: 'Spell Channel Alternate', attackTag: '' };
     case 'FlySpellCastDirected': return { wc3Name: 'Spell Alternate Throw', attackTag: '' };

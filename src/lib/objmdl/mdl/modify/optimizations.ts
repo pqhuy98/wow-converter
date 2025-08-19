@@ -1,29 +1,35 @@
-import { MDLModify } from ".";
-import { Node } from "../components/node";
-import { Animation } from "../components/animation";
-import { GlobalSequence } from "../components/global-sequence";
-import { Material } from "../components/material";
-import { Texture } from "../components/texture";
-import { buildChildrenLists } from "../mdl-traverse";
-
+import { Animation } from '../components/animation';
+import { GlobalSequence } from '../components/global-sequence';
+import { Material } from '../components/material';
+import { Node } from '../components/node/node';
+import { Texture } from '../components/texture';
+import { buildChildrenLists } from '../mdl-traverse';
+import { MDLModify } from '.';
 
 export function removeUnusedMaterialsTextures(this: MDLModify) {
   // Deduplicate textures
   this.mdl.materials = [...new Set(this.mdl.geosets.map((geoset) => geoset.material))];
   const textureKey = (tex: Texture) => JSON.stringify(tex);
   const usedTextures = new Map<string, Texture>();
+
+  const getTexture = (tex: Texture) => {
+    const key = textureKey(tex);
+    if (!usedTextures.has(key)) {
+      usedTextures.set(key, tex);
+    }
+    return usedTextures.get(key)!;
+  };
+
   this.mdl.materials.forEach((mat) => {
     mat.layers.forEach((layer) => {
       if (layer.texture.image === '') {
         console.log('Empty texture', mat.id, layer.texture.image);
       }
-      const texKey = textureKey(layer.texture);
-      if (!usedTextures.has(texKey)) {
-        usedTextures.set(texKey, layer.texture);
-      } else {
-        layer.texture = usedTextures.get(texKey)!;
-      }
+      layer.texture = getTexture(layer.texture);
     });
+  });
+  this.mdl.particleEmitter2s.forEach((e) => {
+    e.texture = getTexture(e.texture);
   });
   this.mdl.textures = [...usedTextures.values()];
 
@@ -43,7 +49,14 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
 }
 
 export function removeUnusedNodes(this: MDLModify) {
-  const usedNodes = new Set<Node>([...this.mdl.attachments]);
+  const usedNodes = new Set<Node>([
+    ...this.mdl.attachments,
+    // ...this.mdl.particleEmitters,
+    ...this.mdl.particleEmitter2s,
+    // ...this.mdl.particleEmitterPopcorns,
+    ...this.mdl.eventObjects,
+    ...this.mdl.collisionShapes,
+  ]);
   this.mdl.geosets.forEach((geoset) => geoset.vertices.forEach((v) => {
     v.skinWeights?.forEach((sw) => usedNodes.add(sw.bone));
     v.matrix?.bones.forEach((b) => usedNodes.add(b));
@@ -76,12 +89,10 @@ export function removeUnusedVertices(this: MDLModify) {
   return this;
 }
 
-
 export function removeCinematicSequences(this: MDLModify) {
   this.mdl.sequences = this.mdl.sequences.filter((seq) => !seq.name.includes('Cinematic'));
   return this;
 }
-
 
 export function optimizeKeyFrames(this: MDLModify) {
   // Pre-compute sequence intervals once so every key-frame test is O(1)
@@ -182,6 +193,9 @@ export function optimizeKeyFrames(this: MDLModify) {
         break;
       case 'tvertexAnim':
         threshold = 0.001;
+        break;
+      default:
+        threshold = 0.0001;
         break;
     }
     optimiseAnim(anim, threshold);

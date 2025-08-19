@@ -204,7 +204,7 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
   return null
 }
 
-const localRefPattern = /^[a-zA-Z0-9_\-\/\\]+(\.obj)?$/
+const localRefPattern = /^[a-zA-Z0-9_\-\/\\,]+(\.obj)?$/
 
 export function isLocalRef(val: string) {
   if (!localRefPattern.test(val)) return false;

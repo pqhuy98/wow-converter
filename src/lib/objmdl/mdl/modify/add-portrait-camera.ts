@@ -1,7 +1,8 @@
-import { Vector3 } from "@/lib/math/common";
-import { V3 } from "@/lib/math/vector";
-import { MDLModify } from ".";
-import { iterateNodesAtTimestamp } from "../mdl-traverse";
+import { Vector3 } from '@/lib/math/common';
+import { V3 } from '@/lib/math/vector';
+
+import { iterateNodesAtTimestamp } from '../mdl-traverse';
+import { MDLModify } from '.';
 
 export function addPortraitCamera(this: MDLModify, standSequenceName: string = 'Stand') {
   const cameraBone = this.mdl.bones.find((b) => b.name === 'Head')

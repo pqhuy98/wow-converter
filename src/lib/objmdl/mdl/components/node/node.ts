@@ -1,9 +1,9 @@
 import { QuaternionRotation, Vector3 } from '@/lib/math/common';
 
-import { Animation, animationToString } from './animation';
-import { f, fVector } from './formatter';
-import { Geoset, GeosetAnim } from './geoset';
-import { Sequence } from './sequence';
+import { Animation, animationToString } from '../animation';
+import { f, fVector } from '../formatter';
+import { Geoset, GeosetAnim } from '../geoset';
+import { Sequence } from '../sequence';
 
 export enum NodeFlag {
   DONTINHERIT_TRANSLATION = 'DontInherit { Translation },',
@@ -24,6 +24,7 @@ export interface Node {
   translation?: Animation<Vector3>;
   scaling?: Animation<Vector3>;
   rotation?: Animation<QuaternionRotation>;
+  type: string
 }
 
 export interface Bone extends Node {
@@ -39,6 +40,7 @@ export interface AttachmentPoint extends Node {
 }
 
 export interface EventObject extends Node {
+  type: 'EventObject'
   track: {sequence: Sequence, offset: number}[] // which sequence, and duration offset from sequence's start time
 }
 
@@ -101,7 +103,7 @@ export function pivotPointsToString(nodes: Node[]): string {
     }`;
 }
 
-function nodeHeaders(node: Node): string {
+export function nodeHeaders(node: Node): string {
   return `
       ObjectId ${node.objectId},
 
@@ -111,7 +113,7 @@ function nodeHeaders(node: Node): string {
   `;
 }
 
-function nodeAnimations(node: Node): string {
+export function nodeAnimations(node: Node): string {
   return `
     ${animationToString('Translation', node.translation)}
     ${animationToString('Rotation', node.rotation)}

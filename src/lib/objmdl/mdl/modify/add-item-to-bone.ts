@@ -1,8 +1,10 @@
-import chalk from "chalk";
-import { MDL } from "../mdl";
-import { MDLModify } from ".";
-import { V3 } from "@/lib/math/vector";
-import path from "path";
+import chalk from 'chalk';
+import path from 'path';
+
+import { V3 } from '@/lib/math/vector';
+
+import { MDL } from '../mdl';
+import { MDLModify } from '.';
 
 export function addMdlItemToBone(this: MDLModify, item: MDL, boneName: string) {
   const attachmentBone = this.mdl.bones.find((b) => b.name === boneName);
@@ -15,8 +17,8 @@ export function addMdlItemToBone(this: MDLModify, item: MDL, boneName: string) {
   item.getNodes().forEach((b) => {
     if (!b.parent) {
       b.parent = attachmentBone;
-      b.pivotPoint = V3.sum(b.pivotPoint, attachmentBone.pivotPoint);
     }
+    b.pivotPoint = V3.sum(b.pivotPoint, attachmentBone.pivotPoint);
   });
   item.geosets.forEach((geoset) => geoset.vertices.forEach((v) => {
     v.position = V3.sum(v.position, attachmentBone.pivotPoint);
@@ -35,6 +37,7 @@ export function addMdlItemToBone(this: MDLModify, item: MDL, boneName: string) {
   // this.mdl.attachments.push(...item.attachments);
   this.mdl.eventObjects.push(...item.eventObjects);
   // this.mdl.collisionShapes.push(...item.collisionShapes);
+  this.mdl.particleEmitter2s.push(...item.particleEmitter2s);
   return this;
 }
 
