@@ -166,6 +166,7 @@ export function addDecayAnimation(this: MDLModify) {
     }
   };
   const copyAnimKeyFrames = <T>(anim: Animation<T>) => {
+    if (anim.globalSeq) return;
     updateAnimKeyFrames(anim, deathTimestamp, decayFleshSequence.interval[0]);
     updateAnimKeyFrames(anim, deathTimestamp, decayFleshSequence.interval[1]);
     updateAnimKeyFrames(anim, deathTimestamp, decayBoneSequence.interval[0]);
@@ -173,29 +174,30 @@ export function addDecayAnimation(this: MDLModify) {
   };
 
   this.mdl.geosetAnims.forEach((geosetAnim) => {
-    if (geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha) {
+    if (geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha && !geosetAnim.alpha.globalSeq) {
       copyAnimKeyFrames(geosetAnim.alpha);
     }
-    if (geosetAnim.color && 'keyFrames' in geosetAnim.color) {
+    if (geosetAnim.color && 'keyFrames' in geosetAnim.color && !geosetAnim.color.globalSeq) {
       copyAnimKeyFrames(geosetAnim.color);
     }
   });
 
   // Copy texture anim
   this.mdl.textureAnims.forEach((texAnim) => {
-    if (texAnim.translation && !texAnim.translation.globalSeq && texAnim.translation.keyFrames.get(deathTimestamp)) {
+    if (texAnim.translation && !texAnim.translation.globalSeq) {
       copyAnimKeyFrames(texAnim.translation);
     }
-    if (texAnim.rotation && !texAnim.rotation.globalSeq && texAnim.rotation.keyFrames.get(deathTimestamp)) {
+    if (texAnim.rotation && !texAnim.rotation.globalSeq) {
       copyAnimKeyFrames(texAnim.rotation);
     }
-    if (texAnim.scaling && !texAnim.scaling.globalSeq && texAnim.scaling.keyFrames.get(deathTimestamp)) {
+    if (texAnim.scaling && !texAnim.scaling.globalSeq) {
       copyAnimKeyFrames(texAnim.scaling);
     }
   });
 
   // Disable particle emitters
   this.mdl.particleEmitter2s.forEach((p) => {
+    if (p.visibility && p.visibility.globalSeq) return;
     if (!p.visibility) {
       p.visibility = {
         interpolation: 'Linear',

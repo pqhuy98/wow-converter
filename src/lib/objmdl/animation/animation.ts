@@ -176,9 +176,9 @@ export class AnimationFile implements AnimationData {
       if (bone.flags & 0x2) mdlBone.flags.push(NodeFlag.DONTINHERIT_SCALING);
       if (bone.flags & 0x4) mdlBone.flags.push(NodeFlag.DONTINHERIT_ROTATION);
       if (bone.flags & 0x8) mdlBone.flags.push(NodeFlag.BILLBOARDED);
-      if (bone.flags & 0x10) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_Z); // X and Z are swapped?
-      if (bone.flags & 0x20) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_Y);
-      if (bone.flags & 0x40) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_X); // X and Z are swapped?
+      if (bone.flags & 0x10) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_Y); // X and Z are swapped?
+      if (bone.flags & 0x20) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_X);
+      if (bone.flags & 0x40) mdlBone.flags.push(NodeFlag.BILLBOARD_LOCK_Z); // X and Z are swapped?
 
       const isValidTimestamps = (timestamps: number[] | null, animId: number): timestamps is number[] => {
         const isNull = timestamps == null;
