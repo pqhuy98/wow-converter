@@ -179,18 +179,6 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
             console.log('COLLISION SHAPE NOT SUPPOTED', shape)
           }
         }
-        if (sphereModelRef.current) {
-          const sphereModel = sphereModelRef.current
-          for(const e of model.particleEmitters2) {
-            const inst = sphereModel.addInstance()
-            inst.setLocation([0, 0, 0])
-            inst.uniformScale(10)
-            inst.setParent(modelInstance.nodes[e.index])
-            inst.setScene(scene)
-            inst[collisionsVisible ? 'show' : 'hide']()
-            collisionInstancesRef.current.push(inst)
-          }
-        }
       } catch {}
 
       // Utility to update camera position from spherical coords
