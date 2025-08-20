@@ -55,6 +55,7 @@ export const CharacterSchema = z.object({
 });
 
 export type Character = z.infer<typeof CharacterSchema>;
+export type Size = z.infer<typeof CharacterSchema>['size'];
 export type Ref = z.infer<typeof RefSchema>;
 export type LocalRef = z.infer<typeof LocalRefSchema>;
 export type WowheadRef = z.infer<typeof WowheadRefSchema>;

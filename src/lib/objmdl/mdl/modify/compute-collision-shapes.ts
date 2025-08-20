@@ -1,8 +1,9 @@
 import { Vector3 } from '@/lib/math/common';
 
 import { GeosetVertex } from '../components/geoset';
-import { iterateVerticesAtTimestamp } from '../mdl-traverse';
+import { interpolateKeyFrames, iterateVerticesAtTimestamp } from '../mdl-traverse';
 import { MDLModify } from '.';
+import { V3 } from '@/lib/math/vector';
 
 export function addCollisionShapes(this: MDLModify) {
   // Iterate all vertices at Stand sequence (or first sequence)
@@ -13,7 +14,6 @@ export function addCollisionShapes(this: MDLModify) {
   const timestamp = seq.interval[0];
   iterateVerticesAtTimestamp(this.mdl, seq, timestamp, (v, vPos) => {
     if (!Number.isFinite(vPos[0]) || !Number.isFinite(vPos[1]) || !Number.isFinite(vPos[2])) return;
-    cloud.push(vPos);
     vToPos.set(v, vPos);
   });
 

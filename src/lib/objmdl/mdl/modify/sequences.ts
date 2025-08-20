@@ -161,7 +161,7 @@ export function addDecayAnimation(this: MDLModify) {
   // Copy geoset animation
   const updateAnimKeyFrames = <T>(anim: Animation<T>, timestampFrom: number, timestampTo: number) => {
     const value = anim.keyFrames.get(timestampFrom);
-    if (value) {
+    if (value != null) {
       anim.keyFrames.set(timestampTo, _.cloneDeep(value));
     }
   };

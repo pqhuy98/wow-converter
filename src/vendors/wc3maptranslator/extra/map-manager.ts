@@ -48,7 +48,10 @@ export class MapManager {
 
     // Initialise FourCC generator and mark all already-used IDs as taken.
     this.fourCCGenerator = new FourCCGenerator();
+  }
 
+  load() {
+    this.mapData.load();
     const registerTableFourCCs = (table: ObjectModificationTable) => {
       [...Object.keys(table.original), ...Object.keys(table.custom)].forEach((key) => {
         if (key.length >= 4) this.fourCCGenerator.addUsed(key.slice(0, 4));
@@ -113,21 +116,26 @@ export class MapManager {
   }
 
   save() {
+    this.mapData.unitData.custom = {};
     this.unitTypes.forEach((unitType) => {
       this.mapData.unitData.custom[`${unitType.code}:${unitType.parent}`] = unitType.data;
     });
+    this.mapData.doodadData.custom = {};
     this.doodadTypes.forEach((doodadType) => {
       this.mapData.doodadData.custom[`${doodadType.code}:${doodadType.parent}`] = doodadType.data;
     });
+    this.mapData.destructibleData.custom = {};
     this.destructibleTypes.forEach((destructibleType) => {
       this.mapData.destructibleData.custom[`${destructibleType.code}:${destructibleType.parent}`] = destructibleType.data;
     });
+    this.mapData.units = [];
     this.units.forEach((unit) => {
       this.mapData.units.push({
         ...unit,
         type: unit.type.code,
       });
     });
+    this.mapData.doodads = [];
     this.doodads.forEach((doodad) => {
       this.mapData.doodads.push({
         ...doodad,

@@ -4,11 +4,9 @@ build
 target
 dist
 *.zip
-maps/**
-maps
-!maps/template-empty.w3x/*
-!maps/template-empty.w3x/**/*
-!maps/template-empty.w3x
+maps/*
+!maps/template-empty.w3x/
+!maps/test-regression.w3x/
 # Logs
 logs
 *.log

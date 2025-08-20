@@ -364,8 +364,10 @@ export async function prepareNpcExport(npcId: number): Promise<NpcExportPreparat
     let skinName: string | undefined;
     if (textureIds.length > 0) {
       const skins = await wowExportClient.getModelSkins(modelId);
-      const matched = skins.find((s: { textureIDs: number[] }) => textureIds.every((id) => s.textureIDs.includes(id)));
-      skinName = (matched ?? skins[0])?.id;
+      const matches = skins.filter((s: { textureIDs: number[] }) => textureIds.every((id) => s.textureIDs.includes(id)));
+      debug && console.log('Matched skins:', matches);
+      skinName = (matches.length > 0 ? matches[0] : skins[0])?.id;
+      debug && console.log('Selected skin:', skinName);
     }
 
     // ===== Process equipment (if any) =====

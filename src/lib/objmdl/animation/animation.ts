@@ -105,7 +105,7 @@ export class AnimationFile implements AnimationData {
 
   constructor(public filePath: string) {
     try {
-      console.log("Loading animation file", this.filePath);
+      console.log('Loading animation file', this.filePath);
       const start = performance.now();
       Object.assign(this, JSON.parse(readFileSync(filePath, 'utf-8')));
       debug && console.log('AnimationFile load took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
@@ -186,10 +186,10 @@ export class AnimationFile implements AnimationData {
           && timestamps.some((_, i) => i > 0 && timestamps[i] < timestamps[i - 1] || timestamps[i] > 9999999);
         const isInvalid = isNull || isNotIncreasing;
         if (isInvalid) {
-          console.warn(`Invalid timestamps ${timestamps} for bone ${bone.boneNameCRC} in animation ${this.animations?.[animId]?.id}`, { isNull, isNotIncreasing});
+          debug && console.warn(`Invalid timestamps ${String(timestamps)} for bone ${bone.boneNameCRC} in animation ${this.animations?.[animId]?.id}`, { isNull, isNotIncreasing });
         }
         return !isInvalid;
-      }
+      };
 
       // Translation
       let accumTime = 0;

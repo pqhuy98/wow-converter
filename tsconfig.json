@@ -24,6 +24,6 @@
     "resolveFullPaths": true,
     "verbose": false
   },
-  "include": ["src", "examples", "bin"],
+  "include": ["src", "examples", "bin", "tests"],
   "exclude": ["webui"]
 }

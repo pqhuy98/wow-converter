@@ -73,6 +73,16 @@ export function iterateVerticesAtTimestamp(mdl: MDL, sequence: Sequence, timesta
   const vertices = new Set<GeosetVertex>();
   const geosets = new Map<GeosetVertex, Geoset>();
   mdl.geosets.forEach((geoset) => {
+    const geosetAnim = mdl.geosetAnims.find((ga) => ga.geoset === geoset);
+    let alpha = 1
+    if (geosetAnim && geosetAnim.alpha) {
+      if ("static" in geosetAnim.alpha) {
+        alpha = geosetAnim.alpha.value;
+      } else {
+        alpha = interpolateKeyFrames(sequence, geosetAnim.alpha.keyFrames, timestamp, geosetAnim.alpha.interpolation === 'Linear' ? V3.lerpScalar : V3.noInterpScalar, 1);
+      }
+    }
+    if (alpha < 0.01) return;
     geoset.faces.forEach((f) => {
       f.vertices.forEach((v) => {
         vertices.add(v);

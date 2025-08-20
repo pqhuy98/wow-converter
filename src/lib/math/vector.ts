@@ -66,6 +66,10 @@ export class V3 {
     return v0 + t * (v1 - v0);
   }
 
+  static noInterpScalar(v0: number, _v1: number, _t: number): number {
+    return v0;
+  }
+
   // eslint-disable-next-line
   static noInterp<T extends number[]>(v0: T, _v1: T, _t: number): T {
     return [...v0] as T;

@@ -17,7 +17,7 @@ import {
 import { Texture } from '../mdl/components/texture';
 import { TextureAnim } from '../mdl/components/texture-anim';
 import { MDL } from '../mdl/mdl';
-import { m2BlendModeToWc3FilterMode, wowToWc3Interpolation } from '../utils';
+import { getLayerFilterMode, wowToWc3Interpolation } from '../utils';
 
 namespace Data {
   export interface Texture {
@@ -292,7 +292,7 @@ export class M2MetadataFile {
 
   constructor(private filePath: string, private config: Config, private animFile: AnimationFile, private mdl: MDL) {
     try {
-      console.log("Loading metadata file", this.filePath);
+      console.log('Loading metadata file', this.filePath);
       Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
       if (this.fileType === 'm2') {
       // ADT files (terrain) won't have metadata JSON.
@@ -409,6 +409,8 @@ export class M2MetadataFile {
       };
     }
 
+    const debug = false;
+
     // Textures
     const textures: Texture[] = this.textures.map((tex) => ({
       id: 0,
@@ -433,10 +435,10 @@ export class M2MetadataFile {
 
     this.skin.textureUnits.forEach((tu) => {
       const submeshId = tu.skinSectionIndex;
-      const textureId = this.textureCombos[tu.textureComboIndex];
       const material = this.materials[tu.materialIndex];
       const textAnimId = this.textureTransformsLookup[tu.textureTransformComboIndex];
       const twoSided = (material.flags & 0x04) > 0;
+      const shaderId = tu.shaderID;
 
       if (!submeshMaterials.has(submeshId)) {
         submeshMaterials.set(submeshId, {
@@ -447,24 +449,41 @@ export class M2MetadataFile {
         });
       }
 
-      submeshMaterials.get(submeshId)!.layers.push({
-        texture: textures[textureId],
-        filterMode: m2BlendModeToWc3FilterMode(material.blendingMode),
-        tvertexAnim: textAnimId !== BlizzardNull ? textureAnims[textAnimId] : undefined,
+      const layers = submeshMaterials.get(submeshId)!.layers;
 
-        // https://wowdev.wiki/M2#Render_flags_and_blending_modes
-        unshaded: false,
-        sphereEnvMap: false,
-        unlit: (material.flags & 0x01) > 0,
-        unfogged: (material.flags & 0x02) > 0,
-        twoSided: (material.flags & 0x04) > 0,
-        noDepthTest: (material.flags & 0x08) > 0,
-        noDepthSet: (material.flags & 0x10) > 0,
-        alpha: {
-          static: true,
-          value: 1,
-        },
-      });
+      const textureCount = tu.textureCount;
+
+      for (let i = 0; i < Math.min(textureCount, 4); i++) {
+        const textureId = this.textureCombos[tu.textureComboIndex + i];
+        const filterMode = getLayerFilterMode(material.blendingMode, shaderId, i);
+        if (!filterMode) {
+          continue;
+        }
+        if (layers.length > 0) {
+          debug && console.log('layer', {
+            shaderId, filterMode, textureId, image: textures[textureId].image,
+          });
+        }
+
+        layers.push({
+          texture: textures[textureId],
+          filterMode,
+          tvertexAnim: textAnimId !== BlizzardNull ? textureAnims[textAnimId] : undefined,
+
+          // https://wowdev.wiki/M2#Render_flags_and_blending_modes
+          unshaded: false,
+          sphereEnvMap: false,
+          unlit: (material.flags & 0x01) > 0,
+          unfogged: (material.flags & 0x02) > 0,
+          twoSided: (material.flags & 0x04) > 0,
+          noDepthTest: (material.flags & 0x08) > 0,
+          noDepthSet: (material.flags & 0x10) > 0,
+          alpha: {
+            static: true,
+            value: 1,
+          },
+        });
+      }
     });
 
     return {
@@ -587,7 +606,7 @@ export class M2MetadataFile {
         priorityPlane: 0,
         replaceableId: 0,
         gravity: this.m2trackToAnimationOrStatic(p.gravity, 'others', decompressGravity)!,
-        lifeSpan: p.lifespan.values[0][0],
+        lifeSpan: Math.max(...p.lifespan.values.flat()),
         timeMiddle: timeMid / timeEnd,
         squirt: (p.flags & 0x40) > 0,
 
@@ -675,6 +694,9 @@ export class M2MetadataFile {
 
       const rand = () => Math.random() * 2 - 1;
       // Sample N variants
+      const variants: ParticleEmitter2[] = [];
+      const token = new Map<ParticleEmitter2, number>();
+
       for (let i = 0; i < variantCount; i++) {
         node.parent = undefined; // remove to avoid cloning the parent
         const variant = _.cloneDeep(node);
@@ -688,20 +710,31 @@ export class M2MetadataFile {
           variant.tailDecayIntervals = [cell, cell, 1];
         }
 
+        let scaleMult = 1;
         if (scaleVary >= varyThreshold) {
-          const scaleMult = Math.max(1 + Math.random() * scaleVary);
+          scaleMult = Math.max(1 + Math.random() * scaleVary);
           for (let j = 0; j < 3; j++) {
             variant.segmentScaling[j] *= scaleMult;
           }
         }
 
+        let lifeSpanMult = 1;
         if (p.lifespanVary >= varyThreshold) {
-          variant.lifeSpan += [0, 0.5, 1][Math.floor(Math.random() * 3)] * p.lifespanVary;
+          const newLifeSpan = variant.lifeSpan + Math.random() * p.lifespanVary;
+          lifeSpanMult = newLifeSpan / variant.lifeSpan;
+          variant.lifeSpan = newLifeSpan;
         }
 
+        token.set(variant, lifeSpanMult * scaleMult);
+        variants.push(variant);
+      }
+
+      // const totalTokens = Array.from(token.values()).reduce((a, b) => a + b, 0);
+      for (const variant of variants) {
         // we need to randomize the emission rate to avoid the same value for all variants
         // causing all particles to spawn at the same time
         const emissionRateFactor = 1 / variantCount * (1 + rand() * 0.5);
+        // const emissionRateFactor = token.get(variant)! / totalTokens;
         if ('static' in variant.emissionRate) {
           variant.emissionRate.value *= emissionRateFactor;
         } else if ('keyFrames' in variant.emissionRate) {
@@ -710,8 +743,9 @@ export class M2MetadataFile {
             keyFrames.set(k, v * emissionRateFactor);
           });
         }
-        particleEmitter2s.push(variant);
       }
+
+      particleEmitter2s.push(...variants);
     });
 
     this.mdl.particleEmitter2s = particleEmitter2s;

@@ -73,8 +73,8 @@ export class MapTranslator {
     if (existsSync(this.filePaths.destructibleData)) {
       this.destructibleData = ObjectsTranslator.warToJson(ObjectType.Destructables, readFileSync(this.filePaths.destructibleData)).json;
     }
-    if (existsSync(this.filePaths.doodads)) {
-      this.doodadData = ObjectsTranslator.warToJson(ObjectType.Doodads, readFileSync(this.filePaths.doodads)).json;
+    if (existsSync(this.filePaths.doodadData)) {
+      this.doodadData = ObjectsTranslator.warToJson(ObjectType.Doodads, readFileSync(this.filePaths.doodadData)).json;
     }
     if (existsSync(this.filePaths.abilityData)) {
       this.abilityData = ObjectsTranslator.warToJson(ObjectType.Abilities, readFileSync(this.filePaths.abilityData)).json;

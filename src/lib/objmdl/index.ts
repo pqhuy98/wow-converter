@@ -70,17 +70,17 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
 
     const mtlMaterial = mtl.materials.find((m) => m.name === matName);
 
-    const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : undefined;
+    const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : '';
 
     if (mat) {
       mat.layers.forEach((l) => {
-        const blpPath = textureRelativePath ? path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp')) : l.texture.image;
+        const blpPath = l.texture.image || path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp'));
         l.texture = {
           ...l.texture,
           image: blpPath,
         };
-        if (textureRelativePath) {
-          texturePaths.add(textureRelativePath);
+        if (blpPath) {
+          texturePaths.add(blpPath);
         }
       });
     } else {
