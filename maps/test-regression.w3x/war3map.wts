@@ -1,0 +1,60 @@
+﻿STRING 1
+{
+Player 1
+}
+
+STRING 2
+{
+Force 1
+}
+
+STRING 3
+{
+Just another Warcraft III map
+}
+
+STRING 4
+{
+Any
+}
+
+STRING 5
+{
+Nondescript
+}
+
+STRING 6
+{
+Unknown
+}
+
+STRING 7
+// Units: AAAA (0-lady-deathwhisper-36855), Name (Name)
+{
+0-lady-deathwhisper-36855
+}
+
+STRING 8
+// Units: AAAB (1-lord-marrowgar-36612), Name (Name)
+{
+1-lord-marrowgar-36612
+}
+
+STRING 9
+// Units: AAAC (2-xuen-71953), Name (Name)
+{
+2-xuen-71953
+}
+
+STRING 10
+// Units: AAAD (3-yulon-154515), Name (Name)
+{
+3-yulon-154515
+}
+
+STRING 11
+// Units: AAAF (4-sha-of-doubt-56439), Name (Name)
+{
+4-sha-of-doubt-56439
+}
+
