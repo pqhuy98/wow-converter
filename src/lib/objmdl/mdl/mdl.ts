@@ -140,7 +140,7 @@ export class MDL {
     ].filter((anim) => anim != null);
   }
 
-  private updateIds() {
+  updateIds() {
     // Reindex everything with `id`
     this.globalSequences.forEach((v, i) => v.id = i);
     this.textures.forEach((v, i) => v.id = i);

@@ -66,13 +66,20 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   const mtlNameMap = new Map<string, Material>();
 
   const resolveGeosetMaterial = (submeshId: number, matName: string): MDL['materials'][number] => {
-    const mat = _.cloneDeep(submeshIdToMat.get(submeshId));
-
     const mtlMaterial = mtl.materials.find((m) => m.name === matName);
-
     const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : '';
+    texturePaths.add(textureRelativePath);
 
+    const protoMat = submeshIdToMat.get(submeshId)
+    const mat = _.cloneDeep(protoMat);
+    
     if (mat) {
+      // do not clone tvertexAnim
+      mat.layers.forEach((l, i) => {
+        l.tvertexAnim = protoMat?.layers[i].tvertexAnim;
+      });
+
+      // if missing texture path, use value from .MTL file
       mat.layers.forEach((l) => {
         const blpPath = l.texture.image || path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp'));
         l.texture = {
@@ -142,6 +149,24 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
       flags: [],
       pivotPoint: [0, 0, 0],
     }];
+  }
+
+  if (mdl.sequences.length === 0) {
+    // Model without sequence will crash Wc3
+    mdl.sequences.push({
+      name: 'Stand',
+      data: {
+        wowName: '', attackTag: '', wc3Name: 'Stand', wowVariant: 0, wowFrequency: 0,
+      },
+      interval: [0, 1000],
+      moveSpeed: 0,
+      nonLooping: false,
+      
+      // bounds will be computed later in mdl.sync()
+      minimumExtent: [-1, -1, -1],
+      maximumExtent: [1, 1, 1],
+      boundsRadius: 1,
+    });
   }
 
   const submeshToId = new Map(metadata.skin.subMeshes.map((s, i) => [s, i]));

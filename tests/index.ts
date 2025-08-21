@@ -1,10 +1,10 @@
-import { MapTranslator } from './../src/vendors/wc3maptranslator/translators/MapTranslator';
+import { MapTranslator } from '../src/vendors/wc3maptranslator/translators/MapTranslator';
 import esMain from 'es-main';
 import { writeFileSync } from 'fs';
 
-import { AttachItem, CharacterExporter, Size, wowhead } from '@/lib/converter/character-exporter';
+import { AttachItem, CharacterExporter, local, Size, wowhead } from '@/lib/converter/character-exporter';
 
-import { getDefaultConfig } from '@/lib/global-config';
+import { Config, getDefaultConfig } from '@/lib/global-config';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
@@ -13,7 +13,7 @@ import { distancePerTile } from '@/lib/constants';
 import { Vector3 } from '@/lib/math/common';
 
 export const testMapDir = './maps/test-regression.w3x';
-export const ceConfig = await getDefaultConfig();
+export const ceConfig: Config = await getDefaultConfig()
 export const ce = new CharacterExporter(testMapDir, ceConfig);
 
 async function exportTestCases() {
@@ -53,6 +53,7 @@ async function exportTestCases() {
     ],
     ["https://www.wowhead.com/npc=114895/nightbane#modelviewer", "", "", "giant"],
     ["https://www.wowhead.com/mop-classic/npc=64986/heavenly-onyx-cloud-serpent", "", "", ""],
+    ["local::creature\\protodragonshadowflame\\protodragonshadowflame_body.obj", "", "", "giant"]
   ];
 
   const names: string[] = [];
@@ -81,19 +82,23 @@ async function exportTestCases() {
       attackTag = "1H";
     }
 
-    const npcId = base.split("npc=").pop()?.split("/").shift();
-    const npcName = base.split("/").pop();
-    const name = `${i}-${npcName}-${npcId}`;
-    // await ce.exportCharacter({
-    //   base: wowhead(base),
-    //   attachItems,
-    //   attackTag,
-    //   inGameMovespeed: 270,
-    //   size,
-    //   scale: 1.5
-    // }, name);
+    let name = ""
+    if (base.startsWith("local::")) {
+      name = base.split("\\").pop()!.replace(".obj", "");
+    } else {
+      const npcId = base.split("npc=").pop()?.split("/").shift();
+      const npcName = base.split("/").pop()!.split("#")[0]
+      name = `${i}-${npcName}-${npcId}`;
+    }
+    await ce.exportCharacter({
+      base: base.startsWith("local::") ? local(base.replace("local::", "")) : wowhead(base),
+      attachItems,
+      attackTag,
+      inGameMovespeed: 270,
+      size,
+      scale: 1.5
+    }, name);
     names.push(name);
-    console.log(name, attackTag, size);
   }
 
   return names;
@@ -122,7 +127,7 @@ export async function main() {
   map.unitTypes = []
 
   for(let i = 0; i < names.length; i++) {
-    const name = names[i % names.length];
+    const name = names[i];
     const unitType = map.addUnitType("hero", "Hpal", [
       { id: 'unam', type: ModificationType.string, value: name },
       { id: 'upro', type: ModificationType.string, value: name },

@@ -18,12 +18,16 @@ DONE:
 - Bug: inputting new URLs into base/itme input box doesn't update React state.
 - Collision box right now too big. Try to choose best that fit the Stand anim.
 - Some users want matrix model version 800
+- Basic particles
+- Bug: doesn't work for some user with existing wow.export settings from the official.
+  e.g. when they have exportModelFormat: "RAW" while wow-converter fails to change wow.export config during startup. (why? it should!).
 
 BLOCKED:
 - Blood elf model's attachment not working
   Reason: wow.export bones and attachment data is wrong, not sure if any other data source for replacement.
 - Some later models have advanced materials e.g. firehawk that requires UV2 layer that Wc3 doesn't have.
+- Model infernal2 has incorrect geoset anims for the glow: wow.export didn't has this data, not sure why.
+- https://www.wowhead.com/npc=16867/shattered-hand-grunt this orc has wrong eye textures
+  Reason: cannot find texture file ID in wowhead data, even after searching in network requests in Chrome network inspection. 
 
 BUGS:
-- Doesn't work for some user with existing wow.export settings from the official.
-  e.g. when they have exportModelFormat: "RAW" while wow-converter fails to change wow.export config during startup. (why? it should!).

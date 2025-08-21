@@ -7,6 +7,7 @@ import { buildChildrenLists } from '../mdl-traverse';
 import { MDLModify } from '.';
 
 export function removeUnusedMaterialsTextures(this: MDLModify) {
+  this.mdl.updateIds();
   // Deduplicate textures
   this.mdl.materials = [...new Set(this.mdl.geosets.map((geoset) => geoset.material))];
   const textureKey = (tex: Texture) => JSON.stringify(tex);

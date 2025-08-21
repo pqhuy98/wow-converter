@@ -1,5 +1,6 @@
 import { Interpolation } from './mdl/components/animation';
 import { BlendMode } from './mdl/components/material';
+import { Texture } from './mdl/components/texture';
 
 export function wowToWc3Interpolation(wowInterpolation: number): Interpolation {
   switch (wowInterpolation) {
@@ -38,16 +39,26 @@ function m2BlendModeToWc3FilterMode(m2BlendMode: number): BlendMode {
 
 const debug = false;
 
-// Map M2 shader combiner (from shaderId) to WC3 per-layer filter
-export function getLayerFilterMode(blendingMode: number, shaderId: number, layerIndex: number): BlendMode | undefined {
+// Map M2 shader combiner (from shaderId) to WC3 per-layer filter. This is all hacks and reverse-engineering.
+export function getLayerFilterMode(blendingMode: number, shaderId: number, layerIndex: number, texture: Texture): BlendMode | undefined {
   if (layerIndex === 0) return m2BlendModeToWc3FilterMode(blendingMode);
   const opaquePath = (shaderId & 0x70) === 0;
   const op = (shaderId & 7);
   // Aligns with WebWowViewer combiner groupings; simplified to WC3 filter modes
   if (opaquePath) {
-    debug && console.log('opaquePath', op);
+    debug && console.log('opaquePath', {opaquePath, op, blendingMode, shaderId, layerIndex});
     if (op === 0) return undefined; // Opaque_Opaque
-    if (op === 3) return undefined; // Opaque_AddAlpha / Opaque_AddAlpha_Alpha
+    if (op === 3) {
+      // Opaque_AddAlpha / Opaque_AddAlpha_Alpha
+      const texturePath = texture.image.replace(".png", "").replace(".blp", "");
+      // A hack to skip textures like "armorreflect" that has same op as glow textures but should be skipped
+      // We need to be aggressive in skipping secondary textures, only add when absolutely certain
+      debug && console.log('texturePath', texturePath);
+      if (texturePath.endsWith("_glow")) {
+        return 'Additive';
+      }
+      return undefined
+    }
     return 'Additive';
     // https://www.wowhead.com/mop-classic/npc=71953/xuen op=[2,5,6]
     // https://www.wowhead.com/mop-classic/npc=56762/yulon op=[6]

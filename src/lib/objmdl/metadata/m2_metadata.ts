@@ -417,8 +417,8 @@ export class M2MetadataFile {
       image: tex.fileNameExternal
         ? join(this.config.assetPrefix, relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
         : '',
-      wrapHeight: (tex.flags & 1) > 0,
-      wrapWidth: (tex.flags & 2) > 0,
+      wrapWidth: (tex.flags & 1) > 0,
+      wrapHeight: (tex.flags & 2) > 0,
     }));
 
     // Texture anims
@@ -455,7 +455,8 @@ export class M2MetadataFile {
 
       for (let i = 0; i < Math.min(textureCount, 4); i++) {
         const textureId = this.textureCombos[tu.textureComboIndex + i];
-        const filterMode = getLayerFilterMode(material.blendingMode, shaderId, i);
+        const texture = textures[textureId];
+        const filterMode = getLayerFilterMode(material.blendingMode, shaderId, i, texture);
         if (!filterMode) {
           continue;
         }

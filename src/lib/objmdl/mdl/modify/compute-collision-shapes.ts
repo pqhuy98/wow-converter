@@ -1,9 +1,8 @@
 import { Vector3 } from '@/lib/math/common';
 
 import { GeosetVertex } from '../components/geoset';
-import { interpolateKeyFrames, iterateVerticesAtTimestamp } from '../mdl-traverse';
+import { iterateVerticesAtTimestamp } from '../mdl-traverse';
 import { MDLModify } from '.';
-import { V3 } from '@/lib/math/vector';
 
 export function addCollisionShapes(this: MDLModify) {
   // Iterate all vertices at Stand sequence (or first sequence)

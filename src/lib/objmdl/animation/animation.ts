@@ -360,22 +360,6 @@ export class AnimationFile implements AnimationData {
       standSeqs.filter((seq) => seq !== mainStandSeq).forEach((seq) => seq.rarity = 4);
     }
 
-    if (sequences.length === 0) {
-      // Model with sequence will crash Wc3
-      sequences.push({
-        name: 'Stand',
-        data: {
-          wowName: '', attackTag: '', wc3Name: 'Stand', wowVariant: 0, wowFrequency: 0,
-        },
-        interval: [0, 1000],
-        moveSpeed: 0,
-        minimumExtent: [-1, -1, -1],
-        maximumExtent: [1, 1, 1],
-        boundsRadius: 1,
-        nonLooping: false,
-      });
-    }
-
     const wowAttachments = this.extractWowAttachments(bones);
     debug && console.log('AnimationFile toMdl took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
