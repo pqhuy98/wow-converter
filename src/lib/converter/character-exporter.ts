@@ -17,6 +17,7 @@ import {
 } from '../objmdl/animation/animation_mapper';
 import { MDL } from '../objmdl/mdl/mdl';
 import { AssetManager } from './common/model-manager';
+import { CharacterExporterTest } from './wowhead-exporter';
 
 // Local file path must be a relative path and must not contain ".." or start with a slash.
 // This is to prevent path traversal attacks and other security issues.
@@ -76,7 +77,10 @@ const wantedZPerSize = {
 
 const debug = false;
 
-export class CharacterExporter {
+
+export { CharacterExporterTest as CharacterExporter };
+
+class CharacterExporter2 {
   public models: [MDL, string][] = [];
 
   public assetManager: AssetManager;

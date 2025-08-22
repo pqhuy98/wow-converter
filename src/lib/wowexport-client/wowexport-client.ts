@@ -83,6 +83,7 @@ export interface RCPResponse {
 export interface ExportCharacterParams {
   race: number;
   gender: number;
+  chrModelId: number;
   customizations: { [optionId: string]: number };
   geosetIds: number[];
   hideGeosetIds: number[];
@@ -94,7 +95,7 @@ export interface ExportCharacterParams {
 
 export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COMPLETE';
 
-const debug = false;
+const debug = true;
 
 export class WowExportClient extends EventEmitter {
   private socket: Socket;

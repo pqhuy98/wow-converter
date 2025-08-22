@@ -290,6 +290,7 @@ async function getExportCharacterRpcParams(characterData: CharacterData): Promis
   const rpcParams: ExportCharacterParams = {
     race: characterData.raceId,
     gender: characterData.genderId,
+    chrModelId: characterData.character.ChrModelId,
     customizations,
     format: 'obj',
     include_animations: true,

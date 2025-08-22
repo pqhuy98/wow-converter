@@ -24,13 +24,13 @@ async function exportTestCases() {
     ['https://www.wowhead.com/npc=154515/yulon', "", "", ""],
     ['https://www.wowhead.com/npc=56439/sha-of-doubt', "", "", "giant"],
     [
-      'https://www.wowhead.com/wotlk/npc=37187/high-overlord-saurfang',
+      'https://www.wowhead.com/npc=37187/high-overlord-saurfang',
       "https://www.wowhead.com/wotlk/item=49623/shadowmourne",
       "https://www.wowhead.com/wotlk/item=49623/shadowmourne",
       ""
     ],
     [
-      'https://www.wowhead.com/wotlk/npc=37119/highlord-tirion-fordring',
+      'https://www.wowhead.com/npc=37119/highlord-tirion-fordring',
       "https://www.wowhead.com/item=120978/ashbringer",
       "",
       ""
