@@ -7,7 +7,6 @@ import { buildChildrenLists } from '../mdl-traverse';
 import { MDLModify } from '.';
 
 export function removeUnusedMaterialsTextures(this: MDLModify) {
-  this.mdl.updateIds();
   // Deduplicate textures
   this.mdl.materials = [...new Set(this.mdl.geosets.map((geoset) => geoset.material))];
   const textureKey = (tex: Texture) => JSON.stringify(tex);
@@ -34,8 +33,13 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
   });
   this.mdl.textures = [...usedTextures.values()];
 
+  
   // Deduplicate materials
+  // set id of texture anims so that materialKey works correct.
+  // Because textureAnims[].XXX.keyframes cannot be serialized since it's a Map
+  this.mdl.textureAnims.forEach((ta, i) => ta.id = i);
   const materialKey = (mat: Material) => JSON.stringify(mat);
+
   const usedMaterials = new Map<string, Material>();
   this.mdl.geosets.forEach((geoset) => {
     const matKey = materialKey(geoset.material);
