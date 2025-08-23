@@ -110,7 +110,7 @@ export async function ControllerExportCharacter(app: express.Application) {
     };
 
     console.log('Job finished',
-      `(${chalk.yellow(((performance.now() - start) / 1000).toFixed(2))+"s"})`,
+      `${chalk.yellow(((performance.now() - start) / 1000).toFixed(2)+"s")}`,
       chalk.gray(JSON.stringify(resp, null, 2))
     );
     return resp;

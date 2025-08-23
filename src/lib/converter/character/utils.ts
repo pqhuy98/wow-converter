@@ -6,6 +6,8 @@ import { ModelSkin, wowExportClient } from '@/lib/wowexport-client/wowexport-cli
 
 import { AssetManager } from '../common/model-manager';
 import chalk from 'chalk';
+import { statSync } from 'fs';
+import { waitUntil } from '@/lib/utils';
 
 export interface ExportContext {
   assetManager: AssetManager;
@@ -31,7 +33,18 @@ export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: nu
   console.log("wow.export exportModels took", chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   const obj = exported.files.find((f) => f.type === 'OBJ')?.file;
-  if (!obj) throw new Error('Failed to export model OBJ');
+  if (!obj) {
+    let msg = 'Failed to export model OBJ';
+    if (wowExportClient.isClassic()) {
+      msg += `, are you sure it exists in your classic wow installation?`;
+    }
+    throw new Error(msg);
+  }
+
+  // TODO: find out why in some cases, the exported OBJ is empty for awhile even after the export is complete
+  if (statSync(obj).size === 0) {
+    await waitUntil(() => statSync(obj).size > 0);
+  }
 
   const baseDir = await wowExportClient.getAssetDir();
   const relative = path.relative(baseDir, obj);
@@ -40,6 +53,13 @@ export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: nu
 
 export async function exportTexture(textureId: number): Promise<string> {
   const tex = await wowExportClient.exportTextures([textureId]);
+  if (tex.length === 0) {
+    let msg = `No texture with file data ID: ${textureId}`;
+    if (wowExportClient.isClassic()) {
+      msg += `, are you sure it exists in your classic wow installation?`;
+    }
+    throw new Error(msg);
+  }
   return relativeToExport(tex[0].file);
 }
 

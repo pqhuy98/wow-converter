@@ -26,7 +26,10 @@ export interface ServerInfo {
 
 export interface CASCInfo {
     type: string;
-    build: any;
+    build: {
+      Product: string;
+      Version: string;
+    };
     buildConfig: any;
     buildName: string;
     buildKey: string;
@@ -117,6 +120,11 @@ export class WowExportClient extends EventEmitter {
     exportHookRegistered: false,
   };
 
+  cascInfo: CASCInfo | null = null;
+  isClassic() {
+    return this.cascInfo?.build.Product.includes('classic');
+  }
+
   private assetDir = '';
 
   async getAssetDir() {
@@ -200,8 +208,9 @@ export class WowExportClient extends EventEmitter {
         }
         if (!this.status.cascLoaded) {
           const info = await this.getCASCInfo();
+          this.cascInfo = info;
           this.status.cascLoaded = true;
-          console.log(chalk.green('✅ Retrieved wow.export CASC info:'), info.buildName);
+          console.log(chalk.green('✅ Retrieved wow.export CASC info:'), info.build.Product, info.buildName);
           failedAttempts = 0;
         }
         if (!this.status.exportHookRegistered) {

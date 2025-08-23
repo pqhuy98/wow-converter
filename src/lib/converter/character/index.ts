@@ -183,12 +183,15 @@ export class CharacterExporter {
       if (npcMeta.Model) {
         return exportCreatureNpcAsMdl({ assetManager: this.assetManager, config: this.config }, baseZam);
       }
+
       return exportCharacterNpcAsMdl({
         ctx: { assetManager: this.assetManager, config: this.config },
-        // character models must always be exported from the latest expansion
-        // because legacy models are no longer available in game files
-        zam: {...baseZam, expansion: 'latest-available' },
-        // zam: baseZam,
+        zam: {
+          ...baseZam,
+          expansion: wowExportClient.isClassic()
+            ? baseZam.expansion
+            : 'latest-available', // // in latest wow installation, classic models are not available
+        },
         keepCinematic: Boolean(char.keepCinematic),
         attackTag: char.attackTag,
       });

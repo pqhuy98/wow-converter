@@ -25,7 +25,7 @@ export function addMdlItemToBone(this: MDLModify, item: MDL, boneName: string) {
     v.position = V3.sum(v.position, attachmentBone.pivotPoint);
   }));
 
-  mergeOtherMdlObjects(this.mdl, item);
+  mergeItemObjects(this.mdl, item);
   return this;
 }
 
@@ -84,7 +84,7 @@ export function addMdlCollectionItemToModel(this: MDLModify, item: MDL) {
   });
   item.bones = []
 
-  mergeOtherMdlObjects(this.mdl, item);
+  mergeItemObjects(this.mdl, item);
   return this;
 }
 
@@ -93,7 +93,11 @@ export function canAddMdlCollectionItemToModel(main: MDL, item: MDL) {
   return item.bones.every(b => boneMap.has(b.name));
 }
 
-function mergeOtherMdlObjects(main: MDL, item: MDL) {
+function mergeItemObjects(main: MDL, item: MDL) {
+  item.geosets.forEach(geoset => {
+    geoset.name = `item_${geoset.name}`;
+  });
+
   main.globalSequences.push(...item.globalSequences);
 
   main.textures.push(...item.textures);

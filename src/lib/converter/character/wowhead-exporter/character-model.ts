@@ -8,13 +8,11 @@ import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bo
 import { MDL, WowAttachment } from '@/lib/objmdl/mdl/mdl';
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
-import { CharacterNpcZamUrl, NpcZamUrl } from '@/lib/wowhead-client/zam-url';
+import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { ExportContext, exportModelFileIdAsMdl, exportTexture } from '../utils';
 import { EquipmentSlot, getEquipmentSlotName, ItemMetata, processItemData } from './item-model';
-import { exportCreatureNpcAsMdl } from './creature-model';
 import { canAddMdlCollectionItemToModel } from '@/lib/objmdl/mdl/modify/add-item-to-model';
-import { Bone } from '@/lib/objmdl/mdl/components/node/node';
 
 type EquipmentSlotData = {
   slotId: EquipmentSlot;
@@ -28,30 +26,25 @@ export async function exportCharacterNpcAsMdl({
   attackTag,
 }: {
   ctx: ExportContext;
-  zam: CharacterNpcZamUrl;
+  zam: NpcZamUrl;
   keepCinematic: boolean
   attackTag: AttackTag | undefined
 }): Promise<MDL> {
+  // Export the base model
   const prep = await prepareCharacterNpcExport(zam);
   let charMdl: MDL;
-  if (zam.expansion === 'latest-available') {
-    const start = performance.now();
-    const result = await wowExportClient.exportCharacter({
-      ...prep.rpcParams,
-      excludeAnimationIds: getExcludedAnimIds(keepCinematic, attackTag),
-    });
-    console.log("wow.export exportCharacter took", chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+  const start = performance.now();
+  const result = await wowExportClient.exportCharacter({
+    ...prep.rpcParams,
+    excludeAnimationIds: getExcludedAnimIds(keepCinematic, attackTag),
+  });
+  console.log("wow.export exportCharacter took", chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
-    const baseDir = await wowExportClient.getAssetDir();
-    const relative = path.relative(baseDir, result.exportPath);
-    charMdl = ctx.assetManager.parse(relative, true).mdl;
-  } else {
-    // TODO: get the model file id from charModelId
-    // TODO: remove geosets based on customizations
-    charMdl = await exportModelFileIdAsMdl({ assetManager: ctx.assetManager, config: ctx.config }, 119940);
-  }
+  const baseDir = await wowExportClient.getAssetDir();
+  const relative = path.relative(baseDir, result.exportPath);
+  charMdl = ctx.assetManager.parse(relative, true).mdl;
 
-  // NPC main texture file
+  // Replace the base texture with the npc baked texture
   if (prep.npcTextureFile) {
     const npcTexturePath = await exportTexture(prep.npcTextureFile);
     ctx.assetManager.addPngTexture(npcTexturePath);
@@ -128,6 +121,8 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
     itemData.hideGeosetIds?.forEach((id: number) => hideGeosetIds.add(id));
     equipmentSlots.push({ slotId, data: itemData });
   }
+
+  geosetIds.add(702) // Ears2 - otherwise the model will be missing ears
 
   // Prepare RPC params for wowexport
   const rpcParams: ExportCharacterParams = {
@@ -227,13 +222,15 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
   };
   for (const slot of slots) {
     const cfg = textureSlotConfigs[slot.slotId];
-    if (!cfg) return;
+    if (!cfg) continue;
     const matching = charMdl.geosets.filter((g) => cfg.geosetNames.some((name) => g.name.includes(name)));
-    if (matching.length === 0) return;
+    if (matching.length === 0) continue;
 
-    const texPath = await exportTexture(slot.data.textureFiles[0]);
+    const textureFile = slot.data.textureFiles[0];
+
+    
+    const texPath = await exportTexture(textureFile);
     ctx.assetManager.addPngTexture(texPath);
-
     charMdl.textures.push({
       id: charMdl.textures.length,
       image: path.join(ctx.config.assetPrefix, texPath).replace('.png', '.blp'),
@@ -263,6 +260,7 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
       ],
     });
     matching.forEach((g) => { g.material = charMdl.materials.at(-1)!; });
+    console.log('Set texture', getEquipmentSlotName(slot.slotId), "->", path.basename(texPath).replace('.png', ''));
   }
 }
 

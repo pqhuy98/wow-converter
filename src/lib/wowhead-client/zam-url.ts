@@ -8,9 +8,8 @@ export type BaseZamUrl = {
 }
 
 export type NpcZamUrl = BaseZamUrl & { type: 'npc', displayId: number };
-export type CharacterNpcZamUrl = { type: 'npc', displayId: number, expansion: "latest-available" };
 export type ItemZamUrl = BaseZamUrl & { type: 'item', displayId: number, slotId: number | null };
-export type ZamUrl = NpcZamUrl | CharacterNpcZamUrl | ItemZamUrl;
+export type ZamUrl = NpcZamUrl | ItemZamUrl;
 
 export function getZamBaseUrl(expansion: ZamExpansion): string {
   return `https://wow.zamimg.com/modelviewer/${expansion}`;

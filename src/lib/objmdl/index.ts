@@ -32,6 +32,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   const metadata = new M2MetadataFile(objFilePath.replace(/\.obj$/, '.json'), config, animation, mdl);
 
   if (obj.models.length === 0) {
+    console.error(chalk.red('No models found in', objFilePath));
     return { mdl, texturePaths: new Set<string>() };
   }
 
