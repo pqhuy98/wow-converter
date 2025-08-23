@@ -1,6 +1,6 @@
 import { MapTranslator } from '../src/vendors/wc3maptranslator/translators/MapTranslator';
 import esMain from 'es-main';
-import { writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 
 import { AttachItem, CharacterExporter, local, Size, wowhead } from '@/lib/converter/character';
 
@@ -11,9 +11,13 @@ import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { distancePerTile } from '@/lib/constants';
 import { Vector3 } from '@/lib/math/common';
+import chalk from 'chalk';
 
 export const testMapDir = './maps/test-regression.w3x';
-export const ceConfig: Config = await getDefaultConfig()
+export const ceConfig: Config = {
+  ...(await getDefaultConfig()),
+  overrideModels: false,
+}
 export const ce = new CharacterExporter(testMapDir, ceConfig);
 
 async function exportTestCases() {
@@ -53,7 +57,20 @@ async function exportTestCases() {
     ],
     ["https://www.wowhead.com/npc=114895/nightbane#modelviewer", "", "", "giant"],
     ["https://www.wowhead.com/mop-classic/npc=64986/heavenly-onyx-cloud-serpent", "", "", ""],
-    ["local::creature\\protodragonshadowflame\\protodragonshadowflame_body.obj", "", "", "giant"]
+    ["local::creature\\protodragonshadowflame\\protodragonshadowflame_body.obj", "", "", "giant"],
+    [
+      "https://www.wowhead.com/npc=87607/sever-frostsprocket",
+      "https://www.wowhead.com/item=141376/icy-ebon-warsword?bonus=4790",
+      "https://www.wowhead.com/item=51010/the-facelifter",
+      ""
+    ],
+    [
+      "https://www.wowhead.com/npc=36857/blood-elf-warrior",
+      "https://www.wowhead.com/item=31331/the-night-blade",
+      "https://www.wowhead.com/item=31331/the-night-blade",
+      ""
+    ],
+    ["https://www.wowhead.com/npc=172613/rokhan", "", "", ""]
   ];
 
   const names: string[] = [];
@@ -84,12 +101,18 @@ async function exportTestCases() {
 
     let name = ""
     if (base.startsWith("local::")) {
-      name = base.split("\\").pop()!.replace(".obj", "");
+      name = `${i}-${base.split("\\").pop()!.replace(".obj", "")}`;
     } else {
       const npcId = base.split("npc=").pop()?.split("/").shift();
       const npcName = base.split("/").pop()!.split("#")[0]
       name = `${i}-${npcName}-${npcId}`;
     }
+
+    if (existsSync(ce.getFullPath(name + '.mdx')) && !ceConfig.overrideModels) {
+      console.log('Skipping file already exists', chalk.yellow(name + '.mdx'));
+      continue;
+    }
+
     await ce.exportCharacter({
       base: base.startsWith("local::") ? local(base.replace("local::", "")) : wowhead(base),
       attachItems,
@@ -145,6 +168,8 @@ export async function main() {
       -(Math.floor(i2 / width) * 1000 + padding + mapSize.offset.y),
       0,
     ]
+
+    console.log(name, "at location", position.slice(0, 2));
 
     map.addUnit(unitType, {
       variation: 0,

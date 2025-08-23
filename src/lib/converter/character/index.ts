@@ -14,6 +14,7 @@ import { exportCharacterNpcAsMdl } from './wowhead-exporter/character-model';
 import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
 import { exportZamItemAsMdl } from './wowhead-exporter/item-model';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { existsSync } from 'fs';
 
 // Local file path must be a relative path and must not contain ".." or start with a slash.
 // This is to prevent path traversal attacks and other security issues.
@@ -83,8 +84,12 @@ export class CharacterExporter {
   }
 
   public includeMdlToOutput(mdl: MDL, outputFile: string) {
-    const fullOutputFile = join(this.outputPath, outputFile);
+    const fullOutputFile = this.getFullPath(outputFile);
     this.models.push([mdl, fullOutputFile]);
+  }
+
+  getFullPath(outputFile: string) {
+    return join(this.outputPath, outputFile);
   }
 
   async exportCharacter(char: Character, outputFile: string) {

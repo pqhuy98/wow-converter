@@ -688,7 +688,7 @@ export class M2MetadataFile {
       if (scaleVary >= varyThreshold) maxVariants *= 3;
 
       // TODO: replace / this.particleEmitters!.length with only PEs that need variants
-      const variantCount = Math.round(Math.min(maxVariants, 1000 / this.particleEmitters!.length));
+      const variantCount = Math.round(Math.min(maxVariants, 500 / this.particleEmitters!.length));
       if (variantCount < 1) {
         particleEmitter2s.push(node);
         return;
