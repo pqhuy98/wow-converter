@@ -7,7 +7,7 @@ import { join } from 'path';
 
 import {
   Character, CharacterExporter, displayID, wowhead,
-} from '../converter/character-exporter';
+} from '../converter/character';
 import { Config } from '../global-config';
 import { AttackTag } from '../objmdl/animation/animation_mapper';
 import { WoWAttachmentID } from '../objmdl/animation/bones_mapper';

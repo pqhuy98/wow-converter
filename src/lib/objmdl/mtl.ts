@@ -18,6 +18,8 @@ export class MTLFile {
   constructor(filePath: string) {
     let mtlContent: string;
     try {
+      const debug = false;
+      debug && console.log('Loading mtl file', filePath);
       mtlContent = readFileSync(filePath, 'utf-8');
     } catch (e) {
       console.error('Cannot read mtl file', filePath, ' - skip it');

@@ -33,7 +33,6 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
   });
   this.mdl.textures = [...usedTextures.values()];
 
-  
   // Deduplicate materials
   // set id of texture anims so that materialKey works correct.
   // Because textureAnims[].XXX.keyframes cannot be serialized since it's a Map

@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 
-export type ZamExpansion = 'classic' | 'tbc' | 'wrath' | 'cata' | 'mists' | 'live' | 'ptr' | 'ptr2';
+export type ZamExpansion = 'classic' | 'tbc' | 'wrath' | 'cata' | 'mists' | 'live' | 'ptr' | 'ptr2' | 'latest-available';
 export type ZamType = 'npc' | 'item';
 
 export type BaseZamUrl = {
@@ -8,26 +8,13 @@ export type BaseZamUrl = {
 }
 
 export type NpcZamUrl = BaseZamUrl & { type: 'npc', displayId: number };
+export type CharacterNpcZamUrl = { type: 'npc', displayId: number, expansion: "latest-available" };
 export type ItemZamUrl = BaseZamUrl & { type: 'item', displayId: number, slotId: number | null };
-export type CharacterModelZamUrl = BaseZamUrl & { type: 'character', modelId: number };
-export type ZamUrl = NpcZamUrl | ItemZamUrl | CharacterModelZamUrl;
+export type ZamUrl = NpcZamUrl | CharacterNpcZamUrl | ItemZamUrl;
 
 export function getZamBaseUrl(expansion: ZamExpansion): string {
   return `https://wow.zamimg.com/modelviewer/${expansion}`;
 }
-
-export async function parseWowheadUrlToZam(url: string, fallbackType?: ZamType, fallbackExpansion?: ZamExpansion): Promise<ZamUrl> {
-  const type = getTypeFromUrl(url) || fallbackType;
-  if (!type) throw new Error(`Cannot infer type from wowhead url: ${url}`);
-
-  const displayId = await getDisplayIdFromUrl(url);
-  const expansion = getExpansionFromUrl(url) || fallbackExpansion || 'live';
-  if (type === 'item') {
-    return { expansion, type, displayId, slotId: null };
-  }
-  return { expansion, type, displayId };
-}
-
 
 const expansionMap: Record<string, ZamExpansion> = {
   // wowhead expansion -> zam expansion
@@ -41,19 +28,49 @@ const expansionMap: Record<string, ZamExpansion> = {
   'ptr-2': 'ptr2',
   '': 'live',
 } as const;
+const expansions = [...Object.entries(expansionMap)];
+const expansionsReverse = [...expansions].reverse();
+
+export async function getZamUrlFromWowheadUrl(url: string): Promise<ZamUrl> {
+  const type = getTypeFromUrl(url);
+  if (!type) throw new Error(`Cannot infer type from wowhead url: ${url}`);
+
+  const displayId = await getDisplayIdFromUrl(url);
+  const expansion = getExpansionFromUrl(url) || 'live';
+  if (type === 'item') {
+    return {
+      expansion, type, displayId, slotId: null,
+    };
+  }
+  return { expansion, type, displayId };
+}
 
 export function getExpansionFromUrl(url: string): ZamExpansion | undefined {
-  for (const [wowheadEx, zamEx] of Object.entries(expansionMap)) {
-    const wowheadPrefix = `https://www.wowhead.com/${wowheadEx ? `${wowheadEx}/` : ''}`
-    const wowZamPrefix = `https://wow.zamimg.com/modelviewer/${zamEx}`
+  for (const [wowheadEx, zamEx] of expansions) {
+    const wowheadPrefix = `https://www.wowhead.com/${wowheadEx ? `${wowheadEx}/` : ''}`;
+    const wowZamPrefix = `https://wow.zamimg.com/modelviewer/${zamEx}`;
     if (url.startsWith(wowheadPrefix) || url.startsWith(wowZamPrefix)) return zamEx;
   }
   return undefined;
 }
 
+export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpansion> {
+  for (const [_, zamEx] of expansionsReverse) {
+    try {
+      const base = getZamBaseUrl(zamEx);
+      const res = await fetch(`${base}/${path}`);
+      if (!res.ok) throw new Error(`Failed to fetch latest available npc: ${res.status} ${res.statusText}`);
+      return zamEx;
+    } catch (e) {
+      // continue
+    }
+  }
+  throw new Error('No expansion found');
+}
+
 function getTypeFromUrl(url: string): ZamType | undefined {
-  if (/\/npc[=\/]/i.test(url)) return 'npc';
-  if(/\/item[=\/]/i.test(url)) return 'item';
+  if (/\/npc[=/]/i.test(url)) return 'npc';
+  if (/\/item[=/]/i.test(url)) return 'item';
   return undefined;
 }
 
@@ -61,7 +78,7 @@ async function getDisplayIdFromUrl(url: string): Promise<number> {
   const byJson = url.match(/\/(?:npc|item)\/(\d+)\.json/i)?.[1];
   if (byJson) return parseInt(byJson, 10);
   // Fallback to parsing embedded data attributes
-  const html = await fetchHtml(url);
+  const html = await fetchWowZaming(url);
   const m = html.match(/data-mv-display-id="(\d+)"/);
   if (!m) {
     throw new Error(`Cannot extract displayId from wowhead url: ${url}`);
@@ -69,15 +86,12 @@ async function getDisplayIdFromUrl(url: string): Promise<number> {
   return parseInt(m[1], 10);
 }
 
-const htmlCache = new LRUCache<string, string>({ max: 200 });
-async function fetchHtml(url: string): Promise<string> {
-  const cached = htmlCache.get(url);
+const respCache = new LRUCache<string, string>({ max: 200 });
+export async function fetchWowZaming(url: string): Promise<string> {
+  const cached = respCache.get(url);
   if (cached) return cached;
   const res = await fetch(url);
   const text = await res.text();
-  htmlCache.set(url, text);
+  respCache.set(url, text);
   return text;
 }
-
-
-

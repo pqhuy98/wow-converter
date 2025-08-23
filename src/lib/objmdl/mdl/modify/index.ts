@@ -6,7 +6,7 @@ import { MDL } from '../mdl';
 import {
   iterateVerticesAtTimestamp,
 } from '../mdl-traverse';
-import { addItemPathToBone, addMdlItemToBone } from './add-item-to-bone';
+import { addItemPathToBone, addMdlCollectionItemToModel, addMdlItemToBone } from './add-item-to-model';
 import { addPortraitCamera } from './add-portrait-camera';
 import { addWc3AttachmentPoint, setWowAttachmentScale } from './attachments';
 import { addCollisionShapes } from './compute-collision-shapes';
@@ -48,6 +48,8 @@ export class MDLModify {
   addMdlItemToBone = addMdlItemToBone;
 
   addItemPathToBone = addItemPathToBone;
+
+  addMdlCollectionItemToModel = addMdlCollectionItemToModel;
 
   addCollisionShapes = addCollisionShapes;
 

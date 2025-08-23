@@ -46,18 +46,20 @@ export function getLayerFilterMode(blendingMode: number, shaderId: number, layer
   const op = (shaderId & 7);
   // Aligns with WebWowViewer combiner groupings; simplified to WC3 filter modes
   if (opaquePath) {
-    debug && console.log('opaquePath', {opaquePath, op, blendingMode, shaderId, layerIndex});
+    debug && console.log('opaquePath', {
+      opaquePath, op, blendingMode, shaderId, layerIndex,
+    });
     if (op === 0) return undefined; // Opaque_Opaque
     if (op === 3) {
       // Opaque_AddAlpha / Opaque_AddAlpha_Alpha
-      const texturePath = texture.image.replace(".png", "").replace(".blp", "");
+      const texturePath = texture.image.replace('.png', '').replace('.blp', '');
       // A hack to skip textures like "armorreflect" that has same op as glow textures but should be skipped
       // We need to be aggressive in skipping secondary textures, only add when absolutely certain
       debug && console.log('texturePath', texturePath);
-      if (texturePath.endsWith("_glow")) {
+      if (texturePath.endsWith('_glow')) {
         return 'Additive';
       }
-      return undefined
+      return undefined;
     }
     return 'Additive';
     // https://www.wowhead.com/mop-classic/npc=71953/xuen op=[2,5,6]

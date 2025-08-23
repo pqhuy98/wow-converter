@@ -4,7 +4,7 @@ import fsExtra from 'fs-extra';
 import path from 'path';
 import z from 'zod';
 
-import { LocalRefValueSchema } from '@/lib/converter/character-exporter';
+import { LocalRefValueSchema } from '@/lib/converter/character';
 
 import { ceOutputPath } from '../config';
 

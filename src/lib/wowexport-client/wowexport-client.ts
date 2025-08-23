@@ -80,6 +80,14 @@ export interface RCPResponse {
     [key: string]: any;
 }
 
+export interface ModelSkin {
+  id: string;
+  label: string;
+  displayID: number;
+  textureIDs: number[];
+  extraGeosets: any[];
+}
+
 export interface ExportCharacterParams {
   race: number;
   gender: number;
@@ -95,7 +103,7 @@ export interface ExportCharacterParams {
 
 export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COMPLETE';
 
-const debug = true;
+const debug = false;
 
 export class WowExportClient extends EventEmitter {
   private socket: Socket;
@@ -623,13 +631,7 @@ export class WowExportClient extends EventEmitter {
     throw new Error('Failed to get file by name');
   }
 
-  async getModelSkins(fileDataID: number): Promise<{
-    id: string;
-    label: string;
-    displayID: number;
-    textureIDs: number[];
-    extraGeosets: any[];
-  }[]> {
+  async getModelSkins(fileDataID: number): Promise<ModelSkin[]> {
     const response = await this.sendCommand('GET_MODEL_SKINS', { fileDataID });
     if (response.id === 'MODEL_SKINS') {
       return response.skins;

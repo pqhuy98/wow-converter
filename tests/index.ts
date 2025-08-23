@@ -2,7 +2,7 @@ import { MapTranslator } from '../src/vendors/wc3maptranslator/translators/MapTr
 import esMain from 'es-main';
 import { writeFileSync } from 'fs';
 
-import { AttachItem, CharacterExporter, local, Size, wowhead } from '@/lib/converter/character-exporter';
+import { AttachItem, CharacterExporter, local, Size, wowhead } from '@/lib/converter/character';
 
 import { Config, getDefaultConfig } from '@/lib/global-config';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';

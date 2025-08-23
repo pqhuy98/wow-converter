@@ -19,6 +19,8 @@ export class OBJFile {
   };
 
   constructor(private filePath: string, defaultModelName?: string) {
+    const debug = false;
+    debug && console.log('Loading obj file', this.filePath);
     this.fileContents = readFileSync(filePath, 'utf-8');
 
     if (defaultModelName !== undefined) {

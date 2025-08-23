@@ -1,6 +1,7 @@
 exported-assets
 recent-exports.json
 build
+notes.txt
 target
 dist
 *.zip

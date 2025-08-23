@@ -17,13 +17,15 @@ import { guessFilterMode } from './utils';
 const debug = false;
 
 export function convertWowExportModel(objFilePath: string, config: Config): {mdl: MDL, texturePaths: Set<string>} {
-  let start = performance.now();
+  console.log('Converting OBJ model:', objFilePath);
+  let start0 = performance.now();
+  let start = start0;
   const obj = new OBJFile(objFilePath).parse();
   const mtl = new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'));
 
   const mdl = new MDL({
     formatVersion: 1000,
-    name: path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', '.mdl'),
+    name: path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', ''),
   });
 
   const animation = new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'));
@@ -70,9 +72,9 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
     const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : '';
     texturePaths.add(textureRelativePath);
 
-    const protoMat = submeshIdToMat.get(submeshId)
+    const protoMat = submeshIdToMat.get(submeshId);
     const mat = _.cloneDeep(protoMat);
-    
+
     if (mat) {
       // do not clone tvertexAnim
       mat.layers.forEach((l, i) => {
@@ -161,7 +163,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
       interval: [0, 1000],
       moveSpeed: 0,
       nonLooping: false,
-      
+
       // bounds will be computed later in mdl.sync()
       minimumExtent: [-1, -1, -1],
       maximumExtent: [1, 1, 1],
@@ -286,6 +288,9 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   start = performance.now();
   mdl.modify.computeWalkMovespeed();
   debug && console.log('computeWalkMovespeed took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+
+  const totalTimeS = (performance.now() - start0) / 1000;
+  console.log(chalk.green('Successfully converted:'), objFilePath, "-", chalk.yellow(totalTimeS.toFixed(2)), 's\n');
 
   return { mdl, texturePaths };
 }

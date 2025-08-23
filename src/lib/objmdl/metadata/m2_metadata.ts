@@ -292,7 +292,8 @@ export class M2MetadataFile {
 
   constructor(private filePath: string, private config: Config, private animFile: AnimationFile, private mdl: MDL) {
     try {
-      console.log('Loading metadata file', this.filePath);
+      const debug = true;
+      debug && console.log('Loading metadata file', this.filePath);
       Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
       if (this.fileType === 'm2') {
       // ADT files (terrain) won't have metadata JSON.

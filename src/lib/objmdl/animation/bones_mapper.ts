@@ -472,6 +472,11 @@ export enum WoWAttachmentID {
   Unknown = 60,
 }
 
+const wowAttachmentEntries = Object.entries(WoWAttachmentID);
+export const getWoWAttachmentName = (attachmentId: number) => {
+  return wowAttachmentEntries.find(([_, value]) => value === attachmentId)?.[0] ?? "unknown";
+};
+
 // Only map WoW attachment points that have a valid WC3 equivalent.
 // E.g. WoW ShoulderRight/ShoulderLeft do not exist in WC3, so we use Medium/Large as proxies.
 export const WoWToWC3AttachmentMap: Partial<Record<WoWAttachmentID, string>> = {
@@ -493,6 +498,8 @@ export function getBoneName(bone_id: number, index: number, crc: number) {
 
   if (crc in CRC_BONE_NAMES) return CRC_BONE_NAMES[crc];
 
+  if (crc) return `bone_crc_${crc}`;
+  if (bone_id) return `bone_id_${bone_id}`;
   return `bone_${index}`;
 }
 

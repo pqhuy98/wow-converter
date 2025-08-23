@@ -74,9 +74,9 @@ export function iterateVerticesAtTimestamp(mdl: MDL, sequence: Sequence, timesta
   const geosets = new Map<GeosetVertex, Geoset>();
   mdl.geosets.forEach((geoset) => {
     const geosetAnim = mdl.geosetAnims.find((ga) => ga.geoset === geoset);
-    let alpha = 1
+    let alpha = 1;
     if (geosetAnim && geosetAnim.alpha) {
-      if ("static" in geosetAnim.alpha) {
+      if ('static' in geosetAnim.alpha) {
         alpha = geosetAnim.alpha.value;
       } else {
         alpha = interpolateKeyFrames(sequence, geosetAnim.alpha.keyFrames, timestamp, geosetAnim.alpha.interpolation === 'Linear' ? V3.lerpScalar : V3.noInterpScalar, 1);

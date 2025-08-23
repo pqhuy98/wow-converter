@@ -1,7 +1,7 @@
 import { rmSync } from 'fs';
 import fsExtra from 'fs-extra';
 
-import { CharacterExporter } from '@/lib/converter/character-exporter';
+import { CharacterExporter } from '@/lib/converter/character';
 import { getDefaultConfig } from '@/lib/global-config';
 
 export const ceOutputPath = 'exported-assets';

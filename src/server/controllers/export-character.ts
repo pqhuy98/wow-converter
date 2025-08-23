@@ -7,7 +7,7 @@ import z from 'zod';
 
 import {
   CharacterExporter, CharacterSchema, LocalRefSchema, LocalRefValueSchema,
-} from '@/lib/converter/character-exporter';
+} from '@/lib/converter/character';
 import { Config, getDefaultConfig } from '@/lib/global-config';
 import { stableStringify, waitUntil } from '@/lib/utils';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
@@ -58,6 +58,7 @@ export async function ControllerExportCharacter(app: express.Application) {
 
   /** Core export logic, extracted into its own function so the queue worker can reuse it */
   async function handleExport(job: ExportCharacterJob) {
+    const start = performance.now();
     const request = job.request;
     const ce = new CharacterExporter(ceOutputPath, ceConfig);
     console.log(`Start exporting ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
@@ -108,7 +109,10 @@ export async function ControllerExportCharacter(app: express.Application) {
       versionId: job.id,
     };
 
-    console.log('Job finished:', chalk.gray(JSON.stringify(resp, null, 2)));
+    console.log('Job finished',
+      `(${chalk.yellow(((performance.now() - start) / 1000).toFixed(2))+"s"})`,
+      chalk.gray(JSON.stringify(resp, null, 2))
+    );
     return resp;
   }
 

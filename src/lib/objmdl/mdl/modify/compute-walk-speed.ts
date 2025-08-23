@@ -13,7 +13,7 @@ export function computeWalkMovespeed(this: MDLModify) {
     if (seq.moveSpeed === 0 && ([
       'Walk', 'Run', 'Sprint', 'FlyWalk',
     ].includes(seq.data.wowName))) {
-      console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
+      debug && console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
       const SAMPLE_STEPS = 30;
 
         // -------------------------------------------------------------------
