@@ -27,7 +27,7 @@ export function AttachmentSelector({
         ))}
         {availableOther.length > 0 && (
           <>
-            <div className="px-2 py-1.5 text-xs text-muted-foreground border-t">Other attachments (untested):</div>
+            <div className="px-2 py-1.5 text-xs text-muted-foreground border-t">Other attachments:</div>
             {availableOther.map((attachment) => (
               <SelectItem key={attachment.id} value={attachment.id.toString()}>
                 {attachment.name} ({attachment.id})

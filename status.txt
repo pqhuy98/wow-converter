@@ -1,5 +1,5 @@
 TODO (not in any priority order):
-- In later expansions. some NPCs with collection e.g. mechagnome, earthen,... cannot be fully exported.
+- Character customization collection e.g. mechagnome, earthen,... is not exported.
 - NPCs don't close hand when holding items
 - Multi-step workflow in web to tune the model:
   - First export for full model with all data
@@ -11,7 +11,6 @@ TODO (not in any priority order):
 - Support for wowhead dressing room.
 - Auto-updater for wow-converter to keep users up-to-date.
 - Collect anonymous analytics to understand common usage patterns.
-- Use correct model ID for character export based on wowhead URL of different expansions.
 
 DONE:
 - Feet and trouser geoset wrong in some cases
@@ -21,6 +20,10 @@ DONE:
 - Basic particles
 - Bug: doesn't work for some user with existing wow.export settings from the official.
   e.g. when they have exportModelFormat: "RAW" while wow-converter fails to change wow.export config during startup. (why? it should!).
+- Export classic models.
+- Item collections are exported.
+- Models now have ears 
+- All attachments work correctly
 
 BLOCKED:
 - Blood elf model's attachment not working
