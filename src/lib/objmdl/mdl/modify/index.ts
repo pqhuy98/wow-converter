@@ -22,7 +22,9 @@ import {
 import {
   addDecayAnimation, addEventObjectBySequenceName, debugSequence, removeWowSequence, renameSequencesByWowName, sortSequences, useWalkSequenceByWowName,
 } from './sequences';
-import { rotate, scale, scaleSequenceDuration, translate } from './translate-scale-rotate';
+import {
+  rotate, scale, scaleSequenceDuration, translate,
+} from './translate-scale-rotate';
 
 export class MDLModify {
   constructor(public mdl: MDL) {
@@ -84,6 +86,16 @@ export class MDLModify {
 
   optimizeKeyFrames = optimizeKeyFrames;
 
+  optimizeAll() {
+    this.sortSequences();
+    this.removeUnusedVertices();
+    this.removeUnusedNodes();
+    this.removeUnusedMaterialsTextures();
+    this.optimizeKeyFrames();
+    this.mdl.sync();
+    return this;
+  }
+
   // Delete/cut/crop
   deleteVerticesIf = deleteVerticesIf;
 
@@ -135,5 +147,15 @@ export class MDLModify {
       maxZ = Math.max(maxZ, vPos[2]);
     });
     return maxZ;
+  }
+
+  keepCinematicSequences(patterns: (string | RegExp)[]) {
+    this.mdl.sequences.forEach((s) => {
+      const name = s.data.wowName;
+      if (patterns.some((p) => (typeof p === 'string' ? name.includes(p) : p.test(name)))) {
+        s.keep = true;
+      }
+    });
+    return this;
   }
 }

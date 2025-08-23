@@ -7,6 +7,7 @@ export interface Config {
   overrideModels: boolean
   mdx?: boolean
   infiniteExtentBoundRadiusThreshold: number
+  isBulkExport?: boolean
 }
 
 export async function getDefaultConfig(): Promise<Config> {

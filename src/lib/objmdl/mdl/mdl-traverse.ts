@@ -79,6 +79,7 @@ export function iterateVerticesAtTimestamp(mdl: MDL, sequence: Sequence, timesta
       if ('static' in geosetAnim.alpha) {
         alpha = geosetAnim.alpha.value;
       } else {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         alpha = interpolateKeyFrames(sequence, geosetAnim.alpha.keyFrames, timestamp, geosetAnim.alpha.interpolation === 'Linear' ? V3.lerpScalar : V3.noInterpScalar, 1);
       }
     }

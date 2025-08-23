@@ -21,8 +21,8 @@ const WowMap = {
 
 const maps: [WowMap, [number, number], [number, number], string][] = [
   // [WowMap.Northrend, [28, 29], [22, 23], 'wrathgate.w3x'],
-  [WowMap.Northrend, [29, 30], [18, 19], 'icecrown.w3x'],
-  // [WowMap.IcecrownCitadel, [27, 28], [31, 33], 'icc-floor12.w3x'],
+  // [WowMap.Northrend, [29, 30], [18, 19], 'icecrown.w3x'],
+  [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
   // [WowMap.IcecrownCitadel, [25, 28], [21, 24], 'icc-floor34.w3x'],
   // [WowMap.IcecrownCitadel, [35, 36], [30, 31], 'frozen-throne.w3x'],
   // [WowMap.Azeroth, [32, 32], [48, 48], 'northshire-abbey.w3x'],
@@ -38,17 +38,18 @@ const mapAngleDeg = 0;
 
 const config: Config = {
   ...await getDefaultConfig(),
+  isBulkExport: true,
   overrideModels: false,
-  mdx: false,
+  mdx: true,
 };
 
 const creatureScaleUp = 2;
+const mapOutputDir = `maps/${chosenMap[3]}`;
 
 const mapExportConfig: MapExportConfig = {
   ...defaultMapExportConfig,
   mapId: chosenMap[0].id,
   wowExportFolder: chosenMap[0].folder,
-  outputPath: `maps/${chosenMap[3]}`,
   min: chosenMap[1],
   max: chosenMap[2],
   mapAngleDeg,
@@ -70,7 +71,9 @@ const mapExportConfig: MapExportConfig = {
 (async function main() {
   const mapConverter = new MapExporter(config, mapExportConfig);
 
-  await mapConverter.convert();
+  await mapConverter.exportDoodadsAssets(mapOutputDir);
+  await mapConverter.exportCreatures(mapOutputDir);
+  mapConverter.saveWar3mapFiles(mapOutputDir);
 }())
   .then(() => process.exit(0))
   .catch((e) => {

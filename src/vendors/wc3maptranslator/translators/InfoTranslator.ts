@@ -142,6 +142,10 @@ export class InfoTranslator implements Translator<Info> {
     outBufferToWar.addInt(infoJson.supportedModes);
     outBufferToWar.addInt(infoJson.gameDataVersion);
 
+    outBufferToWar.addInt(infoJson.defaultCameraZoom);
+    outBufferToWar.addInt(infoJson.maxCameraZoom);
+    outBufferToWar.addInt(infoJson.minCameraZoom);
+
     // Players
     outBufferToWar.addInt(infoJson.players?.length || 0);
     infoJson.players?.forEach((player) => {
@@ -292,6 +296,9 @@ export class InfoTranslator implements Translator<Info> {
       editorVersion: 0,
       scriptLanguage: ScriptLanguage.JASS,
       supportedModes: SupportedModes.Both,
+      defaultCameraZoom: 0,
+      maxCameraZoom: 0,
+      minCameraZoom: 0,
       gameVersion: {
         major: 0,
         minor: 0,
@@ -398,6 +405,10 @@ export class InfoTranslator implements Translator<Info> {
     result.scriptLanguage = outBufferToJSON.readInt();
     result.supportedModes = outBufferToJSON.readInt();
     result.gameDataVersion = outBufferToJSON.readInt();
+
+    result.defaultCameraZoom = outBufferToJSON.readInt();
+    result.maxCameraZoom = outBufferToJSON.readInt();
+    result.minCameraZoom = outBufferToJSON.readInt();
 
     // Struct: players
     const numPlayers = outBufferToJSON.readInt();

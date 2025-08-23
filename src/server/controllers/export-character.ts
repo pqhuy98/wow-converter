@@ -13,7 +13,7 @@ import { stableStringify, waitUntil } from '@/lib/utils';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { Job, JobQueue, QueueConfig } from '@/server/utils/job-queue';
 
-import { ceOutputPath, isSharedHosting, serverDeployTime } from '../config';
+import { isSharedHosting, outputDir, serverDeployTime } from '../config';
 import { startupRequests } from './export-character.startup';
 
 export const ExporCharacterRequestSchema = z.object({
@@ -60,14 +60,13 @@ export async function ControllerExportCharacter(app: express.Application) {
   async function handleExport(job: ExportCharacterJob) {
     const start = performance.now();
     const request = job.request;
-    const ce = new CharacterExporter(ceOutputPath, ceConfig);
+    const ce = new CharacterExporter(ceConfig);
     console.log(`Start exporting ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
 
     await wowExportClient.syncConfig();
     await ce.exportCharacter(request.character, request.outputFileName);
 
-    let exportedModels: string[] = [];
-    ce.models.forEach(([mdl, filePath]) => {
+    ce.models.forEach(([mdl]) => {
       if (request.formatVersion === '800') {
         mdl.modify.convertToSd800();
       }
@@ -85,33 +84,28 @@ export async function ControllerExportCharacter(app: express.Application) {
       }
       mdl.modify.optimizeKeyFrames();
       mdl.sync();
-      fsExtra.ensureDirSync(path.dirname(filePath));
-      if (request.format === 'mdx') {
-        fsExtra.writeFileSync(`${filePath}.mdx`, mdl.toMdx());
-        exportedModels.push(`${filePath}.mdx`);
-      } else {
-        fsExtra.writeFileSync(`${filePath}.mdl`, mdl.toMdl());
-        exportedModels.push(`${filePath}.mdl`);
-      }
     });
 
-    ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-    let textures = await ce.assetManager.exportTextures(ce.outputPath);
+    let exportedModels = ce.writeAllModels(outputDir, request.format);
+    let textures = await ce.writeAllTextures(outputDir);
 
-    exportedModels = exportedModels.map((model) => path.relative(ceOutputPath, model));
-    textures = textures.map((texture) => path.relative(ceOutputPath, texture));
+    console.log('Exported models', exportedModels);
+    exportedModels = exportedModels.map((model) => path.relative(outputDir, `${model}.${request.format}`));
+    console.log('Exported models 2', exportedModels);
+    textures = textures.map((texture) => path.relative(outputDir, texture));
 
     // Return the list of exported assets to the caller – zipping happens on-demand via the download API
     const resp: ExportCharacterResponse = {
       exportedModels,
       exportedTextures: textures,
-      outputDirectory: !isSharedHosting ? path.resolve(ce.outputPath) : undefined,
+      outputDirectory: !isSharedHosting ? path.resolve(outputDir) : undefined,
       versionId: job.id,
     };
 
-    console.log('Job finished',
-      `${chalk.yellow(((performance.now() - start) / 1000).toFixed(2)+"s")}`,
-      chalk.gray(JSON.stringify(resp, null, 2))
+    console.log(
+      'Job finished',
+      `${chalk.yellow(`${((performance.now() - start) / 1000).toFixed(2)}s`)}`,
+      chalk.gray(JSON.stringify(resp, null, 2)),
     );
     return resp;
   }
@@ -191,7 +185,7 @@ export async function ControllerExportCharacter(app: express.Application) {
 
   // Serve exported assets. When running on shared hosting enable HTTP caching to reduce bandwidth
   app.use('/assets', isSharedHosting
-    ? express.static(ceOutputPath, {
+    ? express.static(outputDir, {
       maxAge: '1h',
       setHeaders: (res) => {
         // Explicitly set the Cache-Control header because some CDNs ignore the implicit one
@@ -200,7 +194,7 @@ export async function ControllerExportCharacter(app: express.Application) {
       },
     })
     // When in personal mode we want always fresh content
-    : express.static(ceOutputPath));
+    : express.static(outputDir));
 
   let jobs: ExportCharacterJob[] = [];
   if (isSharedHosting) {

@@ -1,76 +1,77 @@
-import { MapTranslator } from '../src/vendors/wc3maptranslator/translators/MapTranslator';
-import esMain from 'es-main';
-import { existsSync, writeFileSync } from 'fs';
-
-import { AttachItem, CharacterExporter, local, Size, wowhead } from '@/lib/converter/character';
-
-import { Config, getDefaultConfig } from '@/lib/global-config';
-import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
-import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
-import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
-import { ModificationType } from '@/vendors/wc3maptranslator/data';
-import { distancePerTile } from '@/lib/constants';
-import { Vector3 } from '@/lib/math/common';
 import chalk from 'chalk';
+import esMain from 'es-main';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
-export const testMapDir = './maps/test-regression.w3x';
+import { distancePerTile } from '@/lib/constants';
+import {
+  AttachItem, CharacterExporter, local, Size, wowhead,
+} from '@/lib/converter/character';
+import { Config, getDefaultConfig } from '@/lib/global-config';
+import { Vector3 } from '@/lib/math/common';
+import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
+import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { ModificationType } from '@/vendors/wc3maptranslator/data';
+import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
+
+export const outputDir = './maps/test-regression.w3x';
 export const ceConfig: Config = {
   ...(await getDefaultConfig()),
-  overrideModels: false,
-}
-export const ce = new CharacterExporter(testMapDir, ceConfig);
+  overrideModels: true,
+};
+export const ce = new CharacterExporter(ceConfig);
 
 async function exportTestCases() {
-  const testCases: [string, string, string, Size | ""][] = [
-    ['https://www.wowhead.com/wotlk/npc=36855/lady-deathwhisper', "", "", ""],
-    ['https://www.wowhead.com/wotlk/npc=36612/lord-marrowgar', "", "", ""],
-    ['https://www.wowhead.com/mop-classic/npc=71953/xuen', "", "", ""],
-    ['https://www.wowhead.com/npc=154515/yulon', "", "", ""],
-    ['https://www.wowhead.com/npc=56439/sha-of-doubt', "", "", "giant"],
+  const testCases: [string, string, string, Size | ''][] = [
+    ['https://www.wowhead.com/wotlk/npc=36855/lady-deathwhisper', '', '', ''],
+    ['https://www.wowhead.com/wotlk/npc=36612/lord-marrowgar', '', '', ''],
+    ['https://www.wowhead.com/mop-classic/npc=71953/xuen', '', '', ''],
+    ['https://www.wowhead.com/npc=154515/yulon', '', '', ''],
+    ['https://www.wowhead.com/npc=56439/sha-of-doubt', '', '', 'giant'],
     [
       'https://www.wowhead.com/npc=37187/high-overlord-saurfang',
-      "https://www.wowhead.com/wotlk/item=49623/shadowmourne",
-      "https://www.wowhead.com/wotlk/item=49623/shadowmourne",
-      ""
+      'https://www.wowhead.com/wotlk/item=49623/shadowmourne',
+      'https://www.wowhead.com/wotlk/item=49623/shadowmourne',
+      '',
     ],
     [
       'https://www.wowhead.com/npc=37119/highlord-tirion-fordring',
-      "https://www.wowhead.com/item=120978/ashbringer",
-      "",
-      ""
+      'https://www.wowhead.com/item=120978/ashbringer',
+      '',
+      '',
     ],
     [
-      "https://www.wowhead.com/wotlk/npc=36597/the-lich-king",
-      "https://www.wowhead.com/classic/item=231885/frostmourne",
-      "",
-      ""
+      'https://www.wowhead.com/wotlk/npc=36597/the-lich-king',
+      'https://www.wowhead.com/classic/item=231885/frostmourne',
+      '',
+      '',
     ],
-    ["https://www.wowhead.com/npc=102672/nythendra", "", "", "giant"],
-    ["https://www.wowhead.com/npc=211664/elisande", "", "", ""],
-    ["https://www.wowhead.com/npc=113201/thicket-manahunter", "", "", ""],
-    ["https://www.wowhead.com/npc=68397/lei-shen", "", "", ""],
+    ['https://www.wowhead.com/npc=102672/nythendra', '', '', 'giant'],
+    ['https://www.wowhead.com/npc=211664/elisande', '', '', ''],
+    ['https://www.wowhead.com/npc=113201/thicket-manahunter', '', '', ''],
+    ['https://www.wowhead.com/npc=68397/lei-shen', '', '', ''],
     [
-      "https://www.wowhead.com/npc=22917/illidan-stormrage",
-      "https://www.wowhead.com/item=32837/warglaive-of-azzinoth",
-      "https://www.wowhead.com/item=32838/warglaive-of-azzinoth",
-      ""
+      'https://www.wowhead.com/npc=22917/illidan-stormrage',
+      'https://www.wowhead.com/item=32837/warglaive-of-azzinoth',
+      'https://www.wowhead.com/item=32838/warglaive-of-azzinoth',
+      '',
     ],
-    ["https://www.wowhead.com/npc=114895/nightbane#modelviewer", "", "", "giant"],
-    ["https://www.wowhead.com/mop-classic/npc=64986/heavenly-onyx-cloud-serpent", "", "", ""],
-    ["local::creature\\protodragonshadowflame\\protodragonshadowflame_body.obj", "", "", "giant"],
+    ['https://www.wowhead.com/npc=114895/nightbane#modelviewer', '', '', 'giant'],
+    ['https://www.wowhead.com/mop-classic/npc=64986/heavenly-onyx-cloud-serpent', '', '', ''],
+    ['local::creature\\protodragonshadowflame\\protodragonshadowflame_body.obj', '', '', 'giant'],
     [
-      "https://www.wowhead.com/npc=87607/sever-frostsprocket",
-      "https://www.wowhead.com/item=141376/icy-ebon-warsword?bonus=4790",
-      "https://www.wowhead.com/item=51010/the-facelifter",
-      ""
+      'https://www.wowhead.com/npc=87607/sever-frostsprocket',
+      'https://www.wowhead.com/item=141376/icy-ebon-warsword?bonus=4790',
+      'https://www.wowhead.com/item=51010/the-facelifter',
+      '',
     ],
     [
-      "https://www.wowhead.com/npc=36857/blood-elf-warrior",
-      "https://www.wowhead.com/item=31331/the-night-blade",
-      "https://www.wowhead.com/item=31331/the-night-blade",
-      ""
+      'https://www.wowhead.com/npc=36857/blood-elf-warrior',
+      'https://www.wowhead.com/item=31331/the-night-blade',
+      'https://www.wowhead.com/item=31331/the-night-blade',
+      '',
     ],
-    ["https://www.wowhead.com/npc=172613/rokhan", "", "", ""]
+    ['https://www.wowhead.com/npc=172613/rokhan', '', '', ''],
   ];
 
   const names: string[] = [];
@@ -80,8 +81,8 @@ async function exportTestCases() {
     const base = Array.isArray(url) ? url[0] : url;
     const weaponR = Array.isArray(url) ? url[1] : undefined;
     const weaponL = Array.isArray(url) ? url[2] : undefined;
-    const sizeStr = Array.isArray(url) ? url[3] : "";
-    const size: Size = sizeStr === "" ? undefined : sizeStr;
+    const sizeStr = Array.isArray(url) ? url[3] : '';
+    const size: Size = sizeStr === '' ? undefined : sizeStr;
 
     const attachItems: Record<string, AttachItem> = {};
     if (weaponR) {
@@ -91,37 +92,36 @@ async function exportTestCases() {
       attachItems[WoWAttachmentID.HandLeft] = { path: wowhead(weaponL), scale: 1 };
     }
 
-    let attackTag: AttackTag = "Unarmed";
+    let attackTag: AttackTag = 'Unarmed';
     if (weaponR && !weaponL || !weaponR && weaponL) {
-      attackTag = "2H";
+      attackTag = '2H';
     }
     if (weaponR && weaponL) {
-      attackTag = "1H";
+      attackTag = '1H';
     }
 
-    let name = ""
-    if (base.startsWith("local::")) {
-      name = `${i}-${base.split("\\").pop()!.replace(".obj", "")}`;
+    let name = '';
+    if (base.startsWith('local::')) {
+      name = `${i}-${base.split('\\').pop()!.replace('.obj', '')}`;
     } else {
-      const npcId = base.split("npc=").pop()?.split("/").shift();
-      const npcName = base.split("/").pop()!.split("#")[0]
+      const npcId = base.split('npc=').pop()?.split('/').shift();
+      const npcName = base.split('/').pop()!.split('#')[0];
       name = `${i}-${npcName}-${npcId}`;
     }
-
-    if (existsSync(ce.getFullPath(name + '.mdx')) && !ceConfig.overrideModels) {
-      console.log('Skipping file already exists', chalk.yellow(name + '.mdx'));
+    names.push(name);
+    if (existsSync(join(outputDir, `${name}.mdx`)) && !ceConfig.overrideModels) {
+      console.log('Skipping file already exists', chalk.yellow(`${name}.mdx`));
       continue;
     }
 
     await ce.exportCharacter({
-      base: base.startsWith("local::") ? local(base.replace("local::", "")) : wowhead(base),
+      base: base.startsWith('local::') ? local(base.replace('local::', '')) : wowhead(base),
       attachItems,
       attackTag,
       inGameMovespeed: 270,
       size,
-      scale: 1.5
+      scale: 1.5,
     }, name);
-    names.push(name);
   }
 
   return names;
@@ -130,46 +130,36 @@ async function exportTestCases() {
 export async function main() {
   const names = await exportTestCases();
 
-  ce.models.forEach(([model, path]) => {
-    model.modify
-      .sortSequences()
-      .removeUnusedVertices()
-      .removeUnusedNodes()
-      .removeUnusedMaterialsTextures()
-      .optimizeKeyFrames();
-    model.sync();
-    writeFileSync(`${path}.mdx`, model.toMdx());
-    console.log('Wrote character model to', path);
-  });
-  ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  await ce.assetManager.exportTextures(ce.outputPath);
+  ce.optimizeModelsTextures();
+  ce.writeAllModels(outputDir, 'mdx');
+  await ce.writeAllTextures(outputDir);
 
-  const map = new MapManager(testMapDir);
-  map.load();
-  map.units = [];
-  map.unitTypes = []
+  const map = new MapManager();
+  map.load(outputDir);
+  map.units = map.units.filter((unit) => typeof unit.type === 'string'); // all melee units
+  map.unitTypes = [];
 
-  for(let i = 0; i < names.length; i++) {
+  for (let i = 0; i < names.length; i++) {
     const name = names[i];
-    const unitType = map.addUnitType("hero", "Hpal", [
+    const unitType = map.addUnitType('hero', 'Hpal', [
       { id: 'unam', type: ModificationType.string, value: name },
       { id: 'upro', type: ModificationType.string, value: name },
       { id: 'umdl', type: ModificationType.string, value: `${name}.mdx` },
       { id: 'usca', type: ModificationType.real, value: 1 },
       { id: 'ussc', type: ModificationType.real, value: 2 },
-    ])
+    ]);
 
     const mapSize = map.terrain.map;
-    const padding = 10 * distancePerTile
-    const width = mapSize.width * distancePerTile - 2 * padding
-    const i2 = i * 500
+    const padding = 10 * distancePerTile;
+    const width = mapSize.width * distancePerTile - 2 * padding;
+    const i2 = i * 500;
     const position: Vector3 = [
       (i2 % width) + padding + mapSize.offset.x,
       -(Math.floor(i2 / width) * 1000 + padding + mapSize.offset.y),
       0,
-    ]
+    ];
 
-    console.log(name, "at location", position.slice(0, 2));
+    console.log(name, 'at location', position.slice(0, 2));
 
     map.addUnit(unitType, {
       variation: 0,
@@ -195,10 +185,13 @@ export async function main() {
       color: 23,
       waygate: -1,
       id: 0,
-    })
+    });
   }
 
-  map.save();
+  console.log('Unit counts:', map.units.length);
+  console.log('Unit types counts:', map.unitTypes.length);
+
+  map.save(outputDir);
 }
 
 if (esMain(import.meta)) {

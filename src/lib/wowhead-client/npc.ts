@@ -48,6 +48,8 @@ export interface NPCData {
   TextureFiles?: TextureFilesMap;
 }
 
+const debug = false;
+
 export async function fetchNpcMeta(zam: NpcZamUrl): Promise<NPCData> {
   if (zam.type !== 'npc') throw new Error('fetchNpcMeta expects a ZamUrl of type npc');
   const path = `meta/npc/${zam.displayId}.json`;
@@ -58,7 +60,20 @@ export async function fetchNpcMeta(zam: NpcZamUrl): Promise<NPCData> {
   }
   const base = getZamBaseUrl(expansion);
   const url = `${base}/${path}`;
-  console.log('Get NPC meta from', chalk.blue(url));
-  const res = await fetchWowZaming(url);
-  return JSON.parse(res) as unknown as NPCData;
+  debug && console.log('Get NPC meta from', chalk.blue(url));
+  try {
+    const res = await fetchWowZaming(url);
+    return JSON.parse(res) as unknown as NPCData;
+  } catch (e) {
+    console.log(
+      chalk.red('Failed to fetch NPC meta from'),
+      chalk.blue(url),
+      chalk.red(e),
+      chalk.red('falling back to latest available expansion'),
+    );
+    const base2 = getZamBaseUrl(await getLatestExpansionHavingUrl(path));
+    const url2 = `${base2}/${path}`;
+    const res2 = await fetchWowZaming(url2);
+    return JSON.parse(res2) as unknown as NPCData;
+  }
 }

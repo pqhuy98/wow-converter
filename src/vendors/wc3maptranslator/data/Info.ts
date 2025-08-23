@@ -83,6 +83,9 @@ interface Info {
   scriptLanguage: ScriptLanguage
   supportedModes: SupportedModes
   gameDataVersion: number
+  defaultCameraZoom: number
+  maxCameraZoom: number
+  minCameraZoom: number
   map: Map
   camera: PlayableCamera
   gameDataSet: number

@@ -1,20 +1,22 @@
 import chalk from 'chalk';
-import path, { join } from 'path';
+import { writeFileSync } from 'fs';
+import { ensureDirSync } from 'fs-extra';
+import path, { dirname, join } from 'path';
 import { z } from 'zod';
 
-import { AssetManager } from '@/lib/converter/common/model-manager';
+import { AssetManager } from '@/lib/converter/common/asset-manager';
 import { Config } from '@/lib/global-config';
+import { getWoWAttachmentName } from '@/lib/objmdl/animation/bones_mapper';
 import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
+import { ensureLocalModelFileExists } from './utils';
 import { exportCharacterNpcAsMdl } from './wowhead-exporter/character-model';
 import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
 import { exportZamItemAsMdl } from './wowhead-exporter/item-model';
-import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
-import { existsSync } from 'fs';
 
 // Local file path must be a relative path and must not contain ".." or start with a slash.
 // This is to prevent path traversal attacks and other security issues.
@@ -79,17 +81,12 @@ export class CharacterExporter {
 
   public models: [MDL, string][] = [];
 
-  constructor(public outputPath: string, public config: Config) {
+  constructor(public config: Config) {
     this.assetManager = new AssetManager(config);
   }
 
   public includeMdlToOutput(mdl: MDL, outputFile: string) {
-    const fullOutputFile = this.getFullPath(outputFile);
-    this.models.push([mdl, fullOutputFile]);
-  }
-
-  getFullPath(outputFile: string) {
-    return join(this.outputPath, outputFile);
+    this.models.push([mdl, outputFile]);
   }
 
   async exportCharacter(char: Character, outputFile: string) {
@@ -102,8 +99,9 @@ export class CharacterExporter {
       model.sequences = model.sequences.filter((seq) => !char.attackTag || seq.data.attackTag === '' || seq.data.attackTag === char.attackTag);
     }
     if (!char.keepCinematic) {
-      model.sequences = model.sequences.filter((seq) => !seq.name.includes('Cinematic'));
+      model.sequences = model.sequences.filter((seq) => !seq.name.includes('Cinematic') || seq.keep);
     }
+    char.portraitCameraSequenceName = 'Stand';
     model.modify.addPortraitCamera(char.portraitCameraSequenceName);
 
     if (char.attachItems) {
@@ -175,6 +173,7 @@ export class CharacterExporter {
 
   private async exportBaseMdl(char: Character): Promise<MDL> {
     if (char.base.type === 'local') {
+      await ensureLocalModelFileExists(char.base.value);
       return this.assetManager.parse(char.base.value, true).mdl;
     }
     if (char.base.type === 'wowhead' || char.base.type === 'displayID') {
@@ -206,6 +205,7 @@ export class CharacterExporter {
 
   private async exportItem(ref: Ref): Promise<MDL> {
     if (ref.type === 'local') {
+      await ensureLocalModelFileExists(ref.value);
       return this.assetManager.parse(ref.value, true).mdl;
     }
     if (ref.type === 'wowhead' || ref.type === 'displayID') {
@@ -223,5 +223,30 @@ export class CharacterExporter {
       });
     }
     throw new Error('Unknown item type');
+  }
+
+  optimizeModelsTextures() {
+    this.models.forEach(([model]) => model.modify.optimizeAll());
+    this.assetManager.purgeTextures(this.models.flatMap(([m]) => m.textures.map((t) => t.image)));
+  }
+
+  writeAllModels(outputDir: string, format: 'mdx' | 'mdl') {
+    const fullPaths: string[] = [];
+    for (const [model, path] of this.models) {
+      const fullPath = join(outputDir, path);
+      fullPaths.push(fullPath);
+      ensureDirSync(dirname(fullPath));
+      if (format === 'mdx') {
+        writeFileSync(`${fullPath}.mdx`, model.toMdx());
+      } else {
+        writeFileSync(`${fullPath}.mdl`, model.toMdl());
+      }
+      console.log('Wrote model', chalk.green(`${fullPath}.${format}`));
+    }
+    return fullPaths;
+  }
+
+  async writeAllTextures(outputDir: string) {
+    return this.assetManager.exportTextures(outputDir);
   }
 }

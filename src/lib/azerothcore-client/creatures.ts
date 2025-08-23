@@ -2,7 +2,7 @@ import {
   creature, creature_template, creature_template_model, item_template, Prisma, PrismaClient,
 } from '@prisma/client';
 import chalk from 'chalk';
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
 
 import {
@@ -165,7 +165,7 @@ export async function exportCreatureModels(
         }
       }
 
-      const ex = new CharacterExporter(outputPath, config);
+      const ex = new CharacterExporter(config);
       const attackTag = c.equipment ? getAttackTag(c.equipment) : undefined;
       console.log('Attack tag:', attackTag);
       await ex.exportCharacter({
@@ -177,22 +177,12 @@ export async function exportCreatureModels(
       console.log('initial export character took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       start = performance.now();
-      ex.models.forEach(([model, path]) => {
-        model.modify
-          .sortSequences()
-          .removeUnusedVertices()
-          .removeUnusedNodes()
-          .removeUnusedMaterialsTextures()
-          .optimizeKeyFrames();
-        model.sync();
-        writeFileSync(`${path}.mdx`, model.toMdx());
-        console.log('Wrote character model to', chalk.blue(path));
-      });
+      ex.optimizeModelsTextures();
+      ex.writeAllModels(outputPath, config.mdx ? 'mdx' : 'mdl');
       console.log('optimize and write took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       start = performance.now();
-      ex.assetManager.purgeTextures(ex.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-      await ex.assetManager.exportTextures(ex.outputPath);
+      await ex.writeAllTextures(outputPath);
       console.log('export materials took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       const end = performance.now();

@@ -1,6 +1,5 @@
-import assert from 'assert';
 import chalk from 'chalk';
-import { existsSync, rmSync } from 'fs';
+import { existsSync, readdirSync, rmSync } from 'fs';
 import fsExtra from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
@@ -9,7 +8,7 @@ import { Creature, exportCreatureModels, getCreaturesInTile } from '@/lib/azerot
 import {
   dataHeightMax, dataHeightMin, dataHeightToGameZ, distancePerTile, maxGameHeightDiff,
 } from '@/lib/constants';
-import { computeAbsoluteMinMaxExtents } from '@/lib/converter/common/model-manager';
+import { computeAbsoluteMinMaxExtents } from '@/lib/converter/common/asset-manager';
 import { WowObject, WowObjectType } from '@/lib/converter/common/models';
 import { WowObjectManager } from '@/lib/converter/common/wow-object-manager';
 import { getTerrainHeight, Wc3Converter } from '@/lib/converter/map-exporter/wc3-converter';
@@ -24,7 +23,6 @@ import { IDoodadType, IUnitType, MapManager } from '@/vendors/wc3maptranslator/e
 export interface MapExportConfig {
   mapId: number;
   wowExportFolder: string;
-  outputPath: string;
   min: Vector2;
   max: Vector2;
   mapAngleDeg: number;
@@ -76,16 +74,19 @@ export const defaultMapExportConfig: Omit<MapExportConfig, 'mapId' | 'wowExportF
 export class MapExporter {
   private globalRotation: EulerRotation;
 
+  private mapManager: MapManager;
+
+  private roots: WowObject[];
+
   constructor(public config: Config, public mapExportConfig: MapExportConfig) {
     this.globalRotation = [0, 0, radians(-90 + mapExportConfig.mapAngleDeg)];
   }
 
-  public async convert() {
+  public async exportDoodadsAssets(outputDir: string) {
     const {
-      mapId, wowExportFolder, outputPath, min, max, mapAngleDeg,
+      wowExportFolder, min, max, mapAngleDeg,
     } = this.mapExportConfig;
     const mapConfig = this.mapExportConfig;
-    assert.ok(outputPath.startsWith('maps/'));
 
     await wowExportClient.waitUntilReady();
 
@@ -109,55 +110,71 @@ export class MapExporter {
     wowObjectManager.rotateRootsAtCenter(this.globalRotation);
 
     // Generate terrain
-    const roots = wowObjectManager.roots;
-    const mapManager = new MapManager(outputPath);
+    this.roots = wowObjectManager.roots;
+    this.mapManager = new MapManager();
     const war3Exporter = new Wc3Converter(mapConfig);
-    mapManager.terrain = war3Exporter.generateTerrainWithHeight(roots);
+    this.mapManager.terrain = war3Exporter.generateTerrainWithHeight(this.roots);
 
     // Place doodads
     const { doodadTypesWithPitchRoll } = war3Exporter.placeDoodads(
-      mapManager,
-      roots,
+      this.mapManager,
+      this.roots,
       (doodad) => doodadFilter(doodad.id, doodad.type),
     );
 
-    console.log('Total doodads:', mapManager.doodads.length);
-    console.log('Total doodad types:', mapManager.doodadTypes.length);
+    console.log('Total doodads:', this.mapManager.doodads.length);
+    console.log('Total doodad types:', this.mapManager.doodadTypes.length);
     console.log('Doodad types with custom pitch/roll:', doodadTypesWithPitchRoll);
-    if (mapManager.doodads.length > 130_000) {
-      throw new Error(`Too many doodads: ${mapManager.doodads.length}, limit is 130_000`);
+    if (this.mapManager.doodads.length > 130_000) {
+      throw new Error(`Too many doodads: ${this.mapManager.doodads.length}, limit is 130_000`);
     }
+
+    // Export doodad assets
+    wowObjectManager.assetManager.exportModels(outputDir);
+    await wowObjectManager.assetManager.exportTextures(outputDir);
+  }
+
+  public async exportCreatures(outputDir: string) {
+    const mapConfig = this.mapExportConfig;
+    const { mapId } = mapConfig;
 
     // Place creatures as Units or Doodads
     let creatures: Creature[] = [];
     if (mapConfig.creatures.enable) {
-      creatures = await this.generateUnitsData(mapManager, mapId, roots);
-      console.log('Created', mapManager.unitTypes.length, 'custom unit types');
-      console.log('Placed', mapManager.units.length, 'unit instances');
+      creatures = await this.generateUnitsData(this.mapManager, mapId, this.roots);
+      console.log('Created', this.mapManager.unitTypes.length, 'custom unit types');
+      console.log('Placed', this.mapManager.units.length, 'unit instances');
     }
-
-    // Save map
-    if (!existsSync(outputPath)) {
-      fsExtra.copySync('maps/template-empty.w3x', outputPath);
-    }
-    mapManager.save();
-    try {
-      // Remove precomputed shadow file if it exists, since it no longers match objects on the map
-      rmSync(path.join(outputPath, 'war3map.shd'));
-    } catch (e) {
-      // ignore
-    }
-
-    // Export assets
-    wowObjectManager.assetManager.exportModels(outputPath);
-    await wowObjectManager.assetManager.exportTextures(outputPath);
     const start = performance.now();
     creatures.sort((a, b) => a.model.CreatureDisplayID - b.model.CreatureDisplayID);
     if (mapConfig.creatures.enable) {
-      await exportCreatureModels(creatures, outputPath, this.config);
+      await exportCreatureModels(creatures, outputDir, this.config);
     }
     console.log('Exported all creatures in', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
     console.log('Done');
+  }
+
+  public saveWar3mapFiles(outputDir: string) {
+    // Save map
+    const templateEmptyDir = 'maps/template-empty.w3x';
+    if (!existsSync(outputDir)) {
+      fsExtra.copySync(templateEmptyDir, outputDir);
+    } else {
+      // copy all files in template-empty.w3x to outputDir if not already exists
+      const allFiles = readdirSync(templateEmptyDir);
+      for (const file of allFiles) {
+        if (!existsSync(path.join(outputDir, file))) {
+          fsExtra.copySync(path.join(templateEmptyDir, file), path.join(outputDir, file));
+        }
+      }
+    }
+    this.mapManager.save(outputDir);
+    try {
+      // Remove precomputed shadow file if it exists, since it no longers match objects on the map
+      rmSync(path.join(outputDir, 'war3map.shd'));
+    } catch (e) {
+      // ignore
+    }
   }
 
   private async generateUnitsData(
@@ -341,10 +358,10 @@ export class MapExporter {
   }
 }
 
-function buildPaths(prefix: string, x: [number, number], y: [number, number]) {
+function buildPaths(prefix: string, min: Vector2, max: Vector2) {
   const res: string[] = [];
-  for (let i = x[0]; i <= x[1]; i++) {
-    for (let j = y[0]; j <= y[1]; j++) {
+  for (let i = min[0]; i <= max[0]; i++) {
+    for (let j = min[1]; j <= max[1]; j++) {
       res.push(path.join(prefix, `adt_${i}_${j}.obj`));
     }
   }

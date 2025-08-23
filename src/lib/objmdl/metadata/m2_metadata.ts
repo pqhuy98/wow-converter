@@ -292,8 +292,7 @@ export class M2MetadataFile {
 
   constructor(private filePath: string, private config: Config, private animFile: AnimationFile, private mdl: MDL) {
     try {
-      const debug = true;
-      debug && console.log('Loading metadata file', this.filePath);
+      !config.isBulkExport && console.log('Loading metadata file', this.filePath);
       Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
       if (this.fileType === 'm2') {
       // ADT files (terrain) won't have metadata JSON.
@@ -688,7 +687,7 @@ export class M2MetadataFile {
       if (scaleVary >= varyThreshold) maxVariants *= 3;
 
       // TODO: replace / this.particleEmitters!.length with only PEs that need variants
-      const variantCount = Math.round(Math.min(maxVariants, 500 / this.particleEmitters!.length));
+      const variantCount = Math.round(Math.min(maxVariants, 400 / this.particleEmitters!.length));
       if (variantCount < 1) {
         particleEmitter2s.push(node);
         return;
@@ -752,7 +751,7 @@ export class M2MetadataFile {
 
     this.mdl.particleEmitter2s = particleEmitter2s;
     this.mdl.textures.push(...particleEmitter2s.map((e) => e.texture));
-    console.log('Particle emitters 2:', this.mdl.particleEmitter2s.length);
+    !this.config.isBulkExport && console.log('Particle emitters 2:', this.mdl.particleEmitter2s.length);
   }
 
   objToSubmesh = new Map<number, number>();

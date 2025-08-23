@@ -121,6 +121,7 @@ export class WowExportClient extends EventEmitter {
   };
 
   cascInfo: CASCInfo | null = null;
+
   isClassic() {
     return this.cascInfo?.build.Product.includes('classic');
   }
@@ -589,13 +590,20 @@ export class WowExportClient extends EventEmitter {
   }
 
   /**
-     * Search for files in listfile
-     * @param search - Search pattern
-     * @param useRegex - Use regular expression
-     * @returns Promise with search results
-     */
+   * Search for files in listfile
+   * @param search - Search pattern
+   * @param useRegex - Use regular expression
+   * @returns Promise with search results
+   */
+  private searchFileBlocked = false;
+
   async searchFiles(search: string, useRegex: boolean = false): Promise<FileEntry[]> {
+    if (this.searchFileBlocked) {
+      await waitUntil(() => !this.searchFileBlocked);
+    }
+    this.searchFileBlocked = true;
     const response = await this.sendCommand('LISTFILE_SEARCH', { search, useRegularExpression: useRegex });
+    this.searchFileBlocked = false;
 
     if (response.id === 'LISTFILE_SEARCH_RESULT') {
       return response.entries;

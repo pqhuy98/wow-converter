@@ -1,5 +1,7 @@
 import { readFileSync } from 'fs';
 
+import { Config } from '../global-config';
+
 export interface ObjMaterial {
   name: string;
   Ns?: number;
@@ -15,11 +17,10 @@ export interface ObjMaterial {
 export class MTLFile {
   materials: ObjMaterial[] = [];
 
-  constructor(filePath: string) {
+  constructor(filePath: string, config: Config) {
     let mtlContent: string;
     try {
-      const debug = false;
-      debug && console.log('Loading mtl file', filePath);
+      !config.isBulkExport && console.log('Loading mtl file', filePath);
       mtlContent = readFileSync(filePath, 'utf-8');
     } catch (e) {
       console.error('Cannot read mtl file', filePath, ' - skip it');

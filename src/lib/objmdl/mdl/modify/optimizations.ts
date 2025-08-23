@@ -94,7 +94,7 @@ export function removeUnusedVertices(this: MDLModify) {
 }
 
 export function removeCinematicSequences(this: MDLModify) {
-  this.mdl.sequences = this.mdl.sequences.filter((seq) => !seq.name.includes('Cinematic'));
+  this.mdl.sequences = this.mdl.sequences.filter((seq) => !seq.name.includes('Cinematic') || seq.keep);
   return this;
 }
 

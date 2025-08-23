@@ -10,7 +10,7 @@ import { getInitialTerrain } from '../../mapmodifier/terrain';
 import { Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation, degrees } from '../../math/rotation';
 import { V3 } from '../../math/vector';
-import { computeAbsoluteMinMaxExtents } from '../common/model-manager';
+import { computeAbsoluteMinMaxExtents } from '../common/asset-manager';
 import { WowObject } from '../common/models';
 import { MapExportConfig } from './map-exporter';
 

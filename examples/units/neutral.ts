@@ -1,8 +1,8 @@
 import esMain from 'es-main';
-import { writeFileSync } from 'fs';
 
 import { displayID, local, wowhead } from '@/lib/converter/character';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { outputDir } from '@/server/config';
 
 import { ce } from './common';
 
@@ -41,17 +41,9 @@ async function wolf() {
 export async function main() {
   await bolvarIcc();
   await wolf();
-  await ce.assetManager.exportTextures(ce.outputPath);
-  ce.models.forEach(([model, path]) => {
-    model.modify
-      .sortSequences()
-      .removeUnusedNodes()
-      .removeUnusedMaterialsTextures()
-      .optimizeKeyFrames();
-    model.sync();
-    writeFileSync(`${path}.mdx`, model.toMdx());
-    console.log('Wrote character model to', path);
-  });
+  ce.optimizeModelsTextures();
+  await ce.writeAllTextures(outputDir);
+  ce.writeAllModels(outputDir, 'mdx');
 }
 
 if (esMain(import.meta)) {

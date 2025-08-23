@@ -17,18 +17,18 @@ import { guessFilterMode } from './utils';
 const debug = false;
 
 export function convertWowExportModel(objFilePath: string, config: Config): {mdl: MDL, texturePaths: Set<string>} {
-  console.log('Converting OBJ model:', objFilePath);
-  let start0 = performance.now();
+  !config.isBulkExport && console.log('Converting OBJ model:', objFilePath);
+  const start0 = performance.now();
   let start = start0;
-  const obj = new OBJFile(objFilePath).parse();
-  const mtl = new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'));
+  const obj = new OBJFile(objFilePath, config).parse();
+  const mtl = new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'), config);
 
   const mdl = new MDL({
     formatVersion: 1000,
     name: path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', ''),
   });
 
-  const animation = new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'));
+  const animation = new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'), config);
   const metadata = new M2MetadataFile(objFilePath.replace(/\.obj$/, '.json'), config, animation, mdl);
 
   if (obj.models.length === 0) {
@@ -90,7 +90,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
           image: blpPath,
         };
         if (blpPath) {
-          texturePaths.add(blpPath);
+          texturePaths.add(blpPath.replace('.blp', '.png').replace(new RegExp(`^${config.assetPrefix}\\\\`), ''));
         }
       });
     } else {
@@ -291,7 +291,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   debug && console.log('computeWalkMovespeed took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   const totalTimeS = (performance.now() - start0) / 1000;
-  console.log(chalk.green('Successfully converted:'), objFilePath, "-", chalk.yellow(totalTimeS.toFixed(2)), 's\n');
+  !config.isBulkExport && console.log(chalk.green('Successfully converted:'), objFilePath, '-', chalk.yellow(totalTimeS.toFixed(2)), 's\n');
 
   return { mdl, texturePaths };
 }

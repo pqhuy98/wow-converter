@@ -6,13 +6,15 @@ import {
 } from '@/lib/objmdl/animation/animation_mapper';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { MDL, WowAttachment } from '@/lib/objmdl/mdl/mdl';
+import { canAddMdlCollectionItemToModel } from '@/lib/objmdl/mdl/modify/add-item-to-model';
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { ExportContext, exportModelFileIdAsMdl, exportTexture } from '../utils';
-import { EquipmentSlot, getEquipmentSlotName, ItemMetata, processItemData } from './item-model';
-import { canAddMdlCollectionItemToModel } from '@/lib/objmdl/mdl/modify/add-item-to-model';
+import {
+  EquipmentSlot, getEquipmentSlotName, ItemMetata, processItemData,
+} from './item-model';
 
 type EquipmentSlotData = {
   slotId: EquipmentSlot;
@@ -32,17 +34,16 @@ export async function exportCharacterNpcAsMdl({
 }): Promise<MDL> {
   // Export the base model
   const prep = await prepareCharacterNpcExport(zam);
-  let charMdl: MDL;
   const start = performance.now();
   const result = await wowExportClient.exportCharacter({
     ...prep.rpcParams,
     excludeAnimationIds: getExcludedAnimIds(keepCinematic, attackTag),
   });
-  console.log("wow.export exportCharacter took", chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+  console.log('wow.export exportCharacter took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   const baseDir = await wowExportClient.getAssetDir();
   const relative = path.relative(baseDir, result.exportPath);
-  charMdl = ctx.assetManager.parse(relative, true).mdl;
+  const charMdl = ctx.assetManager.parse(relative, true).mdl;
 
   // Replace the base texture with the npc baked texture
   if (prep.npcTextureFile) {
@@ -84,7 +85,6 @@ export async function exportCharacterNpcAsMdl({
   // Attach items with models
   await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots);
 
-
   // Cloak etc additional textures
   await attachEquipmentsWithTexturesOnly(ctx, charMdl, prep.equipmentSlots);
 
@@ -122,7 +122,7 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
     equipmentSlots.push({ slotId, data: itemData });
   }
 
-  geosetIds.add(702) // Ears2 - otherwise the model will be missing ears
+  geosetIds.add(702); // Ears2 - otherwise the model will be missing ears
 
   // Prepare RPC params for wowexport
   const rpcParams: ExportCharacterParams = {
@@ -142,7 +142,6 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
   return { rpcParams, npcTextureFile, equipmentSlots };
 }
 
-
 async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[]) {
   const collectionsAdded = new Set<number>();
   const attachmentResults: {
@@ -155,12 +154,12 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   // Attach individual item model to the character model
   const attachItemModel = async (fileDataId: number, textures: number[], attachmentId: WoWAttachmentID | undefined) => {
     if (collectionsAdded.has(fileDataId)) {
-      return
+      return;
     }
 
     const itemMdl = await exportModelFileIdAsMdl(ctx, fileDataId, textures);
 
-    let attachment: WowAttachment | undefined
+    let attachment: WowAttachment | undefined;
     if (attachmentId) {
       attachment = charMdl.wowAttachments.find((a) => a.wowAttachmentId === attachmentId);
       if (!attachment) {
@@ -168,20 +167,28 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
         if (charMdl.wowAttachments.length === 0) {
           console.error(chalk.red(`No WoW attachments data found in this model ${charMdl.model.name}`));
         }
-        attachmentResults.push({attachmentId, itemMdl, ok: false, fileDataId});
+        attachmentResults.push({
+          attachmentId, itemMdl, ok: false, fileDataId,
+        });
         return;
       }
     }
     if (attachment && attachmentId) {
       charMdl.modify.addMdlItemToBone(itemMdl, attachment.bone.name);
-      attachmentResults.push({attachmentId, itemMdl, ok: true, fileDataId});
+      attachmentResults.push({
+        attachmentId, itemMdl, ok: true, fileDataId,
+      });
     } else if (canAddMdlCollectionItemToModel(charMdl, itemMdl)) {
       charMdl.modify.addMdlCollectionItemToModel(itemMdl);
       collectionsAdded.add(fileDataId);
-      attachmentResults.push({attachmentId, itemMdl, ok: true, fileDataId});
+      attachmentResults.push({
+        attachmentId, itemMdl, ok: true, fileDataId,
+      });
     } else {
       console.error(chalk.red(`Cannot add item ${fileDataId} to model as collection because the item is not a collection.`));
-      attachmentResults.push({attachmentId, itemMdl, ok: false, fileDataId});
+      attachmentResults.push({
+        attachmentId, itemMdl, ok: false, fileDataId,
+      });
     }
   };
 
@@ -195,7 +202,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     [EquipmentSlot.Legs, 0, undefined],
     [EquipmentSlot.Boots, 0, undefined],
     [EquipmentSlot.Gloves, 0, undefined],
-  ]
+  ];
   for (const [slotId, index, attachmentId] of attachmentList) {
     const slot = equipmentSlots.find((s) => s.slotId === slotId);
     if (slot && slot.data.modelFiles[index]) {
@@ -215,7 +222,6 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   });
 }
 
-
 async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL, slots: EquipmentSlotData[]) {
   const textureSlotConfigs: Partial<Record<EquipmentSlot, { geosetNames: string[]; twoSided?: boolean }>> = {
     [EquipmentSlot.Back]: { geosetNames: ['Cloak'], twoSided: true },
@@ -228,7 +234,6 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
 
     const textureFile = slot.data.textureFiles[0];
 
-    
     const texPath = await exportTexture(textureFile);
     ctx.assetManager.addPngTexture(texPath);
     charMdl.textures.push({
@@ -260,7 +265,7 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
       ],
     });
     matching.forEach((g) => { g.material = charMdl.materials.at(-1)!; });
-    console.log('Set texture', getEquipmentSlotName(slot.slotId), "->", path.basename(texPath).replace('.png', ''));
+    console.log('Set texture', getEquipmentSlotName(slot.slotId), '->', path.basename(texPath).replace('.png', ''));
   }
 }
 

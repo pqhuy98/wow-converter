@@ -1,5 +1,7 @@
 import { readFileSync } from 'fs';
 
+import { Config } from '../global-config';
+
 export class OBJFile {
   private fileContents: string;
 
@@ -18,14 +20,9 @@ export class OBJFile {
     models: [],
   };
 
-  constructor(private filePath: string, defaultModelName?: string) {
-    const debug = false;
-    debug && console.log('Loading obj file', this.filePath);
+  constructor(private filePath: string, config: Config) {
+    !config.isBulkExport && console.log('Loading obj file', this.filePath);
     this.fileContents = readFileSync(filePath, 'utf-8');
-
-    if (defaultModelName !== undefined) {
-      this.defaultModelName = defaultModelName;
-    }
   }
 
   public parse(): IResult {

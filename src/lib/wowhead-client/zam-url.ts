@@ -90,6 +90,9 @@ export async function fetchWowZaming(url: string): Promise<string> {
   const cached = respCache.get(url);
   if (cached) return cached;
   const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch wowhead url: ${url} ${res.status} ${res.statusText} ${await res.text()}`);
+  }
   const text = await res.text();
   respCache.set(url, text);
   return text;

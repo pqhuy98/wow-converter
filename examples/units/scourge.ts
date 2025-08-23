@@ -1,5 +1,4 @@
 import esMain from 'es-main';
-import { writeFileSync } from 'fs';
 
 import { CharacterExporter, local, wowhead } from '@/lib/converter/character';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
@@ -7,7 +6,7 @@ import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { ceConfig } from './common';
 
 const outputDir = './maps/demo.w3x/';
-const ce = new CharacterExporter(outputDir, ceConfig);
+const ce = new CharacterExporter(ceConfig);
 
 export async function bosses() {
   await ce.exportCharacter({
@@ -223,18 +222,9 @@ export async function main() {
   await fleshGiantCorpse();
   await frostWyrm();
 
-  await ce.assetManager.exportTextures(ce.outputPath);
-  ce.models.forEach(([model, path]) => {
-    model.modify
-      .sortSequences()
-      .removeUnusedVertices()
-      .removeUnusedNodes()
-      .removeUnusedMaterialsTextures()
-      .optimizeKeyFrames();
-    model.sync();
-    writeFileSync(`${path}.mdx`, model.toMdx());
-    console.log('Wrote character model to', path);
-  });
+  ce.models.forEach(([model]) => model.modify.optimizeAll());
+  ce.writeAllModels(outputDir, 'mdx');
+  await ce.writeAllTextures(outputDir);
 }
 
 if (esMain(import.meta)) {

@@ -1,8 +1,8 @@
 import esMain from 'es-main';
-import { writeFileSync } from 'fs';
 
 import { local, wowhead } from '@/lib/converter/character';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { outputDir } from '@/server/config';
 
 import { ce } from './common';
 
@@ -57,22 +57,9 @@ export async function main() {
   await muradin();
   await muradin2();
 
-  ce.models.forEach(([model, path]) => {
-    model.modify
-      .sortSequences()
-      .removeUnusedVertices()
-      .removeUnusedNodes()
-      .removeUnusedMaterialsTextures()
-      .optimizeKeyFrames();
-    model.sync();
-    // model.sequences.sort((s1, s2) => s1.interval[0] - s2.interval[0])
-    // model.sequences.forEach(s => s.name += " " + s.data.wowName)
-    // writeFileSync(path + ".mdl", model.toString())
-    writeFileSync(`${path}.mdx`, model.toMdx());
-    console.log('Wrote character model to', path);
-  });
-  ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  await ce.assetManager.exportTextures(ce.outputPath);
+  ce.optimizeModelsTextures();
+  ce.writeAllModels(outputDir, 'mdx');
+  await ce.writeAllTextures(outputDir);
   console.log('Alliance done');
 }
 

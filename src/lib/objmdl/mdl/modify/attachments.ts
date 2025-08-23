@@ -2,8 +2,24 @@ import chalk from 'chalk';
 
 import { Vector3 } from '@/lib/math/common';
 
-import { WoWAttachmentID, WoWToWC3AttachmentMap } from '../../animation/bones_mapper';
+import { WoWAttachmentID } from '../../animation/bones_mapper';
 import { MDLModify } from '.';
+
+// Only map WoW attachment points that have a valid WC3 equivalent.
+// E.g. WoW ShoulderRight/ShoulderLeft do not exist in WC3, so we use Medium/Large as proxies.
+const WoWToWC3AttachmentMap: Partial<Record<WoWAttachmentID, string>> = {
+  [WoWAttachmentID.Head]: 'Head',
+  [WoWAttachmentID.HandRight]: 'Hand Right',
+  [WoWAttachmentID.HandLeft]: 'Hand Left',
+  [WoWAttachmentID.ShoulderRight]: 'Medium',
+  [WoWAttachmentID.ShoulderLeft]: 'Large',
+  [WoWAttachmentID.LeftFoot]: 'Foot Left',
+  [WoWAttachmentID.RightFoot]: 'Foot Right',
+  [WoWAttachmentID.Chest]: 'Chest',
+  [WoWAttachmentID.PlayerName]: 'Overhead',
+  [WoWAttachmentID.Base]: 'Origin',
+  // Add more as needed
+};
 
 export function addWc3AttachmentPoint(this: MDLModify) {
   // Only map WoW attachment points that have a valid WC3 equivalent.
@@ -20,7 +36,7 @@ export function addWc3AttachmentPoint(this: MDLModify) {
         ? `${wc3Key} Ref`
         : `Wow:${wowAttachmentId}:${Object.keys(WoWAttachmentID)[Object.values(WoWAttachmentID).indexOf(wowAttachmentId)]}`,
       parent: bone,
-      pivotPoint: wowAttachment.pivotPoint,
+      pivotPoint: [...wowAttachment.bone.pivotPoint],
       flags: [],
     });
   });

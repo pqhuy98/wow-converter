@@ -8,11 +8,11 @@ export const ceOutputPath = 'exported-assets';
 export const ceConfig = await getDefaultConfig();
 fsExtra.ensureDirSync(ceOutputPath);
 
-export const ce = new CharacterExporter(ceOutputPath, ceConfig);
+export const ce = new CharacterExporter(ceConfig);
 
 export function clearOutput() {
-  rmSync(ce.outputPath, { recursive: true });
-  fsExtra.ensureDirSync(ce.outputPath);
+  rmSync(ceOutputPath, { recursive: true });
+  fsExtra.ensureDirSync(ceOutputPath);
 }
 
 const clear = false;

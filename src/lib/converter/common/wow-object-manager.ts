@@ -11,7 +11,7 @@ import { Config } from '../../global-config';
 import { Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../../math/rotation';
 import { V3 } from '../../math/vector';
-import { AssetManager, computeAbsoluteMinMaxExtents } from './model-manager';
+import { AssetManager, computeAbsoluteMinMaxExtents } from './asset-manager';
 import { isWowObjectType, WowObject, WowObjectType } from './models';
 
 interface PlacementInfoRow {

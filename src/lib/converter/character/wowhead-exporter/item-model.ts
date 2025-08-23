@@ -88,11 +88,10 @@ function filterFilesByRaceGender(
   for (let i = 0; i < componentEntries.length; i++) {
     const [_componentId, id] = componentEntries[i];
     const entries = files[id] || [];
-    const matchingFiles = entries.filter((fileEntry) => {
+    const matchingFiles = entries.filter((fileEntry) => (
       // Check if this entry matches our race and gender OR is universal (Race: 0, Gender: 2)
-      return ((fileEntry.Race === targetRace || fileEntry.Race === 0)
-        && (fileEntry.Gender === targetGender || fileEntry.Gender > 1));
-    });
+      (fileEntry.Race === targetRace || fileEntry.Race === 0)
+        && (fileEntry.Gender === targetGender || fileEntry.Gender > 1)));
     matchingFiles.sort((a, b) => a.ExtraData - b.ExtraData);
     let matchingFile = matchingFiles[0];
     if (matchingFiles.length > 1 && matchingFiles[i]) {

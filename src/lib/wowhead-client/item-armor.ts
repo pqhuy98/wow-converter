@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 
 import {
-  fetchWowZaming, getLatestExpansionHavingUrl, getZamBaseUrl, ZamExpansion, ZamUrl,
+  fetchWowZaming, getLatestExpansionHavingUrl, getZamBaseUrl, ZamUrl,
 } from './zam-url';
 
 interface ItemFile {
@@ -25,6 +25,8 @@ export interface ItemData {
   ComponentTextures: { [componentId: string]: number };
 }
 
+const debug = false;
+
 export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   if (zam.type !== 'item') throw new Error('fetchItemMeta expects a ZamUrl of type item');
   const path = zam.slotId
@@ -37,7 +39,7 @@ export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   }
   const base = getZamBaseUrl(expansion);
   const url = `${base}/${path}`;
-  console.log('Get item meta from', chalk.blue(url));
+  debug && console.log('Get item meta from', chalk.blue(url));
   const res = await fetchWowZaming(url);
   return JSON.parse(res) as unknown as ItemData;
 }

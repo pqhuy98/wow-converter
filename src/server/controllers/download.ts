@@ -6,7 +6,7 @@ import z from 'zod';
 
 import { LocalRefValueSchema } from '@/lib/converter/character';
 
-import { ceOutputPath } from '../config';
+import { outputDir } from '../config';
 
 const DownloadRequestSchema = z.object({
   files: z.array(LocalRefValueSchema).min(1),
@@ -25,9 +25,9 @@ export function ControllerDownload(app: express.Application) {
       archive.pipe(res);
 
       for (const relativePath of files) {
-        const diskPath = path.resolve(ceOutputPath, relativePath);
+        const diskPath = path.resolve(outputDir, relativePath);
         // Prevent directory-traversal attacks
-        if (!diskPath.startsWith(path.resolve(ceOutputPath))) {
+        if (!diskPath.startsWith(path.resolve(outputDir))) {
           throw new Error('Invalid path');
         }
 

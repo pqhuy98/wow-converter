@@ -39,7 +39,10 @@ export class MapTranslator {
 
   public filePaths: Record<FilePath, string>;
 
-  constructor(private mapDir: string) {
+  constructor() {
+  }
+
+  public setMapDir(mapDir: string) {
     this.filePaths = {
       info: path.join(mapDir, 'war3map.w3i'),
       terrain: path.join(mapDir, 'war3map.w3e'),
@@ -55,11 +58,15 @@ export class MapTranslator {
     };
   }
 
-  load() {
+  load(mapDir: string) {
+    this.setMapDir(mapDir);
     this.info = InfoTranslator.warToJson(readFileSync(this.filePaths.info)).json;
     this.terrain = TerrainTranslator.warToJson(readFileSync(this.filePaths.terrain)).json;
 
+    console.log('Loading units from', this.filePaths.unitData);
     this.units = UnitsTranslator.warToJson(readFileSync(this.filePaths.units)).json;
+    console.log('Units loaded', this.units.length);
+
     const allDoodads = DoodadsTranslator.warToJson(readFileSync(this.filePaths.doodads)).json;
     this.doodads = allDoodads[0];
     this.specialDoodads = allDoodads[1];

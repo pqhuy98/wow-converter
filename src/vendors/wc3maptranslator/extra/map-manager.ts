@@ -14,7 +14,7 @@ export interface IUnitType {
 }
 
 export interface IUnit extends Omit<Unit, 'type'> {
-  type: IUnitType
+  type: IUnitType | string
 }
 
 export interface IDoodadType {
@@ -25,7 +25,7 @@ export interface IDoodadType {
 }
 
 export interface IDoodad extends Omit<Doodad, 'type'> {
-  type: IDoodadType
+  type: IDoodadType | string
 }
 
 export class MapManager {
@@ -43,15 +43,15 @@ export class MapManager {
 
   doodads: IDoodad[] = [];
 
-  constructor(mapDir: string) {
-    this.mapData = new MapTranslator(mapDir);
+  constructor() {
+    this.mapData = new MapTranslator();
 
     // Initialise FourCC generator and mark all already-used IDs as taken.
     this.fourCCGenerator = new FourCCGenerator();
   }
 
-  load() {
-    this.mapData.load();
+  load(mapDir: string) {
+    this.mapData.load(mapDir);
     const registerTableFourCCs = (table: ObjectModificationTable) => {
       [...Object.keys(table.original), ...Object.keys(table.custom)].forEach((key) => {
         if (key.length >= 4) this.fourCCGenerator.addUsed(key.slice(0, 4));
@@ -65,6 +65,43 @@ export class MapManager {
     registerTableFourCCs(this.mapData.abilityData);
     registerTableFourCCs(this.mapData.buffData);
     registerTableFourCCs(this.mapData.upgradeData);
+
+    Object.entries(this.mapData.unitData.custom).forEach(([key, value]) => {
+      const [code, parent] = key.split(':');
+      this.unitTypes.push({
+        code,
+        parent,
+        data: value,
+      });
+    });
+    Object.entries(this.mapData.doodadData.custom).forEach(([key, value]) => {
+      const [code, parent] = key.split(':');
+      this.doodadTypes.push({
+        code,
+        parent,
+        data: value,
+        isDestructible: false,
+      });
+    });
+    Object.entries(this.mapData.destructibleData.custom).forEach(([key, value]) => {
+      const [code, parent] = key.split(':');
+      this.destructibleTypes.push({
+        code,
+        parent,
+        data: value,
+        isDestructible: true,
+      });
+    });
+
+    console.log('Unit types', this.unitTypes.map((type) => type.code));
+    this.units = this.mapData.units.map((unit) => {
+      const type = this.unitTypes.find((type) => type.code === unit.type) ?? unit.type;
+      return { ...unit, type };
+    });
+    this.doodads = this.mapData.doodads.map((doodad) => {
+      const type = this.doodadTypes.find((type) => type.code === doodad.type) ?? doodad.type;
+      return { ...doodad, type };
+    });
   }
 
   get terrain() {
@@ -115,7 +152,7 @@ export class MapManager {
     return this.doodads[this.doodads.length - 1];
   }
 
-  save() {
+  save(mapDir: string) {
     this.mapData.unitData.custom = {};
     this.unitTypes.forEach((unitType) => {
       this.mapData.unitData.custom[`${unitType.code}:${unitType.parent}`] = unitType.data;
@@ -132,16 +169,17 @@ export class MapManager {
     this.units.forEach((unit) => {
       this.mapData.units.push({
         ...unit,
-        type: unit.type.code,
+        type: typeof unit.type === 'string' ? unit.type : unit.type.code,
       });
     });
     this.mapData.doodads = [];
     this.doodads.forEach((doodad) => {
       this.mapData.doodads.push({
         ...doodad,
-        type: doodad.type.code,
+        type: typeof doodad.type === 'string' ? doodad.type : doodad.type.code,
       });
     });
+    this.mapData.setMapDir(mapDir);
     this.mapData.save('units');
     this.mapData.save('doodads');
     this.mapData.save('terrain');

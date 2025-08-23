@@ -1,10 +1,10 @@
 import esMain from 'es-main';
-import fs from 'fs-extra';
 
 import { wowhead } from '@/lib/converter/character';
 import { Vector3 } from '@/lib/math/common';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { MDL } from '@/lib/objmdl/mdl/mdl';
+import { outputDir } from '@/server/config';
 
 import { ce } from './common';
 
@@ -113,23 +113,9 @@ export async function main() {
   // await deathboundWard();
   // await ancientSkeletalSoldier();
 
-  ce.models.forEach(([model, filePath]) => {
-    model.modify
-      .sortSequences()
-      .removeUnusedVertices()
-      .removeUnusedNodes()
-      .removeUnusedMaterialsTextures()
-      .optimizeKeyFrames();
-    model.sync();
-    // model.sequences.sort((s1, s2) => s1.interval[0] - s2.interval[0])
-    // model.sequences.forEach((s) => s.name += ` ${s.data.wowName}`);
-    // writeFileSync(`${filePath}.mdl`, model.toString());
-    fs.writeFileSync(`${filePath}.mdx`, model.toMdx());
-    console.log('Wrote character model to', filePath);
-  });
-
-  ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  await ce.assetManager.exportTextures(ce.outputPath);
+  ce.optimizeModelsTextures();
+  ce.writeAllModels(outputDir, 'mdx');
+  await ce.writeAllTextures(outputDir);
   process.exit(0);
 }
 

@@ -1,8 +1,8 @@
 import esMain from 'es-main';
-import fs from 'fs-extra';
 
 import { wowhead } from '@/lib/converter/character';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { outputDir } from '@/server/config';
 
 import { ce } from './common';
 
@@ -80,23 +80,9 @@ export async function main() {
   await ebonBladeCommanders();
   await argentCommanders();
 
-  ce.models.forEach(([model, filePath]) => {
-    model.modify
-      .sortSequences()
-      .removeUnusedVertices()
-      .removeUnusedNodes()
-      .removeUnusedMaterialsTextures()
-      .optimizeKeyFrames();
-    model.sync();
-    // model.sequences.sort((s1, s2) => s1.interval[0] - s2.interval[0])
-    // model.sequences.forEach((s) => s.name = `${s.name} | ${s.data.wowName} | ${s.data.attackTag}`);
-    // writeFileSync(`${filePath}.mdl`, model.toString());
-    fs.writeFileSync(`${filePath}.mdx`, model.toMdx());
-    console.log('Wrote character model to', filePath);
-  });
-
-  ce.assetManager.purgeTextures(ce.models.flatMap(([m]) => m.textures.map((t) => t.image)));
-  await ce.assetManager.exportTextures(ce.outputPath);
+  ce.optimizeModelsTextures();
+  ce.writeAllModels(outputDir, 'mdx');
+  await ce.writeAllTextures(outputDir);
 }
 
 if (esMain(import.meta)) {

@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import _ from 'lodash';
 
+import { Config } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 
 import { BlizzardNull } from '../../constants';
@@ -103,10 +104,10 @@ export class AnimationFile implements AnimationData {
 
   isLoaded = false;
 
-  constructor(public filePath: string) {
+  constructor(public filePath: string, config: Config) {
     try {
       const debug = false;
-      debug && console.log('Loading animation file', this.filePath);
+      !config.isBulkExport && console.log('Loading animation file', this.filePath);
       const start = performance.now();
       Object.assign(this, JSON.parse(readFileSync(filePath, 'utf-8')));
       debug && console.log('AnimationFile load took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
