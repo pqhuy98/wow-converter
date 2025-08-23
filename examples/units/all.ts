@@ -1,3 +1,4 @@
+import esMain from 'es-main';
 import { main as alliance } from './alliance';
 import { main as horde } from './horde';
 import { main as lightHammerNpcs } from './light-hammer-npcs';
@@ -22,6 +23,6 @@ async function main() {
   await scourge();
 }
 
-if (require.main === module) {
+if (esMain(import.meta)) {
   void main().then(() => process.exit(0));
 }

@@ -1,5 +1,5 @@
 {
-  "name": "wow-converter",
+  "name": "@pqhuy98/wow-converter",
   "version": "1.1.0",
   "description": "",
   "author": "Huy Pham",
@@ -13,6 +13,9 @@
       "node18-win-x64"
     ],
     "outputPath": "dist"
+  },
+  "exports": {
+    "./*": "./src/*"
   },
   "scripts": {
     "lint": "eslint src/**/*.ts --fix",

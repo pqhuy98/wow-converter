@@ -22,7 +22,7 @@ import {
 import {
   addDecayAnimation, addEventObjectBySequenceName, debugSequence, removeWowSequence, renameSequencesByWowName, sortSequences, useWalkSequenceByWowName,
 } from './sequences';
-import { scale, scaleSequenceDuration, translate } from './translate-scale';
+import { rotate, scale, scaleSequenceDuration, translate } from './translate-scale-rotate';
 
 export class MDLModify {
   constructor(public mdl: MDL) {
@@ -37,6 +37,8 @@ export class MDLModify {
   scale = scale;
 
   translate = translate;
+
+  rotate = rotate;
 
   scaleSequenceDuration = scaleSequenceDuration;
 

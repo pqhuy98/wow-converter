@@ -12,9 +12,6 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "paths": {
-      "common/src/*": [
-        "../common/src/*"
-      ],
       "@/*": [
         "./src/*"
       ]

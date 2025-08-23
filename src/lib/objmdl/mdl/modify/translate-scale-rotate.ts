@@ -1,4 +1,4 @@
-import { Vector3 } from '@/lib/math/common';
+import { EulerRotation, Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
 
 import { AnimationOrStatic } from '../components/animation';
@@ -110,5 +110,22 @@ export function scaleSequenceDuration(this: MDLModify, sequence: Sequence, scali
     seq.interval[1] += durationOffset;
   });
   sequence.interval[1] += durationOffset;
+  return this;
+}
+
+export function rotate(this: MDLModify, eulerRotation: EulerRotation) {
+  this.mdl.geosets.forEach((geoset) => {
+    geoset.vertices.forEach((vertex) => {
+      vertex.position = V3.rotate(vertex.position, eulerRotation);
+    });
+  });
+  this.mdl.getNodes().forEach((node) => {
+    node.pivotPoint = V3.rotate(node.pivotPoint, eulerRotation);
+  });
+  this.mdl.cameras.forEach((cam) => {
+    cam.position = V3.rotate(cam.position, eulerRotation);
+    cam.target.position = V3.rotate(cam.target.position, eulerRotation);
+  });
+  this.mdl.sync();
   return this;
 }
