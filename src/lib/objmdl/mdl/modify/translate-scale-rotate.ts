@@ -53,6 +53,11 @@ export function scale(this: MDLModify, value: number) {
     e.segmentScaling = V3.scale(e.segmentScaling, value);
   });
 
+  this.mdl.lights.forEach((l) => {
+    scaleAnimOrStatic(l.attenuationStart);
+    scaleAnimOrStatic(l.attenuationEnd);
+  });
+
   return this;
 }
 
