@@ -132,7 +132,7 @@ function computeZamMeshId(group: number, offset: number | undefined): number {
   return group * 100 + variant;
 }
 
-const debug = false;
+const debug = true;
 
 // Geosets to show on the item model itself (viewer applies groups 27/21 and also 26 for some)
 function resolveCharacterGeosetIds(slotId: number, itemData: ItemData) {
@@ -162,6 +162,7 @@ function resolveCharacterGeosetIds(slotId: number, itemData: ItemData) {
 // Geosets to apply when equipping the item on a character (attach to character groups)
 export function filterCollectionGeosets(slotId: number, itemData: ItemData, model: MDL) {
   const submeshIds = new Set(resolveCharacterGeosetIds(slotId, itemData));
+  debug && console.log('submeshIds', submeshIds);
   const chosenGeosets = new Set<Geoset>();
   const enabledGroups = new Set<number>();
   // multiple geosets can share same submeshId, we need to include all of them
@@ -172,6 +173,8 @@ export function filterCollectionGeosets(slotId: number, itemData: ItemData, mode
     }
   });
 
+  debug && console.log('enabledGroups 1', enabledGroups);
+
   submeshIds.forEach((id) => {
     const group = Math.floor(id / 100);
     if (enabledGroups.has(group)) return;
@@ -179,10 +182,15 @@ export function filterCollectionGeosets(slotId: number, itemData: ItemData, mode
     // fallback to the model's first geoset in the group
     const defaultGeoset = model.geosets.find((g) => Math.floor(g.wowData.submeshId / 100) === group);
     if (defaultGeoset) {
-      chosenGeosets.add(defaultGeoset);
+      // there can be multiple geosets with the same default submeshId, we need to add all of them
+      model.geosets.filter((g) => g.wowData.submeshId === defaultGeoset.wowData.submeshId).forEach((g) => {
+        chosenGeosets.add(g);
+      });
       enabledGroups.add(group);
     }
   });
+
+  debug && console.log('enabledGroups 1', enabledGroups);
 
   return Array.from(chosenGeosets);
 }

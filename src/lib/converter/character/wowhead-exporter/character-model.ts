@@ -199,7 +199,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
         collections.set(fileDataId, _.cloneDeep(itemMdl));
       }
 
-      const debug = false;
+      const debug = true;
       debug && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
       const enabledGeosets = filterCollectionGeosets(itemData.slotId!, itemData.originalData, itemMdl);
 

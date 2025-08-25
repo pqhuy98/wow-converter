@@ -12,6 +12,7 @@ const classicTestCases: [string, string, string, Size | ''][] = [
   ['https://www.wowhead.com/mop-classic/npc=30115/vereesa-windrunner', '', '', ''],
   ['https://www.wowhead.com/mop-classic/npc=32678/emeline-fizzlefry', '', '', ''],
   ['https://www.wowhead.com/mop-classic/npc=32677/whirt-the-all-knowing', '', '', ''],
+  ['https://www.wowhead.com/wotlk/npc=36853/sindragosa', '', '', 'hero'],
 ];
 
 export const testConfigClassic: TestConfig = {
