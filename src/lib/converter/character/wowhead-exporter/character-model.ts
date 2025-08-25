@@ -12,7 +12,9 @@ import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/w
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';
 
-import { ExportContext, exportModelFileIdAsMdl, exportTexture } from '../utils';
+import {
+  applyReplaceableTextrures, ExportContext, exportModelFileIdAsMdl, exportTexture,
+} from '../utils';
 import {
   EquipmentSlot, filterCollectionGeosets,
   getEquipmentSlotName, getSubmeshName, ItemMetata, processItemData,
@@ -43,47 +45,7 @@ export async function exportCharacterNpcAsMdl({
   const charMdl = ctx.assetManager.parse(relative, true).mdl;
 
   // Replace the base texture with the npc baked texture
-  if (prep.npcTextureFile) {
-    const npcTexturePath = await exportTexture(prep.npcTextureFile);
-    ctx.assetManager.addPngTexture(npcTexturePath);
-
-    // base texture is the one of the geoset with highest face count. Hacky heuristic
-    // TODO: find replaceable textures
-    const baseTexturePath = charMdl.geosets.reduce((acc, geoset) => (
-      geoset.faces.length > acc.faces.length ? geoset : acc
-    )).material.layers[0].texture.image;
-
-    const newTexturePath = path.join(ctx.config.assetPrefix, npcTexturePath).replace('.png', '.blp');
-
-    charMdl.geosets.forEach((geoset, i) => {
-      // For skeleton, we don't want to override anything but
-      // For some reason, the skull is not included in the npc baked texture
-      let skip = false;
-      const raceSkeleton = 20;
-      if (prep.rpcParams.race === raceSkeleton) {
-        skip = true;
-        let geosetIds: number[] | undefined;
-        if (geoset.name.includes('Glove') && charMdl.geosets[i - 1].name.includes('Glove')) {
-          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Gloves)?.data.geosetIds;
-        } else if (geoset.name.includes('Boot') && charMdl.geosets[i + 1].name.includes('Boot')) {
-          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Feet)?.data.geosetIds;
-        } else if (geoset.name.includes('Trousers')) {
-          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Legs)?.data.geosetIds;
-        }
-        if (geosetIds && geosetIds.length > 0) {
-          skip = false;
-        }
-      }
-      if (skip) return;
-
-      // Replace the base texture with the npc baked texture
-      geoset.material.layers.forEach((layer) => {
-        if (layer.texture.image === baseTexturePath || layer.texture.image === '') {
-          layer.texture.image = newTexturePath;
-        }
-      });
-    });
-  }
+  await applyNpcBaseTextrure(ctx, charMdl, prep);
 
   // Attach items with models
   await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots);
@@ -111,6 +73,9 @@ export async function exportCharacterNpcAsMdl({
     charMdl.geosets = charMdl.geosets.filter((g) => !g.name.startsWith('Tabard'));
   }
 
+  // Apply replaceable textures
+  await applyReplaceableTextrures(ctx, charMdl, prep.replaceableTextures);
+
   return charMdl;
 }
 
@@ -119,11 +84,14 @@ type EquipmentSlotData = {
   data: ItemMetata;
 }
 
-async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
+type Prep ={
   rpcParams: ExportCharacterParams;
   npcTextureFile: number | null;
   equipmentSlots: EquipmentSlotData[];
-}> {
+  replaceableTextures: Record<string, number>;
+}
+
+async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<Prep> {
   const metadata = await fetchNpcMeta(zam);
   if (!metadata.Character) {
     throw new Error('prepareCharacterNpcExport: NPC has no character metadata');
@@ -174,7 +142,12 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
 
   const npcTextureFile = metadata.TextureFiles ? Object.values(metadata.TextureFiles)[0]?.[0]?.FileDataId : null;
 
-  return { rpcParams, npcTextureFile, equipmentSlots };
+  return {
+    rpcParams,
+    npcTextureFile,
+    equipmentSlots,
+    replaceableTextures: metadata.Textures || {},
+  };
 }
 
 async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[]) {
@@ -288,6 +261,9 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
       image: path.join(ctx.config.assetPrefix, texPath).replace('.png', '.blp'),
       wrapWidth: false,
       wrapHeight: false,
+      wowData: {
+        type: 0,
+      },
     });
     charMdl.materials.push({
       id: charMdl.materials.length,
@@ -313,6 +289,50 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
     });
     matching.forEach((g) => { g.material = charMdl.materials.at(-1)!; });
     console.log('Set texture', getEquipmentSlotName(slot.slotId), '->', path.basename(texPath).replace('.png', ''));
+  }
+}
+
+async function applyNpcBaseTextrure(ctx: ExportContext, charMdl: MDL, prep: Prep) {
+  if (prep.npcTextureFile) {
+    const npcTexturePath = await exportTexture(prep.npcTextureFile);
+    ctx.assetManager.addPngTexture(npcTexturePath);
+
+    // base texture is the one of the geoset with highest face count. Hacky heuristic
+    // TODO: find replaceable textures
+    const baseTexturePath = charMdl.geosets.reduce((acc, geoset) => (
+      geoset.faces.length > acc.faces.length ? geoset : acc
+    )).material.layers[0].texture.image;
+
+    const newTexturePath = path.join(ctx.config.assetPrefix, npcTexturePath).replace('.png', '.blp');
+
+    charMdl.geosets.forEach((geoset, i) => {
+      // For skeleton, we don't want to override anything but
+      // For some reason, the skull is not included in the npc baked texture
+      let skip = false;
+      const raceSkeleton = 20;
+      if (prep.rpcParams.race === raceSkeleton) {
+        skip = true;
+        let geosetIds: number[] | undefined;
+        if (geoset.name.includes('Glove') && charMdl.geosets[i - 1].name.includes('Glove')) {
+          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Gloves)?.data.geosetIds;
+        } else if (geoset.name.includes('Boot') && charMdl.geosets[i + 1].name.includes('Boot')) {
+          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Feet)?.data.geosetIds;
+        } else if (geoset.name.includes('Trousers')) {
+          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Legs)?.data.geosetIds;
+        }
+        if (geosetIds && geosetIds.length > 0) {
+          skip = false;
+        }
+      }
+      if (skip) return;
+
+      // Replace the base texture with the npc baked texture
+      geoset.material.layers.forEach((layer) => {
+        if (layer.texture.image === baseTexturePath || layer.texture.image === '') {
+          layer.texture.image = newTexturePath;
+        }
+      });
+    });
   }
 }
 

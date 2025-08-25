@@ -128,6 +128,9 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
         image: textureRelativePath ? path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp')) : '',
         wrapHeight: true,
         wrapWidth: true,
+        wowData: {
+          type: 0,
+        },
       };
       const material: Material = {
         id: 0,

@@ -126,6 +126,9 @@ export function RefInput({
             onBlur={() => {
               fullValidAndFix(currentValues[value.type]);
             }}
+            onFocus={(e) => {
+              e.target.select();
+            }}
             className={`border-2 bg-white text-left ${clientValidationResult && !clientValidationResult.ok ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'}`}
           />
           {clientValidationResult && clientValidationResult.error && (

@@ -1,3 +1,5 @@
+import chalk from 'chalk';
+
 import { Animation } from '../components/animation';
 import { GlobalSequence } from '../components/global-sequence';
 import { Material } from '../components/material';
@@ -20,10 +22,10 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
     return usedTextures.get(key)!;
   };
 
-  this.mdl.materials.forEach((mat) => {
+  this.mdl.materials.forEach((mat, i) => {
     mat.layers.forEach((layer) => {
       if (layer.texture.image === '') {
-        console.log('Empty texture', mat.id, layer.texture.image);
+        console.log(chalk.red('Empty texture:'), i, layer.texture.wowData.type);
       }
       layer.texture = getTexture(layer.texture);
     });

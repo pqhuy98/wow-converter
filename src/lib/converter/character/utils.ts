@@ -7,7 +7,7 @@ import path from 'path';
 import { Config } from '@/lib/global-config';
 import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { waitUntil } from '@/lib/utils';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { ExportFile, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import { AssetManager } from '../common/asset-manager';
 
@@ -141,4 +141,35 @@ async function moveFile(src: string, dest: string) {
   await waitUntil(() => existsSync(src));
   copyFileSync(src, dest);
   unlinkSync(src);
+}
+
+const debug = false;
+
+export async function applyReplaceableTextrures(ctx: ExportContext, mdl: MDL, replaceableTextures: Record<string, number>) {
+  debug && console.log('applyReplaceableTextrures', replaceableTextures);
+  const textureMap = new Map<number, ExportFile[]>();
+
+  for (const texture of mdl.textures) {
+    if (texture.image !== '') return;
+    const type = texture.wowData.type.toString();
+    if (!replaceableTextures[type]) return;
+
+    debug && console.log('applyReplaceableTextrures', type, replaceableTextures[type]);
+
+    const fileDataId = replaceableTextures[type];
+
+    if (!textureMap.has(fileDataId)) {
+      const file = await wowExportClient.exportTextures([fileDataId]);
+      textureMap.set(fileDataId, file);
+      console.log('Replaceable texture:', path.relative(ctx.config.wowExportAssetDir, file[0].file));
+    }
+    const fileData = textureMap.get(fileDataId)!;
+
+    debug && console.log('fileData', fileData);
+
+    const fileDataPath = path.relative(ctx.config.wowExportAssetDir, fileData[0].file);
+    ctx.assetManager.addPngTexture(fileDataPath);
+    texture.image = path.join(ctx.config.assetPrefix, fileDataPath).replace('.png', '.blp');
+    debug && console.log('texture.image', texture.image);
+  }
 }

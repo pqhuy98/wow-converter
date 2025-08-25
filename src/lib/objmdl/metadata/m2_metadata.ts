@@ -437,13 +437,16 @@ export class M2MetadataFile {
     const debug = false;
 
     // Textures
-    const textures: Texture[] = this.textures.map((tex) => ({
+    const textures: Texture[] = this.textures.map((tex, i) => ({
       id: 0,
       image: tex.fileNameExternal
         ? join(this.config.assetPrefix, relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
         : '',
       wrapWidth: (tex.flags & 1) > 0,
       wrapHeight: (tex.flags & 2) > 0,
+      wowData: {
+        type: this.textureTypes[i],
+      },
     }));
 
     // Texture anims

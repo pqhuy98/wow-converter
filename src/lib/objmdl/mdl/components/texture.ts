@@ -4,6 +4,9 @@ export interface Texture {
   image: string;
   wrapWidth: boolean;
   wrapHeight: boolean;
+  wowData: {
+    type: number // 0 is default, >=1 is replaceable id
+  }
 }
 
 export function texturesToString(textures: Texture[]) {
