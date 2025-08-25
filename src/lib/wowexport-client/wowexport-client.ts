@@ -87,8 +87,8 @@ export interface ModelSkin {
   id: string;
   label: string;
   displayID: number;
-  textureIDs: number[];
-  extraGeosets: any[];
+  textures: number[];
+  extraGeosets?: number[];
 }
 
 export interface ExportCharacterParams {

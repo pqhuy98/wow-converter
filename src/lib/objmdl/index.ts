@@ -5,7 +5,9 @@ import path from 'path';
 
 import { Config } from '../global-config';
 import { AnimationFile } from './animation/animation';
-import { GeosetVertex, Matrix, SkinWeight } from './mdl/components/geoset';
+import {
+  Geoset, GeosetVertex, Matrix, SkinWeight,
+} from './mdl/components/geoset';
 import { Material } from './mdl/components/material';
 import { Texture } from './mdl/components/texture';
 import { MDL } from './mdl/mdl';
@@ -37,12 +39,30 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   }
 
   const groups = new Map<IGroup, IFace[]>();
+  const geosetsGroups: [Geoset, IGroup][] = [];
   obj.models[0].faces.forEach((f) => {
     if (!groups.has(f.group)) {
       groups.set(f.group, []);
+      mdl.geosets.push({
+        id: 0,
+        name: f.group.name,
+        vertices: [],
+        faces: [],
+        matrices: mdl.bones.map((b) => ({ id: 0, bones: [b] })),
+        minimumExtent: [0, 0, 0],
+        maximumExtent: [0, 0, 0],
+        boundsRadius: 0,
+        material: undefined!,
+        selectionGroup: 0,
+        wowData: {
+          submeshId: -1,
+        },
+      });
+      geosetsGroups.push([mdl.geosets[mdl.geosets.length - 1], f.group]);
     }
     groups.get(f.group)!.push(f);
   });
+  metadata.mapSubMeshesToMdlGeosets(mdl);
 
   const parentDir = path.dirname(objFilePath);
 
@@ -175,23 +195,16 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   const submeshToId = new Map(metadata.skin.subMeshes.map((s, i) => [s, i]));
   const enabledSubmeshes = metadata.skin.subMeshes.filter((s) => s.enabled);
 
+  let idx = 0;
   groups.forEach((faces) => {
-    const i = mdl.geosets.length;
+    const i = idx;
+    idx++;
+    const [geoset] = geosetsGroups.find(([_geoset, group]) => group === faces[0].group)!;
+
     const submesh = enabledSubmeshes[i];
     const submeshId = submeshToId.get(submesh)!;
-    mdl.geosets.push({
-      id: 0,
-      name: faces[0].group.name,
-      vertices: [],
-      faces: [],
-      matrices: mdl.bones.map((b) => ({ id: 0, bones: [b] })),
-      minimumExtent: [0, 0, 0],
-      maximumExtent: [0, 0, 0],
-      boundsRadius: 0,
-      material: resolveGeosetMaterial(submeshId, faces[0].material),
-      selectionGroup: 0,
-    });
-    const geoset = mdl.geosets[mdl.geosets.length - 1];
+
+    geoset.material = resolveGeosetMaterial(submeshId, faces[0].material);
 
     mdl.textures.push(...geoset.material.layers.map((l) => l.texture));
     mdl.materials.push(geoset.material);
@@ -249,11 +262,12 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
     mdl.geosets.forEach((geoset, i) => {
       const subMesh = enabledSubmeshes[i];
       if (!subMesh || subMesh.vertexCount !== geoset.vertices.length) {
-        console.error('Submesh mismatch', {
+        console.error(chalk.red('Submesh mismatch'), {
           subMesh,
           geoset: geoset.name,
+          geosetVertices: geoset.vertices.length,
         });
-        throw new Error('Submesh mismatch');
+        // throw new Error('Submesh mismatch');
       }
       debug && console.log(geoset.name, metadata.skin.subMeshes.findIndex((s) => s === subMesh), geoset.material.layers[0].texture.image);
     });

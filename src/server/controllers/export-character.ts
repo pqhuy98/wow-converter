@@ -76,6 +76,14 @@ export async function ControllerExportCharacter(app: express.Application) {
       if (request.optimization?.removeUnusedVertices) {
         mdl.modify.removeUnusedVertices();
       }
+      const particlesDensity = request.character.particlesDensity;
+      if (particlesDensity != null) {
+        if (particlesDensity > 0 && particlesDensity !== 1) {
+          mdl.modify.scaleParticlesDensity(particlesDensity);
+        } else if (particlesDensity === 0) {
+          mdl.particleEmitter2s = [];
+        }
+      }
       if (request.optimization?.removeUnusedNodes) {
         mdl.modify.removeUnusedNodes();
       }

@@ -7,7 +7,7 @@ import path from 'path';
 import { Config } from '@/lib/global-config';
 import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { waitUntil } from '@/lib/utils';
-import { ModelSkin, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import { AssetManager } from '../common/asset-manager';
 
@@ -16,19 +16,36 @@ export interface ExportContext {
   config: Config;
 }
 
-export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, textureIds?: number[]): Promise<MDL> {
+export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, guessSkin: {
+  textureIds?: number[]
+  extraGeosets?: number[]
+}): Promise<MDL> {
   const skins = await wowExportClient.getModelSkins(modelFileId);
 
-  const countMatchingTextures = (skin: ModelSkin) => textureIds?.filter((id) => skin.textureIDs.includes(id)).length ?? 0;
+  const skinMatchScore = (extraGeosets: number[], textureIds: number[]) => {
+    const textureScore = guessSkin.textureIds?.filter((id) => textureIds.includes(id)).length ?? 0;
+    const geosetScore = guessSkin.extraGeosets?.filter((id) => extraGeosets.includes(id)).length ?? 0;
+    const extraGeosetPenalty = extraGeosets.filter((id) => !guessSkin.extraGeosets?.includes(id)).length;
+    return geosetScore * 1000000 - extraGeosetPenalty * 1000 + textureScore;
+  };
 
   const match = skins.length > 0 ? skins.reduce((acc, s) => {
-    const count = countMatchingTextures(s);
-    if (count > acc.count) {
-      return { skin: s, count };
+    const score = skinMatchScore(s.extraGeosets ?? [], s.textures);
+    if (score > acc.score) {
+      return { skin: s, score };
     }
     return acc;
-  }, { skin: skins[0], count: countMatchingTextures(skins[0]) }) : undefined;
+  }, { skin: skins[0], score: skinMatchScore(skins[0].extraGeosets ?? [], skins[0].textures) }) : undefined;
   const skinName = match?.skin.id;
+
+  if (match) {
+    const maxScore = skinMatchScore(guessSkin.extraGeosets || [], guessSkin.textureIds || []);
+    const score = skinMatchScore(match?.skin.extraGeosets || [], match?.skin.textures || []);
+    const confidence = score / maxScore;
+    const skinIdx = skins.findIndex((s) => s === match.skin);
+    console.log('Chosen skin:', skinName, 'with confidence:', `${(confidence * 100).toFixed(2)}%`);
+    console.log({ score, maxScore, skinIdx });
+  }
 
   const start = performance.now();
   const exported = (await wowExportClient.exportModels([{ fileDataID: modelFileId, skinName }]))[0];

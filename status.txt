@@ -34,3 +34,14 @@ BLOCKED:
   Reason: cannot find texture file ID in wowhead data, even after searching in network requests in Chrome network inspection. 
 
 BUGS:
+Collections:
+https://www.wowhead.com/npc=187590/merithra // collection variant is wrong
+https://www.wowhead.com/npc=176789/lady-liadrin // right shoulder item has too big glow geoset 
+https://www.wowhead.com/npc=208418/flamecrested-portalweaver // OK
+https://www.wowhead.com/npc=187609/earthcaller-yevaa // OK
+https://www.wowhead.com/npc=209065/austin-huxworth // OK
+https://www.wowhead.com/npc=229161/darkfuse-brute // armor geosets have wrong texture
+https://www.wowhead.com/npc=181398/malganis
+https://www.wowhead.com/npc=82057/shattered-hand-brawler // 
+https://www.wowhead.com/npc=245601/enforcer-jaktull
+

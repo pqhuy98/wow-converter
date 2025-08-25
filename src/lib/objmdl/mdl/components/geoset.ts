@@ -34,6 +34,10 @@ export interface Geoset extends Bound {
   matrices: Matrix[]
   selectionGroup: number;
   unselectable?: boolean;
+
+  wowData: {
+    submeshId: number
+  }
 }
 
 export interface GeosetVertex {

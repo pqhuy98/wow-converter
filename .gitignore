@@ -7,7 +7,7 @@ dist
 *.zip
 maps/*
 !maps/template-empty.w3x/
-!maps/test-regression.w3x/
+!maps/test-regression*.w3x/
 maps/test-regression.w3x/*.mdx
 maps/test-regression.w3x/wow/**/*.blp
 # Logs

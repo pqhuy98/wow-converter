@@ -1,48 +1,60 @@
-"use client"
+'use client';
 
-import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Separator } from "@/components/ui/separator"
-import { Download, HelpCircle, History } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { host } from "@/app/config"
-import ModelViewerUi from "./model-viewer"
-import { commonAttachments, otherAttachments, Character, AttachItem, ExportRequest, ModelFormat, JobStatus, ModelFormatVersion, RefSchema } from "@/lib/models/export-character.model"
-import _ from "lodash"
-import { validateRef, isLocalRef } from "@/components/wow-converter/ref-input"
-import { setServerConfig } from "@/lib/config"
-import { CharacterConfig } from "@/components/wow-converter/character-config"
-import { AttachItems } from "@/components/wow-converter/attach-items"
+import _ from 'lodash';
+import { Download, HelpCircle, History } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { host } from '@/app/config';
+import { Button } from '@/components/ui/button';
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { AttachItems } from '@/components/wow-converter/attach-items';
+import { CharacterConfig } from '@/components/wow-converter/character-config';
+import { isLocalRef, validateRef } from '@/components/wow-converter/ref-input';
+import { setServerConfig } from '@/lib/config';
+import {
+  AttachItem, Character, commonAttachments, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, otherAttachments, RefSchema,
+} from '@/lib/models/export-character.model';
+
+import ModelViewerUi from './model-viewer';
 
 // Tooltips organized in a record
 const tooltips = {
-  baseModel: "The base character model to use. Can be a Wowhead URL, local file inside wow.export folder, or Display ID number.",
-  attackAnimation: "Determines which attack animations the character will use.",
-  characterSize: "How tall the character is in the game.",
-  movementSpeed: "Animation - walk speed (\"uwal\") of the unit in World Editor. The tool will try to slow down/speed up the Walk animations to match the Warcraft movement speed. If you experience a bug with too fast or too slow walk animation, set to 0 to keep the original WoW animation speed.",
-  scaleMultiplier: "Additional scale multiplier (1.0 = no change, optional). Firstly the model will be scaled to match the character size, then this multiplier will be applied.",
-  keepCinematic: "Preserve cinematic animation sequences in the exported model. Warning: WoW models have many cinematic sequences, this significantly increases file size.",
-  noDecay: "Do not automatically add Decay animations.",
-  portraitCamera: "Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.",
-  itemReference: "The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.",
-  attachmentPoint: "Where on the character model this item will be attached",
-  itemScale: "Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.",
-  sortSequences: "Sort animations by name in the order of: Stand, Walk, Attack, Spell, Death, Decay, Cinematic XXX.",
-  removeUnusedVertices: "Remove geoset vertices that are not used by any geoset faces.",
-  removeUnusedNodes: "Remove nodes that are not used in any geosets or do not contain used children nodes.",
-  removeUnusedMaterials: "Remove materials and textures that are not used in any geosets.",
-  optimizeKeyFrames: "Remove key frames that are not used in any animation, or are insignificant.",
-  format: "Model format (MDX vs MDL). MDX is the binary format, the file is most compact and lowest file size. MDL is the text format for debugging purposes, the file is human readable when opened in text editors, at the cost of larger file size.",
+  baseModel: 'The base character model to use. Can be a Wowhead URL, local file inside wow.export folder, or Display ID number.',
+  attackAnimation: 'Determines which attack animations the character will use.',
+  characterSize: 'How tall the character is in the game.',
+  // eslint-disable-next-line max-len
+  movementSpeed: 'Animation - walk speed ("uwal") of the unit in World Editor. The tool will try to slow down/speed up the Walk animations to match the Warcraft movement speed. If you experience a bug with too fast or too slow walk animation, set to 0 to keep the original WoW animation speed.',
+  scaleMultiplier: 'Additional scale multiplier, optional. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
+  keepCinematic: 'Preserve cinematic animation sequences in the exported model. Warning: WoW models have many cinematic sequences, this significantly increases file size.',
+  noDecay: 'Do not automatically add Decay animations.',
+  particleDensity: 'Particle density (1.0 = default, 0.5 = half, 2.0 = double, 0 = none...). Putting higher density will decrease rendering performance.',
+  // eslint-disable-next-line max-len
+  portraitCamera: 'Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.',
+  itemReference: 'The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.',
+  attachmentPoint: 'Where on the character model this item will be attached',
+  itemScale: 'Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.',
+  sortSequences: 'Sort animations by name in the order of: Stand, Walk, Attack, Spell, Death, Decay, Cinematic XXX.',
+  removeUnusedVertices: 'Remove geoset vertices that are not used by any geoset faces.',
+  removeUnusedNodes: 'Remove nodes that are not used in any geosets or do not contain used children nodes.',
+  removeUnusedMaterials: 'Remove materials and textures that are not used in any geosets.',
+  optimizeKeyFrames: 'Remove key frames that are not used in any animation, or are insignificant.',
+  // eslint-disable-next-line max-len
+  format: 'Model format (MDX vs MDL). MDX is the binary format, the file is most compact and lowest file size. MDL is the text format for debugging purposes, the file is human readable when opened in text editors, at the cost of larger file size.',
+  // eslint-disable-next-line max-len
   formatVersion: "Model format version (HD vs SD). HD models work in all Warcraft 3 Retail's Reforged and Classic graphics modes, it has the highest fidelity with precise WoW model data. However HD models cannot be opened in legacy modeling tools like Magos Model Editor. If you want to use those legacy tools for post-processing, choose SD 800 instead. WARNING: wow-converter might export very broken SD models on complex WoW models. SD conversion does not guarantee to work, after exporting you need to check if each animation is working.",
-}
-
-
+};
 
 const defaultCharacter = {
   base: { type: 'wowhead', value: 'https://www.wowhead.com/wotlk/npc=36597/the-lich-king' },
@@ -55,64 +67,63 @@ const defaultCharacter = {
     },
   },
   portraitCameraSequenceName: 'Stand',
-} as const
-
+} as const;
 
 export default function WoWNPCExporter() {
   useEffect(() => {
-    fetch(`${host}/export/character/config`)
-      .then(res => res.json())
+    void fetch(`${host}/export/character/config`)
+      .then((res) => res.json())
       .then((config) => {
-        setServerConfig(config)
-      })
-  }, [])
+        setServerConfig(config);
+      });
+  }, []);
 
-  const [character, setCharacter] = useState<Character>(_.cloneDeep(defaultCharacter))
+  const [character, setCharacter] = useState<Character>(_.cloneDeep(defaultCharacter));
 
   // Guess output file name from base model value
-  const [outputFileName, setOutputFileName] = useState(guessOutputFileWowhead(character.base.value) ?? "")
+  const [outputFileName, setOutputFileName] = useState(guessOutputFileWowhead(character.base.value) ?? '');
   useEffect(() => {
-    const guessed = guessOutputFile(character.base)
+    const guessed = guessOutputFile(character.base);
     if (guessed) {
-      setOutputFileName(guessed)
+      setOutputFileName(guessed);
     }
-  }, [character.base.value])
+  }, [character.base.value]);
 
-  const [format, setFormat] = useState<ModelFormat>("mdx")
-  const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>("1000")
+  const [format, setFormat] = useState<ModelFormat>('mdx');
+  const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>('1000');
   const [optimization, setOptimization] = useState({
     sortSequences: true,
     removeUnusedVertices: true,
     removeUnusedNodes: true,
-    removeUnusedMaterialsTextures: true
-  })
+    removeUnusedMaterialsTextures: true,
+  });
 
-  const [isExporting, setIsExporting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false);
 
   // Job/queue tracking
-  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
-  const [viewerModelPath, setViewerModelPath] = useState<string | undefined>(undefined)
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [viewerModelPath, setViewerModelPath] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const checkExportResult = async () => {
-      const res = await fetch(`${host}/export/character/demos`)
-      const jobs = await res.json()
+      const res = await fetch(`${host}/export/character/demos`);
+      const jobs = await res.json();
       if (jobs.length > 0) {
-        setViewerModelPath(jobs[Math.floor(Math.random() * jobs.length)].result.exportedModels[0])
+        setViewerModelPath(jobs[Math.floor(Math.random() * jobs.length)].result.exportedModels[0]);
       }
-    }
-    checkExportResult()
-  }, [])
+    };
+    void checkExportResult();
+  }, []);
 
   const addAttachItem = () => {
     // Find the first unused attachment ID, starting with common ones
-    const usedIds = new Set(Object.keys(character.attachItems || {}).map(Number))
+    const usedIds = new Set(Object.keys(character.attachItems || {}).map(Number));
 
-    let newId = commonAttachments[0].id
+    let newId = commonAttachments[0].id;
     for (const attachment of [...commonAttachments, ...otherAttachments]) {
       if (!usedIds.has(attachment.id)) {
-        newId = attachment.id
-        break
+        newId = attachment.id;
+        break;
       }
     }
 
@@ -122,65 +133,62 @@ export default function WoWNPCExporter() {
         ...prev.attachItems,
         [newId]: {
           path: {
-            type: "wowhead",
+            type: 'wowhead',
             value: Object.keys(prev.attachItems || {}).length === 0
-            ? defaultCharacter.attachItems[1].path.value
-            : "" },
+              ? defaultCharacter.attachItems[1].path.value
+              : '',
+          },
         },
       },
-    }))
-  }
+    }));
+  };
 
-  const removeAttachItem = (id: number) => {
-    return setCharacter((prev) => {
-      const newAttachItems = { ...prev.attachItems }
-      delete newAttachItems[id]
-      return { ...prev, attachItems: newAttachItems }
-    })
-  }
+  const removeAttachItem = (id: number) => setCharacter((prev) => {
+    const newAttachItems = { ...prev.attachItems };
+    delete newAttachItems[id];
+    return { ...prev, attachItems: newAttachItems };
+  });
 
-  const updateAttachItem = (id: number, item: AttachItem) => {
-    return setCharacter((prev) => ({
-      ...prev,
-      attachItems: {
-        ...prev.attachItems,
-        [id]: {...item},
-      },
-    }))
-  }
+  const updateAttachItem = (id: number, item: AttachItem) => setCharacter((prev) => ({
+    ...prev,
+    attachItems: {
+      ...prev.attachItems,
+      [id]: { ...item },
+    },
+  }));
 
   const checkExportValid = useCallback(() => {
     // Check base model
-    if (validateRef(character.base, "npc", true)) return "Invalid base model"
+    if (validateRef(character.base, 'npc', true)) return 'Invalid base model';
 
     // Check output filename
-    if (!outputFileName.trim()) return "Output filename is required"
-    if (!isLocalRef(outputFileName)) return "Invalid output filename"
+    if (!outputFileName.trim()) return 'Output filename is required';
+    if (!isLocalRef(outputFileName)) return 'Invalid output filename';
 
     // Check all attach items have valid references
-    const attachItems = character.attachItems || {}
+    const attachItems = character.attachItems || {};
     for (const item of Object.values(attachItems)) {
-      if (validateRef(item.path, "item", true)) return "Invalid attach item"
+      if (validateRef(item.path, 'item', true)) return 'Invalid attach item';
     }
 
-    return null
-  }, [character, outputFileName])
+    return null;
+  }, [character, outputFileName]);
 
   const handleExport = async () => {
-    const error = checkExportValid()
+    const error = checkExportValid();
     if (error) {
-      alert(error)
-      return
+      alert(error);
+      return;
     }
-    setIsExporting(true)
-    setJobStatus(null)
+    setIsExporting(true);
+    setJobStatus(null);
 
     try {
       // Prepare request
       const exportCharacter = {
         ...character,
-        attackTag: character.attackTag === undefined ? "" : character.attackTag,
-      }
+        attackTag: character.attackTag === undefined ? '' : character.attackTag,
+      };
 
       const request: ExportRequest = {
         character: exportCharacter,
@@ -188,136 +196,141 @@ export default function WoWNPCExporter() {
         optimization,
         format,
         formatVersion,
-      }
+      };
 
       const response = await fetch(`${host}/export/character`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(request),
-      })
+      });
 
       if (!response.ok) {
-        throw new Error(await response.text())
+        throw new Error(await response.text());
       }
 
-      const result = await response.json()
-      setJobStatus(result)
-    } catch (error: any) {
-      console.error("Export error:", error)
+      const result = await response.json();
+      setJobStatus(result);
+    } catch (error: unknown) {
+      console.error('Export error:', error);
       setJobStatus({
         id: '',
         status: 'failed',
         position: null,
         result: null,
-        error: error?.message || String(error),
+        error: error instanceof Error ? error.message : String(error),
         submittedAt: Date.now(),
-      })
+      });
     } finally {
-      setIsExporting(false)
+      setIsExporting(false);
     }
-  }
+  };
 
   // is window focused?
-  const [isWindowFocused, setIsWindowFocused] = useState(true)
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
   useEffect(() => {
-    const handleFocus = () => setIsWindowFocused(true)
-    const handleBlur = () => setIsWindowFocused(false)
-    window.addEventListener('focus', handleFocus)
-    window.addEventListener('blur', handleBlur)
-  }, [])
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleBlur = () => setIsWindowFocused(false);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+  }, []);
 
-  const [doneCount, setDoneCount] = useState(0)
+  const [doneCount, setDoneCount] = useState(0);
 
   // Poll job status every 1s when a job is active
   useEffect(() => {
-    if (!jobStatus || jobStatus.status === 'done' || jobStatus.status === 'failed') return
+    if (!jobStatus || jobStatus.status === 'done' || jobStatus.status === 'failed') return undefined;
 
-    let pendingFetches = 0
+    let pendingFetches = 0;
     const fetchJobStatus = async () => {
       try {
-        pendingFetches++
-        if (pendingFetches > 1) return
-        const res = await fetch(`${host}/export/character/status/${jobStatus.id}`)
+        pendingFetches++;
+        if (pendingFetches > 1) return;
+        const res = await fetch(`${host}/export/character/status/${jobStatus.id}`);
         if (!res.ok) {
-          throw new Error(await res.text())
+          throw new Error(await res.text());
         }
-        const data = await res.json()
-        setJobStatus(data)
+        const data = await res.json();
+        setJobStatus(data);
 
         if (data.status === 'pending') {
+          // do nothing
         } else if (data.status === 'processing') {
+          // do nothing
         } else if (data.status === 'done') {
-          setDoneCount(doneCount + 1)
-          setViewerModelPath(data.result.exportedModels[0])
-          clearInterval(interval)
+          setDoneCount(doneCount + 1);
+          setViewerModelPath(data.result.exportedModels[0]);
+          clearInterval(interval);
         } else if (data.status === 'failed') {
-          clearInterval(interval)
+          clearInterval(interval);
         }
-      } catch (e: any) {
-        console.error('Polling error:', e)
+      } catch (e: unknown) {
+        console.error('Polling error:', e);
         setJobStatus({
           id: '',
           status: 'failed',
           position: null,
           result: null,
-          error: e?.message || String(e),
+          error: e instanceof Error ? e.message : String(e),
           submittedAt: Date.now(),
-        })
-        clearInterval(interval)
+        });
+        clearInterval(interval);
       } finally {
-        pendingFetches--
+        pendingFetches--;
       }
-    }
+    };
 
-    const interval = setInterval(fetchJobStatus, 1000)
-    fetchJobStatus()
+    const interval = setInterval(() => void fetchJobStatus(), 1000);
+    void fetchJobStatus();
 
-    return () => clearInterval(interval)
-  }, [jobStatus?.id, isWindowFocused])
+    return () => {
+      clearInterval(interval);
+    };
+  }, [jobStatus?.id, isWindowFocused]);
 
   /**
    * Download the exported assets as a ZIP by calling the new POST /download API.
    */
   const handleDownloadZip = async () => {
-    if (!jobStatus?.result) return
+    if (!jobStatus?.result) return;
 
     const files = [
       ...(jobStatus.result.exportedModels || []),
       ...(jobStatus.result.exportedTextures || []),
-    ]
+    ];
 
     if (files.length === 0) {
-      alert("Nothing to download – exported files list is empty")
-      return
+      // eslint-disable-next-line no-alert
+      alert('Nothing to download – exported files list is empty');
+      return;
     }
 
     try {
       const res = await fetch(`${host}/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files }),
-      })
+      });
 
       if (!res.ok) {
-        throw new Error(await res.text())
+        throw new Error(await res.text());
       }
 
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `${outputFileName || "export"}.zip`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-    } catch (e: any) {
-      console.error("Download ZIP error:", e)
-      alert(e?.message || String(e))
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${outputFileName || 'export'}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      console.error('Download ZIP error:', e);
+      alert(e instanceof Error ? e.message : String(e));
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -371,7 +384,7 @@ export default function WoWNPCExporter() {
                   placeholder="my-character"
                   value={outputFileName}
                   onChange={(e) => setOutputFileName(e.target.value)}
-                  className={`border-2 bg-white ${!outputFileName.trim() ? "border-red-500" : "border-gray-300 focus:border-blue-500"}`}
+                  className={`border-2 bg-white ${!outputFileName.trim() ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'}`}
                 />
               </div>
 
@@ -426,7 +439,7 @@ export default function WoWNPCExporter() {
               </div>
 
               <div className="md:col-span-3">
-                <Button onClick={handleExport} disabled={isExporting || jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} className="w-full" size="lg">
+                <Button onClick={() => void handleExport()} disabled={isExporting || jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} className="w-full" size="lg">
                   {isExporting ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -451,8 +464,7 @@ export default function WoWNPCExporter() {
                   <Checkbox
                     id="sortSequences"
                     checked={optimization.sortSequences}
-                    onCheckedChange={(checked) =>
-                      setOptimization({ ...optimization, sortSequences: checked as boolean })
+                    onCheckedChange={(checked) => setOptimization({ ...optimization, sortSequences: checked as boolean })
                     }
                   />
                   <Label htmlFor="sortSequences" className="text-sm flex items-center gap-2">
@@ -474,8 +486,7 @@ export default function WoWNPCExporter() {
                   <Checkbox
                     id="removeUnusedVertices"
                     checked={optimization.removeUnusedVertices}
-                    onCheckedChange={(checked) =>
-                      setOptimization({ ...optimization, removeUnusedVertices: checked as boolean })
+                    onCheckedChange={(checked) => setOptimization({ ...optimization, removeUnusedVertices: checked as boolean })
                     }
                   />
                   <Label htmlFor="removeUnusedVertices" className="text-sm flex items-center gap-2">
@@ -497,8 +508,7 @@ export default function WoWNPCExporter() {
                   <Checkbox
                     id="removeUnusedNodes"
                     checked={optimization.removeUnusedNodes}
-                    onCheckedChange={(checked) =>
-                      setOptimization({ ...optimization, removeUnusedNodes: checked as boolean })
+                    onCheckedChange={(checked) => setOptimization({ ...optimization, removeUnusedNodes: checked as boolean })
                     }
                   />
                   <Label htmlFor="removeUnusedNodes" className="text-sm flex items-center gap-2">
@@ -520,8 +530,7 @@ export default function WoWNPCExporter() {
                   <Checkbox
                     id="removeUnusedMaterials"
                     checked={optimization.removeUnusedMaterialsTextures}
-                    onCheckedChange={(checked) =>
-                      setOptimization({ ...optimization, removeUnusedMaterialsTextures: checked as boolean })
+                    onCheckedChange={(checked) => setOptimization({ ...optimization, removeUnusedMaterialsTextures: checked as boolean })
                     }
                   />
                   <Label htmlFor="removeUnusedMaterials" className="text-sm flex items-center gap-2">
@@ -603,7 +612,7 @@ export default function WoWNPCExporter() {
                     variant="outline"
                     size="icon"
                     onClick={() => {
-                      navigator.clipboard.writeText(jobStatus.result!.outputDirectory!)
+                      void navigator.clipboard.writeText(jobStatus.result!.outputDirectory!);
                     }}
                     title="Copy output directory"
                   >
@@ -612,10 +621,10 @@ export default function WoWNPCExporter() {
                       <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" />
                     </svg>
                   </Button>
-                  <span className="text-lg font-mono select-all">{jobStatus.result!.outputDirectory}</span> 
+                  <span className="text-lg font-mono select-all">{jobStatus.result!.outputDirectory}</span>
                 </div>}
                 <div className="flex items-center gap-2 w-full pt-2">
-                  <Button variant="default" size="icon" onClick={handleDownloadZip}>
+                  <Button variant="default" size="icon" onClick={() => void handleDownloadZip()}>
                     <Download className="h-4 w-4" />
                   </Button>
                   <span className="text-lg">Download: {outputFileName}.zip</span>
@@ -623,7 +632,7 @@ export default function WoWNPCExporter() {
               </div>}
               {viewerModelPath && (
                 <div className="h-[600px]">
-                  <ModelViewerUi key={viewerModelPath + ":" + doneCount} modelPath={viewerModelPath} />
+                  <ModelViewerUi key={`${viewerModelPath}:${doneCount}`} modelPath={viewerModelPath} />
                 </div>
               )}
               {jobStatus?.result && <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -632,7 +641,7 @@ export default function WoWNPCExporter() {
                   <ul className="list-disc list-inside space-y-1">
                     {jobStatus.result.exportedModels?.map((model: string, index: number) => (
                       <li key={index} className="text-sm">
-                        {jobStatus.result!.versionId ? model.replace("__" + jobStatus.result!.versionId, '') : model}
+                        {jobStatus.result!.versionId ? model.replace(`__${jobStatus.result!.versionId}`, '') : model}
                       </li>
                     ))}
                   </ul>
@@ -654,49 +663,48 @@ export default function WoWNPCExporter() {
       </div>
       <div className="text-lg text-center text-gray-600 mt-4">
         Created by <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">wc3-sandbox</a>
-        {" | "}
+        {' | '}
         <a href="https://github.com/pqhuy98/wow-converter" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Source code</a>
-        {" | "}
+        {' | '}
         <a href="https://www.youtube.com/@wc3-sandbox" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">YouTube</a>
       </div>
     </div>
-  )
+  );
 }
 
 function guessOutputFile(ref: RefSchema) {
-  if (ref.type === "wowhead") {
-    return guessOutputFileWowhead(ref.value)
+  if (ref.type === 'wowhead') {
+    return guessOutputFileWowhead(ref.value);
   }
-  if (ref.type === "local") {
-    return guessOutputFileLocalPath(ref.value)
+  if (ref.type === 'local') {
+    return guessOutputFileLocalPath(ref.value);
   }
-  if (ref.type === "displayID") {
-    return guessOutputFileDisplayId(Number(ref.value))
+  if (ref.type === 'displayID') {
+    return guessOutputFileDisplayId(Number(ref.value));
   }
-  return undefined
+  return undefined;
 }
 
 function guessOutputFileWowhead(url: string) {
   // extract npc name from ...npc=1234/name, handling expansion prefixes
-  url = url.split("#")[0].split("?")[0]
-  const parts = url.split("/")
+  const parts = url.split('#')[0].split('?')[0].split('/');
   // Find the part that contains the category=id/name pattern
   for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    if (part.includes("=")) {
-      const npcName = (parts[i+1] || parts[i]).split("=").pop()
-      return npcName
+    const part = parts[i];
+    if (part.includes('=')) {
+      const npcName = (parts[i + 1] || parts[i]).split('=').pop();
+      return npcName;
     }
   }
-  return undefined
+  return undefined;
 }
 
 function guessOutputFileLocalPath(path: string) {
   // extract item name from creature\druidcat2\druidcat2_artifact3_green.obj
-  return path.split("\\").pop()?.split(".")[0]
+  return path.split('\\').pop()?.split('.')[0];
 }
 
 function guessOutputFileDisplayId(displayId: number) {
   // get npc name from display id
-  return `creature-${displayId}`
+  return `creature-${displayId}`;
 }

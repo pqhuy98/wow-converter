@@ -1,16 +1,20 @@
+import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import _ from 'lodash';
 import { dirname, join, relative } from 'path';
 
 import { degrees } from '@/lib/math/rotation';
+import { V3 } from '@/lib/math/vector';
 
 import { BlizzardNull } from '../../constants';
 import { Config } from '../../global-config';
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { AnimationFile } from '../animation/animation';
 import { Animation, AnimationOrStatic, AnimationType } from '../mdl/components/animation';
+import { Geoset } from '../mdl/components/geoset';
 import { GlobalSequence } from '../mdl/components/global-sequence';
 import { Material } from '../mdl/components/material';
+import { Bone } from '../mdl/components/node/node';
 import {
   FilterMode as WC3FilterMode, HeadOrTail as WC3HeadOrTail, ParticleEmitter2, ParticleEmitter2Flag,
 } from '../mdl/components/node/particle-emitter-2';
@@ -186,6 +190,8 @@ namespace Data {
     baseSpinVary: number
     spin: number
     spinVary: number
+
+    drag: number // drag coefficient. new velocity = old velocity * (1 - drag * dt)
   }
 
   export interface BoundingBox {
@@ -314,6 +320,22 @@ export class M2MetadataFile {
     this.globalSequenceMap = new Map<number, GlobalSequence>(this.mdl.globalSequences.map((gs) => [gs.id, gs]));
   }
 
+  subMeshGeosetMap: Map<Data.Skin['subMeshes'][number], Geoset> = new Map();
+
+  geosetSubMeshMap: Map<Geoset, Data.Skin['subMeshes'][number]> = new Map();
+
+  mapSubMeshesToMdlGeosets(mdl: MDL) {
+    let geosetIdx = 0;
+    this.skin.subMeshes.forEach((subMesh) => {
+      if (!subMesh.enabled) return;
+      const geoset = mdl.geosets[geosetIdx];
+      this.subMeshGeosetMap.set(subMesh, geoset);
+      this.geosetSubMeshMap.set(geoset, subMesh);
+      geoset.wowData.submeshId = subMesh.submeshID;
+      geosetIdx++;
+    });
+  }
+
   private getGlobalSeq(id: number) {
     if (!this.globalSequenceMap.has(id)) {
       const newGs: GlobalSequence = {
@@ -378,14 +400,15 @@ export class M2MetadataFile {
     const result: MDL['geosetAnims'] = [];
     textureUnits.forEach((tu) => {
       const wowColor = this.colors[tu.colorIndex];
-      if (!this.mdl.geosets[tu.skinSectionIndex]) {
-        console.log('geoset not found', tu.skinSectionIndex, this.mdl.geosets.length);
+      const geoset = this.subMeshGeosetMap.get(this.skin.subMeshes[tu.skinSectionIndex]);
+      if (!geoset) {
+        console.log(chalk.red('geoset not found'), tu.skinSectionIndex, this.skin.subMeshes[tu.skinSectionIndex]);
         return;
       }
 
       const geosetAnim: MDL['geosetAnims'][number] = {
         id: 0,
-        geoset: this.mdl.geosets[tu.skinSectionIndex],
+        geoset,
 
         // MDL color order is blue, green, red, but WoW uses red, green, blue
         color: this.m2trackToAnimationOrStatic(wowColor.color, 'color', (v) => [v[2], v[1], v[0]]),
@@ -395,7 +418,7 @@ export class M2MetadataFile {
       };
       result.push(geosetAnim);
       if (geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha) {
-        geosetAnim.alpha.interpolation = 'DontInterp';
+        // geosetAnim.alpha.interpolation = 'DontInterp';
       }
     });
     this.mdl.geosetAnims = result;
@@ -457,6 +480,7 @@ export class M2MetadataFile {
         const textureId = this.textureCombos[tu.textureComboIndex + i];
         const texture = textures[textureId];
         const filterMode = getLayerFilterMode(material.blendingMode, shaderId, i, texture);
+
         if (!filterMode) {
           continue;
         }
@@ -467,7 +491,7 @@ export class M2MetadataFile {
         }
 
         layers.push({
-          texture: textures[textureId],
+          texture,
           filterMode,
           tvertexAnim: textAnimId !== BlizzardNull ? textureAnims[textAnimId] : undefined,
 
@@ -583,6 +607,8 @@ export class M2MetadataFile {
         return -z;
       };
 
+      const speed = this.m2trackToAnimationOrStatic(p.emissionSpeed, 'others')!;
+
       const node: ParticleEmitter2 = {
         objectId: -1,
         type: 'ParticleEmitter2',
@@ -594,7 +620,7 @@ export class M2MetadataFile {
         filterMode: mapBlend(p.blendingType),
         width: this.m2trackToAnimationOrStatic(p.emissionAreaWidth, 'others')!,
         length: this.m2trackToAnimationOrStatic(p.emissionAreaLength, 'others')!,
-        speed: this.m2trackToAnimationOrStatic(p.emissionSpeed, 'others')!,
+        speed,
         variation: this.m2trackToAnimationOrStatic(p.speedVariation, 'others')!,
         emissionRate: this.m2trackToAnimationOrStatic(p.emissionRate, 'others')!,
         latitude: this.m2trackToAnimationOrStatic(p.verticalRange, 'others', degrees)!,
@@ -607,9 +633,9 @@ export class M2MetadataFile {
         priorityPlane: 0,
         replaceableId: 0,
         gravity: this.m2trackToAnimationOrStatic(p.gravity, 'others', decompressGravity)!,
-        lifeSpan: Math.max(...p.lifespan.values.flat()),
         timeMiddle: timeMid / timeEnd,
         squirt: (p.flags & 0x40) > 0,
+        lifeSpan: Math.max(...p.lifespan.values.flat()),
 
         segmentColors: (() => {
           const track = p.colorTrack;
@@ -628,12 +654,17 @@ export class M2MetadataFile {
           return [f(v0), f(v1), f(v2)];
         })(),
         segmentScaling: (() => {
-          const track = p.scaleTrack;
-          const v0 = getValueAt(track, 0) ?? [1, 1];
-          const v1 = getValueAt(track, timeMid) ?? v0;
-          const v2 = getValueAt(track, timeEnd) ?? v1;
-          const f = (v: [number, number]) => Math.min(v[0], v[1]);
-          return [f(v0), f(v1), f(v2)];
+          const scalingTrack = p.scaleTrack;
+          const scaling0 = getValueAt(scalingTrack, 0) ?? [1, 1];
+          const scaling1 = getValueAt(scalingTrack, timeMid) ?? scaling0;
+          const scaling2 = getValueAt(scalingTrack, timeEnd) ?? scaling1;
+
+          // in wow, non-moving particles are scale down by 0.05
+          // as seem in source code of WebWowViewerCpp
+          const factor = 'static' in speed && speed.value < 0.0001 ? 0.05 : 1;
+
+          const f = (scaling: [number, number]) => Math.min(scaling[0], scaling[1]) * factor;
+          return [f(scaling0), f(scaling1), f(scaling2)];
         })(),
         headIntervals: (() => {
           const track = p.headCellTrack;
@@ -667,6 +698,20 @@ export class M2MetadataFile {
       if (p.flags & 0x10) node.flags2.push(ParticleEmitter2Flag.ModelSpace);
       // if (p.flags & 0x1000) node.flags2.push(ParticleEmitter2Flag.XYQuad);
 
+      // Apply drag
+      if (p.drag > 0) {
+        if ('static' in speed) {
+          const equivalentVelocity = calculateEquivalentVelocityNoDrag(speed.value, node.lifeSpan, p.drag);
+          speed.value = equivalentVelocity;
+        } else {
+          const keyFrames = speed.keyFrames;
+          keyFrames.forEach((v, k) => {
+            const equivalentVelocity = calculateEquivalentVelocityNoDrag(v, node.lifeSpan, p.drag);
+            keyFrames.set(k, equivalentVelocity);
+          });
+        }
+      }
+
       const varyThreshold = 0.1;
       const chooseRandomTexture = p.flags & 0x10000
         && p.headCellTrack.timestamps.length === 0
@@ -698,10 +743,30 @@ export class M2MetadataFile {
       const variants: ParticleEmitter2[] = [];
       const token = new Map<ParticleEmitter2, number>();
 
+      // Create a dedicated bone to group the variants of the same particle emitter
+      const newParent: Bone = {
+        objectId: -1,
+        type: 'Bone',
+        name: `${node.name}_group`,
+        parent,
+        flags: [],
+        pivotPoint: [...parent.pivotPoint],
+        geoset: 'Multiple', // without it the model will be broken
+        translation: { // wc3 requires a translation for the bone
+          interpolation: 'DontInterp',
+          type: 'translation',
+          keyFrames: new Map([
+            ...this.mdl.sequences.map((s) => <[number, Vector3]>[s.interval[0], [0, 0, 0]]),
+            ...this.mdl.sequences.map((s) => <[number, Vector3]>[s.interval[1], [0, 0, 0]]),
+          ]),
+        },
+      };
+      this.mdl.bones.push(newParent);
+
+      node.parent = undefined; // remove to avoid cloning the parent
       for (let i = 0; i < variantCount; i++) {
-        node.parent = undefined; // remove to avoid cloning the parent
         const variant = _.cloneDeep(node);
-        variant.parent = parent;
+        variant.parent = newParent;
 
         if (chooseRandomTexture) {
           const cell = Math.floor(Math.random() * p.textureRows * p.textureCols);
@@ -713,10 +778,8 @@ export class M2MetadataFile {
 
         let scaleMult = 1;
         if (scaleVary >= varyThreshold) {
-          scaleMult = Math.max(1 + Math.random() * scaleVary);
-          for (let j = 0; j < 3; j++) {
-            variant.segmentScaling[j] *= scaleMult;
-          }
+          scaleMult = Math.max(1 + rand() * scaleVary);
+          variant.segmentScaling = V3.scale(variant.segmentScaling, scaleMult);
         }
 
         let lifeSpanMult = 1;
@@ -769,4 +832,35 @@ export class M2MetadataFile {
     }
     return this.objToSubmesh.get(geosetVertexIndex);
   }
+}
+
+/**
+ * Calculate the equivalent initial velocity for a particle without drag
+ * that travels the same distance as a particle with drag over the same lifetime
+ *
+ * @param initialVelocity - Initial velocity of particle with drag
+ * @param lifetime - Particle lifetime in seconds
+ * @param drag - Drag coefficient
+ * @param deltaTime - Time step (typically 0.016-0.033 seconds)
+ * @returns Equivalent initial velocity for particle without drag
+ */
+function calculateEquivalentVelocityNoDrag(
+  initialVelocity: number,
+  lifetime: number,
+  drag: number,
+  deltaTime: number = 1 / 30,
+): number {
+  if (drag === 0) {
+    return initialVelocity;
+  }
+
+  const decayFactor = 1 - drag * deltaTime;
+  const steps = lifetime / deltaTime;
+
+  // Calculate the integral of velocity over time
+  // ∫₀^T v₀ * (1 - drag * dt)^(t/dt) dt
+  const integral = initialVelocity * (decayFactor ** steps - 1) / Math.log(decayFactor) * deltaTime;
+
+  // Equivalent velocity without drag = distance / lifetime
+  return integral / lifetime;
 }

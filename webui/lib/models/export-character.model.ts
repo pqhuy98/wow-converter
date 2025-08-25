@@ -3,10 +3,10 @@ export interface Config {
   isSharedHosting: boolean
 }
 
-export type RefType = "local" | "wowhead" | "displayID"
-export type AttackTag = "" | "1H" | "2H" | "2HL" | "Unarmed" | "Bow" | "Rifle" | "Thrown"
-export type ModelSize = "small" | "medium" | "large" | "hero" | "giant"
-export type ModelFormat = "mdx" | "mdl"
+export type RefType = 'local' | 'wowhead' | 'displayID'
+export type AttackTag = '' | '1H' | '2H' | '2HL' | 'Unarmed' | 'Bow' | 'Rifle' | 'Thrown'
+export type ModelSize = 'small' | 'medium' | 'large' | 'hero' | 'giant'
+export type ModelFormat = 'mdx' | 'mdl'
 
 export interface RefSchema {
   type: RefType
@@ -27,6 +27,7 @@ export interface Character {
   scale?: number
   attachItems?: Record<number, AttachItem>
   noDecay?: boolean
+  particlesDensity?: number
   portraitCameraSequenceName?: string
 }
 
@@ -131,66 +132,66 @@ export enum WoWAttachmentID {
 }
 
 export const commonAttachments = [
-  { id: WoWAttachmentID.HandRight, name: "Hand Right" },
-  { id: WoWAttachmentID.HandLeft, name: "Hand Left" },
-  { id: WoWAttachmentID.Shield, name: "Shield" },
-]
+  { id: WoWAttachmentID.HandRight, name: 'Hand Right' },
+  { id: WoWAttachmentID.HandLeft, name: 'Hand Left' },
+  { id: WoWAttachmentID.Shield, name: 'Shield' },
+];
 
 export const otherAttachments = [
-  { id: WoWAttachmentID.ElbowRight, name: "Elbow Right" },
-  { id: WoWAttachmentID.ElbowLeft, name: "Elbow Left" },
-  { id: WoWAttachmentID.ShoulderRight, name: "Shoulder Right" },
-  { id: WoWAttachmentID.ShoulderLeft, name: "Shoulder Left" },
-  { id: WoWAttachmentID.KneeRight, name: "Knee Right" },
-  { id: WoWAttachmentID.KneeLeft, name: "Knee Left" },
-  { id: WoWAttachmentID.HipRight, name: "Hip Right" },
-  { id: WoWAttachmentID.HipLeft, name: "Hip Left" },
-  { id: WoWAttachmentID.Helm, name: "Helm" },
-  { id: WoWAttachmentID.Back, name: "Back" },
-  { id: WoWAttachmentID.ShoulderFlapRight, name: "Shoulder Flap Right" },
-  { id: WoWAttachmentID.ShoulderFlapLeft, name: "Shoulder Flap Left" },
-  { id: WoWAttachmentID.ChestBloodFront, name: "Chest Blood Front" },
-  { id: WoWAttachmentID.ChestBloodBack, name: "Chest Blood Back" },
-  { id: WoWAttachmentID.Breath, name: "Breath" },
-  { id: WoWAttachmentID.PlayerName, name: "Player Name" },
-  { id: WoWAttachmentID.Base, name: "Base" },
-  { id: WoWAttachmentID.Head, name: "Head" },
-  { id: WoWAttachmentID.SpellLeftHand, name: "Spell Left Hand" },
-  { id: WoWAttachmentID.SpellRightHand, name: "Spell Right Hand" },
-  { id: WoWAttachmentID.Special1, name: "Special 1" },
-  { id: WoWAttachmentID.Special2, name: "Special 2" },
-  { id: WoWAttachmentID.Special3, name: "Special 3" },
-  { id: WoWAttachmentID.SheathMainHand, name: "Sheath Main Hand" },
-  { id: WoWAttachmentID.SheathOffHand, name: "Sheath Off Hand" },
-  { id: WoWAttachmentID.SheathShield, name: "Sheath Shield" },
-  { id: WoWAttachmentID.PlayerNameMounted, name: "Player Name Mounted" },
-  { id: WoWAttachmentID.LargeWeaponLeft, name: "Large Weapon Left" },
-  { id: WoWAttachmentID.LargeWeaponRight, name: "Large Weapon Right" },
-  { id: WoWAttachmentID.HipWeaponLeft, name: "Hip Weapon Left" },
-  { id: WoWAttachmentID.HipWeaponRight, name: "Hip Weapon Right" },
-  { id: WoWAttachmentID.Chest, name: "Chest" },
-  { id: WoWAttachmentID.HandArrow, name: "Hand Arrow" },
-  { id: WoWAttachmentID.Bullet, name: "Bullet" },
-  { id: WoWAttachmentID.SpellHandOmni, name: "Spell Hand Omni" },
-  { id: WoWAttachmentID.SpellHandDirected, name: "Spell Hand Directed" },
-  { id: WoWAttachmentID.VehicleSeat1, name: "Vehicle Seat 1" },
-  { id: WoWAttachmentID.VehicleSeat2, name: "Vehicle Seat 2" },
-  { id: WoWAttachmentID.VehicleSeat3, name: "Vehicle Seat 3" },
-  { id: WoWAttachmentID.VehicleSeat4, name: "Vehicle Seat 4" },
-  { id: WoWAttachmentID.VehicleSeat5, name: "Vehicle Seat 5" },
-  { id: WoWAttachmentID.VehicleSeat6, name: "Vehicle Seat 6" },
-  { id: WoWAttachmentID.VehicleSeat7, name: "Vehicle Seat 7" },
-  { id: WoWAttachmentID.VehicleSeat8, name: "Vehicle Seat 8" },
-  { id: WoWAttachmentID.LeftFoot, name: "Left Foot" },
-  { id: WoWAttachmentID.RightFoot, name: "Right Foot" },
-  { id: WoWAttachmentID.ShieldNoGlove, name: "Shield No Glove" },
-  { id: WoWAttachmentID.SpineLow, name: "Spine Low" },
-  { id: WoWAttachmentID.AlteredShoulderR, name: "Altered Shoulder R" },
-  { id: WoWAttachmentID.AlteredShoulderL, name: "Altered Shoulder L" },
-  { id: WoWAttachmentID.BeltBuckle, name: "Belt Buckle" },
-  { id: WoWAttachmentID.SheathCrossbow, name: "Sheath Crossbow" },
-  { id: WoWAttachmentID.HeadTop, name: "Head Top" },
-  { id: WoWAttachmentID.VirtualSpellDirected, name: "Virtual Spell Directed" },
-  { id: WoWAttachmentID.Backpack, name: "Backpack" },
-  { id: WoWAttachmentID.Unknown, name: "Unknown" },
-]
+  { id: WoWAttachmentID.ElbowRight, name: 'Elbow Right' },
+  { id: WoWAttachmentID.ElbowLeft, name: 'Elbow Left' },
+  { id: WoWAttachmentID.ShoulderRight, name: 'Shoulder Right' },
+  { id: WoWAttachmentID.ShoulderLeft, name: 'Shoulder Left' },
+  { id: WoWAttachmentID.KneeRight, name: 'Knee Right' },
+  { id: WoWAttachmentID.KneeLeft, name: 'Knee Left' },
+  { id: WoWAttachmentID.HipRight, name: 'Hip Right' },
+  { id: WoWAttachmentID.HipLeft, name: 'Hip Left' },
+  { id: WoWAttachmentID.Helm, name: 'Helm' },
+  { id: WoWAttachmentID.Back, name: 'Back' },
+  { id: WoWAttachmentID.ShoulderFlapRight, name: 'Shoulder Flap Right' },
+  { id: WoWAttachmentID.ShoulderFlapLeft, name: 'Shoulder Flap Left' },
+  { id: WoWAttachmentID.ChestBloodFront, name: 'Chest Blood Front' },
+  { id: WoWAttachmentID.ChestBloodBack, name: 'Chest Blood Back' },
+  { id: WoWAttachmentID.Breath, name: 'Breath' },
+  { id: WoWAttachmentID.PlayerName, name: 'Player Name' },
+  { id: WoWAttachmentID.Base, name: 'Base' },
+  { id: WoWAttachmentID.Head, name: 'Head' },
+  { id: WoWAttachmentID.SpellLeftHand, name: 'Spell Left Hand' },
+  { id: WoWAttachmentID.SpellRightHand, name: 'Spell Right Hand' },
+  { id: WoWAttachmentID.Special1, name: 'Special 1' },
+  { id: WoWAttachmentID.Special2, name: 'Special 2' },
+  { id: WoWAttachmentID.Special3, name: 'Special 3' },
+  { id: WoWAttachmentID.SheathMainHand, name: 'Sheath Main Hand' },
+  { id: WoWAttachmentID.SheathOffHand, name: 'Sheath Off Hand' },
+  { id: WoWAttachmentID.SheathShield, name: 'Sheath Shield' },
+  { id: WoWAttachmentID.PlayerNameMounted, name: 'Player Name Mounted' },
+  { id: WoWAttachmentID.LargeWeaponLeft, name: 'Large Weapon Left' },
+  { id: WoWAttachmentID.LargeWeaponRight, name: 'Large Weapon Right' },
+  { id: WoWAttachmentID.HipWeaponLeft, name: 'Hip Weapon Left' },
+  { id: WoWAttachmentID.HipWeaponRight, name: 'Hip Weapon Right' },
+  { id: WoWAttachmentID.Chest, name: 'Chest' },
+  { id: WoWAttachmentID.HandArrow, name: 'Hand Arrow' },
+  { id: WoWAttachmentID.Bullet, name: 'Bullet' },
+  { id: WoWAttachmentID.SpellHandOmni, name: 'Spell Hand Omni' },
+  { id: WoWAttachmentID.SpellHandDirected, name: 'Spell Hand Directed' },
+  { id: WoWAttachmentID.VehicleSeat1, name: 'Vehicle Seat 1' },
+  { id: WoWAttachmentID.VehicleSeat2, name: 'Vehicle Seat 2' },
+  { id: WoWAttachmentID.VehicleSeat3, name: 'Vehicle Seat 3' },
+  { id: WoWAttachmentID.VehicleSeat4, name: 'Vehicle Seat 4' },
+  { id: WoWAttachmentID.VehicleSeat5, name: 'Vehicle Seat 5' },
+  { id: WoWAttachmentID.VehicleSeat6, name: 'Vehicle Seat 6' },
+  { id: WoWAttachmentID.VehicleSeat7, name: 'Vehicle Seat 7' },
+  { id: WoWAttachmentID.VehicleSeat8, name: 'Vehicle Seat 8' },
+  { id: WoWAttachmentID.LeftFoot, name: 'Left Foot' },
+  { id: WoWAttachmentID.RightFoot, name: 'Right Foot' },
+  { id: WoWAttachmentID.ShieldNoGlove, name: 'Shield No Glove' },
+  { id: WoWAttachmentID.SpineLow, name: 'Spine Low' },
+  { id: WoWAttachmentID.AlteredShoulderR, name: 'Altered Shoulder R' },
+  { id: WoWAttachmentID.AlteredShoulderL, name: 'Altered Shoulder L' },
+  { id: WoWAttachmentID.BeltBuckle, name: 'Belt Buckle' },
+  { id: WoWAttachmentID.SheathCrossbow, name: 'Sheath Crossbow' },
+  { id: WoWAttachmentID.HeadTop, name: 'Head Top' },
+  { id: WoWAttachmentID.VirtualSpellDirected, name: 'Virtual Spell Directed' },
+  { id: WoWAttachmentID.Backpack, name: 'Backpack' },
+  { id: WoWAttachmentID.Unknown, name: 'Unknown' },
+];

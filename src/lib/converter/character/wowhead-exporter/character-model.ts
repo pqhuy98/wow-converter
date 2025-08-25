@@ -1,11 +1,12 @@
 import chalk from 'chalk';
+import _ from 'lodash';
 import path from 'path';
 
 import {
   ANIM_NAMES, AttackTag, getWc3AnimName, getWowAnimName,
 } from '@/lib/objmdl/animation/animation_mapper';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
-import { MDL, WowAttachment } from '@/lib/objmdl/mdl/mdl';
+import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { canAddMdlCollectionItemToModel } from '@/lib/objmdl/mdl/modify/add-item-to-model';
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
@@ -13,13 +14,9 @@ import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { ExportContext, exportModelFileIdAsMdl, exportTexture } from '../utils';
 import {
-  EquipmentSlot, getEquipmentSlotName, ItemMetata, processItemData,
+  EquipmentSlot, filterCollectionGeosets,
+  getEquipmentSlotName, getSubmeshName, ItemMetata, processItemData,
 } from './item-model';
-
-type EquipmentSlotData = {
-  slotId: EquipmentSlot;
-  data: ItemMetata;
-}
 
 export async function exportCharacterNpcAsMdl({
   ctx,
@@ -49,7 +46,13 @@ export async function exportCharacterNpcAsMdl({
   if (prep.npcTextureFile) {
     const npcTexturePath = await exportTexture(prep.npcTextureFile);
     ctx.assetManager.addPngTexture(npcTexturePath);
-    const baseTexturePath = charMdl.geosets[0].material.layers[0].texture.image;
+
+    // base texture is the one of the geoset with highest face count. Hacky heuristic
+    // TODO: find replaceable textures
+    const baseTexturePath = charMdl.geosets.reduce((acc, geoset) => (
+      geoset.faces.length > acc.faces.length ? geoset : acc
+    )).material.layers[0].texture.image;
+
     const newTexturePath = path.join(ctx.config.assetPrefix, npcTexturePath).replace('.png', '.blp');
 
     charMdl.geosets.forEach((geoset, i) => {
@@ -63,7 +66,7 @@ export async function exportCharacterNpcAsMdl({
         if (geoset.name.includes('Glove') && charMdl.geosets[i - 1].name.includes('Glove')) {
           geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Gloves)?.data.geosetIds;
         } else if (geoset.name.includes('Boot') && charMdl.geosets[i + 1].name.includes('Boot')) {
-          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Boots)?.data.geosetIds;
+          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Feet)?.data.geosetIds;
         } else if (geoset.name.includes('Trousers')) {
           geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Legs)?.data.geosetIds;
         }
@@ -88,7 +91,32 @@ export async function exportCharacterNpcAsMdl({
   // Cloak etc additional textures
   await attachEquipmentsWithTexturesOnly(ctx, charMdl, prep.equipmentSlots);
 
+  // Hacky fixes to be removed later
+  // EyeGlow make them a bit transparent with geoset anims
+  charMdl.geosets.forEach((geoset) => {
+    if (geoset.name.startsWith('Eyeglow')) {
+      charMdl.geosetAnims.push({
+        id: -1,
+        geoset,
+        alpha: {
+          static: true,
+          value: 0.3,
+        },
+      });
+    }
+  });
+
+  // If the item has trousers, remove the tabard geoset
+  if (charMdl.geosets.some((g) => g.name.startsWith('Trousers') && g.name !== 'Trousers1')) {
+    charMdl.geosets = charMdl.geosets.filter((g) => !g.name.startsWith('Tabard'));
+  }
+
   return charMdl;
+}
+
+type EquipmentSlotData = {
+  slotId: EquipmentSlot;
+  data: ItemMetata;
 }
 
 async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
@@ -122,7 +150,11 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
     equipmentSlots.push({ slotId, data: itemData });
   }
 
-  geosetIds.add(702); // Ears2 - otherwise the model will be missing ears
+  console.log('Equipments:', equipmentSlots.map((s) => getEquipmentSlotName(s.slotId)));
+
+  if (!slotIds.includes(EquipmentSlot.Head)) {
+    geosetIds.add(702); // Ears2 - otherwise the model will be missing ears
+  }
 
   // Prepare RPC params for wowexport
   const rpcParams: ExportCharacterParams = {
@@ -143,7 +175,7 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
 }
 
 async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[]) {
-  const collectionsAdded = new Set<number>();
+  const collections = new Map<number, MDL>();
   const attachmentResults: {
     attachmentId: WoWAttachmentID | undefined,
     itemMdl: MDL,
@@ -152,44 +184,56 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   }[] = [];
 
   // Attach individual item model to the character model
-  const attachItemModel = async (fileDataId: number, textures: number[], attachmentId: WoWAttachmentID | undefined) => {
-    if (collectionsAdded.has(fileDataId)) {
+  const attachItemModel = async (fileDataId: number, itemData: ItemMetata, attachmentId: WoWAttachmentID | undefined) => {
+    const itemMdl = !collections.has(fileDataId)
+      ? await exportModelFileIdAsMdl(ctx, fileDataId, { textureIds: itemData.textureFiles })
+      : _.cloneDeep(collections.get(fileDataId)!);
+
+    const isCollection = collections.has(fileDataId) || canAddMdlCollectionItemToModel(charMdl, itemMdl);
+
+    if (isCollection) {
+      if (!collections.has(fileDataId)) {
+        collections.set(fileDataId, _.cloneDeep(itemMdl));
+      }
+
+      const debug = false;
+      debug && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
+      const enabledGeosets = filterCollectionGeosets(itemData.slotId!, itemData.originalData, itemMdl);
+
+      debug && console.log('chosen geosets', enabledGeosets.map((g) => getSubmeshName(g.wowData.submeshId)));
+      debug && console.log('all available geosets', fileDataId, itemMdl.geosets.map((g) => `${getSubmeshName(g.wowData.submeshId)} (${g.wowData.submeshId})`));
+
+      itemMdl.geosets = enabledGeosets;
+
+      charMdl.modify.addMdlCollectionItemToModel(itemMdl);
+      attachmentResults.push({
+        attachmentId, itemMdl, ok: true, fileDataId,
+      });
       return;
     }
 
-    const itemMdl = await exportModelFileIdAsMdl(ctx, fileDataId, textures);
+    // not a collection, add to bone
 
-    let attachment: WowAttachment | undefined;
-    if (attachmentId) {
-      attachment = charMdl.wowAttachments.find((a) => a.wowAttachmentId === attachmentId);
-      if (!attachment) {
-        console.error(chalk.red(`Cannot find bone for wow attachment ${attachmentId} (${getWoWAttachmentName(attachmentId)})`));
-        if (charMdl.wowAttachments.length === 0) {
-          console.error(chalk.red(`No WoW attachments data found in this model ${charMdl.model.name}`));
-        }
-        attachmentResults.push({
-          attachmentId, itemMdl, ok: false, fileDataId,
-        });
-        return;
-      }
+    if (!attachmentId) {
+      console.error(chalk.red(`Cannot add item ${fileDataId} to model as bone because no attachment id is provided.`));
+      return;
     }
-    if (attachment && attachmentId) {
-      charMdl.modify.addMdlItemToBone(itemMdl, attachment.bone.name);
-      attachmentResults.push({
-        attachmentId, itemMdl, ok: true, fileDataId,
-      });
-    } else if (canAddMdlCollectionItemToModel(charMdl, itemMdl)) {
-      charMdl.modify.addMdlCollectionItemToModel(itemMdl);
-      collectionsAdded.add(fileDataId);
-      attachmentResults.push({
-        attachmentId, itemMdl, ok: true, fileDataId,
-      });
-    } else {
-      console.error(chalk.red(`Cannot add item ${fileDataId} to model as collection because the item is not a collection.`));
+
+    const attachment = charMdl.wowAttachments.find((a) => a.wowAttachmentId === attachmentId);
+    if (!attachment) {
+      console.error(chalk.red(`Cannot find bone for wow attachment ${attachmentId} (${getWoWAttachmentName(attachmentId)})`));
+      if (charMdl.wowAttachments.length === 0) {
+        console.error(chalk.red(`No WoW attachments data found in this model ${charMdl.model.name}`));
+      }
       attachmentResults.push({
         attachmentId, itemMdl, ok: false, fileDataId,
       });
+      return;
     }
+    charMdl.modify.addMdlItemToBone(itemMdl, attachment.bone);
+    attachmentResults.push({
+      attachmentId, itemMdl, ok: true, fileDataId,
+    });
   };
 
   const attachmentList: [EquipmentSlot, number, WoWAttachmentID | undefined][] = [
@@ -200,13 +244,13 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     [EquipmentSlot.Back, 0, WoWAttachmentID.Backpack],
     [EquipmentSlot.Chest, 0, undefined],
     [EquipmentSlot.Legs, 0, undefined],
-    [EquipmentSlot.Boots, 0, undefined],
+    [EquipmentSlot.Feet, 0, undefined],
     [EquipmentSlot.Gloves, 0, undefined],
   ];
   for (const [slotId, index, attachmentId] of attachmentList) {
     const slot = equipmentSlots.find((s) => s.slotId === slotId);
     if (slot && slot.data.modelFiles[index]) {
-      await attachItemModel(slot.data.modelFiles[index], slot.data.textureFiles, attachmentId);
+      await attachItemModel(slot.data.modelFiles[index], slot.data, attachmentId);
     }
   }
 

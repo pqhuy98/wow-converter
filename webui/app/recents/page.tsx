@@ -1,129 +1,134 @@
-"use client"
+'use client';
 
-import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { ExternalLink, Download, ArrowLeft, History } from "lucide-react"
-import { host } from "../config"
-import ModelViewerUi from "../model-viewer"
-import { commonAttachments, FullJobStatus, JobStatus, otherAttachments } from "@/lib/models/export-character.model"
+import {
+  ArrowLeft, Download, ExternalLink,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Card, CardContent, CardHeader, CardTitle,
+} from '@/components/ui/card';
+import {
+  commonAttachments, FullJobStatus, otherAttachments,
+} from '@/lib/models/export-character.model';
+
+import { host } from '../config';
+import ModelViewerUi from '../model-viewer';
 
 // Utility function to format timestamps
 const formatTimestamp = (timestamp: number, showAbsolute: boolean = false): string => {
   if (showAbsolute) {
-    const date = new Date(timestamp)
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-    const seconds = String(date.getSeconds()).padStart(2, '0')
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
-  
-  const now = Date.now()
-  const diff = now - timestamp
-  const minutes = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  
+
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / (1000 * 60));
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
   if (days > 0) {
-    return `${days} day${days > 1 ? 's' : ''} ago`
-  } else if (hours > 0) {
-    return `${hours} hour${hours > 1 ? 's' : ''} ago`
-  } else if (minutes > 0) {
-    return `${minutes} min${minutes > 1 ? 's' : ''} ago`
-  } else {
-    return 'Just now'
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  } if (hours > 0) {
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  } if (minutes > 0) {
+    return `${minutes} min${minutes > 1 ? 's' : ''} ago`;
   }
-}
+  return 'Just now';
+};
 
 // Utility function to calculate duration
 const calculateDuration = (startTime?: number, endTime?: number): string | null => {
-  if (!startTime || !endTime) return null
-  
-  const duration = endTime - startTime
-  const seconds = Math.floor(duration / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  
+  if (!startTime || !endTime) return null;
+
+  const duration = endTime - startTime;
+  const seconds = Math.floor(duration / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
   if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s`
-  } else {
-    return `${seconds}s`
+    return `${minutes}m ${remainingSeconds}s`;
   }
-}
+  return `${seconds}s`;
+};
 
 export default function RecentsPage() {
-  const [jobs, setJobs] = useState<FullJobStatus[]>([])
-  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [showAbsoluteTime, setShowAbsoluteTime] = useState(false)
+  const [jobs, setJobs] = useState<FullJobStatus[]>([]);
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showAbsoluteTime, setShowAbsoluteTime] = useState(false);
 
   useEffect(() => {
     const fetchRecentJobs = async () => {
       try {
-        const response = await fetch(`${host}/export/character/recent`)
+        const response = await fetch(`${host}/export/character/recent`);
         if (!response.ok) {
-          throw new Error('Failed to fetch recent jobs')
+          throw new Error('Failed to fetch recent jobs');
         }
-        const data = await response.json()
-        setJobs(data)
-        
+        const data = await response.json();
+        setJobs(data);
+
         // Set the most recent successful job as selected
-        const mostRecentDone = data.find((job: FullJobStatus) => job.status === 'done')
+        const mostRecentDone = data.find((job: FullJobStatus) => job.status === 'done');
         if (mostRecentDone) {
-          setSelectedJobId(mostRecentDone.id)
+          setSelectedJobId(mostRecentDone.id);
         }
       } catch (error) {
-        console.error('Error fetching recent jobs:', error)
+        console.error('Error fetching recent jobs:', error);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchRecentJobs()
-  }, [])
+    void fetchRecentJobs();
+  }, []);
 
   const getSimplifiedWowheadUrl = (url: string, type: 'npc' | 'item'): string => {
     try {
-      const urlObj = new URL(url)
-      const pathParts = urlObj.pathname.split('/')
-      const categoryPart = pathParts.find(part => part.includes('='))
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      const categoryPart = pathParts.find((part) => part.includes('='));
       if (categoryPart) {
-        const [category, id] = categoryPart.split('=')
-        const slug = pathParts[pathParts.length - 1] || id
-        return `${slug} [${id}]`
+        const [category, id] = categoryPart.split('=');
+        const slug = pathParts[pathParts.length - 1] || id;
+        return `${slug} [${id}]`;
       }
     } catch (e) {
       // If URL parsing fails, return the original value
     }
-    return url
-  }
+    return url;
+  };
 
   const getSimplifiedRef = (ref: { type: string; value: string }, type: 'npc' | 'item'): string => {
     if (ref.type === 'wowhead') {
-      return getSimplifiedWowheadUrl(ref.value, type)
-    } else if (ref.type === 'displayID') {
-      return `Display ID [${ref.value}]`
-    } else {
-      return ref.value
+      return getSimplifiedWowheadUrl(ref.value, type);
+    } if (ref.type === 'displayID') {
+      return `Display ID [${ref.value}]`;
     }
-  }
+    return ref.value;
+  };
 
   const getAttachItemsString = (attachItems?: Record<string, { path: { type: string; value: string }; scale?: number }>): JSX.Element[] => {
     if (!attachItems || Object.keys(attachItems).length === 0) {
-      return [<span key="none">None</span>]
+      return [<span key="none">None</span>];
     }
 
-    const attachmentNames = Object.fromEntries([...commonAttachments, ...otherAttachments].map(a => [a.id, a.name]))
+    const attachmentNames = Object.fromEntries([...commonAttachments, ...otherAttachments].map((a) => [a.id, a.name]));
 
     return Object.entries(attachItems).map(([attachmentId, item], index) => {
-      const attachmentName = attachmentNames[attachmentId] || `Attachment ${attachmentId}`
-      const itemRef = getSimplifiedRef(item.path, 'item')
-      
+      const attachmentName = attachmentNames[attachmentId] || `Attachment ${attachmentId}`;
+      const itemRef = getSimplifiedRef(item.path, 'item');
+
       if (item.path.type === 'wowhead') {
         return (
           <span key={attachmentId}>
@@ -140,74 +145,73 @@ export default function RecentsPage() {
             </a>
             {index < Object.keys(attachItems).length - 1 ? ', ' : ''}
           </span>
-        )
-      } else {
-        return (
+        );
+      }
+      return (
           <span key={attachmentId}>
             {attachmentName}: {itemRef}
             {index < Object.keys(attachItems).length - 1 ? ', ' : ''}
           </span>
-        )
-      }
-    })
-  }
+      );
+    });
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'done': return 'bg-green-500'
-      case 'failed': return 'bg-red-500'
-      case 'processing': return 'bg-yellow-500'
-      case 'pending': return 'bg-gray-500'
-      default: return 'bg-gray-500'
+      case 'done': return 'bg-green-500';
+      case 'failed': return 'bg-red-500';
+      case 'processing': return 'bg-yellow-500';
+      case 'pending': return 'bg-gray-500';
+      default: return 'bg-gray-500';
     }
-  }
+  };
 
-  const selectedJob = jobs.find(job => job.id === selectedJobId)
+  const selectedJob = jobs.find((job) => job.id === selectedJobId);
   const selectedModelPath = useMemo(() => {
     if (selectedJob?.status === 'done' && selectedJob?.result?.exportedModels?.[0]) {
-      return selectedJob.result.exportedModels[0]
+      return selectedJob.result.exportedModels[0];
     }
-    return undefined
-  }, [selectedJob?.id, selectedJob?.status, selectedJob?.result?.exportedModels?.[0]])
+    return undefined;
+  }, [selectedJob?.id, selectedJob?.status, selectedJob?.result?.exportedModels?.[0]]);
 
   const handleDownloadZip = async (job: FullJobStatus) => {
-    if (!job.result) return
+    if (!job.result) return;
 
     const files = [
       ...(job.result.exportedModels || []),
       ...(job.result.exportedTextures || []),
-    ]
+    ];
 
     if (files.length === 0) {
-      alert("Nothing to download – exported files list is empty")
-      return
+      alert('Nothing to download – exported files list is empty');
+      return;
     }
 
     try {
       const res = await fetch(`${host}/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files }),
-      })
+      });
 
       if (!res.ok) {
-        throw new Error(await res.text())
+        throw new Error(await res.text());
       }
 
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `${job.request.outputFileName}.zip`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-    } catch (e: any) {
-      console.error("Download ZIP error:", e)
-      alert(e?.message || String(e))
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${job.request.outputFileName}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Download ZIP error:', e);
+      alert(e instanceof Error ? e.message : String(e));
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -219,7 +223,7 @@ export default function RecentsPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -254,36 +258,36 @@ export default function RecentsPage() {
                   </div>
                 ) : (
                   jobs.map((job) => {
-                    const isExpanded = expandedJobs.has(job.id)
-                    const isSelected = selectedJobId === job.id
-                    const character = job.request.character
-                    
-                    if (!character) return null
+                    const isExpanded = expandedJobs.has(job.id);
+                    const isSelected = selectedJobId === job.id;
+                    const character = job.request.character;
+
+                    if (!character) return null;
 
                     return (
                       <div
                         key={job.id}
                         className={`border rounded-lg p-3 cursor-pointer transition-all duration-200 ${
-                          isSelected 
-                            ? 'border-blue-500 bg-blue-50' 
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                         }`}
                         onClick={() => {
-                          setSelectedJobId(job.id)
+                          setSelectedJobId(job.id);
                           // If clicking the same job, toggle its expansion
                           if (selectedJobId === job.id) {
-                            setExpandedJobs(prev => {
-                              const newSet = new Set(prev)
+                            setExpandedJobs((prev) => {
+                              const newSet = new Set(prev);
                               if (newSet.has(job.id)) {
-                                newSet.delete(job.id)
+                                newSet.delete(job.id);
                               } else {
-                                newSet.add(job.id)
+                                newSet.add(job.id);
                               }
-                              return newSet
-                            })
+                              return newSet;
+                            });
                           } else {
                             // If clicking a different job, expand it and collapse all others
-                            setExpandedJobs(new Set([job.id]))
+                            setExpandedJobs(new Set([job.id]));
                           }
                         }}
                       >
@@ -296,7 +300,7 @@ export default function RecentsPage() {
                                 {job.request.outputFileName}
                               </span>
                             </div>
-                            
+
                             <div className="text-xs text-gray-600 space-y-1">
                               <div className="flex items-center gap-1">
                                 <span className="font-medium">Base:</span>
@@ -315,7 +319,7 @@ export default function RecentsPage() {
                                   <span className="font-bold">{getSimplifiedRef(character.base, 'npc')}</span>
                                 )}
                               </div>
-                              
+
                               <div className="flex items-center gap-4">
                                 <span>
                                   <span className="font-medium">Attack:</span> <span className="font-bold">{character.attackTag || 'All'}</span>
@@ -324,21 +328,21 @@ export default function RecentsPage() {
                                   <span className="font-medium">Size:</span> <span className="font-bold">{character.size || 'Default'}</span>
                                 </span>
                               </div>
-                              
+
                               <div>
                                 <span className="font-medium">Items:</span> <span className="font-bold">{getAttachItemsString(character.attachItems)}</span>
                               </div>
                               <div className="border-t border-gray-200 mt-2 pt-2">
                                 <div className="flex items-center gap-2">
                                   <div className="w-48 flex items-center gap-1">
-                                    <span className="font-medium whitespace-nowrap">Submitted at: </span> 
+                                    <span className="font-medium whitespace-nowrap">Submitted at: </span>
                                     <Button
                                       variant="outline"
                                       size="sm"
                                       className="text-xs h-auto p-1 font-bold hover:bg-blue-50 border-gray-300"
                                       onClick={(e) => {
-                                        e.stopPropagation()
-                                        setShowAbsoluteTime(!showAbsoluteTime)
+                                        e.stopPropagation();
+                                        setShowAbsoluteTime(!showAbsoluteTime);
                                       }}
                                     >
                                       {formatTimestamp(job.submittedAt, showAbsoluteTime)}
@@ -346,7 +350,7 @@ export default function RecentsPage() {
                                   </div>
                                   {job.startedAt && job.finishedAt && job.submittedAt && job.startedAt && (
                                     <div className="w-32 flex items-center gap-1">
-                                      <span className="font-medium">Duration: </span> 
+                                      <span className="font-medium">Duration: </span>
                                       <span className="font-bold">
                                         {calculateDuration(job.submittedAt, job.startedAt)} + {calculateDuration(job.startedAt, job.finishedAt)}
                                       </span>
@@ -359,7 +363,7 @@ export default function RecentsPage() {
                         </div>
 
                         {/* Expanded Details */}
-                        <div 
+                        <div
                           className={`mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600 space-y-2 overflow-hidden transition-all duration-300 ease-in-out ${
                             isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
                           }`}
@@ -387,9 +391,7 @@ export default function RecentsPage() {
                                 <span className="font-medium">Portrait Camera:</span> <span className="font-bold">{character.portraitCameraSequenceName || 'None'}</span>
                               </div>
                             </div>
-                            
 
-                            
                             {job.request.optimization && (
                               <div>
                                 <span className="font-medium">Optimizations:</span>
@@ -401,7 +403,7 @@ export default function RecentsPage() {
                                 </div>
                               </div>
                             )}
-                            
+
                             {job.status === 'done' && job.result && (
                               <div className="flex items-center gap-2">
                                                                  <Button
@@ -409,8 +411,8 @@ export default function RecentsPage() {
                                    size="sm"
                                    className="text-xs"
                                    onClick={(e) => {
-                                     e.stopPropagation()
-                                     handleDownloadZip(job)
+                                     e.stopPropagation();
+                                     void handleDownloadZip(job);
                                    }}
                                  >
                                    <Download className="h-3 w-3 mr-1" />
@@ -419,7 +421,7 @@ export default function RecentsPage() {
                                 <span className="text-green-600 font-medium">✓ Complete</span>
                               </div>
                             )}
-                            
+
                             {job.status === 'failed' && (
                               <div className="text-red-600 font-medium">
                                 ✗ Failed: {job.error}
@@ -427,7 +429,7 @@ export default function RecentsPage() {
                             )}
                           </div>
                         </div>
-                    )
+                    );
                   })
                 )}
               </CardContent>
@@ -451,5 +453,5 @@ export default function RecentsPage() {
         </div>
       </div>
     </div>
-  )
-} 
+  );
+}

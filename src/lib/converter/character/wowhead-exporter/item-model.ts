@@ -1,3 +1,4 @@
+import { Geoset } from '@/lib/objmdl/mdl/components/geoset';
 import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { fetchItemMeta, ItemData } from '@/lib/wowhead-client/item-armor';
 import { ItemZamUrl } from '@/lib/wowhead-client/zam-url';
@@ -5,10 +6,13 @@ import { ItemZamUrl } from '@/lib/wowhead-client/zam-url';
 import { ExportContext, exportModelFileIdAsMdl } from '../utils';
 
 export interface ItemMetata {
+  slotId: number | null;
+  displayId: number;
   modelFiles: number[];
   textureFiles: number[];
   geosetIds?: number[];
   hideGeosetIds?: number[];
+  originalData: ItemData;
 }
 
 // Slots enum used by orchestration and attachments
@@ -18,7 +22,7 @@ export enum EquipmentSlot {
   Chest = 5,
   Belt = 6,
   Legs = 7,
-  Boots = 8,
+  Feet = 8,
   Wrist = 9,
   Gloves = 10,
   Back = 16,
@@ -29,28 +33,152 @@ export function getEquipmentSlotName(slotId: number) {
   return Object.entries(EquipmentSlot).find(([_, v]) => v === slotId)?.[0];
 }
 
-const GEOSET_GROUPS: Record<number, number[]> = {
-  [EquipmentSlot.Chest]: [800, 0, 1300],
-  [EquipmentSlot.Belt]: [1800],
-  [EquipmentSlot.Legs]: [1100, 0, 1300],
-  [EquipmentSlot.Boots]: [500, 2000 + 1],
-  [EquipmentSlot.Gloves]: [400],
-  [EquipmentSlot.Back]: [1500],
-  [EquipmentSlot.Tabard]: [1200],
-};
+export const SUBMESH_GROUPS = {
+  Hair: 0,
+  FacialA: 100,
+  FacialB: 200,
+  FacialC: 300,
+  Gloves: 400,
+  Boots: 500,
+  Tail: 600,
+  Ears: 700,
+  Wrists: 800,
+  Kneepads: 900,
+  Chest: 1000,
+  Pants: 1100,
+  Tabard: 1200,
+  Trousers: 1300,
+  Cloak: 1500,
+  Chins: 1600,
+  Eyeglow: 1700,
+  Belt: 1800,
+  'Bone/Tail': 1900,
+  Feet: 2000,
+  Torso: 2200,
+  HandAttach: 2300,
+  HeadAttach: 2400,
+  DHBlindfolds: 2500,
+  Head: 2700,
+  Chest2: 2800,
+  MechagnomeArms: 2900,
+  MechagnomeLegs: 3000,
+  MechagnomeFeet: 3100,
+  Face: 3200,
+  Eyes: 3300,
+  Eyebrows: 3400,
+  Earrings: 3500,
+  Necklace: 3600,
+  Headdress: 3700,
+  Tails: 3800,
+  Vines: 3900,
+  'Chins/Tusk': 4000,
+  Noses: 4100,
+  HairDecoA: 4200,
+  HairDecoB: 4300,
+  BodySize: 4400,
+  EyeGlowB: 5100,
+} as const;
 
-function resolveGeosetId(slotId: number, itemData: ItemData) {
-  // Accept any 'ItemData-like' object from wowhead meta
-  const result = new Set<number>();
-  (itemData?.Item?.GeosetGroup || []).forEach((value: number, i: number) => {
-    if (!GEOSET_GROUPS[slotId]?.[i] || (value === 0 && (GEOSET_GROUPS[slotId][i] % 100) === 0)) return;
-    const geosetId = (GEOSET_GROUPS[slotId][i]) + value + 1;
-    result.add(geosetId);
-  });
-  return Array.from(result);
+export function getSubmeshName(idx: number) {
+  const group = Math.floor(idx / 100) * 100;
+  const name = Object.entries(SUBMESH_GROUPS).find(([_, v]) => v === group)?.[0];
+  return `${name}${idx % 100}`;
 }
 
-function resolveHideGeosetId(itemData: ItemData, targetRace: number, targetGender: number) {
+// Reverse engineered from https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js
+// rr[] defaults: per geoset group default variant
+const ZAM_GROUP_BASE_OFFSET: ReadonlyArray<number> = [
+  1, 1, 1, 1, 1, 1, 1, 2, 1, 1, // 0-9
+  1, 1, 1, 1, 0, 1, 0, 0, 1, 1, // 10-19
+  1, 1, 1, 1, 0, 0, 1, 0, 1, 0, // 20-29
+  0, 0, 2, 1, 1, 0, 0, 0, 1, 0, // 30-39
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 40-49
+  1, 1, // 50-51
+];
+
+// Slot -> geoset groups order expected by AttachGeosetGroup offsets
+// Search for "i.k(t.b[1], 21)) : 3 == t.C ? i.k(t.b[0], 26) : 4 == t.C ? (i.k(t.b[0], 8),"
+// in https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js
+const ZAM_SLOT_TO_GROUPS: Readonly<Record<number, ReadonlyArray<number>>> = {
+  // Head
+  1: [27, 21],
+  // Shoulder
+  3: [26],
+  // Chest (shirt)
+  4: [8, 10],
+  // Chest (armor) / Robe
+  5: [8, 10, 13, 22, 28],
+  20: [8, 10, 13, 22, 28],
+  // Waist
+  6: [18],
+  // Legs
+  7: [11, 9, 13],
+  // Feet
+  8: [5, 20],
+  // Wrist
+  9: [23],
+  // Hands
+  10: [4, 23],
+  // Back (cloak)
+  16: [15],
+  // Tabard
+  19: [12],
+};
+
+function computeZamMeshId(group: number, offset: number | undefined): number {
+  const base = ZAM_GROUP_BASE_OFFSET[group] ?? 1;
+  const variant = base + (offset ?? 0);
+  return group * 100 + variant;
+}
+
+const debug = false;
+
+// Geosets to show on the item model itself (viewer applies groups 27/21 and also 26 for some)
+function resolveCharacterGeosetIds(slotId: number, itemData: ItemData) {
+  // Use Item.GeosetGroup (viewer stores this as k) to equip onto character model groups
+  const offsets = itemData?.Item?.GeosetGroup ?? [];
+  const groups = ZAM_SLOT_TO_GROUPS[slotId] ?? [];
+  const result = new Set<number>();
+  debug && console.log('resolveGeosetId', slotId, getEquipmentSlotName(slotId), groups, offsets);
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i];
+
+    // special case for boots per reverse engineering
+    if (slotId === EquipmentSlot.Feet && group === SUBMESH_GROUPS.Feet / 100) {
+      result.add(2002);
+      continue;
+    }
+
+    const off = offsets[i];
+    const geosetId = computeZamMeshId(group, off);
+    result.add(geosetId);
+  }
+  const geosetIds = Array.from(result);
+  debug && console.log(geosetIds.map((id) => getSubmeshName(id)));
+  return geosetIds;
+}
+
+// Geosets to apply when equipping the item on a character (attach to character groups)
+export function filterCollectionGeosets(slotId: number, itemData: ItemData, model: MDL) {
+  const geosets = resolveCharacterGeosetIds(slotId, itemData);
+  const chosenGeosets = new Set<Geoset>();
+  for (const geosetId of geosets) {
+    const geoset = model.geosets.find((g) => g.wowData.submeshId === geosetId);
+    if (geoset) {
+      chosenGeosets.add(geoset);
+    } else {
+      const group = Math.floor(geosetId / 100);
+      const defaultGeosetId = group * 100 + 1; // yes it's intentionally not computeZamMeshId(group, 0)
+      const defaultGeoset = model.geosets.find((g) => g.wowData.submeshId === defaultGeosetId);
+      if (defaultGeoset) {
+        chosenGeosets.add(defaultGeoset);
+      }
+    }
+  }
+  return Array.from(chosenGeosets);
+}
+
+function resolveHideGeosetIds(itemData: ItemData, targetRace: number, targetGender: number) {
   const result = new Set<number>();
   let hideGeosets = itemData?.Item?.HideGeosetMale;
   if (targetGender === 1) hideGeosets = itemData?.Item?.HideGeosetFemale;
@@ -65,16 +193,20 @@ function resolveHideGeosetId(itemData: ItemData, targetRace: number, targetGende
 
 export async function processItemData(url: ItemZamUrl, targetRace: number, targetGender: number): Promise<ItemMetata> {
   const itemData = await fetchItemMeta(url);
-  return {
+  const result: ItemMetata = {
+    slotId: url.slotId,
+    displayId: url.displayId,
     modelFiles: filterFilesByRaceGender(itemData.ModelFiles || {}, itemData.ComponentModels || {}, targetRace, targetGender),
     textureFiles: [
       ...filterFilesByRaceGender(itemData.TextureFiles || {}, itemData.ComponentTextures || {}, targetRace, targetGender),
       ...[itemData.Textures, itemData.Textures2].filter((obj) => obj !== null)
         .flatMap((obj) => Object.entries(obj).flatMap(([, value]) => value)),
     ],
-    geosetIds: url.slotId ? resolveGeosetId(url.slotId, itemData) : [],
-    hideGeosetIds: resolveHideGeosetId(itemData, targetRace, targetGender),
+    geosetIds: url.slotId ? resolveCharacterGeosetIds(url.slotId, itemData) : [],
+    hideGeosetIds: resolveHideGeosetIds(itemData, targetRace, targetGender),
+    originalData: itemData,
   };
+  return result;
 }
 
 function filterFilesByRaceGender(
@@ -116,5 +248,5 @@ export async function exportZamItemAsMdl({
   const result = await processItemData(zam, targetRace, targetGender);
   const modelId = result.modelFiles[0];
   const allTextureIds = result.textureFiles;
-  return exportModelFileIdAsMdl(ctx, modelId, allTextureIds);
+  return exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
 }

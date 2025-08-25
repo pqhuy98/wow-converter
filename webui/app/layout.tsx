@@ -1,10 +1,11 @@
-import type { Metadata } from 'next'
-import './globals.css'
+import './globals.css';
+
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: `Huy's wow-converter`,
+  title: 'Huy\'s wow-converter',
   description: 'Easily export WoW NPC models into Warcraft 3 MDL/MDX',
-}
+};
 
 export default function RootLayout({
   children,
@@ -18,5 +19,5 @@ export default function RootLayout({
       </head>
       <body>{children}</body>
     </html>
-  )
+  );
 }

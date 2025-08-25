@@ -1,24 +1,25 @@
-"use client"
+'use client';
 
-import { ArrowLeft } from "lucide-react"
-import { useSearchParams, useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import ModelViewerUi from "../model-viewer"
-import { Suspense } from "react"
+import { ArrowLeft } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+
+import { Button } from '@/components/ui/button';
+
+import ModelViewerUi from '../model-viewer';
 
 export default function ViewerPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <Viewer />
     </Suspense>
-  )
+  );
 }
 
-
 function Viewer() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const modelPath = searchParams.get('model')
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const modelPath = searchParams.get('model');
 
   if (!modelPath) {
     return (
@@ -36,7 +37,7 @@ function Viewer() {
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -54,5 +55,5 @@ function Viewer() {
       </div>
       <ModelViewerUi modelPath={decodeURIComponent(modelPath)} alwaysFullscreen={true} />
     </div>
-  )
-} 
+  );
+}

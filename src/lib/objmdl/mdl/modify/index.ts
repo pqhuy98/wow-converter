@@ -158,4 +158,18 @@ export class MDLModify {
     });
     return this;
   }
+
+  scaleParticlesDensity(factor: number) {
+    this.mdl.particleEmitter2s.forEach((p) => {
+      if ('static' in p.emissionRate) {
+        p.emissionRate.value *= factor;
+      } else {
+        const keyFrames = p.emissionRate.keyFrames;
+        keyFrames.forEach((v, k) => {
+          keyFrames[k] = v * factor;
+        });
+      }
+    });
+    return this;
+  }
 }

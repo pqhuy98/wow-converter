@@ -1,4 +1,3 @@
-import chalk from 'chalk';
 import path from 'path';
 
 import { V3 } from '@/lib/math/vector';
@@ -7,42 +6,32 @@ import { Bone } from '../components/node/node';
 import { MDL } from '../mdl';
 import { MDLModify } from '.';
 
-const debug = false;
+const debug = true;
 
-export function addMdlItemToBone(this: MDLModify, item: MDL, boneName: string) {
-  const attachmentBone = this.mdl.bones.find((b) => b.name === boneName);
-  if (!attachmentBone) {
-    console.error(chalk.red(`Cannot find bone "${boneName}" to attach item "${path.basename(item.model.name)}".`));
-    return this;
-  }
-  debug && console.log(`Attaching item "${path.basename(item.model.name)}" to bone "${attachmentBone.name}"...`);
+export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
+  debug && console.log(`Attaching item "${path.basename(item.model.name)}" to bone "${bone.name}"...`);
 
   item.getNodes().forEach((b) => {
     if (!b.parent) {
-      b.parent = attachmentBone;
+      b.parent = bone;
     }
-    b.pivotPoint = V3.sum(b.pivotPoint, attachmentBone.pivotPoint);
+    b.pivotPoint = V3.sum(b.pivotPoint, bone.pivotPoint);
   });
   item.geosets.forEach((geoset) => geoset.vertices.forEach((v) => {
-    v.position = V3.sum(v.position, attachmentBone.pivotPoint);
+    v.position = V3.sum(v.position, bone.pivotPoint);
   }));
 
   mergeItemObjects(this.mdl, item);
   return this;
 }
 
-export function addItemPathToBone(this: MDLModify, itemPath: string, boneName: string) {
-  const attachmentBone = this.mdl.bones.find((b) => b.name === boneName);
-  if (!attachmentBone) {
-    console.error(chalk.red(`Cannot find bone "${boneName}" to attach item path "${itemPath}".`));
-    return this;
-  }
+export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone) {
   this.mdl.attachments.push({
     type: 'AttachmentPoint',
     name: `Item_${itemPath}`,
     path: itemPath,
-    parent: attachmentBone,
-    pivotPoint: [...attachmentBone.pivotPoint],
+    parent: bone,
+    pivotPoint: [...bone.pivotPoint],
     flags: [],
     attachmentId: 0,
     scaling: {
@@ -91,6 +80,10 @@ export function addMdlCollectionItemToModel(this: MDLModify, item: MDL) {
 }
 
 export function canAddMdlCollectionItemToModel(main: MDL, item: MDL) {
+  if (item.bones.some((b) => !b.parent && b.name.includes('bone_'))) {
+    return false;
+  }
+
   const boneMap = new Map<string, Bone>(main.bones.map((b) => [b.name, b]));
   return item.bones.every((b) => boneMap.has(b.name));
 }

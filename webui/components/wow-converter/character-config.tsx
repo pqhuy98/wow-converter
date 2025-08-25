@@ -1,34 +1,44 @@
-import { AttackTag, Character, ModelSize } from "@/lib/models/export-character.model"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
-import { TooltipProvider, TooltipTrigger, TooltipContent, Tooltip } from "@/components/ui/tooltip"
-import { User, HelpCircle } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-import { RefInput } from "./ref-input"
+import { HelpCircle, User } from 'lucide-react';
+import { useState } from 'react';
 
-const attackTagOptions: { value: AttackTag | "all", label: string, description: string }[] = [
-  { value: "all", label: "All", description: "Include all attack animations" },
-  { value: "1H", label: "1H Weapon", description: "The model uses 1H weapon(s)" },
-  { value: "2H", label: "2H Weapon", description: "The model uses a 2H weapon" },
-  { value: "2HL", label: "2HL Weapon", description: "The model uses a 2H polearm" },
-  { value: "Unarmed", label: "Unarmed", description: "The model uses fists and kicks" },
+import {
+  Card, CardContent,
+  CardDescription, CardHeader, CardTitle,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { AttackTag, Character, ModelSize } from '@/lib/models/export-character.model';
+
+import { RefInput } from './ref-input';
+
+const attackTagOptions: { value: AttackTag | 'all', label: string, description: string }[] = [
+  { value: 'all', label: 'All', description: 'Include all attack animations' },
+  { value: '1H', label: '1H Weapon', description: 'The model uses 1H weapon(s)' },
+  { value: '2H', label: '2H Weapon', description: 'The model uses a 2H weapon' },
+  { value: '2HL', label: '2HL Weapon', description: 'The model uses a 2H polearm' },
+  { value: 'Unarmed', label: 'Unarmed', description: 'The model uses fists and kicks' },
   // { value: "Bow", label: "Bow", description: "The model uses a bow." },
   // { value: "Rifle", label: "Rifle", description: "The model uses a rifle." },
   // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
-]
+];
 
-const sizeOptions: { value: ModelSize | "none", label: string, description: string }[] = [
-  { value: "none", label: "Default", description: "Original WoW size times 56" },
-  { value: "small", label: "Small", description: "As tall as Undead Ghoul" },
-  { value: "medium", label: "Medium", description: "As tall as Orc Grunt" },
-  { value: "large", label: "Large", description: "As tall as Undead Abomination" },
-  { value: "hero", label: "Hero", description: "As tall as Tauren Chieftain" },
-  { value: "giant", label: "Giant", description: "As tall as Flesh Golem" },
-]
+const sizeOptions: { value: ModelSize | 'none', label: string, description: string }[] = [
+  { value: 'none', label: 'Default', description: 'Original WoW size times 56' },
+  { value: 'small', label: 'Small', description: 'As tall as Undead Ghoul' },
+  { value: 'medium', label: 'Medium', description: 'As tall as Orc Grunt' },
+  { value: 'large', label: 'Large', description: 'As tall as Undead Abomination' },
+  { value: 'hero', label: 'Hero', description: 'As tall as Tauren Chieftain' },
+  { value: 'giant', label: 'Giant', description: 'As tall as Flesh Golem' },
+];
 
-const portraitSuggestions = ["Stand", "Stand Ready"]
+const portraitSuggestions = ['Stand', 'Stand Ready'];
 
 export function CharacterConfig({
   character,
@@ -45,9 +55,12 @@ export function CharacterConfig({
     scaleMultiplier: string
     keepCinematic: string
     noDecay: string
+    particleDensity: string
     portraitCamera: string
   }
 }) {
+  const [particlesDensity, setParticlesDensity] = useState(character.particlesDensity || 1);
+
   return <Card>
     <CardHeader className="pb-4">
       <CardTitle className="flex items-center gap-2 text-lg">
@@ -60,7 +73,7 @@ export function CharacterConfig({
       <RefInput
         value={character.base}
         onChange={(base) => {
-          setCharacter((prev) => ({ ...prev, base }))
+          setCharacter((prev) => ({ ...prev, base }));
         }}
         label="Base Model"
         tooltip={tooltips.baseModel}
@@ -83,12 +96,11 @@ export function CharacterConfig({
             </TooltipProvider>
           </div>
           <Select
-            value={character.attackTag || "all"}
-            onValueChange={(value: AttackTag | "all") =>
-              setCharacter((prev) => ({
-                ...prev,
-                attackTag: value === "all" ? undefined : (value as AttackTag),
-              }))
+            value={character.attackTag || 'all'}
+            onValueChange={(value: AttackTag | 'all') => setCharacter((prev) => ({
+              ...prev,
+              attackTag: value === 'all' ? undefined : (value as AttackTag),
+            }))
             }
           >
             <SelectTrigger>
@@ -122,12 +134,11 @@ export function CharacterConfig({
             </TooltipProvider>
           </div>
           <Select
-            value={character.size || "none"}
-            onValueChange={(value: string) =>
-              setCharacter((prev) => ({
-                ...prev,
-                size: value === "none" ? undefined : (value as ModelSize),
-              }))
+            value={character.size || 'none'}
+            onValueChange={(value: string) => setCharacter((prev) => ({
+              ...prev,
+              size: value === 'none' ? undefined : (value as ModelSize),
+            }))
             }
           >
             <SelectTrigger>
@@ -166,9 +177,8 @@ export function CharacterConfig({
             id="movespeed"
             type="number"
             step="1"
-            value={character.inGameMovespeed || ""}
-            onChange={(e) =>
-              setCharacter((prev) => ({ ...prev, inGameMovespeed: Number.parseInt(e.target.value) || 0 }))
+            value={character.inGameMovespeed || ''}
+            onChange={(e) => setCharacter((prev) => ({ ...prev, inGameMovespeed: Number.parseInt(e.target.value, 10) || 0 }))
             }
             className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
           />
@@ -193,9 +203,8 @@ export function CharacterConfig({
             type="number"
             step="0.1"
             placeholder="1.0"
-            value={character.scale || ""}
-            onChange={(e) =>
-              setCharacter((prev) => ({ ...prev, scale: Number.parseFloat(e.target.value) || undefined }))
+            value={character.scale || ''}
+            onChange={(e) => setCharacter((prev) => ({ ...prev, scale: Number.parseFloat(e.target.value) || undefined }))
             }
             className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
           />
@@ -249,40 +258,37 @@ export function CharacterConfig({
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="portraitCamera" className="text-sm">
-            Portrait Camera Sequence
+        <div className="flex items-center space-x-2">
+          <Label htmlFor="noParticles" className="flex items-center gap-2 text-sm">
+            Particle Density
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">{tooltips.particleDensity}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </Label>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">{tooltips.portraitCamera}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        <div className="relative">
           <Input
-            id="portraitCamera"
-            placeholder="Enter sequence name..."
-            value={character.portraitCameraSequenceName || ""}
-            onChange={(e) =>
-              setCharacter((prev) => ({ ...prev, portraitCameraSequenceName: e.target.value || undefined }))
-            }
-            list="portrait-suggestions"
-            className="border-2 border-gray-300 bg-white focus:border-blue-500"
+            id="particlesDensity"
+            type="number"
+            placeholder="1.0"
+            min={0}
+            max={5}
+            value={particlesDensity}
+            onChange={(e) => {
+              const value = Number.parseFloat(e.target.value);
+              setParticlesDensity(value);
+              setCharacter((prev) => ({ ...prev, particlesDensity: isNaN(value) ? 1 : value }));
+            }}
+            className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
           />
-          <datalist id="portrait-suggestions">
-            {portraitSuggestions.map((suggestion) => (
-              <option key={suggestion} value={suggestion} />
-            ))}
-          </datalist>
         </div>
       </div>
       </div>
     </CardContent>
-  </Card>
+  </Card>;
 }

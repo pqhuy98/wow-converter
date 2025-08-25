@@ -51,6 +51,7 @@ export const CharacterSchema = z.object({
   scale: z.number().optional(),
   attachItems: z.record(z.union([z.number(), z.string()]), AttachItemSchema).optional(),
   noDecay: z.boolean().optional(),
+  particlesDensity: z.number().optional(),
   portraitCameraSequenceName: z.string().optional(),
 });
 
@@ -115,10 +116,10 @@ export class CharacterExporter {
           }
           const useAttachmentPath = false;
           if (!useAttachmentPath) {
-            model.modify.addMdlItemToBone(itemMdl, wowAttachment.bone.name);
+            model.modify.addMdlItemToBone(itemMdl, wowAttachment.bone);
           } else {
             this.includeMdlToOutput(itemMdl, itemPath.path.value);
-            model.modify.addItemPathToBone(`${itemPath.path.value}.mdx`, wowAttachment.bone.name);
+            model.modify.addItemPathToBone(`${itemPath.path.value}.mdx`, wowAttachment.bone);
           }
         } else {
           console.error(chalk.red(`Cannot find bone for wow attachment ${wowAttachmentId} (${getWoWAttachmentName(Number(wowAttachmentId))})`));

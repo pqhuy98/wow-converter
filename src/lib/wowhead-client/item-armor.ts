@@ -18,6 +18,8 @@ export interface ItemData {
   TextureFiles: { [textureId: string]: ItemFile[] };
   Item: {
     GeosetGroup: number[];
+    AttachGeosetGroup?: number[];
+    GeosetGroupOverride?: number[];
     HideGeosetMale?: { RaceId: number; GeosetGroup: number; RaceBitSelection: number }[];
     HideGeosetFemale?: { RaceId: number; GeosetGroup: number; RaceBitSelection: number }[];
   };
@@ -25,7 +27,7 @@ export interface ItemData {
   ComponentTextures: { [componentId: string]: number };
 }
 
-const debug = false;
+const debug = true;
 
 export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   if (zam.type !== 'item') throw new Error('fetchItemMeta expects a ZamUrl of type item');

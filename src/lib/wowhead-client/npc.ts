@@ -25,6 +25,10 @@ export interface CharacterMeta {
 
 export interface CreatureMeta {
   CreatureCustomizations: Customization[];
+  CreatureGeosetData: {
+    GeosetIndex: number;
+    GeosetValue: number;
+  }[];
 }
 
 export interface EquipmentMap {

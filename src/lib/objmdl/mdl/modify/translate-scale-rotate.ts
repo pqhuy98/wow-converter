@@ -50,11 +50,7 @@ export function scale(this: MDLModify, value: number) {
     scaleAnimOrStatic(e.length);
     scaleAnimOrStatic(e.speed);
     scaleAnimOrStatic(e.gravity);
-    e.segmentScaling = [
-      e.segmentScaling[0] * value,
-      e.segmentScaling[1] * value,
-      e.segmentScaling[2] * value,
-    ];
+    e.segmentScaling = V3.scale(e.segmentScaling, value);
   });
 
   return this;

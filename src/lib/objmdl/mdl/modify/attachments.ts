@@ -28,13 +28,17 @@ export function addWc3AttachmentPoint(this: MDLModify) {
     const bone = wowAttachment.bone;
     const wowAttachmentId = wowAttachment.wowAttachmentId as WoWAttachmentID;
     const wc3Key = WoWToWC3AttachmentMap[wowAttachmentId];
+    const attachmentName = wc3Key
+      ? `${wc3Key} Ref`
+      : `Wow:${wowAttachmentId}:${Object.keys(WoWAttachmentID)[Object.values(WoWAttachmentID).indexOf(wowAttachmentId)]}`;
+
+    if (wc3Key) console.log(attachmentName, '->', bone.name);
+
     this.mdl.attachments.push({
       attachmentId: 0,
       path: '',
       type: 'AttachmentPoint',
-      name: wc3Key
-        ? `${wc3Key} Ref`
-        : `Wow:${wowAttachmentId}:${Object.keys(WoWAttachmentID)[Object.values(WoWAttachmentID).indexOf(wowAttachmentId)]}`,
+      name: attachmentName,
       parent: bone,
       pivotPoint: [...wowAttachment.bone.pivotPoint],
       flags: [],
