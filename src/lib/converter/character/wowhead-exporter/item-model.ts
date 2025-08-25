@@ -132,7 +132,7 @@ function computeZamMeshId(group: number, offset: number | undefined): number {
   return group * 100 + variant;
 }
 
-const debug = true;
+const debug = false;
 
 // Geosets to show on the item model itself (viewer applies groups 27/21 and also 26 for some)
 function resolveCharacterGeosetIds(slotId: number, itemData: ItemData) {

@@ -292,16 +292,18 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
   }
 }
 
+const debug = false;
+
 async function applyNpcBaseTextrure(ctx: ExportContext, charMdl: MDL, prep: Prep) {
+  debug && console.log('applyNpcBaseTextrure', prep.npcTextureFile);
   if (prep.npcTextureFile) {
     const npcTexturePath = await exportTexture(prep.npcTextureFile);
     ctx.assetManager.addPngTexture(npcTexturePath);
 
     // base texture is the one of the geoset with highest face count. Hacky heuristic
     // TODO: find replaceable textures
-    const baseTexturePath = charMdl.geosets.reduce((acc, geoset) => (
-      geoset.faces.length > acc.faces.length ? geoset : acc
-    )).material.layers[0].texture.image;
+    const baseTexturePath = charMdl.textures.find((t) => t.wowData.type === 1)?.image;
+    debug && console.log('baseTexturePath', baseTexturePath);
 
     const newTexturePath = path.join(ctx.config.assetPrefix, npcTexturePath).replace('.png', '.blp');
 
