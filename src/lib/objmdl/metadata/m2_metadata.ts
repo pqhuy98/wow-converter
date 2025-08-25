@@ -14,6 +14,7 @@ import { Animation, AnimationOrStatic, AnimationType } from '../mdl/components/a
 import { Geoset } from '../mdl/components/geoset';
 import { GlobalSequence } from '../mdl/components/global-sequence';
 import { Material } from '../mdl/components/material';
+import { Light, LightType } from '../mdl/components/node/light';
 import { Bone } from '../mdl/components/node/node';
 import {
   FilterMode as WC3FilterMode, HeadOrTail as WC3HeadOrTail, ParticleEmitter2, ParticleEmitter2Flag,
@@ -74,6 +75,19 @@ namespace Data {
     translation: Translation
     rotation: Rotation
     scaling: Scaling
+  }
+
+  export interface LightMeta {
+    type: number
+    bone: number
+    position: Vector3
+    ambient_color: M2Track<Vector3>
+    ambient_intensity: M2Track<number>
+    diffuse_color: M2Track<Vector3>
+    diffuse_intensity: M2Track<number>
+    attenuation_start: M2Track<number>
+    attenuation_end: M2Track<number>
+    visibility: M2Track<number>
   }
 
   // Coordinate system and units
@@ -284,6 +298,9 @@ export class M2MetadataFile {
 
   // New: particles exported by wow.export
   particleEmitters?: Data.ParticleEmitter[];
+
+  // New: lights exported by wow.export
+  lights?: Data.LightMeta[];
 
   skin: Data.Skin = {
     subMeshes: [],
@@ -818,6 +835,49 @@ export class M2MetadataFile {
     this.mdl.particleEmitter2s = particleEmitter2s;
     this.mdl.textures.push(...particleEmitter2s.map((e) => e.texture));
     !this.config.isBulkExport && console.log('Particle emitters 2:', this.mdl.particleEmitter2s.length);
+  }
+
+  extractMDLLights(): void {
+    if (!this.isLoaded || !Array.isArray(this.lights)) {
+      return;
+    }
+
+    const lights: Light[] = [];
+
+    const toAnimOrStatic = <T>(track: Data.M2Track<T>, type: AnimationType, transform?: (v: T) => T) => this.m2trackToAnimationOrStatic(track, type, transform ?? ((v) => v));
+
+    this.lights.forEach((l, i) => {
+      const parent = this.mdl.bones[(l.bone ?? 0)] ?? this.mdl.bones[0];
+
+      // Warcraft 3 light types mapping
+      const wc3Type: LightType = l.type === 1 ? LightType.Omnidirectional : LightType.Directional;
+
+      // WoW colors are RGB 0..1, WC3 MDL expects BGR in writer utilities convert via Vector3 ordering in geosetAnims.
+      // For lights we will keep RGB order; node writer expects `Color`/`AmbColor` in RGB and handles printing.
+      const colorXform = (v: Vector3): Vector3 => [v[0], v[1], v[2]];
+
+      const node: Light = {
+        objectId: -1,
+        type: 'Light',
+        name: `Light_${i}`,
+        pivotPoint: [l.position[0], -l.position[2], l.position[1]],
+        parent,
+        flags: [],
+        lightType: wc3Type,
+        attenuationStart: toAnimOrStatic(l.attenuation_start, 'others')!,
+        attenuationEnd: toAnimOrStatic(l.attenuation_end, 'others')!,
+        intensity: toAnimOrStatic(l.diffuse_intensity, 'others')!,
+        color: toAnimOrStatic(l.diffuse_color, 'others', colorXform)!,
+        ambientIntensity: toAnimOrStatic(l.ambient_intensity, 'others')!,
+        ambientColor: toAnimOrStatic(l.ambient_color, 'others', colorXform)!,
+        visibility: this.m2trackToAnimation(l.visibility, 'others'),
+      };
+
+      lights.push(node);
+    });
+
+    this.mdl.lights = lights;
+    !this.config.isBulkExport && console.log('Lights:', this.mdl.lights.length);
   }
 
   objToSubmesh = new Map<number, number>();

@@ -279,6 +279,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   // New: particles emitters
   if (metadata.isLoaded) {
     metadata.extractMDLParticlesEmitters(textures);
+    metadata.extractMDLLights();
   }
 
   debug && console.log('basic parse took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');

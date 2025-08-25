@@ -10,6 +10,7 @@ import {
 } from './components/geoset';
 import { GlobalSequence, globalSequencesToString } from './components/global-sequence';
 import { Material, materialsToString } from './components/material';
+import { Light, lightsToString } from './components/node/light';
 import {
   AttachmentPoint, attachmentPointsToString, Bone, bonesToString, CollisionShape, collisionShapesToString, EventObject, eventObjectsToString, Helper, helpersToString, pivotPointsToString,
 } from './components/node/node';
@@ -52,6 +53,8 @@ export class MDL {
   bones: Bone[] = [];
 
   attachments: AttachmentPoint[] = [];
+
+  lights: Light[] = [];
 
   // particleEmitters: ParticleEmitter[] = [];
   particleEmitter2s: ParticleEmitter2[] = [];
@@ -106,6 +109,7 @@ export class MDL {
     return [
       ...this.bones,
       ...this.attachments,
+      ...this.lights,
       // ...this.particleEmitters,
       ...this.particleEmitter2s,
       // ...this.particleEmitterPopcorns,
@@ -129,6 +133,15 @@ export class MDL {
       ...this.geosetAnims.flatMap((geosetAnim) => [
         geosetAnim.alpha && 'keyFrames' in geosetAnim.alpha ? geosetAnim.alpha : null,
         geosetAnim.color && 'keyFrames' in geosetAnim.color ? geosetAnim.color : null,
+      ]),
+      ...this.lights.flatMap((l) => [
+        l.visibility,
+        'keyFrames' in l.attenuationStart ? l.attenuationStart : null,
+        'keyFrames' in l.attenuationEnd ? l.attenuationEnd : null,
+        'keyFrames' in l.intensity ? l.intensity : null,
+        'keyFrames' in l.color ? l.color : null,
+        'keyFrames' in l.ambientIntensity ? l.ambientIntensity : null,
+        'keyFrames' in l.ambientColor ? l.ambientColor : null,
       ]),
       ...this.particleEmitter2s.flatMap((p) => [
         p.visibility,
@@ -183,6 +196,7 @@ export class MDL {
       ${geosetAnimsToString(this.geosetAnims)}
       ${bonesToString(this.bones)}
       ${attachmentPointsToString(this.attachments)}
+      ${lightsToString(this.lights)}
       ${particleEmitter2sToString(this.particleEmitter2s)}
       ${camerasToString(this.cameras)}
       ${eventObjectsToString(this.eventObjects)}
@@ -312,6 +326,9 @@ export class MDL {
           image: '',
           wrapWidth: false,
           wrapHeight: false,
+          wowData: {
+            type: 0,
+          },
         },
       ];
       this.materials = [
