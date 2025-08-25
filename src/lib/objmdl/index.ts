@@ -90,8 +90,8 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
 
   const resolveGeosetMaterial = (submeshId: number, matName: string): MDL['materials'][number] => {
     const mtlMaterial = mtl.materials.find((m) => m.name === matName);
-    const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : '';
-    texturePaths.add(textureRelativePath);
+    const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : undefined;
+    textureRelativePath && texturePaths.add(textureRelativePath);
 
     const protoMat = submeshIdToMat.get(submeshId);
     const mat = _.cloneDeep(protoMat);
@@ -104,7 +104,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
 
       // if missing texture path, use value from .MTL file
       mat.layers.forEach((l) => {
-        const blpPath = l.texture.image || path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp'));
+        const blpPath = l.texture.image || (textureRelativePath ? path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp')) : '');
         l.texture = {
           ...l.texture,
           image: blpPath,
