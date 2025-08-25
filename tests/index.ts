@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import esMain from 'es-main';
-import { existsSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import path, { join } from 'path';
 
 import { distancePerTile } from '@/lib/constants';
@@ -11,6 +11,7 @@ import { Config, getDefaultConfig } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
@@ -36,7 +37,7 @@ const ceConfig: Config = {
 const ce = new CharacterExporter(ceConfig);
 
 async function exportTestCases() {
-  const names: string[] = [];
+  const npcs: {name: string, mdl?: MDL}[] = [];
 
   for (let i = 0; i < testCases.length; i++) {
     const url = testCases[i];
@@ -70,13 +71,13 @@ async function exportTestCases() {
       const npcName = base.split('/').pop()!.split('#')[0];
       name = `${npcName}-${npcId}`;
     }
-    names.push(name);
+    npcs.push({ name });
     if (existsSync(join(mapDir, `${name}.mdx`)) && !ceConfig.overrideModels) {
       console.log('Skipping file already exists', chalk.yellow(`${name}.mdx`));
       continue;
     }
 
-    await ce.exportCharacter({
+    npcs.at(-1)!.mdl = await ce.exportCharacter({
       base: base.startsWith('local::') ? local(base.replace('local::', '')) : wowhead(base),
       attachItems,
       attackTag,
@@ -87,11 +88,11 @@ async function exportTestCases() {
     }, name);
   }
 
-  return names;
+  return npcs;
 }
 
 export async function main() {
-  const names = await exportTestCases();
+  const npcs = await exportTestCases();
 
   ce.optimizeModelsTextures();
   ce.writeAllModels(mapDir, 'mdx');
@@ -99,18 +100,29 @@ export async function main() {
 
   const map = new MapManager();
   map.load(mapDir);
+  console.log('Unit types', map.unitTypes.map((t) => t.code), map.unitTypes.length);
+
   map.units = map.units.filter((unit) => typeof unit.type === 'string'); // all melee units
   map.unitTypes = [];
 
-  for (let i = 0; i < names.length; i++) {
-    const name = names[i];
+  for (let i = 0; i < npcs.length; i++) {
+    const npc = npcs[i];
+    const name = npc.name;
+    const mdl = npc.mdl;
+    const deathSequence = mdl?.sequences.find((s) => s.name === 'Death');
     const unitType = map.addUnitType('hero', 'Hpal', [
       { id: 'unam', type: ModificationType.string, value: name },
       { id: 'upro', type: ModificationType.string, value: name },
       { id: 'umdl', type: ModificationType.string, value: `${name}.mdx` },
       { id: 'usca', type: ModificationType.real, value: 1 },
       { id: 'ussc', type: ModificationType.real, value: 2 },
-      { id: 'ua1b', type: ModificationType.int, value: 300 },
+      { id: 'ua1b', type: ModificationType.int, value: 500 },
+      { id: 'uabi', type: ModificationType.string, value: 'A003,A001,A002,A000' },
+      {
+        id: 'udtm',
+        type: ModificationType.real,
+        value: deathSequence ? (deathSequence.interval[1] - deathSequence.interval[0]) / 1000 : 6,
+      },
     ]);
 
     const mapSize = map.terrain.map;
@@ -156,6 +168,16 @@ export async function main() {
   console.log('Unit types counts:', map.unitTypes.length);
 
   map.save(mapDir);
+
+  const filesToDelete = [
+    'war3map.j',
+    'war3map.imp',
+    'war3map.wts',
+    'war3mapSkin.w3u',
+  ];
+  for (const file of filesToDelete) {
+    if (existsSync(join(mapDir, file))) unlinkSync(join(mapDir, file));
+  }
   console.log('Map saved to', chalk.blue(path.resolve(mapDir)));
 }
 

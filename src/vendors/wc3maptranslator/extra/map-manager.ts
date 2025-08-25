@@ -50,21 +50,22 @@ export class MapManager {
     this.fourCCGenerator = new FourCCGenerator();
   }
 
+  private registerTableFourCCs(table: ObjectModificationTable) {
+    [...Object.keys(table.original), ...Object.keys(table.custom)].forEach((key) => {
+      if (key.length >= 4) this.fourCCGenerator.addUsed(key.slice(0, 4));
+    });
+  }
+
   load(mapDir: string) {
     this.mapData.load(mapDir);
-    const registerTableFourCCs = (table: ObjectModificationTable) => {
-      [...Object.keys(table.original), ...Object.keys(table.custom)].forEach((key) => {
-        if (key.length >= 4) this.fourCCGenerator.addUsed(key.slice(0, 4));
-      });
-    };
 
-    registerTableFourCCs(this.mapData.unitData);
-    registerTableFourCCs(this.mapData.itemData);
-    registerTableFourCCs(this.mapData.destructibleData);
-    registerTableFourCCs(this.mapData.doodadData);
-    registerTableFourCCs(this.mapData.abilityData);
-    registerTableFourCCs(this.mapData.buffData);
-    registerTableFourCCs(this.mapData.upgradeData);
+    this.registerTableFourCCs(this.mapData.unitData);
+    this.registerTableFourCCs(this.mapData.itemData);
+    this.registerTableFourCCs(this.mapData.destructibleData);
+    this.registerTableFourCCs(this.mapData.doodadData);
+    this.registerTableFourCCs(this.mapData.abilityData);
+    this.registerTableFourCCs(this.mapData.buffData);
+    this.registerTableFourCCs(this.mapData.upgradeData);
 
     Object.entries(this.mapData.unitData.custom).forEach(([key, value]) => {
       const [code, parent] = key.split(':');
@@ -93,7 +94,6 @@ export class MapManager {
       });
     });
 
-    console.log('Unit types', this.unitTypes.map((type) => type.code));
     this.units = this.mapData.units.map((unit) => {
       const type = this.unitTypes.find((type) => type.code === unit.type) ?? unit.type;
       return { ...unit, type };

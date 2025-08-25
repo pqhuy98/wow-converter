@@ -203,10 +203,10 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
       debug && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
       const enabledGeosets = filterCollectionGeosets(itemData.slotId!, itemData.originalData, itemMdl);
 
-      debug && console.log('chosen geosets', enabledGeosets.map((g) => getSubmeshName(g.wowData.submeshId)));
       debug && console.log('all available geosets', fileDataId, itemMdl.geosets.map((g) => `${getSubmeshName(g.wowData.submeshId)} (${g.wowData.submeshId})`));
 
       itemMdl.geosets = enabledGeosets;
+      debug && console.log('chosen geosets', itemMdl.geosets.map((g) => g.name));
 
       charMdl.modify.addMdlCollectionItemToModel(itemMdl);
       attachmentResults.push({

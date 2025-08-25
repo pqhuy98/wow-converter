@@ -161,21 +161,29 @@ function resolveCharacterGeosetIds(slotId: number, itemData: ItemData) {
 
 // Geosets to apply when equipping the item on a character (attach to character groups)
 export function filterCollectionGeosets(slotId: number, itemData: ItemData, model: MDL) {
-  const geosets = resolveCharacterGeosetIds(slotId, itemData);
+  const submeshIds = new Set(resolveCharacterGeosetIds(slotId, itemData));
   const chosenGeosets = new Set<Geoset>();
-  for (const geosetId of geosets) {
-    const geoset = model.geosets.find((g) => g.wowData.submeshId === geosetId);
-    if (geoset) {
-      chosenGeosets.add(geoset);
-    } else {
-      const group = Math.floor(geosetId / 100);
-      const defaultGeosetId = group * 100 + 1; // yes it's intentionally not computeZamMeshId(group, 0)
-      const defaultGeoset = model.geosets.find((g) => g.wowData.submeshId === defaultGeosetId);
-      if (defaultGeoset) {
-        chosenGeosets.add(defaultGeoset);
-      }
+  const enabledGroups = new Set<number>();
+  // multiple geosets can share same submeshId, we need to include all of them
+  model.geosets.forEach((g) => {
+    if (submeshIds.has(g.wowData.submeshId)) {
+      chosenGeosets.add(g);
+      enabledGroups.add(Math.floor(g.wowData.submeshId / 100));
     }
-  }
+  });
+
+  submeshIds.forEach((id) => {
+    const group = Math.floor(id / 100);
+    if (enabledGroups.has(group)) return;
+    // we reach here which means the group is needed, but zam submeshId doesn't exist in the model
+    // fallback to the model's first geoset in the group
+    const defaultGeoset = model.geosets.find((g) => Math.floor(g.wowData.submeshId / 100) === group);
+    if (defaultGeoset) {
+      chosenGeosets.add(defaultGeoset);
+      enabledGroups.add(group);
+    }
+  });
+
   return Array.from(chosenGeosets);
 }
 
