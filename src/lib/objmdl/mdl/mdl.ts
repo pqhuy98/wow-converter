@@ -11,7 +11,7 @@ import {
 import { GlobalSequence, globalSequencesToString } from './components/global-sequence';
 import { Material, materialsToString } from './components/material';
 import {
-  AttachmentPoint, attachmentPointsToString, Bone, bonesToString, CollisionShape, collisionShapesToString, EventObject, eventObjectsToString, pivotPointsToString,
+  AttachmentPoint, attachmentPointsToString, Bone, bonesToString, CollisionShape, collisionShapesToString, EventObject, eventObjectsToString, Helper, helpersToString, pivotPointsToString,
 } from './components/node/node';
 import { ParticleEmitter2, particleEmitter2sToString } from './components/node/particle-emitter-2';
 import { Sequence, sequencesToString } from './components/sequence';
@@ -61,6 +61,8 @@ export class MDL {
 
   eventObjects: EventObject[] = [];
 
+  helpers: Helper[] = [];
+
   collisionShapes: CollisionShape[] = [];
 
   modify: MDLModify;
@@ -109,6 +111,7 @@ export class MDL {
       // ...this.particleEmitterPopcorns,
       ...this.eventObjects,
       ...this.collisionShapes,
+      ...this.helpers,
     ];
   }
 
@@ -184,6 +187,7 @@ export class MDL {
       ${camerasToString(this.cameras)}
       ${eventObjectsToString(this.eventObjects)}
       ${collisionShapesToString(this.collisionShapes)}
+      ${helpersToString(this.helpers)}
       ${pivotPointsToString(this.getNodes())}
     `;
 
@@ -247,19 +251,56 @@ export class MDL {
     });
 
     // Compute bone's GeosetId. It can be ID of one single geoset, or "Multiple" if
-    // the bone is shared between multiple geosets.
+    // the bone or any of its children is shared between multiple geosets.
     const geosetsPerBone = new Map<Bone, Set<Geoset>>();
-    this.geosets.forEach((geoset) => geoset.matrices.forEach((matrix) => matrix.bones.forEach((node) => {
-      if (!geosetsPerBone.has(node)) {
-        geosetsPerBone.set(node, new Set());
-      }
-      geosetsPerBone.get(node)!.add(geoset);
-    })));
+    const boneChildren = new Map<Bone, Bone[]>();
+
+    // Compute individual bone's list of geosets
+    this.geosets.forEach((geoset) => {
+      const bones: Set<Bone> = new Set();
+      geoset.matrices.forEach((m) => m.bones.forEach((b) => bones.add(b)));
+      geoset.vertices.forEach((v) => v.skinWeights?.forEach((w) => bones.add(w.bone)));
+      bones.forEach((bone) => {
+        if (!geosetsPerBone.has(bone)) {
+          geosetsPerBone.set(bone, new Set());
+        }
+        geosetsPerBone.get(bone)!.add(geoset);
+      });
+    });
 
     this.bones.forEach((bone) => {
+      // Compute bone's geoset
       if (geosetsPerBone.has(bone)) {
         const geosets = geosetsPerBone.get(bone)!;
         bone.geoset = geosets.size > 1 ? 'Multiple' : geosets.values().next().value;
+      }
+      // its children list for dfs
+      const parent = bone.parent;
+      if (parent) {
+        if (!boneChildren.has(parent)) {
+          boneChildren.set(parent, []);
+        }
+      boneChildren.get(parent)!.push(bone);
+      }
+    });
+
+    const dfs = (node: Bone) => {
+      for (const child of boneChildren.get(node) ?? []) {
+        dfs(child);
+        if (child.geoset === 'Multiple') {
+          node.geoset = 'Multiple';
+        }
+        if (child.geoset && node.geoset && child.geoset !== node.geoset) {
+          node.geoset = 'Multiple';
+        }
+        if (child.geoset && !node.geoset) {
+          node.geoset = child.geoset;
+        }
+      }
+    };
+    this.bones.forEach((bone) => {
+      if (!bone.parent) {
+        dfs(bone);
       }
     });
 

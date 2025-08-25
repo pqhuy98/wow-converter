@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import esMain from 'es-main';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import path, { join } from 'path';
 
 import { distancePerTile } from '@/lib/constants';
 import {
@@ -11,80 +11,31 @@ import { Config, getDefaultConfig } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 
-export const outputDir = './maps/test-regression.w3x';
-export const ceConfig: Config = {
+import { testConfigClassic } from './classic';
+import { testConfigRetail } from './retail';
+
+await wowExportClient.waitUntilReady();
+
+const testConfig = wowExportClient.isClassic() ? testConfigClassic : testConfigRetail;
+const mapDir = testConfig.map;
+const testCases = testConfig.testCases;
+
+console.log('--------------------------------');
+console.log('|Test mode:', chalk.yellow(testConfig.name));
+console.log('--------------------------------');
+
+const ceConfig: Config = {
   ...(await getDefaultConfig()),
   // overrideModels: true,
   overrideModels: false,
 };
-export const ce = new CharacterExporter(ceConfig);
+const ce = new CharacterExporter(ceConfig);
 
 async function exportTestCases() {
-  const testCases: [string, string, string, Size | ''][] = [
-    ['https://www.wowhead.com/wotlk/npc=36855/lady-deathwhisper', '', '', ''],
-    ['https://www.wowhead.com/wotlk/npc=36612/lord-marrowgar', '', '', ''],
-    ['https://www.wowhead.com/mop-classic/npc=71953/xuen', '', '', ''],
-    ['https://www.wowhead.com/npc=154515/yulon', '', '', ''],
-    ['https://www.wowhead.com/npc=56439/sha-of-doubt', '', '', 'giant'],
-    [
-      'https://www.wowhead.com/npc=37187/high-overlord-saurfang',
-      'https://www.wowhead.com/wotlk/item=49623/shadowmourne',
-      'https://www.wowhead.com/wotlk/item=49623/shadowmourne',
-      '',
-    ],
-    [
-      'https://www.wowhead.com/npc=37119/highlord-tirion-fordring',
-      'https://www.wowhead.com/item=120978/ashbringer',
-      '',
-      '',
-    ],
-    [
-      'https://www.wowhead.com/wotlk/npc=36597/the-lich-king',
-      'https://www.wowhead.com/classic/item=231885/frostmourne',
-      '',
-      '',
-    ],
-    ['https://www.wowhead.com/npc=102672/nythendra', '', '', 'giant'],
-    ['https://www.wowhead.com/npc=211664/elisande', '', '', ''],
-    ['https://www.wowhead.com/npc=113201/thicket-manahunter', '', '', ''],
-    ['https://www.wowhead.com/npc=68397/lei-shen', '', '', ''],
-    [
-      'https://www.wowhead.com/npc=22917/illidan-stormrage',
-      'https://www.wowhead.com/item=32837/warglaive-of-azzinoth',
-      'https://www.wowhead.com/item=32838/warglaive-of-azzinoth',
-      '',
-    ],
-    ['https://www.wowhead.com/npc=114895/nightbane#modelviewer', '', '', 'giant'],
-    ['https://www.wowhead.com/mop-classic/npc=64986/heavenly-onyx-cloud-serpent', '', '', ''],
-    ['local::creature\\protodragonshadowflame\\protodragonshadowflame_body.obj', '', '', 'giant'],
-    [
-      'https://www.wowhead.com/npc=87607/sever-frostsprocket',
-      'https://www.wowhead.com/item=141376/icy-ebon-warsword?bonus=4790',
-      'https://www.wowhead.com/item=51010/the-facelifter',
-      '',
-    ],
-    [
-      'https://www.wowhead.com/npc=36857/blood-elf-warrior',
-      'https://www.wowhead.com/item=31331/the-night-blade',
-      'https://www.wowhead.com/item=31331/the-night-blade',
-      '',
-    ],
-    ['https://www.wowhead.com/npc=172613/rokhan', '', '', ''],
-    ['https://www.wowhead.com/npc=187609/earthcaller-yevaa', '', '', ''],
-    ['https://www.wowhead.com/npc=187590/merithra', '', '', ''],
-    ['https://www.wowhead.com/npc=176789/lady-liadrin', '', '', ''],
-    ['https://www.wowhead.com/npc=208418/flamecrested-portalweaver', '', '', ''],
-    ['https://www.wowhead.com/npc=187609/earthcaller-yevaa', '', '', ''],
-    ['https://www.wowhead.com/npc=209065/austin-huxworth', '', '', ''],
-    ['https://www.wowhead.com/npc=229161/darkfuse-brute', '', '', ''],
-    ['https://www.wowhead.com/npc=181398/malganis', '', '', ''],
-    ['https://www.wowhead.com/npc=82057/shattered-hand', '', '', ''],
-    ['https://www.wowhead.com/npc=245601/enforcer-jaktull', '', '', ''],
-  ];
-
   const names: string[] = [];
 
   for (let i = 0; i < testCases.length; i++) {
@@ -120,7 +71,7 @@ async function exportTestCases() {
       name = `${npcName}-${npcId}`;
     }
     names.push(name);
-    if (existsSync(join(outputDir, `${name}.mdx`)) && !ceConfig.overrideModels) {
+    if (existsSync(join(mapDir, `${name}.mdx`)) && !ceConfig.overrideModels) {
       console.log('Skipping file already exists', chalk.yellow(`${name}.mdx`));
       continue;
     }
@@ -143,11 +94,11 @@ export async function main() {
   const names = await exportTestCases();
 
   ce.optimizeModelsTextures();
-  ce.writeAllModels(outputDir, 'mdx');
-  await ce.writeAllTextures(outputDir);
+  ce.writeAllModels(mapDir, 'mdx');
+  await ce.writeAllTextures(mapDir);
 
   const map = new MapManager();
-  map.load(outputDir);
+  map.load(mapDir);
   map.units = map.units.filter((unit) => typeof unit.type === 'string'); // all melee units
   map.unitTypes = [];
 
@@ -159,6 +110,7 @@ export async function main() {
       { id: 'umdl', type: ModificationType.string, value: `${name}.mdx` },
       { id: 'usca', type: ModificationType.real, value: 1 },
       { id: 'ussc', type: ModificationType.real, value: 2 },
+      { id: 'ua1b', type: ModificationType.int, value: 300 },
     ]);
 
     const mapSize = map.terrain.map;
@@ -203,7 +155,8 @@ export async function main() {
   console.log('Unit counts:', map.units.length);
   console.log('Unit types counts:', map.unitTypes.length);
 
-  map.save(outputDir);
+  map.save(mapDir);
+  console.log('Map saved to', chalk.blue(path.resolve(mapDir)));
 }
 
 if (esMain(import.meta)) {

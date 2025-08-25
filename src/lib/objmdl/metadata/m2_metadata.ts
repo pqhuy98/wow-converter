@@ -854,7 +854,7 @@ function calculateEquivalentVelocityNoDrag(
     return initialVelocity;
   }
 
-  const decayFactor = 1 - drag * deltaTime;
+  const decayFactor = Math.max(0, 1 - drag * deltaTime);
   const steps = lifetime / deltaTime;
 
   // Calculate the integral of velocity over time
@@ -862,5 +862,18 @@ function calculateEquivalentVelocityNoDrag(
   const integral = initialVelocity * (decayFactor ** steps - 1) / Math.log(decayFactor) * deltaTime;
 
   // Equivalent velocity without drag = distance / lifetime
-  return integral / lifetime;
+  const result = integral / lifetime;
+  if (isNaN(result)) {
+    console.log(chalk.red('NaN'), {
+      initialVelocity,
+      lifetime,
+      drag,
+      deltaTime,
+      decayFactor,
+      steps,
+      integral,
+    });
+    return initialVelocity;
+  }
+  return result;
 }

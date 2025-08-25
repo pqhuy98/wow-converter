@@ -153,7 +153,10 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<{
   console.log('Equipments:', equipmentSlots.map((s) => getEquipmentSlotName(s.slotId)));
 
   if (!slotIds.includes(EquipmentSlot.Head)) {
-    geosetIds.add(702); // Ears2 - otherwise the model will be missing ears
+    // otherwise the model will be missing ears
+    geosetIds.add(701);
+  } else {
+    geosetIds.add(702);
   }
 
   // Prepare RPC params for wowexport

@@ -19,6 +19,7 @@ export interface ItemMetata {
 export enum EquipmentSlot {
   Head = 1,
   Shoulder = 3,
+  Shirt = 4,
   Chest = 5,
   Belt = 6,
   Legs = 7,

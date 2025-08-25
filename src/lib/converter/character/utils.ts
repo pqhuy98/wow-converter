@@ -43,8 +43,7 @@ export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: nu
     const score = skinMatchScore(match?.skin.extraGeosets || [], match?.skin.textures || []);
     const confidence = score / maxScore;
     const skinIdx = skins.findIndex((s) => s === match.skin);
-    console.log('Chosen skin:', skinName, 'with confidence:', `${(confidence * 100).toFixed(2)}%`);
-    console.log({ score, maxScore, skinIdx });
+    console.log('Chosen skin:', skinName, 'with confidence:', `${(confidence * 100).toFixed(2)}%`, { score, maxScore, skinIdx });
   }
 
   const start = performance.now();

@@ -29,6 +29,7 @@ export interface Node {
 
 export interface Bone extends Node {
   type: 'Bone'
+  parent?: Bone;
   geoset?: Geoset | 'Multiple';
   geosetAnim?: GeosetAnim;
 }
@@ -42,6 +43,10 @@ export interface AttachmentPoint extends Node {
 export interface EventObject extends Node {
   type: 'EventObject'
   track: {sequence: Sequence, offset: number}[] // which sequence, and duration offset from sequence's start time
+}
+
+export interface Helper extends Node {
+  type: 'Helper'
 }
 
 export interface CollisionShape extends Node {
@@ -93,6 +98,14 @@ export function eventObjectsToString(eventObjects: EventObject[]): string {
         ${event.track.map((e) => `${e.sequence.interval[0] + e.offset},`).join('\n')}
       }
       ${nodeAnimations(event)}
+    }`).join('\n');
+}
+
+export function helpersToString(helpers: Helper[]): string {
+  return helpers.map((helper) => `
+    Helper "${helper.name}" {
+      ${nodeHeaders(helper)}
+      ${nodeAnimations(helper)}
     }`).join('\n');
 }
 

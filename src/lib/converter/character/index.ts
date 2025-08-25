@@ -93,6 +93,8 @@ export class CharacterExporter {
   async exportCharacter(char: Character, outputFile: string) {
     await wowExportClient.waitUntilReady();
 
+    console.log('Exporting character', char.base.value);
+
     const model = await this.exportBaseMdl(char);
     this.includeMdlToOutput(model, outputFile);
 
