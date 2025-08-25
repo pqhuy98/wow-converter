@@ -402,7 +402,9 @@ export class M2MetadataFile {
       const wowColor = this.colors[tu.colorIndex];
       const geoset = this.subMeshGeosetMap.get(this.skin.subMeshes[tu.skinSectionIndex]);
       if (!geoset) {
-        console.log(chalk.red('geoset not found'), tu.skinSectionIndex, this.skin.subMeshes[tu.skinSectionIndex]);
+        if (this.skin.subMeshes[tu.skinSectionIndex].enabled) {
+          console.log(chalk.red('geoset not found'), tu.skinSectionIndex, this.skin.subMeshes[tu.skinSectionIndex]);
+        }
         return;
       }
 
@@ -755,18 +757,16 @@ export class M2MetadataFile {
         translation: { // wc3 requires a translation for the bone
           interpolation: 'DontInterp',
           type: 'translation',
-          keyFrames: new Map([
-            ...this.mdl.sequences.map((s) => <[number, Vector3]>[s.interval[0], [0, 0, 0]]),
-            ...this.mdl.sequences.map((s) => <[number, Vector3]>[s.interval[1], [0, 0, 0]]),
-          ]),
+          keyFrames: new Map([[0, [0, 0, 0]]]),
         },
       };
-      this.mdl.bones.push(newParent);
+      // this.mdl.bones.push(newParent);
 
       node.parent = undefined; // remove to avoid cloning the parent
       for (let i = 0; i < variantCount; i++) {
         const variant = _.cloneDeep(node);
-        variant.parent = newParent;
+        variant.parent = parent;
+        // variant.parent = newParent;
 
         if (chooseRandomTexture) {
           const cell = Math.floor(Math.random() * p.textureRows * p.textureCols);
