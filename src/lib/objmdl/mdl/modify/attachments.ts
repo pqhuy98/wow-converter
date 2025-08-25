@@ -32,8 +32,6 @@ export function addWc3AttachmentPoint(this: MDLModify) {
       ? `${wc3Key} Ref`
       : `Wow:${wowAttachmentId}:${Object.keys(WoWAttachmentID)[Object.values(WoWAttachmentID).indexOf(wowAttachmentId)]}`;
 
-    if (wc3Key) console.log(attachmentName, '->', bone.name);
-
     this.mdl.attachments.push({
       attachmentId: 0,
       path: '',

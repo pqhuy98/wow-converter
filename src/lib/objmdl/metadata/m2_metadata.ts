@@ -15,7 +15,6 @@ import { Geoset } from '../mdl/components/geoset';
 import { GlobalSequence } from '../mdl/components/global-sequence';
 import { Material } from '../mdl/components/material';
 import { Light, LightType } from '../mdl/components/node/light';
-import { Bone } from '../mdl/components/node/node';
 import {
   FilterMode as WC3FilterMode, HeadOrTail as WC3HeadOrTail, ParticleEmitter2, ParticleEmitter2Flag,
 } from '../mdl/components/node/particle-emitter-2';
@@ -765,21 +764,22 @@ export class M2MetadataFile {
       const variants: ParticleEmitter2[] = [];
       const token = new Map<ParticleEmitter2, number>();
 
-      // Create a dedicated bone to group the variants of the same particle emitter
-      const newParent: Bone = {
-        objectId: -1,
-        type: 'Bone',
-        name: `${node.name}_group`,
-        parent,
-        flags: [],
-        pivotPoint: [...parent.pivotPoint],
-        geoset: 'Multiple', // without it the model will be broken
-        translation: { // wc3 requires a translation for the bone
-          interpolation: 'DontInterp',
-          type: 'translation',
-          keyFrames: new Map([[0, [0, 0, 0]]]),
-        },
-      };
+      // // Create a dedicated bone to group the variants of the same particle emitter
+      // TODO: this doesn't work yet, for some reason the Sha of Doubt model breaks. Other test cases worked fine.
+      // const newParent: Bone = {
+      //   objectId: -1,
+      //   type: 'Bone',
+      //   name: `${node.name}_group`,
+      //   parent,
+      //   flags: [],
+      //   pivotPoint: [...parent.pivotPoint],
+      //   geoset: 'Multiple', // without it the model will be broken
+      //   translation: { // wc3 requires a translation for the bone
+      //     interpolation: 'DontInterp',
+      //     type: 'translation',
+      //     keyFrames: new Map([[0, [0, 0, 0]]]),
+      //   },
+      // };
       // this.mdl.bones.push(newParent);
 
       node.parent = undefined; // remove to avoid cloning the parent
@@ -877,7 +877,12 @@ export class M2MetadataFile {
     });
 
     this.mdl.lights = lights;
-    !this.config.isBulkExport && console.log('Lights:', this.mdl.lights.length);
+    // !this.config.isBulkExport &&
+    lights.length > 0 && console.log(
+      chalk.yellow('Lights:'),
+      this.mdl.model.name,
+      this.mdl.lights.length,
+    );
   }
 
   objToSubmesh = new Map<number, number>();
