@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -21,39 +20,20 @@ import {
 } from '@/components/ui/tooltip';
 import { AttachItems } from '@/components/wow-converter/attach-items';
 import { CharacterConfig } from '@/components/wow-converter/character-config';
+import { OptimizationOptions } from '@/components/wow-converter/optimization-options';
 import { isLocalRef, validateRef } from '@/components/wow-converter/ref-input';
 import { setServerConfig } from '@/lib/config';
 import {
-  AttachItem, Character, commonAttachments, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, otherAttachments, RefSchema,
+  AttachItem, Character, commonAttachments, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, Optimization, otherAttachments, RefSchema,
 } from '@/lib/models/export-character.model';
 
 import ModelViewerUi from './model-viewer';
 
-// Tooltips organized in a record
 const tooltips = {
-  baseModel: 'The base character model to use. Can be a Wowhead URL, local file inside wow.export folder, or Display ID number.',
-  attackAnimation: 'Determines which attack animations the character will use.',
-  characterSize: 'How tall the character is in the game.',
   // eslint-disable-next-line max-len
-  movementSpeed: 'Animation - walk speed ("uwal") of the unit in World Editor. The tool will try to slow down/speed up the Walk animations to match the Warcraft movement speed. If you experience a bug with too fast or too slow walk animation, set to 0 to keep the original WoW animation speed.',
-  scaleMultiplier: 'Additional scale multiplier, optional. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
-  keepCinematic: 'Preserve cinematic animation sequences in the exported model. Warning: WoW models have many cinematic sequences, this significantly increases file size.',
-  noDecay: 'Do not automatically add Decay animations.',
-  particleDensity: 'Particle density (1.0 = default, 0.5 = half, 2.0 = double, 0 = none...). Putting higher density will decrease rendering performance.',
+  format: 'Model format (MDX vs MDL). MDX is the binary format, the file is most compact and lowest file size. MDL is the text format for debugging purposes, the file is human readable when opened in text editors, but has larger file size.',
   // eslint-disable-next-line max-len
-  portraitCamera: 'Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.',
-  itemReference: 'The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.',
-  attachmentPoint: 'Where on the character model this item will be attached',
-  itemScale: 'Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.',
-  sortSequences: 'Sort animations by name in the order of: Stand, Walk, Attack, Spell, Death, Decay, Cinematic XXX.',
-  removeUnusedVertices: 'Remove geoset vertices that are not used by any geoset faces.',
-  removeUnusedNodes: 'Remove nodes that are not used in any geosets or do not contain used children nodes.',
-  removeUnusedMaterials: 'Remove materials and textures that are not used in any geosets.',
-  optimizeKeyFrames: 'Remove key frames that are not used in any animation, or are insignificant.',
-  // eslint-disable-next-line max-len
-  format: 'Model format (MDX vs MDL). MDX is the binary format, the file is most compact and lowest file size. MDL is the text format for debugging purposes, the file is human readable when opened in text editors, at the cost of larger file size.',
-  // eslint-disable-next-line max-len
-  formatVersion: "Model format version (HD vs SD). HD models work in all Warcraft 3 Retail's Reforged and Classic graphics modes, it has the highest fidelity with precise WoW model data. However HD models cannot be opened in legacy modeling tools like Magos Model Editor. If you want to use those legacy tools for post-processing, choose SD 800 instead. WARNING: wow-converter might export very broken SD models on complex WoW models. SD conversion does not guarantee to work, after exporting you need to check if each animation is working.",
+  formatVersion: "Model format version (HD vs SD). HD models work in all Warcraft 3 Retail's Reforged and Classic graphics modes, it has the highest fidelity with precise WoW model data. However HD models cannot be opened in legacy modeling tools like Magos Model Editor. If you want to use those legacy tools for post-processing, choose SD 800 instead. WARNING: wow-converter might export broken SD models on complex WoW models. SD conversion does not guarantee to work, after exporting you need to check if each animation is working.",
 };
 
 const defaultCharacter = {
@@ -91,11 +71,12 @@ export default function WoWNPCExporter() {
 
   const [format, setFormat] = useState<ModelFormat>('mdx');
   const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>('1000');
-  const [optimization, setOptimization] = useState({
+  const [optimization, setOptimization] = useState<Optimization>({
     sortSequences: true,
     removeUnusedVertices: true,
     removeUnusedNodes: true,
     removeUnusedMaterialsTextures: true,
+    maxTextureSize: undefined,
   });
 
   const [isExporting, setIsExporting] = useState(false);
@@ -355,12 +336,10 @@ export default function WoWNPCExporter() {
           <CharacterConfig
             character={character}
             setCharacter={setCharacter}
-            tooltips={tooltips}
           />
           <AttachItems
             character={character}
             setCharacter={setCharacter}
-            tooltips={tooltips}
             removeAttachItem={removeAttachItem}
             updateAttachItem={updateAttachItem}
             addAttachItem={addAttachItem}
@@ -457,119 +436,11 @@ export default function WoWNPCExporter() {
 
             <Separator />
 
-            <div className="space-y-3">
-              <h3 className="text-base font-semibold">Optimization Options</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="sortSequences"
-                    checked={optimization.sortSequences}
-                    onCheckedChange={(checked) => setOptimization({ ...optimization, sortSequences: checked as boolean })
-                    }
-                  />
-                  <Label htmlFor="sortSequences" className="text-sm flex items-center gap-2">
-                    Sort Sequences
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.sortSequences}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                </div>
+            <OptimizationOptions
+              optimization={optimization}
+              setOptimization={setOptimization}
+            />
 
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="removeUnusedVertices"
-                    checked={optimization.removeUnusedVertices}
-                    onCheckedChange={(checked) => setOptimization({ ...optimization, removeUnusedVertices: checked as boolean })
-                    }
-                  />
-                  <Label htmlFor="removeUnusedVertices" className="text-sm flex items-center gap-2">
-                    Remove Unused Vertices
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.removeUnusedVertices}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="removeUnusedNodes"
-                    checked={optimization.removeUnusedNodes}
-                    onCheckedChange={(checked) => setOptimization({ ...optimization, removeUnusedNodes: checked as boolean })
-                    }
-                  />
-                  <Label htmlFor="removeUnusedNodes" className="text-sm flex items-center gap-2">
-                    Remove Unused Nodes
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.removeUnusedNodes}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="removeUnusedMaterials"
-                    checked={optimization.removeUnusedMaterialsTextures}
-                    onCheckedChange={(checked) => setOptimization({ ...optimization, removeUnusedMaterialsTextures: checked as boolean })
-                    }
-                  />
-                  <Label htmlFor="removeUnusedMaterials" className="text-sm flex items-center gap-2">
-                    Optimize Materials
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.removeUnusedMaterials}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="optimizeKeyFrames"
-                    disabled
-                    checked={true}
-                  />
-                  <Label htmlFor="optimizeKeyFrames" className="text-sm flex items-center gap-2">
-                    Optimize Key Frames
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">{tooltips.optimizeKeyFrames}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
 

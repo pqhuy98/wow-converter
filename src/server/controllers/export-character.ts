@@ -24,6 +24,7 @@ export const ExporCharacterRequestSchema = z.object({
     removeUnusedVertices: z.boolean().optional(),
     removeUnusedNodes: z.boolean().optional(),
     removeUnusedMaterialsTextures: z.boolean().optional(),
+    maxTextureSize: z.enum(['256', '512', '1024']).optional(),
   }),
   format: z.enum(['mdx', 'mdl']),
   formatVersion: z.enum(['800', '1000']).optional(),
@@ -60,7 +61,12 @@ export async function ControllerExportCharacter(app: express.Application) {
   async function handleExport(job: ExportCharacterJob) {
     const start = performance.now();
     const request = job.request;
-    const ce = new CharacterExporter(ceConfig);
+    const ce = new CharacterExporter({
+      ...ceConfig,
+      maxTextureSize: request.optimization.maxTextureSize
+        ? parseInt(request.optimization.maxTextureSize, 10)
+        : undefined,
+    });
     console.log(`Start exporting ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
 
     await wowExportClient.syncConfig();

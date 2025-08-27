@@ -1,6 +1,7 @@
-import { commonAttachments, otherAttachments } from "@/lib/models/export-character.model"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { commonAttachments, otherAttachments } from '@/lib/models/export-character.model';
 
 export function AttachmentSelector({
   value,
@@ -11,8 +12,8 @@ export function AttachmentSelector({
   onChange: (id: number) => void
   usedIds: Set<number>
 }) {
-  const availableCommon = commonAttachments.filter((att) => att.id === value || !usedIds.has(att.id))
-  const availableOther = otherAttachments.filter((att) => att.id === value || !usedIds.has(att.id))
+  const availableCommon = commonAttachments.filter((att) => att.id === value || !usedIds.has(att.id));
+  const availableOther = otherAttachments.filter((att) => att.id === value || !usedIds.has(att.id));
 
   return (
     <Select value={value.toString()} onValueChange={(val) => onChange(Number(val))}>
@@ -37,5 +38,5 @@ export function AttachmentSelector({
         )}
       </SelectContent>
     </Select>
-  )
+  );
 }

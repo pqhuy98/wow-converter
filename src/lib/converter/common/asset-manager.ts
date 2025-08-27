@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 
-import { pngToBlp } from '@/lib/formats/blp/blp';
+import { pngToBlp, readBlpSizeSync } from '@/lib/formats/blp/blp';
 
 import { Config } from '../../global-config';
 import { EulerRotation, Vector3 } from '../../math/common';
@@ -67,17 +68,61 @@ export class AssetManager {
     console.log('Exporting textures to', assetPath);
     mkdirSync(assetPath, { recursive: true });
     await Promise.all(Array.from(this.textures).map(async (texturePath) => {
-      const toPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
-      if (existsSync(toPath)) {
-        exportedTexturePaths.push(toPath);
-        return;
-      }
       const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
       if (!existsSync(fromPath)) {
         console.warn('Skipping texture not found', fromPath);
         return;
       }
-      await pngToBlp(fromPath, toPath);
+
+      // Read source PNG dimensions once so we can compute the target size for current limit
+      const maxSize = this.config.maxTextureSize ?? Infinity;
+      let width = 0;
+      let height = 0;
+      try {
+        const meta = await sharp(fromPath).metadata();
+        width = meta.width ?? 0;
+        height = meta.height ?? 0;
+      } catch (err) {
+        console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
+      }
+
+      // Compute target size for current limit; if limit increased, target grows accordingly
+      const scale = Math.min(1, maxSize / Math.max(width, height));
+      const targetWidth = Math.round(width * scale);
+      const targetHeight = Math.round(height * scale);
+
+      // Skip only if the existing BLP exactly matches the target size
+      const debug = true;
+      const toPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
+      if (existsSync(toPath)) {
+        const size = readBlpSizeSync(toPath);
+        if (size && size.width === targetWidth && size.height === targetHeight) {
+          debug && console.log('Skipping existing texture', toPath);
+          exportedTexturePaths.push(toPath);
+          return;
+        }
+      }
+
+      // Now we need to export the texture again and resize it if needed
+      let pngInput: string | Buffer = fromPath;
+      if (this.config.maxTextureSize) {
+        try {
+          if ((width > targetWidth) || (height > targetHeight)) {
+            console.log('Resizing texture', fromPath, width, height, 'to', targetWidth, targetHeight);
+            pngInput = await sharp(fromPath)
+              .resize({
+                width: targetWidth,
+                height: targetHeight,
+                fit: 'outside',
+              })
+              .png()
+              .toBuffer();
+          }
+        } catch (err) {
+          console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
+        }
+      }
+      await pngToBlp(pngInput, toPath);
       exportedTexturePaths.push(toPath);
     }));
     console.log(`Exported ${exportedTexturePaths.length} textures`);

@@ -23,16 +23,40 @@ if (process.platform === 'win32') {
   } = require('./bin/blp-preview/darwin-arm64-binding.node'));
 }
 
-export async function pngToBlp(pngPath: string, blpPath: string) {
+export async function pngToBlp(png: string | Buffer, blpPath: string) {
   if (!Image) {
     console.log('Using custom png2BlpJs');
-    await png2BlpJs(pngPath, blpPath);
+    await png2BlpJs(png, blpPath);
     return;
   }
 
   const img = new Image();
-  const buf = fs.readFileSync(pngPath);
+  const buf = typeof png === 'string' ? fs.readFileSync(png) : png;
   img.loadFromBuffer(buf, 0, buf.length);
   fs.mkdirSync(path.dirname(blpPath), { recursive: true });
   fs.writeFileSync(blpPath, img.toBuffer(TYPE_BLP));
+}
+
+export function readBlpSizeSync(blpPath: string): { width: number, height: number } | null {
+  try {
+    const fd = fs.openSync(blpPath, 'r');
+    try {
+      const header = Buffer.alloc(20);
+      const bytesRead = fs.readSync(fd, header, 0, 20, 0);
+      if (bytesRead < 20) {
+        return null;
+      }
+      const magic = header.toString('ascii', 0, 4);
+      if (magic !== 'BLP1' && magic !== 'BLP2') {
+        return null;
+      }
+      const width = header.readUInt32LE(12);
+      const height = header.readUInt32LE(16);
+      return { width, height };
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
 }

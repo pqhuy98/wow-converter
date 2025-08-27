@@ -33,15 +33,18 @@ export interface Character {
 
 export type ModelFormatVersion = '800' | '1000'
 
+export interface Optimization {
+  sortSequences?: boolean
+  removeUnusedVertices?: boolean
+  removeUnusedNodes?: boolean
+  removeUnusedMaterialsTextures?: boolean
+  maxTextureSize?: '256' | '512' | '1024'
+}
+
 export interface ExportRequest {
   character: Character
   outputFileName: string
-  optimization: {
-    sortSequences?: boolean
-    removeUnusedVertices?: boolean
-    removeUnusedNodes?: boolean
-    removeUnusedMaterialsTextures?: boolean
-  }
+  optimization: Optimization
   format?: ModelFormat
   formatVersion?: ModelFormatVersion
 }

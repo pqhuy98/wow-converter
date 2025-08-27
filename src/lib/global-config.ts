@@ -8,6 +8,7 @@ export interface Config {
   mdx?: boolean
   infiniteExtentBoundRadiusThreshold: number
   isBulkExport?: boolean
+  maxTextureSize?: number
 }
 
 export async function getDefaultConfig(): Promise<Config> {

@@ -1,29 +1,40 @@
-import { AttachItem, Character, commonAttachments, otherAttachments } from "@/lib/models/export-character.model"
-import { TooltipProvider, TooltipTrigger, TooltipContent, Tooltip } from "@/components/ui/tooltip"
-import { Sword, Trash2, HelpCircle, Plus } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-import { AttachmentSelector } from "./attachment-selector"
-import { RefInput } from "./ref-input"
+import {
+  HelpCircle, Plus, Sword, Trash2,
+} from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Card, CardContent,
+  CardDescription, CardHeader, CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  AttachItem, Character, commonAttachments, otherAttachments,
+} from '@/lib/models/export-character.model';
+
+import { AttachmentSelector } from './attachment-selector';
+import { RefInput } from './ref-input';
+
+const tooltips = {
+  itemReference: 'The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.',
+  attachmentPoint: 'Where on the character model this item will be attached',
+  itemScale: 'Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.',
+};
 
 export function AttachItems({
   character,
   setCharacter,
-  tooltips,
   removeAttachItem,
   updateAttachItem,
   addAttachItem,
 }: {
   character: Character
   setCharacter: React.Dispatch<React.SetStateAction<Character>>
-  tooltips: {
-    attachmentPoint: string
-    itemReference: string
-    itemScale: string
-  }
   removeAttachItem: (id: number) => void
   updateAttachItem: (id: number, item: AttachItem) => void
   addAttachItem: () => void
@@ -40,11 +51,10 @@ export function AttachItems({
       <CardContent className="space-y-3">
         <div className="space-y-3">
           {Object.entries(character.attachItems || {}).map(([id, item]) => {
-            const attachmentId = Number(id)
-            const usedIds = new Set(Object.keys(character.attachItems || {}).map(Number))
-            const attachmentName =
-              [...commonAttachments, ...otherAttachments].find((att) => att.id === attachmentId)?.name ||
-              "Unknown"
+            const attachmentId = Number(id);
+            const usedIds = new Set(Object.keys(character.attachItems || {}).map(Number));
+            const attachmentName = [...commonAttachments, ...otherAttachments].find((att) => att.id === attachmentId)?.name
+              || 'Unknown';
 
             return (
               <Card key={id} className="p-3 bg-blue-50 border-blue-200">
@@ -66,7 +76,7 @@ export function AttachItems({
                   <RefInput
                     value={item.path}
                     onChange={(path) => {
-                      updateAttachItem(attachmentId, { ...item, path })
+                      updateAttachItem(attachmentId, { ...item, path });
                     }}
                     label="Item Reference"
                     tooltip={tooltips.itemReference}
@@ -93,11 +103,11 @@ export function AttachItems({
                         onChange={(newId) => {
                           // Move the item to the new attachment ID
                           setCharacter((prev) => {
-                            const newAttachItems = { ...prev.attachItems }
-                            delete newAttachItems[attachmentId]
-                            newAttachItems[newId] = item
-                            return { ...prev, attachItems: newAttachItems }
-                          })
+                            const newAttachItems = { ...prev.attachItems };
+                            delete newAttachItems[attachmentId];
+                            newAttachItems[newId] = item;
+                            return { ...prev, attachItems: newAttachItems };
+                          });
                         }}
                         usedIds={usedIds}
                       />
@@ -125,12 +135,11 @@ export function AttachItems({
                           type="number"
                           step="0.1"
                           placeholder="1.0"
-                          value={item.scale || ""}
-                          onChange={(e) =>
-                            updateAttachItem(attachmentId, {
-                              ...item,
-                              scale: Number.parseFloat(e.target.value) || undefined,
-                            })
+                          value={item.scale || ''}
+                          onChange={(e) => updateAttachItem(attachmentId, {
+                            ...item,
+                            scale: Number.parseFloat(e.target.value) || undefined,
+                          })
                           }
                           className="border-2 border-gray-300 bg-white focus:border-blue-500"
                         />
@@ -139,7 +148,7 @@ export function AttachItems({
                   </div>
                 </div>
               </Card>
-            )
+            );
           })}
         </div>
 
@@ -149,5 +158,5 @@ export function AttachItems({
         </Button>
       </CardContent>
     </Card>
-  )
+  );
 }

@@ -20,10 +20,10 @@ import { PNG } from 'pngjs';
  * @param pngPath  Path to PNG source
  * @param distPath Destination *.blp* path
  */
-export async function png2BlpJs(pngPath: string, distPath: string) {
-  const pngBuffer = fs.readFileSync(pngPath);
-  const png = PNG.sync.read(pngBuffer);
-  const { width, height, data } = png;
+export async function png2BlpJs(pngInput: string | Buffer, distPath: string) {
+  const pngBuffer = typeof pngInput === 'string' ? fs.readFileSync(pngInput) : pngInput;
+  const parsed = PNG.sync.read(pngBuffer);
+  const { width, height, data } = parsed;
 
   const pixelCount = width * height;
 
