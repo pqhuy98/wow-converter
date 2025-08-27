@@ -11,6 +11,7 @@ import { Light, LightType } from '@/lib/formats/mdl/components/node/light';
 import {
   FilterMode as WC3FilterMode, HeadOrTail as WC3HeadOrTail, ParticleEmitter2, ParticleEmitter2Flag,
 } from '@/lib/formats/mdl/components/node/particle-emitter-2';
+import { RibbonEmitter as MDLRibbonEmitter } from '@/lib/formats/mdl/components/node/ribbon-emitter';
 import { Texture } from '@/lib/formats/mdl/components/texture';
 import { TextureAnim } from '@/lib/formats/mdl/components/texture-anim';
 import { MDL } from '@/lib/formats/mdl/mdl';
@@ -256,6 +257,28 @@ namespace Data {
     textureWeightComboIndex: number
     textureTransformComboIndex: number
   }
+
+  export interface RibbonEmitter {
+    ribbonId: number
+    boneIndex: number
+    position: Vector3
+    textureIndices: number[]
+    materialIndices: number[]
+    colorTrack: M2Track<Vector3>
+    alphaTrack: M2Track<number>
+    heightAboveTrack: M2Track<number>
+    heightBelowTrack: M2Track<number>
+    edgesPerSecond: number
+    edgeLifetime: number
+    gravity: number
+    textureRows: number
+    textureCols: number
+    texSlotTrack: M2Track<number>
+    visibilityTrack: M2Track<number>
+    priorityPlane: number
+    ribbonColorIndex: number
+    textureTransformLookupIndex: number
+  }
 }
 
 export class M2MetadataFile {
@@ -295,11 +318,11 @@ export class M2MetadataFile {
 
   collisionSphereRadius: number;
 
-  // New: particles exported by wow.export
   particleEmitters?: Data.ParticleEmitter[];
 
-  // New: lights exported by wow.export
   lights?: Data.LightMeta[];
+
+  ribbonEmitters?: Data.RibbonEmitter[];
 
   skin: Data.Skin = {
     subMeshes: [],
@@ -844,17 +867,11 @@ export class M2MetadataFile {
 
     const lights: Light[] = [];
 
-    const toAnimOrStatic = <T>(track: Data.M2Track<T>, type: AnimationType, transform?: (v: T) => T) => this.m2trackToAnimationOrStatic(track, type, transform ?? ((v) => v));
-
     this.lights.forEach((l, i) => {
       const parent = this.mdl.bones[(l.bone ?? 0)] ?? this.mdl.bones[0];
 
       // Warcraft 3 light types mapping
       const wc3Type: LightType = l.type === 1 ? LightType.Omnidirectional : LightType.Directional;
-
-      // WoW colors are RGB 0..1, WC3 MDL expects BGR in writer utilities convert via Vector3 ordering in geosetAnims.
-      // For lights we will keep RGB order; node writer expects `Color`/`AmbColor` in RGB and handles printing.
-      const colorXform = (v: Vector3): Vector3 => [v[0], v[1], v[2]];
 
       const node: Light = {
         objectId: -1,
@@ -864,12 +881,14 @@ export class M2MetadataFile {
         parent,
         flags: [],
         lightType: wc3Type,
-        attenuationStart: toAnimOrStatic(l.attenuation_start, 'others')!,
-        attenuationEnd: toAnimOrStatic(l.attenuation_end, 'others')!,
-        intensity: toAnimOrStatic(l.diffuse_intensity, 'others')!,
-        color: toAnimOrStatic(l.diffuse_color, 'others', colorXform)!,
-        ambientIntensity: toAnimOrStatic(l.ambient_intensity, 'others')!,
-        ambientColor: toAnimOrStatic(l.ambient_color, 'others', colorXform)!,
+        attenuationStart: this.m2trackToAnimationOrStatic(l.attenuation_start, 'others', (v) => 1.5 * v)!,
+        attenuationEnd: this.m2trackToAnimationOrStatic(l.attenuation_end, 'others', (v) => 1.5 * v)!,
+        intensity: this.m2trackToAnimationOrStatic(l.diffuse_intensity, 'others')!,
+        // this color stays the same unlike color in geosetAnims
+        color: this.m2trackToAnimationOrStatic(l.diffuse_color, 'others')!,
+        ambientIntensity: this.m2trackToAnimationOrStatic(l.ambient_intensity, 'others')!,
+        // this color stays the same unlike color in geosetAnims
+        ambientColor: this.m2trackToAnimationOrStatic(l.ambient_color, 'others')!,
         visibility: this.m2trackToAnimation(l.visibility, 'others'),
       };
 
@@ -883,6 +902,103 @@ export class M2MetadataFile {
       this.mdl.model.name,
       this.mdl.lights.length,
     );
+  }
+
+  extractMDLRibbonEmitters(textures: Texture[]) {
+    if (!this.isLoaded || !Array.isArray(this.ribbonEmitters)) {
+      return;
+    }
+
+    const ribbons: MDLRibbonEmitter[] = [];
+
+    this.ribbonEmitters.forEach((r, i) => {
+      const parent = this.mdl.bones[(r.boneIndex ?? 0)] ?? this.mdl.bones[0];
+
+      // Choose a texture from the model by first texture index if available
+      const textureIndex = r.textureIndices[0];
+      const ribbonTexture = textures[textureIndex];
+      if (!ribbonTexture) {
+        console.log(chalk.red('Ribbon with invalid texture index'), {
+          model: this.mdl.model.name,
+          ribbonIndex: i,
+          textureIndex,
+          texturesLength: textures.length,
+        });
+        return;
+      }
+
+      // Choose a material from the model by first material index if available
+      const materialIndex = r.materialIndices[0];
+      const material = this.materials[materialIndex];
+      if (!material) {
+        console.log(chalk.red('Ribbon with invalid material index'), {
+          model: this.mdl.model.name,
+          ribbonIndex: i,
+          materialIndex,
+          materialsLength: this.materials.length,
+        });
+        return;
+      }
+
+      // Optional UV transform via lookup
+      const textAnimId = this.textureTransformsLookup[r.textureTransformLookupIndex];
+
+      // Create a dedicated material for this ribbon based on real WoW material flags
+      const ribbonMaterial: Material = {
+        id: 0,
+        constantColor: false,
+        twoSided: (material.flags & 0x04) > 0,
+        layers: [{
+          filterMode: getLayerFilterMode(material.blendingMode, 0, 0, ribbonTexture) ?? 'Blend',
+          texture: ribbonTexture,
+          tvertexAnim: textAnimId !== BlizzardNull ? this.mdl.textureAnims?.[textAnimId] : undefined,
+          alpha: { static: true as const, value: 1 },
+          unshaded: false,
+          sphereEnvMap: false,
+          twoSided: (material.flags & 0x04) > 0,
+          unfogged: (material.flags & 0x02) > 0,
+          unlit: (material.flags & 0x01) > 0,
+          noDepthTest: (material.flags & 0x08) > 0,
+          noDepthSet: (material.flags & 0x10) > 0,
+        }],
+      };
+      this.mdl.materials.push(ribbonMaterial);
+
+      const node: MDLRibbonEmitter = {
+        objectId: -1,
+        type: 'RibbonEmitter',
+        name: `RibbonEmitter_${i}`,
+        pivotPoint: [r.position[0], -r.position[2], r.position[1]],
+        parent,
+        flags: [],
+
+        // Animatable tracks
+        heightAbove: this.m2trackToAnimationOrStatic(r.heightAboveTrack, 'others'),
+        heightBelow: this.m2trackToAnimationOrStatic(r.heightBelowTrack, 'others'),
+        alpha: this.m2trackToAnimationOrStatic(r.alphaTrack, 'alpha', (v) => v / 32767),
+        // this color stays the same unlike color in geosetAnims
+        color: this.m2trackToAnimationOrStatic(r.colorTrack, 'color'),
+        textureSlot: this.m2trackToAnimationOrStatic(r.texSlotTrack, 'others'),
+        visibility: this.m2trackToAnimation(r.visibilityTrack, 'others'),
+
+        // Static properties
+        emissionRate: r.edgesPerSecond,
+        lifeSpan: r.edgeLifetime || 0,
+        rows: Math.max(1, r.textureRows || 1),
+        columns: Math.max(1, r.textureCols || 1),
+        materialId: ribbonMaterial.id,
+        gravity: r.gravity || 0,
+      };
+
+      ribbons.push(node);
+    });
+
+    if (ribbons.length > 0) {
+      console.log(chalk.yellow('Ribbon emitters:'), ribbons.length);
+    }
+
+    this.mdl.ribbonEmitters = ribbons;
+    this.mdl.textures.push(...ribbons.map((e) => this.mdl.materials[e.materialId].layers[0].texture));
   }
 
   objToSubmesh = new Map<number, number>();
@@ -932,7 +1048,7 @@ function calculateEquivalentVelocityNoDrag(
   // Equivalent velocity without drag = distance / lifetime
   const result = integral / lifetime;
   if (isNaN(result)) {
-    console.log(chalk.red('NaN'), {
+    console.log(chalk.red('calculateEquivalentVelocityNoDrag returned NaN'), {
       initialVelocity,
       lifetime,
       drag,

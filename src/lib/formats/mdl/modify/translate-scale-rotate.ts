@@ -58,6 +58,12 @@ export function scale(this: MDLModify, value: number) {
     scaleAnimOrStatic(l.attenuationEnd);
   });
 
+  this.mdl.ribbonEmitters.forEach((r) => {
+    scaleAnimOrStatic(r.heightAbove);
+    scaleAnimOrStatic(r.heightBelow);
+    r.gravity *= value;
+  });
+
   return this;
 }
 

@@ -15,6 +15,7 @@ import {
   AttachmentPoint, attachmentPointsToString, Bone, bonesToString, CollisionShape, collisionShapesToString, EventObject, eventObjectsToString, Helper, helpersToString, pivotPointsToString,
 } from './components/node/node';
 import { ParticleEmitter2, particleEmitter2sToString } from './components/node/particle-emitter-2';
+import { RibbonEmitter, ribbonEmittersToString } from './components/node/ribbon-emitter';
 import { Sequence, sequencesToString } from './components/sequence';
 import { Texture, texturesToString } from './components/texture';
 import { TextureAnim, textureAnimsToString } from './components/texture-anim';
@@ -59,6 +60,8 @@ export class MDL {
   // particleEmitters: ParticleEmitter[] = [];
   particleEmitter2s: ParticleEmitter2[] = [];
   // particleEmitterPopcorns: ParticleEmitterPopcorn[] = [];
+
+  ribbonEmitters: RibbonEmitter[] = [];
 
   cameras: Camera[] = [];
 
@@ -110,6 +113,7 @@ export class MDL {
       ...this.bones,
       ...this.attachments,
       ...this.lights,
+      ...this.ribbonEmitters,
       // ...this.particleEmitters,
       ...this.particleEmitter2s,
       // ...this.particleEmitterPopcorns,
@@ -142,6 +146,14 @@ export class MDL {
         'keyFrames' in l.color ? l.color : null,
         'keyFrames' in l.ambientIntensity ? l.ambientIntensity : null,
         'keyFrames' in l.ambientColor ? l.ambientColor : null,
+      ]),
+      ...this.ribbonEmitters.flatMap((r) => [
+        r.visibility,
+        r.heightAbove && 'keyFrames' in r.heightAbove ? r.heightAbove : null,
+        r.heightBelow && 'keyFrames' in r.heightBelow ? r.heightBelow : null,
+        r.alpha && 'keyFrames' in r.alpha ? r.alpha : null,
+        r.color && 'keyFrames' in r.color ? r.color : null,
+        r.textureSlot && 'keyFrames' in r.textureSlot ? r.textureSlot : null,
       ]),
       ...this.particleEmitter2s.flatMap((p) => [
         p.visibility,
@@ -197,6 +209,7 @@ export class MDL {
       ${bonesToString(this.bones)}
       ${attachmentPointsToString(this.attachments)}
       ${lightsToString(this.lights)}
+      ${ribbonEmittersToString(this.ribbonEmitters)}
       ${particleEmitter2sToString(this.particleEmitter2s)}
       ${camerasToString(this.cameras)}
       ${eventObjectsToString(this.eventObjects)}
