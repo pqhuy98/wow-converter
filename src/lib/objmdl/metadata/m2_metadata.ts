@@ -3,6 +3,17 @@ import { readFileSync } from 'fs';
 import _ from 'lodash';
 import { dirname, join, relative } from 'path';
 
+import { Animation, AnimationOrStatic, AnimationType } from '@/lib/formats/mdl/components/animation';
+import { Geoset } from '@/lib/formats/mdl/components/geoset';
+import { GlobalSequence } from '@/lib/formats/mdl/components/global-sequence';
+import { Material } from '@/lib/formats/mdl/components/material';
+import { Light, LightType } from '@/lib/formats/mdl/components/node/light';
+import {
+  FilterMode as WC3FilterMode, HeadOrTail as WC3HeadOrTail, ParticleEmitter2, ParticleEmitter2Flag,
+} from '@/lib/formats/mdl/components/node/particle-emitter-2';
+import { Texture } from '@/lib/formats/mdl/components/texture';
+import { TextureAnim } from '@/lib/formats/mdl/components/texture-anim';
+import { MDL } from '@/lib/formats/mdl/mdl';
 import { degrees } from '@/lib/math/rotation';
 import { V3 } from '@/lib/math/vector';
 
@@ -10,17 +21,6 @@ import { BlizzardNull } from '../../constants';
 import { Config } from '../../global-config';
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { AnimationFile } from '../animation/animation';
-import { Animation, AnimationOrStatic, AnimationType } from '../mdl/components/animation';
-import { Geoset } from '../mdl/components/geoset';
-import { GlobalSequence } from '../mdl/components/global-sequence';
-import { Material } from '../mdl/components/material';
-import { Light, LightType } from '../mdl/components/node/light';
-import {
-  FilterMode as WC3FilterMode, HeadOrTail as WC3HeadOrTail, ParticleEmitter2, ParticleEmitter2Flag,
-} from '../mdl/components/node/particle-emitter-2';
-import { Texture } from '../mdl/components/texture';
-import { TextureAnim } from '../mdl/components/texture-anim';
-import { MDL } from '../mdl/mdl';
 import { getLayerFilterMode, wowToWc3Interpolation } from '../utils';
 
 namespace Data {
@@ -753,7 +753,7 @@ export class M2MetadataFile {
       if (scaleVary >= varyThreshold) maxVariants *= 3;
 
       // TODO: replace / this.particleEmitters!.length with only PEs that need variants
-      const variantCount = Math.round(Math.min(maxVariants, 400 / this.particleEmitters!.length));
+      const variantCount = Math.round(Math.min(maxVariants, 200 / this.particleEmitters!.length));
       if (variantCount < 1) {
         particleEmitter2s.push(node);
         return;

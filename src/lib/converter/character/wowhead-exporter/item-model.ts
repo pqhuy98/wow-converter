@@ -1,5 +1,5 @@
-import { Geoset } from '@/lib/objmdl/mdl/components/geoset';
-import { MDL } from '@/lib/objmdl/mdl/mdl';
+import { Geoset } from '@/lib/formats/mdl/components/geoset';
+import { MDL } from '@/lib/formats/mdl/mdl';
 import { fetchItemMeta, ItemData } from '@/lib/wowhead-client/item-armor';
 import { ItemZamUrl } from '@/lib/wowhead-client/zam-url';
 

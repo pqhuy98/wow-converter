@@ -2,12 +2,12 @@ import chalk from 'chalk';
 import _ from 'lodash';
 import path from 'path';
 
+import { MDL } from '@/lib/formats/mdl/mdl';
+import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
 import {
   ANIM_NAMES, AttackTag, getWc3AnimName, getWowAnimName,
 } from '@/lib/objmdl/animation/animation_mapper';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
-import { MDL } from '@/lib/objmdl/mdl/mdl';
-import { canAddMdlCollectionItemToModel } from '@/lib/objmdl/mdl/modify/add-item-to-model';
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';

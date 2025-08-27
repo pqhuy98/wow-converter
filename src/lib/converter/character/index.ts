@@ -5,9 +5,9 @@ import path, { dirname, join } from 'path';
 import { z } from 'zod';
 
 import { AssetManager } from '@/lib/converter/common/asset-manager';
+import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
 import { getWoWAttachmentName } from '@/lib/objmdl/animation/bones_mapper';
-import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';

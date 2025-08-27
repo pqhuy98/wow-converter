@@ -1,5 +1,7 @@
 import z from 'zod';
 
+import { SequenceData } from '@/lib/formats/mdl/components/sequence';
+
 import { Data } from './animation';
 
 // Retrieved from https://github.com/Marlamin/wow.tools.local/blob/main/wwwroot/js/anims.js, index-based, no need for number
@@ -1791,14 +1793,6 @@ export function getWowAnimName(anim_id: number): WowAnimName {
 
 export const AttackTagSchema = z.enum(['', '1H', '2H', '2HL', 'Unarmed', 'Bow', 'Rifle', 'Thrown']);
 export type AttackTag = z.infer<typeof AttackTagSchema>
-
-export interface SequenceData {
-	wc3Name: string
-	wowName: WowAnimName
-	wowVariant: number
-	wowFrequency: number
-	attackTag: AttackTag
-}
 
 export const EmptySequenceData: SequenceData = {
   wc3Name: '',

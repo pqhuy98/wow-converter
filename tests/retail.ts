@@ -64,6 +64,13 @@ const testCases: [string, string, string, Size | ''][] = [
   ['https://www.wowhead.com/npc=245601/enforcer-jaktull', '', '', ''],
   ['https://www.wowhead.com/npc=214899/ebyssian', '', '', ''],
   ['https://www.wowhead.com/npc=3095/fela', '', '', ''],
+  [
+    'https://www.wowhead.com/npc=71865/garrosh-hellscream',
+    'https://www.wowhead.com/item=28773/gorehowl',
+    '',
+    '',
+  ],
+  ['https://www.wowhead.com/npc=16867/shattered-hand-grunt', '', '', ''],
 ];
 
 export const testConfigRetail: TestConfig = {

@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 
 import { Vector3 } from '@/lib/math/common';
+import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 
-import { WoWAttachmentID } from '../../animation/bones_mapper';
 import { MDLModify } from '.';
 
 // Only map WoW attachment points that have a valid WC3 equivalent.

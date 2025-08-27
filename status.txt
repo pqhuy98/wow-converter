@@ -6,13 +6,45 @@ TODO (not in any priority order):
   - Select different animations before final export
     - Basic animations auto-chosen, also smaller list, currently a lot of Spell/Spell Slam...
     - List of extra anims grouped by theme, e.g. attack, custom spell...
-- Some creatures using textures not in DB skin list cannot be exported because skin not found.
 - Map generation crashes when map too big and height min-max diff so high
 - Support for wowhead dressing room.
 - Auto-updater for wow-converter to keep users up-to-date.
 - Collect anonymous analytics to understand common usage patterns.
 
+
+BLOCKED:
+- Some later models have advanced materials e.g. firehawk that requires UV2 layer that Wc3 doesn't have.
+- Model infernal2 has incorrect geoset anims for the glow: wow.export didn't has this data, not sure why.
+
+
+BUGS:
+Texture missing:
+https://www.wowhead.com/npc=207939/baron-braunpyke#drops missing weapon texture
+https://www.wowhead.com/npc=111303/nightborne-sage - missing body textures
+https://www.wowhead.com/npc=18806/solarium-priest - broken particle
+https://www.wowhead.com/npc=196636/scalecommander-azurathel - no armor, dragon race
+https://www.wowhead.com/npc=224592/colossal-arathi-amalgam - missing outer texture
+https://www.wowhead.com/npc=26046/anveena - extra hair and necklace geoset
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 DONE:
+- Some creatures using textures not in DB skin list cannot be exported because skin not found.
 - Feet and trouser geoset wrong in some cases
 - Bug: inputting new URLs into base/itme input box doesn't update React state.
 - Collision box right now too big. Try to choose best that fit the Stand anim.
@@ -24,24 +56,6 @@ DONE:
 - Item collections are exported.
 - Models now have ears 
 - All attachments work correctly
-
-BLOCKED:
 - Blood elf model's attachment not working
-  Reason: wow.export bones and attachment data is wrong, not sure if any other data source for replacement.
-- Some later models have advanced materials e.g. firehawk that requires UV2 layer that Wc3 doesn't have.
-- Model infernal2 has incorrect geoset anims for the glow: wow.export didn't has this data, not sure why.
 - https://www.wowhead.com/npc=16867/shattered-hand-grunt this orc has wrong eye textures
-  Reason: cannot find texture file ID in wowhead data, even after searching in network requests in Chrome network inspection. 
-
-BUGS:
-Collections:
-https://www.wowhead.com/npc=187590/merithra // collection variant is wrong
-https://www.wowhead.com/npc=176789/lady-liadrin // right shoulder item has too big glow geoset 
-https://www.wowhead.com/npc=208418/flamecrested-portalweaver // OK
-https://www.wowhead.com/npc=187609/earthcaller-yevaa // OK
-https://www.wowhead.com/npc=209065/austin-huxworth // OK
-https://www.wowhead.com/npc=229161/darkfuse-brute // armor geosets have wrong texture
-https://www.wowhead.com/npc=181398/malganis
-https://www.wowhead.com/npc=82057/shattered-hand-brawler // 
-https://www.wowhead.com/npc=245601/enforcer-jaktull
-
+  Reason: cannot find texture file ID in wowhead data, even after searching in network requests in Chrome network inspection.

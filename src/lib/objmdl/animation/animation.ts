@@ -3,14 +3,14 @@ import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import _ from 'lodash';
 
+import { SkinWeight } from '@/lib/formats/mdl/components/geoset';
+import { GlobalSequence } from '@/lib/formats/mdl/components/global-sequence';
+import { Bone, NodeFlag } from '@/lib/formats/mdl/components/node/node';
+import { MDL, WowAttachment } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 
 import { BlizzardNull } from '../../constants';
-import { SkinWeight } from '../mdl/components/geoset';
-import { GlobalSequence } from '../mdl/components/global-sequence';
-import { Bone, NodeFlag } from '../mdl/components/node/node';
-import { MDL, WowAttachment } from '../mdl/mdl';
 import { wowToWc3Interpolation } from '../utils';
 import { getWacraftSequenceData, getWowAnimName, isLoopAnimation } from './animation_mapper';
 import { getBoneName } from './bones_mapper';

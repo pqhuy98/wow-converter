@@ -1,4 +1,4 @@
-import { MDL } from '@/lib/objmdl/mdl/mdl';
+import { MDL } from '@/lib/formats/mdl/mdl';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';
 

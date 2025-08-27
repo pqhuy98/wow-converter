@@ -7,11 +7,11 @@ import { distancePerTile } from '@/lib/constants';
 import {
   AttachItem, CharacterExporter, local, Size, wowhead,
 } from '@/lib/converter/character';
+import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config, getDefaultConfig } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
-import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';

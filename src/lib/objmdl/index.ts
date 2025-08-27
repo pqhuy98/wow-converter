@@ -3,17 +3,18 @@ import { existsSync } from 'fs';
 import _ from 'lodash';
 import path from 'path';
 
-import { Config } from '../global-config';
-import { AnimationFile } from './animation/animation';
 import {
   Geoset, GeosetVertex, Matrix, SkinWeight,
-} from './mdl/components/geoset';
-import { Material } from './mdl/components/material';
-import { Texture } from './mdl/components/texture';
-import { MDL } from './mdl/mdl';
-import { M2MetadataFile } from './metadata/m2_metadata';
-import { MTLFile } from './mtl';
-import { IFace, IGroup, OBJFile } from './obj';
+} from '@/lib/formats/mdl/components/geoset';
+import { Material } from '@/lib/formats/mdl/components/material';
+import { Texture } from '@/lib/formats/mdl/components/texture';
+import { MDL } from '@/lib/formats/mdl/mdl';
+import { M2MetadataFile } from '@/lib/objmdl/metadata/m2_metadata';
+import { MTLFile } from '@/lib/objmdl/mtl';
+import { IFace, IGroup, OBJFile } from '@/lib/objmdl/obj';
+
+import { Config } from '../global-config';
+import { AnimationFile } from './animation/animation';
 import { guessFilterMode } from './utils';
 
 const debug = false;

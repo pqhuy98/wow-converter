@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 
-import { pngToBlp } from '../../blp/blp';
+import { pngToBlp } from '@/lib/formats/blp/blp';
+
 import { Config } from '../../global-config';
 import { EulerRotation, Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation } from '../../math/rotation';

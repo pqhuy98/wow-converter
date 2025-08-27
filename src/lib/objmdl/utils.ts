@@ -1,6 +1,6 @@
-import { Interpolation } from './mdl/components/animation';
-import { BlendMode } from './mdl/components/material';
-import { Texture } from './mdl/components/texture';
+import { Interpolation } from '@/lib/formats/mdl/components/animation';
+import { BlendMode } from '@/lib/formats/mdl/components/material';
+import { Texture } from '@/lib/formats/mdl/components/texture';
 
 export function wowToWc3Interpolation(wowInterpolation: number): Interpolation {
   switch (wowInterpolation) {
@@ -49,6 +49,9 @@ export function getLayerFilterMode(blendingMode: number, shaderId: number, layer
     debug && console.log('opaquePath', {
       opaquePath, op, blendingMode, shaderId, layerIndex,
     });
+    if (texture.image.includes('armorreflect')) {
+      return undefined;
+    }
     if (op === 0) return undefined; // Opaque_Opaque
     if (op === 3) {
       // Opaque_AddAlpha / Opaque_AddAlpha_Alpha

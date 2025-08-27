@@ -1,6 +1,6 @@
 // Retrieved from https://wowdev.wiki/M2#Key_Bone_Names
 
-import { MDL } from '../mdl/mdl';
+import { MDL } from '@/lib/formats/mdl/mdl';
 
 const BONE_NAMES = {
   0: 'ArmL',

@@ -4,8 +4,8 @@ import {
 } from 'fs';
 import path from 'path';
 
+import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
-import { MDL } from '@/lib/objmdl/mdl/mdl';
 import { waitUntil } from '@/lib/utils';
 import { ExportFile, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 

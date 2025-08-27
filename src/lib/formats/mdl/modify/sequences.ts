@@ -1,8 +1,8 @@
 import _ from 'lodash';
 
 import { Vector3 } from '@/lib/math/common';
+import { WowAnimName } from '@/lib/objmdl/animation/animation_mapper';
 
-import { WowAnimName } from '../../animation/animation_mapper';
 import { Animation } from '../components/animation';
 import { Sequence } from '../components/sequence';
 import { interpolateTransformQuat } from '../mdl-traverse';

@@ -1,4 +1,3 @@
-import { SequenceData } from '../../animation/animation_mapper';
 import { Bound } from './extent';
 import { f } from './formatter';
 
@@ -7,10 +6,19 @@ export interface Sequence extends Bound {
   interval: [number, number];
   nonLooping: boolean;
   moveSpeed: number,
-  data: SequenceData,
+  data: {
+    wc3Name: string
+    wowName: string
+    wowVariant: number
+    wowFrequency: number
+    attackTag: string
+  }
+  ,
   rarity?: number
   keep?: boolean;
 }
+
+export type SequenceData = Sequence['data']
 
 export function sequencesToString(sequences: Sequence[]) {
   if (sequences.length === 0) return '';
