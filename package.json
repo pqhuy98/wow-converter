@@ -7,7 +7,9 @@
   "type": "module",
   "pkg": {
     "assets": [
-      "webui/out/**"
+      "webui/out/**",
+      "node_modules/sharp/build/Release/sharp.node",
+      "node_modules/sharp/vendor/**"
     ],
     "targets": [
       "node18-win-x64"
@@ -27,7 +29,7 @@
     "build:0": "shx rm -rf build && tsc && tsc-alias",
     "build:1": "rollup -c",
     "build:2": "shx rm -rf dist && pkg build/server.bundle.js --config package.json --compress Gzip --options max-old-space-size=99999 --output dist/wow-converter",
-    "build:3": "cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin",
+    "build:3": "cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin && shx mkdir -p dist/sharp/build/Release dist/sharp/vendor && shx cp -r node_modules/sharp/build/Release dist/sharp/build && shx cp -r node_modules/sharp/vendor dist/sharp/vendor",
     "build:app": "npm run prisma:generate && npm run build:0 && npm run build:1 && npm run build:2 && npm run build:3",
     "build:server": "npm run prisma:generate && npm run build:webui && npm run build:0",
     "build:wow.export": "cd wow.export && npm run build && cd .. && shx cp -r wow.export/bin/win-x64/* dist && shx rm dist/update dist/update.json",
@@ -94,7 +96,7 @@
     "open": "^10.2.0",
     "pngjs": "^7.0.0",
     "round-to": "^6.0.0",
-    "sharp": "^0.34.3",
+    "sharp": "0.32.6",
     "typescript": "^5.8.3",
     "war3-model": "^4.0.0",
     "zod": "^4.0.5"
