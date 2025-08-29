@@ -25,7 +25,7 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
   this.mdl.materials.forEach((mat, i) => {
     mat.layers.forEach((layer) => {
       if (layer.texture.image === '') {
-        console.log(chalk.red('Empty texture:'), i, layer.texture.wowData.type);
+        console.log(chalk.red(`Empty texture, i: ${i}, wow type: ${layer.texture.wowData.type}`));
       }
       layer.texture = getTexture(layer.texture);
     });
