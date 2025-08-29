@@ -3,6 +3,7 @@ import path from 'path';
 import sharp from 'sharp';
 
 import { pngToBlp, readBlpSizeSync } from '@/lib/formats/blp/blp';
+import { resizePng } from '@/lib/formats/png';
 
 import { Config } from '../../global-config';
 import { EulerRotation, Vector3 } from '../../math/common';
@@ -109,14 +110,7 @@ export class AssetManager {
         try {
           if ((width > targetWidth) || (height > targetHeight)) {
             console.log('Resizing texture', fromPath, width, height, 'to', targetWidth, targetHeight);
-            pngInput = await sharp(fromPath)
-              .resize({
-                width: targetWidth,
-                height: targetHeight,
-                fit: 'outside',
-              })
-              .png()
-              .toBuffer();
+            pngInput = await resizePng(fromPath, targetWidth, targetHeight);
           }
         } catch (err) {
           console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
