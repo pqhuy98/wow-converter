@@ -476,17 +476,24 @@ export class M2MetadataFile {
     const debug = false;
 
     // Textures
-    const textures: Texture[] = this.textures.map((tex, i) => ({
-      id: 0,
-      image: tex.fileNameExternal
-        ? join(this.config.assetPrefix, relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal.replace('.png', '.blp'))))
-        : '',
-      wrapWidth: (tex.flags & 1) > 0,
-      wrapHeight: (tex.flags & 2) > 0,
-      wowData: {
-        type: this.textureTypes[i],
-      },
-    }));
+    const textures: Texture[] = this.textures.map((tex, i) => {
+      const pngPath = tex.fileNameExternal
+        ? relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal))
+        : '';
+
+      return {
+        id: 0,
+        image: pngPath
+          ? join(this.config.assetPrefix, pngPath.replace('.png', '.blp'))
+          : '',
+        wrapWidth: (tex.flags & 1) > 0,
+        wrapHeight: (tex.flags & 2) > 0,
+        wowData: {
+          type: this.textureTypes[i],
+          pngPath,
+        },
+      };
+    });
 
     // Texture anims
     const textureAnims: TextureAnim[] = this.textureTransforms.map((transform) => ({

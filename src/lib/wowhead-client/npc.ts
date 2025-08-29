@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 
 import {
-  fetchWowZaming, getLatestExpansionHavingUrl, getZamBaseUrl, NpcZamUrl,
+  fetchWithCache, getLatestExpansionHavingUrl, getZamBaseUrl, NpcZamUrl,
 } from './zam-url';
 
 export interface FileEntry {
@@ -20,7 +20,6 @@ export interface Customization {
 export interface CharacterMeta {
   Race: number;
   Gender: number;
-  ChrModelId: number;
 }
 
 export interface CreatureMeta {
@@ -43,7 +42,7 @@ export interface ModelFilesMap {
   [modelId: string]: FileEntry[];
 }
 
-export interface NPCData {
+export interface CharacterData {
   Model?: number;
   Textures?: { [k: string]: number };
   Character?: CharacterMeta;
@@ -54,7 +53,7 @@ export interface NPCData {
 
 const debug = false;
 
-export async function fetchNpcMeta(zam: NpcZamUrl): Promise<NPCData> {
+export async function fetchNpcMeta(zam: NpcZamUrl): Promise<CharacterData> {
   if (zam.type !== 'npc') throw new Error('fetchNpcMeta expects a ZamUrl of type npc');
   const path = `meta/npc/${zam.displayId}.json`;
 
@@ -66,8 +65,8 @@ export async function fetchNpcMeta(zam: NpcZamUrl): Promise<NPCData> {
   const url = `${base}/${path}`;
   debug && console.log('Get NPC meta from', chalk.blue(url));
   try {
-    const res = await fetchWowZaming(url);
-    return JSON.parse(res) as unknown as NPCData;
+    const res = await fetchWithCache(url);
+    return JSON.parse(res) as unknown as CharacterData;
   } catch (e) {
     console.log(
       chalk.red('Failed to fetch NPC meta from'),
@@ -77,7 +76,7 @@ export async function fetchNpcMeta(zam: NpcZamUrl): Promise<NPCData> {
     );
     const base2 = getZamBaseUrl(await getLatestExpansionHavingUrl(path));
     const url2 = `${base2}/${path}`;
-    const res2 = await fetchWowZaming(url2);
-    return JSON.parse(res2) as unknown as NPCData;
+    const res2 = await fetchWithCache(url2);
+    return JSON.parse(res2) as unknown as CharacterData;
   }
 }

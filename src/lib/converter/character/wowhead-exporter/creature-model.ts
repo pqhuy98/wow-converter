@@ -1,11 +1,9 @@
 import { MDL } from '@/lib/formats/mdl/mdl';
-import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
-import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';
+import { CharacterData } from '@/lib/wowhead-client/npc';
 
 import { applyReplaceableTextrures, ExportContext, exportModelFileIdAsMdl } from '../utils';
 
-export async function exportCreatureNpcAsMdl(ctx: ExportContext, zam: NpcZamUrl): Promise<MDL> {
-  const meta = await fetchNpcMeta(zam);
+export async function exportCreatureNpcAsMdl(ctx: ExportContext, meta: CharacterData): Promise<MDL> {
   if (!meta.Model) throw new Error('Creature NPC must contain Model');
   const modelId = meta.Model;
   const extraGeosets = meta.Creature?.CreatureGeosetData?.map((g) => (g.GeosetIndex + 1) * 100 + g.GeosetValue) || [];

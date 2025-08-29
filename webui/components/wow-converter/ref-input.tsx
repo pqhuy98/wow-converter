@@ -174,7 +174,7 @@ export function RefInput({
 }
 
 const wowheadPattern = {
-  npc: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?npc=/,
+  npc: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|dressing-room#)/,
   item: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?item=/,
 };
 

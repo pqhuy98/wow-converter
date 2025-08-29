@@ -131,6 +131,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
         wrapWidth: true,
         wowData: {
           type: 0,
+          pngPath: textureRelativePath || '',
         },
       };
       const material: Material = {

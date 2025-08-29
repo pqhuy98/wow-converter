@@ -341,6 +341,7 @@ export class MDL {
           wrapHeight: false,
           wowData: {
             type: 0,
+            pngPath: '',
           },
         },
       ];

@@ -93,7 +93,7 @@ export class AssetManager {
       const targetHeight = Math.round(height * scale);
 
       // Skip only if the existing BLP exactly matches the target size
-      const debug = true;
+      const debug = false;
       const toPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
       if (existsSync(toPath)) {
         const size = readBlpSizeSync(toPath);
@@ -109,7 +109,7 @@ export class AssetManager {
       if (this.config.maxTextureSize) {
         try {
           if ((width > targetWidth) || (height > targetHeight)) {
-            console.log('Resizing texture', fromPath, width, height, 'to', targetWidth, targetHeight);
+            debug && console.log('Resizing texture', fromPath, width, height, 'to', targetWidth, targetHeight);
             pngInput = await resizePng(fromPath, targetWidth, targetHeight);
           }
         } catch (err) {

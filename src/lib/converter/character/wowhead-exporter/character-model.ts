@@ -4,35 +4,39 @@ import path from 'path';
 
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
+import { radians } from '@/lib/math/rotation';
 import {
   ANIM_NAMES, AttackTag, getWc3AnimName, getWowAnimName,
 } from '@/lib/objmdl/animation/animation_mapper';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
-import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
-import { NpcZamUrl } from '@/lib/wowhead-client/zam-url';
+import { EquipmentSlot } from '@/lib/wowhead-client/item-armor';
+import { CharacterData } from '@/lib/wowhead-client/npc';
+import { ZamExpansion } from '@/lib/wowhead-client/zam-url';
 
 import {
   applyReplaceableTextrures, ExportContext, exportModelFileIdAsMdl, exportTexture,
 } from '../utils';
 import {
-  EquipmentSlot, filterCollectionGeosets,
+  filterCollectionGeosets,
   getEquipmentSlotName, getSubmeshName, ItemMetata, processItemData,
 } from './item-model';
 
-export async function exportCharacterNpcAsMdl({
+export async function exportCharacterAsMdl({
   ctx,
-  zam,
+  metaData,
+  expansion,
   keepCinematic,
   attackTag,
 }: {
   ctx: ExportContext;
-  zam: NpcZamUrl;
+  metaData: CharacterData;
+  expansion: ZamExpansion
   keepCinematic: boolean
   attackTag: AttackTag | undefined
 }): Promise<MDL> {
   // Export the base model
-  const prep = await prepareCharacterNpcExport(zam);
+  const prep = await prepareCharacterExport(metaData, expansion);
   const start = performance.now();
   const result = await wowExportClient.exportCharacter({
     ...prep.rpcParams,
@@ -44,8 +48,8 @@ export async function exportCharacterNpcAsMdl({
   const relative = path.relative(baseDir, result.exportPath);
   const charMdl = ctx.assetManager.parse(relative, true).mdl;
 
-  // Replace the base texture with the npc baked texture
-  await applyNpcBaseTextrure(ctx, charMdl, prep);
+  // Replace the base texture with the prebaked texture
+  await applyPrebakedTextrure(ctx, charMdl, prep);
 
   // Attach items with models
   await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots);
@@ -84,22 +88,20 @@ type EquipmentSlotData = {
   data: ItemMetata;
 }
 
-type Prep ={
+type Prep = {
   rpcParams: ExportCharacterParams;
-  npcTextureFile: number | null;
+  prebakedTexture: number | null;
   equipmentSlots: EquipmentSlotData[];
   replaceableTextures: Record<string, number>;
 }
 
-async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<Prep> {
-  const metadata = await fetchNpcMeta(zam);
+async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExpansion): Promise<Prep> {
   if (!metadata.Character) {
-    throw new Error('prepareCharacterNpcExport: NPC has no character metadata');
+    throw new Error('prepareCharacterExport: URL has no character metadata');
   }
   const character = metadata.Character;
   const race = character.Race;
   const gender = character.Gender;
-  const chrModelId = character.ChrModelId;
 
   // Decide which geosets to include/hide based on equipment
   const geosetIds = new Set<number>();
@@ -111,7 +113,7 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<Prep> {
     const itemId = metadata.Equipment?.[slotId.toString()];
     if (!itemId) continue;
     const itemData = await processItemData({
-      expansion: zam.expansion, type: 'item', displayId: itemId, slotId,
+      expansion, type: 'item', displayId: itemId, slotId,
     }, race, gender);
     itemData.geosetIds?.forEach((id: number) => geosetIds.add(id));
     itemData.hideGeosetIds?.forEach((id: number) => hideGeosetIds.add(id));
@@ -131,7 +133,6 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<Prep> {
   const rpcParams: ExportCharacterParams = {
     race,
     gender,
-    chrModelId,
     customizations: Object.fromEntries((metadata.Creature?.CreatureCustomizations || []).map((c) => [c.optionId, c.choiceId])),
     format: 'obj',
     include_animations: true,
@@ -140,11 +141,11 @@ async function prepareCharacterNpcExport(zam: NpcZamUrl): Promise<Prep> {
     hideGeosetIds: Array.from(hideGeosetIds),
   };
 
-  const npcTextureFile = metadata.TextureFiles ? Object.values(metadata.TextureFiles)[0]?.[0]?.FileDataId : null;
+  const prebakedTexture = metadata.TextureFiles ? Object.values(metadata.TextureFiles)[0]?.[0]?.FileDataId : null;
 
   return {
     rpcParams,
-    npcTextureFile,
+    prebakedTexture,
     equipmentSlots,
     replaceableTextures: metadata.Textures || {},
   };
@@ -161,8 +162,10 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
   // Attach individual item model to the character model
   const attachItemModel = async (fileDataId: number, itemData: ItemMetata, attachmentId: WoWAttachmentID | undefined) => {
+    debug && console.log('attachItemModel', itemData, attachmentId);
+
     const itemMdl = !collections.has(fileDataId)
-      ? await exportModelFileIdAsMdl(ctx, fileDataId, { textureIds: itemData.textureFiles })
+      ? await exportModelFileIdAsMdl(ctx, fileDataId, { textureIds: itemData.modelTextureFiles })
       : _.cloneDeep(collections.get(fileDataId)!);
 
     const isCollection = collections.has(fileDataId) || canAddMdlCollectionItemToModel(charMdl, itemMdl);
@@ -172,7 +175,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
         collections.set(fileDataId, _.cloneDeep(itemMdl));
       }
 
-      const debug = true;
+      const debug = false;
       debug && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
       const enabledGeosets = filterCollectionGeosets(itemData.slotId!, itemData.originalData, itemMdl);
 
@@ -206,6 +209,14 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
       });
       return;
     }
+
+    if (attachmentId === WoWAttachmentID.HandLeft) {
+      const shouldRotate = (itemData.flags & 256) || (itemData.flags & 1024);
+      if (shouldRotate) {
+        itemMdl.modify.rotate([0, 0, radians(180)]);
+      }
+    }
+
     charMdl.modify.addMdlItemToBone(itemMdl, attachment.bone);
     attachmentResults.push({
       attachmentId, itemMdl, ok: true, fileDataId,
@@ -222,6 +233,8 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     [EquipmentSlot.Legs, 0, undefined],
     [EquipmentSlot.Feet, 0, undefined],
     [EquipmentSlot.Gloves, 0, undefined],
+    [EquipmentSlot.MainHand, 0, WoWAttachmentID.HandRight],
+    [EquipmentSlot.OffHand, 0, WoWAttachmentID.HandLeft],
   ];
   for (const [slotId, index, attachmentId] of attachmentList) {
     const slot = equipmentSlots.find((s) => s.slotId === slotId);
@@ -252,7 +265,7 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
     const matching = charMdl.geosets.filter((g) => cfg.geosetNames.some((name) => g.name.includes(name)));
     if (matching.length === 0) continue;
 
-    const textureFile = slot.data.textureFiles[0];
+    const textureFile = slot.data.bodyTextureFiles[0];
 
     const texPath = await exportTexture(textureFile);
     ctx.assetManager.addPngTexture(texPath);
@@ -263,6 +276,7 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
       wrapHeight: false,
       wowData: {
         type: 0,
+        pngPath: texPath,
       },
     });
     charMdl.materials.push({
@@ -294,22 +308,20 @@ async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL
 
 const debug = false;
 
-async function applyNpcBaseTextrure(ctx: ExportContext, charMdl: MDL, prep: Prep) {
-  debug && console.log('applyNpcBaseTextrure', prep.npcTextureFile);
-  if (prep.npcTextureFile) {
-    const npcTexturePath = await exportTexture(prep.npcTextureFile);
-    ctx.assetManager.addPngTexture(npcTexturePath);
+async function applyPrebakedTextrure(ctx: ExportContext, charMdl: MDL, prep: Prep) {
+  const baseTexturePath = charMdl.textures.find((t) => t.wowData.type === 1)?.image;
+  if (prep.prebakedTexture) {
+    const prebakedTexturePath = await exportTexture(prep.prebakedTexture);
+    console.log('Character has prebaked texture', prep.prebakedTexture, prebakedTexturePath);
+    ctx.assetManager.addPngTexture(prebakedTexturePath);
 
-    // base texture is the one of the geoset with highest face count. Hacky heuristic
-    // TODO: find replaceable textures
-    const baseTexturePath = charMdl.textures.find((t) => t.wowData.type === 1)?.image;
     debug && console.log('baseTexturePath', baseTexturePath);
 
-    const newTexturePath = path.join(ctx.config.assetPrefix, npcTexturePath).replace('.png', '.blp');
+    const newTexturePath = path.join(ctx.config.assetPrefix, prebakedTexturePath).replace('.png', '.blp');
 
     charMdl.geosets.forEach((geoset, i) => {
       // For skeleton, we don't want to override anything but
-      // For some reason, the skull is not included in the npc baked texture
+      // For some reason, the skull is not included in the baked texture
       let skip = false;
       const raceSkeleton = 20;
       if (prep.rpcParams.race === raceSkeleton) {
@@ -335,6 +347,8 @@ async function applyNpcBaseTextrure(ctx: ExportContext, charMdl: MDL, prep: Prep
         }
       });
     });
+  } else {
+    console.log('Character has no prebaked texture. Using default texture:', baseTexturePath);
   }
 }
 

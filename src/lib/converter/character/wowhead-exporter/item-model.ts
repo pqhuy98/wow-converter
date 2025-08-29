@@ -1,6 +1,6 @@
 import { Geoset } from '@/lib/formats/mdl/components/geoset';
 import { MDL } from '@/lib/formats/mdl/mdl';
-import { fetchItemMeta, ItemData } from '@/lib/wowhead-client/item-armor';
+import { EquipmentSlot, fetchItemMeta, ItemData } from '@/lib/wowhead-client/item-armor';
 import { ItemZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { ExportContext, exportModelFileIdAsMdl } from '../utils';
@@ -8,26 +8,13 @@ import { ExportContext, exportModelFileIdAsMdl } from '../utils';
 export interface ItemMetata {
   slotId: number | null;
   displayId: number;
+  flags: number;
   modelFiles: number[];
-  textureFiles: number[];
+  modelTextureFiles: number[];
+  bodyTextureFiles: number[];
   geosetIds?: number[];
   hideGeosetIds?: number[];
   originalData: ItemData;
-}
-
-// Slots enum used by orchestration and attachments
-export enum EquipmentSlot {
-  Head = 1,
-  Shoulder = 3,
-  Shirt = 4,
-  Chest = 5,
-  Belt = 6,
-  Legs = 7,
-  Feet = 8,
-  Wrist = 9,
-  Gloves = 10,
-  Back = 16,
-  Tabard = 19,
 }
 
 export function getEquipmentSlotName(slotId: number) {
@@ -213,12 +200,13 @@ export async function processItemData(url: ItemZamUrl, targetRace: number, targe
   const result: ItemMetata = {
     slotId: url.slotId,
     displayId: url.displayId,
+    flags: itemData.Item.Flags,
     modelFiles: filterFilesByRaceGender(itemData.ModelFiles || {}, itemData.ComponentModels || {}, targetRace, targetGender),
-    textureFiles: [
-      ...filterFilesByRaceGender(itemData.TextureFiles || {}, itemData.ComponentTextures || {}, targetRace, targetGender),
+    modelTextureFiles: [
       ...[itemData.Textures, itemData.Textures2].filter((obj) => obj !== null)
         .flatMap((obj) => Object.entries(obj).flatMap(([, value]) => value)),
     ],
+    bodyTextureFiles: filterFilesByRaceGender(itemData.TextureFiles || {}, itemData.ComponentTextures || {}, targetRace, targetGender),
     geosetIds: url.slotId ? resolveCharacterGeosetIds(url.slotId, itemData) : [],
     hideGeosetIds: resolveHideGeosetIds(itemData, targetRace, targetGender),
     originalData: itemData,
@@ -264,6 +252,6 @@ export async function exportZamItemAsMdl({
 }): Promise<MDL> {
   const result = await processItemData(zam, targetRace, targetGender);
   const modelId = result.modelFiles[0];
-  const allTextureIds = result.textureFiles;
+  const allTextureIds = result.modelTextureFiles;
   return exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
 }

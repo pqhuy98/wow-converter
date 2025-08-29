@@ -9,12 +9,13 @@ import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
 import { getWoWAttachmentName } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { decodeDressingRoom } from '@/lib/wowhead-client/dressing-room';
 import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
 import { ensureLocalModelFileExists } from './utils';
-import { exportCharacterNpcAsMdl } from './wowhead-exporter/character-model';
+import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
 import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
 import { exportZamItemAsMdl } from './wowhead-exporter/item-model';
 
@@ -184,21 +185,27 @@ export class CharacterExporter {
         ? await getZamUrlFromWowheadUrl(char.base.value)
         : { expansion: 'live', type: 'npc', displayId: Number(char.base.value) };
 
-      if (baseZam.type !== 'npc') throw new Error(`Expected npc zam url, got ${baseZam.type}`);
-
-      const npcMeta = await fetchNpcMeta(baseZam);
-      if (npcMeta.Model) {
-        return exportCreatureNpcAsMdl({ assetManager: this.assetManager, config: this.config }, baseZam);
+      if (baseZam.type !== 'npc' && baseZam.type !== 'dressing-room') {
+        throw new Error(`Expected npc zam url, got ${baseZam.type}`);
       }
 
-      return exportCharacterNpcAsMdl({
-        ctx: { assetManager: this.assetManager, config: this.config },
-        zam: {
+      const npcMeta = baseZam.type === 'dressing-room'
+        ? await decodeDressingRoom(baseZam.hash)
+        : await fetchNpcMeta({
           ...baseZam,
           expansion: wowExportClient.isClassic()
             ? baseZam.expansion
-            : 'latest-available', // // in latest wow installation, classic models are not available
-        },
+            : 'latest-available', // in latest wow installation, classic models are not available
+        });
+
+      if (npcMeta.Model) {
+        return exportCreatureNpcAsMdl({ assetManager: this.assetManager, config: this.config }, npcMeta);
+      }
+
+      return exportCharacterAsMdl({
+        ctx: { assetManager: this.assetManager, config: this.config },
+        metaData: npcMeta,
+        expansion: baseZam.expansion,
         keepCinematic: Boolean(char.keepCinematic),
         attackTag: char.attackTag,
       });

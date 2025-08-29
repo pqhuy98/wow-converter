@@ -1,8 +1,25 @@
 import chalk from 'chalk';
 
 import {
-  fetchWowZaming, getLatestExpansionHavingUrl, getZamBaseUrl, ZamUrl,
+  fetchWithCache, getLatestExpansionHavingUrl, getZamBaseUrl, ZamUrl,
 } from './zam-url';
+
+// Slots enum used by orchestration and attachments
+export enum EquipmentSlot {
+  Head = 1,
+  Shoulder = 3,
+  Shirt = 4,
+  Chest = 5,
+  Belt = 6,
+  Legs = 7,
+  Feet = 8,
+  Wrist = 9,
+  Gloves = 10,
+  MainHand = 12,
+  OffHand = 13,
+  Back = 16,
+  Tabard = 19,
+}
 
 interface ItemFile {
   FileDataId: number;
@@ -17,6 +34,7 @@ export interface ItemData {
   ModelFiles: { [modelId: string]: ItemFile[] };
   TextureFiles: { [textureId: string]: ItemFile[] };
   Item: {
+    Flags: number;
     GeosetGroup: number[];
     AttachGeosetGroup?: number[];
     GeosetGroupOverride?: number[];
@@ -29,10 +47,27 @@ export interface ItemData {
 
 const debug = true;
 
+const ArmorSlots = [
+  EquipmentSlot.Head,
+  EquipmentSlot.Shoulder,
+  EquipmentSlot.Shirt,
+  EquipmentSlot.Chest,
+  EquipmentSlot.Belt,
+  EquipmentSlot.Legs,
+  EquipmentSlot.Feet,
+  EquipmentSlot.Wrist,
+  EquipmentSlot.Gloves,
+  EquipmentSlot.Back,
+  EquipmentSlot.Tabard,
+];
+
 export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   if (zam.type !== 'item') throw new Error('fetchItemMeta expects a ZamUrl of type item');
-  const path = zam.slotId
-    ? `meta/armor/${zam.slotId}/${zam.displayId}.json`
+  let slotId: number | null = zam.slotId;
+  if (slotId && !ArmorSlots.includes(slotId)) slotId = null;
+
+  const path = slotId
+    ? `meta/armor/${slotId}/${zam.displayId}.json`
     : `meta/item/${zam.displayId}.json`;
 
   let expansion = zam.expansion;
@@ -42,6 +77,6 @@ export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   const base = getZamBaseUrl(expansion);
   const url = `${base}/${path}`;
   debug && console.log('Get item meta from', chalk.blue(url));
-  const res = await fetchWowZaming(url);
+  const res = await fetchWithCache(url);
   return JSON.parse(res) as unknown as ItemData;
 }

@@ -94,7 +94,6 @@ export interface ModelSkin {
 export interface ExportCharacterParams {
   race: number;
   gender: number;
-  chrModelId: number;
   customizations: { [optionId: string]: number };
   geosetIds: number[];
   hideGeosetIds: number[];

@@ -6,6 +6,7 @@ export interface Texture {
   wrapHeight: boolean;
   wowData: {
     type: number // 0 is default, >=1 is replaceable id
+    pngPath: string
   }
 }
 
