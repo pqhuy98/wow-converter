@@ -23,6 +23,7 @@ import {
   addDecayAnimation, addEventObjectBySequenceName, debugSequence, removeWowSequence, renameSequencesByWowName, sortSequences, useWalkSequenceByWowName,
 } from './sequences';
 import {
+  flipY,
   rotate, scale, scaleSequenceDuration, translate,
 } from './translate-scale-rotate';
 
@@ -37,6 +38,8 @@ export class MDLModify {
 
   // Basic transformations
   scale = scale;
+
+  flipY = flipY;
 
   translate = translate;
 

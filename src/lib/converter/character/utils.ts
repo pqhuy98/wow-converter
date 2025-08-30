@@ -14,6 +14,7 @@ import { AssetManager } from '../common/asset-manager';
 export interface ExportContext {
   assetManager: AssetManager;
   config: Config;
+  outputFile: string;
 }
 
 export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, guessSkin: {
@@ -145,14 +146,14 @@ async function moveFile(src: string, dest: string) {
 
 const debug = false;
 
-export async function applyReplaceableTextrures(ctx: ExportContext, mdl: MDL, replaceableTextures: Record<string, number>) {
+export async function applyReplaceableTextures(ctx: ExportContext, mdl: MDL, replaceableTextures: Record<string, number>) {
   debug && console.log('applyReplaceableTextrures', replaceableTextures);
   const textureMap = new Map<number, ExportFile[]>();
 
   for (const texture of mdl.textures) {
-    if (texture.image !== '') return;
+    // if (texture.image !== '') continue;
     const type = texture.wowData.type.toString();
-    if (!replaceableTextures[type]) return;
+    if (!replaceableTextures[type]) continue;
 
     debug && console.log('applyReplaceableTextrures', type, replaceableTextures[type]);
 

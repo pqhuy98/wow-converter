@@ -34,7 +34,6 @@ const ceConfig: Config = {
   // overrideModels: true,
   overrideModels: false,
 };
-const ce = new CharacterExporter(ceConfig);
 
 async function exportTestCases() {
   const npcs: {name: string, mdl?: MDL}[] = [];
@@ -66,10 +65,12 @@ async function exportTestCases() {
     let name = '';
     if (base.startsWith('local::')) {
       name = `${base.split('\\').pop()!.replace('.obj', '')}`;
-    } else {
+    } else if (base.includes('npc=')) {
       const npcId = base.split('npc=').pop()?.split('/').shift();
       const npcName = base.split('/').pop()!.split('#')[0];
       name = `${npcName}-${npcId}`;
+    } else if (base.includes('dressing-room')) {
+      name = base.split('?').at(-1)!;
     }
     npcs.push({ name });
     if (existsSync(join(mapDir, `${name}.mdx`)) && !ceConfig.overrideModels) {
@@ -77,6 +78,7 @@ async function exportTestCases() {
       continue;
     }
 
+    const ce = new CharacterExporter(ceConfig);
     npcs.at(-1)!.mdl = await ce.exportCharacter({
       base: base.startsWith('local::') ? local(base.replace('local::', '')) : wowhead(base),
       attachItems,
@@ -86,6 +88,10 @@ async function exportTestCases() {
       scale: 1.5,
       particlesDensity: 0.5,
     }, name);
+
+    ce.optimizeModelsTextures();
+    ce.writeAllModels(mapDir, 'mdx');
+    await ce.writeAllTextures(mapDir);
   }
 
   return npcs;
@@ -93,10 +99,6 @@ async function exportTestCases() {
 
 export async function main() {
   const npcs = await exportTestCases();
-
-  ce.optimizeModelsTextures();
-  ce.writeAllModels(mapDir, 'mdx');
-  await ce.writeAllTextures(mapDir);
 
   const map = new MapManager();
   map.load(mapDir);

@@ -14,7 +14,7 @@ import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
-import { ensureLocalModelFileExists } from './utils';
+import { ensureLocalModelFileExists, ExportContext } from './utils';
 import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
 import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
 import { exportZamItemAsMdl } from './wowhead-exporter/item-model';
@@ -96,7 +96,9 @@ export class CharacterExporter {
 
     console.log('Exporting character', char.base.value);
 
-    const model = await this.exportBaseMdl(char);
+    const ctx: ExportContext = { assetManager: this.assetManager, config: this.config, outputFile };
+
+    const model = await this.exportBaseMdl(ctx, char);
     this.includeMdlToOutput(model, outputFile);
 
     if (char.attackTag != null) {
@@ -112,7 +114,7 @@ export class CharacterExporter {
       for (const [wowAttachmentId, itemPath] of Object.entries(char.attachItems)) {
         const wowAttachment = model.wowAttachments.find((a) => a.wowAttachmentId === Number(wowAttachmentId));
         if (wowAttachment) {
-          const itemMdl = await this.exportItem(itemPath.path);
+          const itemMdl = await this.exportItem(ctx, itemPath.path);
           itemMdl.bones[0].name += `_atm_${wowAttachmentId}`;
           if (itemPath.scale) {
             itemMdl.modify.scale(itemPath.scale);
@@ -175,7 +177,7 @@ export class CharacterExporter {
     return model;
   }
 
-  private async exportBaseMdl(char: Character): Promise<MDL> {
+  private async exportBaseMdl(ctx: ExportContext, char: Character): Promise<MDL> {
     if (char.base.type === 'local') {
       await ensureLocalModelFileExists(char.base.value);
       return this.assetManager.parse(char.base.value, true).mdl;
@@ -190,7 +192,7 @@ export class CharacterExporter {
       }
 
       const npcMeta = baseZam.type === 'dressing-room'
-        ? await decodeDressingRoom(baseZam.hash)
+        ? await decodeDressingRoom(baseZam.expansion, baseZam.hash)
         : await fetchNpcMeta({
           ...baseZam,
           expansion: wowExportClient.isClassic()
@@ -199,11 +201,11 @@ export class CharacterExporter {
         });
 
       if (npcMeta.Model) {
-        return exportCreatureNpcAsMdl({ assetManager: this.assetManager, config: this.config }, npcMeta);
+        return exportCreatureNpcAsMdl(ctx, npcMeta);
       }
 
       return exportCharacterAsMdl({
-        ctx: { assetManager: this.assetManager, config: this.config },
+        ctx,
         metaData: npcMeta,
         expansion: baseZam.expansion,
         keepCinematic: Boolean(char.keepCinematic),
@@ -213,7 +215,7 @@ export class CharacterExporter {
     throw new Error('Unknown base type');
   }
 
-  private async exportItem(ref: Ref): Promise<MDL> {
+  private async exportItem(ctx: ExportContext, ref: Ref): Promise<MDL> {
     if (ref.type === 'local') {
       await ensureLocalModelFileExists(ref.value);
       return this.assetManager.parse(ref.value, true).mdl;
@@ -226,7 +228,7 @@ export class CharacterExporter {
         };
       if (zam.type !== 'item') throw new Error('Expected item zam url');
       return exportZamItemAsMdl({
-        ctx: { assetManager: this.assetManager, config: this.config },
+        ctx,
         zam,
         targetRace: 0, // universal
         targetGender: 2, // universal

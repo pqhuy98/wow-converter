@@ -1,21 +1,24 @@
 import chalk from 'chalk';
+import { createHash } from 'crypto';
+import { writeFileSync } from 'fs';
 import _ from 'lodash';
 import path from 'path';
 
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
-import { radians } from '@/lib/math/rotation';
+import { drawPngsOnBasePng, PngDraw } from '@/lib/formats/png';
 import {
   ANIM_NAMES, AttackTag, getWc3AnimName, getWowAnimName,
 } from '@/lib/objmdl/animation/animation_mapper';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { fetchCharacterCustomization } from '@/lib/wowhead-client/character-customization';
 import { EquipmentSlot } from '@/lib/wowhead-client/item-armor';
 import { CharacterData } from '@/lib/wowhead-client/npc';
 import { ZamExpansion } from '@/lib/wowhead-client/zam-url';
 
 import {
-  applyReplaceableTextrures, ExportContext, exportModelFileIdAsMdl, exportTexture,
+  applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture,
 } from '../utils';
 import {
   filterCollectionGeosets,
@@ -55,7 +58,8 @@ export async function exportCharacterAsMdl({
   await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots);
 
   // Cloak etc additional textures
-  await attachEquipmentsWithTexturesOnly(ctx, charMdl, prep.equipmentSlots);
+  await applyCloakTexture(ctx, charMdl, prep.equipmentSlots);
+  await applyEquipmentsBodyTextures(ctx, charMdl, prep, expansion);
 
   // Hacky fixes to be removed later
   // EyeGlow make them a bit transparent with geoset anims
@@ -78,7 +82,7 @@ export async function exportCharacterAsMdl({
   }
 
   // Apply replaceable textures
-  await applyReplaceableTextrures(ctx, charMdl, prep.replaceableTextures);
+  await applyReplaceableTextures(ctx, charMdl, prep.replaceableTextures);
 
   return charMdl;
 }
@@ -93,6 +97,7 @@ type Prep = {
   prebakedTexture: number | null;
   equipmentSlots: EquipmentSlotData[];
   replaceableTextures: Record<string, number>;
+  chrModelId: number;
 }
 
 async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExpansion): Promise<Prep> {
@@ -148,6 +153,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     prebakedTexture,
     equipmentSlots,
     replaceableTextures: metadata.Textures || {},
+    chrModelId: character.ChrModelId,
   };
 }
 
@@ -160,13 +166,23 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     fileDataId: number,
   }[] = [];
 
+  const debug = true;
+
   // Attach individual item model to the character model
-  const attachItemModel = async (fileDataId: number, itemData: ItemMetata, attachmentId: WoWAttachmentID | undefined) => {
-    debug && console.log('attachItemModel', itemData, attachmentId);
+  const attachItemModel = async (itemData: ItemMetata, idx: number, attachmentId: WoWAttachmentID | undefined) => {
+    debug && console.log('attachItemModel', attachmentId ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
+
+    const fileDataId = itemData.modelFiles[idx].fileDataId;
+    const itemReplaceableTextures = Object.fromEntries(itemData.modelTextureFiles[idx].map((f) => [f.componentId, f.fileDataId]));
+    debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTextures);
 
     const itemMdl = !collections.has(fileDataId)
-      ? await exportModelFileIdAsMdl(ctx, fileDataId, { textureIds: itemData.modelTextureFiles })
+      ? await exportModelFileIdAsMdl(ctx, fileDataId, { textureIds: itemData.modelTextureFiles[idx].map((f) => f.fileDataId) })
       : _.cloneDeep(collections.get(fileDataId)!);
+
+    debug && console.log(itemMdl.textures.map((t) => `${t.wowData.type} ${t.image}`));
+
+    await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures);
 
     const isCollection = collections.has(fileDataId) || canAddMdlCollectionItemToModel(charMdl, itemMdl);
 
@@ -175,7 +191,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
         collections.set(fileDataId, _.cloneDeep(itemMdl));
       }
 
-      const debug = false;
+      const debug = true;
       debug && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
       const enabledGeosets = filterCollectionGeosets(itemData.slotId!, itemData.originalData, itemMdl);
 
@@ -211,9 +227,9 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     }
 
     if (attachmentId === WoWAttachmentID.HandLeft) {
-      const shouldRotate = (itemData.flags & 256) || (itemData.flags & 1024);
-      if (shouldRotate) {
-        itemMdl.modify.rotate([0, 0, radians(180)]);
+      const shouldFlipY = itemData.flags & 256;
+      if (shouldFlipY) {
+        itemMdl.modify.flipY();
       }
     }
 
@@ -223,23 +239,28 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     });
   };
 
-  const attachmentList: [EquipmentSlot, number, WoWAttachmentID | undefined][] = [
-    [EquipmentSlot.Head, 0, WoWAttachmentID.Helm],
-    [EquipmentSlot.Shoulder, 0, WoWAttachmentID.ShoulderLeft],
-    [EquipmentSlot.Shoulder, 1, WoWAttachmentID.ShoulderRight],
-    [EquipmentSlot.Belt, 0, WoWAttachmentID.BeltBuckle],
-    [EquipmentSlot.Back, 0, WoWAttachmentID.Backpack],
-    [EquipmentSlot.Chest, 0, undefined],
-    [EquipmentSlot.Legs, 0, undefined],
-    [EquipmentSlot.Feet, 0, undefined],
-    [EquipmentSlot.Gloves, 0, undefined],
-    [EquipmentSlot.MainHand, 0, WoWAttachmentID.HandRight],
-    [EquipmentSlot.OffHand, 0, WoWAttachmentID.HandLeft],
-  ];
-  for (const [slotId, index, attachmentId] of attachmentList) {
-    const slot = equipmentSlots.find((s) => s.slotId === slotId);
-    if (slot && slot.data.modelFiles[index]) {
-      await attachItemModel(slot.data.modelFiles[index], slot.data, attachmentId);
+  const attachmentList: Record<EquipmentSlot, WoWAttachmentID[]> = {
+    [EquipmentSlot.Head]: [WoWAttachmentID.Helm],
+    [EquipmentSlot.Shoulder]: [WoWAttachmentID.ShoulderLeft, WoWAttachmentID.ShoulderRight],
+    [EquipmentSlot.Belt]: [WoWAttachmentID.BeltBuckle],
+    [EquipmentSlot.Back]: [WoWAttachmentID.Backpack],
+    [EquipmentSlot.Chest]: [],
+    [EquipmentSlot.Legs]: [],
+    [EquipmentSlot.Feet]: [],
+    [EquipmentSlot.Gloves]: [],
+    [EquipmentSlot.MainHand]: [WoWAttachmentID.HandRight],
+    [EquipmentSlot.OffHand]: [WoWAttachmentID.HandLeft],
+    [EquipmentSlot.Shirt]: [],
+    [EquipmentSlot.Tabard]: [],
+    [EquipmentSlot.Wrist]: [],
+  };
+
+  for (const [slotId, attachmentIds] of Object.entries(attachmentList)) {
+    const slot = equipmentSlots.find((s) => s.slotId === Number(slotId));
+    if (slot) {
+      for (let i = 0; i < slot.data.modelFiles.length; i++) {
+        await attachItemModel(slot.data, i, attachmentIds[i] ?? attachmentIds[0] ?? undefined);
+      }
     }
   }
 
@@ -255,101 +276,188 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   });
 }
 
-async function attachEquipmentsWithTexturesOnly(ctx: ExportContext, charMdl: MDL, slots: EquipmentSlotData[]) {
-  const textureSlotConfigs: Partial<Record<EquipmentSlot, { geosetNames: string[]; twoSided?: boolean }>> = {
-    [EquipmentSlot.Back]: { geosetNames: ['Cloak'], twoSided: true },
-  };
-  for (const slot of slots) {
-    const cfg = textureSlotConfigs[slot.slotId];
-    if (!cfg) continue;
-    const matching = charMdl.geosets.filter((g) => cfg.geosetNames.some((name) => g.name.includes(name)));
-    if (matching.length === 0) continue;
+async function applyCloakTexture(ctx: ExportContext, charMdl: MDL, slots: EquipmentSlotData[]) {
+  const cloakSlot = slots.find((s) => s.slotId === EquipmentSlot.Back);
+  if (!cloakSlot || cloakSlot.data.bodyTextureFiles.length === 0) return;
 
-    const textureFile = slot.data.bodyTextureFiles[0];
-
-    const texPath = await exportTexture(textureFile);
-    ctx.assetManager.addPngTexture(texPath);
-    charMdl.textures.push({
-      id: charMdl.textures.length,
-      image: path.join(ctx.config.assetPrefix, texPath).replace('.png', '.blp'),
-      wrapWidth: false,
-      wrapHeight: false,
-      wowData: {
-        type: 0,
-        pngPath: texPath,
-      },
-    });
-    charMdl.materials.push({
-      id: charMdl.materials.length,
-      constantColor: false,
-      twoSided: cfg.twoSided ?? false,
-      layers: [
-        {
-          filterMode: 'Transparent',
-          texture: charMdl.textures.at(-1)!,
-          twoSided: cfg.twoSided ?? false,
-          unshaded: false,
-          sphereEnvMap: false,
-          unfogged: false,
-          unlit: false,
-          noDepthTest: false,
-          noDepthSet: false,
-          alpha: {
-            static: true,
-            value: 1,
-          },
+  const textureFile = cloakSlot.data.bodyTextureFiles[0];
+  const texPath = await exportTexture(textureFile.fileDataId);
+  ctx.assetManager.addPngTexture(texPath);
+  charMdl.textures.push({
+    id: charMdl.textures.length,
+    image: path.join(ctx.config.assetPrefix, texPath).replace('.png', '.blp'),
+    wrapWidth: false,
+    wrapHeight: false,
+    wowData: {
+      type: 0,
+      pngPath: texPath,
+    },
+  });
+  charMdl.materials.push({
+    id: charMdl.materials.length,
+    constantColor: false,
+    twoSided: true,
+    layers: [
+      {
+        filterMode: 'Transparent',
+        texture: charMdl.textures.at(-1)!,
+        twoSided: true,
+        unshaded: false,
+        sphereEnvMap: false,
+        unfogged: false,
+        unlit: false,
+        noDepthTest: false,
+        noDepthSet: false,
+        alpha: {
+          static: true,
+          value: 1,
         },
-      ],
-    });
-    matching.forEach((g) => { g.material = charMdl.materials.at(-1)!; });
-    console.log('Set texture', getEquipmentSlotName(slot.slotId), '->', path.basename(texPath).replace('.png', ''));
-  }
+      },
+    ],
+  });
+  charMdl.geosets.forEach((g) => {
+    if (g.name.includes('Cloak')) {
+      g.material = charMdl.materials.at(-1)!;
+    }
+  });
 }
 
-const debug = false;
-
 async function applyPrebakedTextrure(ctx: ExportContext, charMdl: MDL, prep: Prep) {
+  if (!prep.prebakedTexture) return;
+
   const baseTexturePath = charMdl.textures.find((t) => t.wowData.type === 1)?.image;
-  if (prep.prebakedTexture) {
-    const prebakedTexturePath = await exportTexture(prep.prebakedTexture);
-    console.log('Character has prebaked texture', prep.prebakedTexture, prebakedTexturePath);
-    ctx.assetManager.addPngTexture(prebakedTexturePath);
+  const prebakedTexturePath = await exportTexture(prep.prebakedTexture);
+  console.log('Character has prebaked texture', prep.prebakedTexture, prebakedTexturePath);
+  ctx.assetManager.addPngTexture(prebakedTexturePath);
 
-    debug && console.log('baseTexturePath', baseTexturePath);
+  // console.log('baseTexturePath', baseTexturePath);
 
-    const newTexturePath = path.join(ctx.config.assetPrefix, prebakedTexturePath).replace('.png', '.blp');
+  const newTexturePath = path.join(ctx.config.assetPrefix, prebakedTexturePath).replace('.png', '.blp');
 
-    charMdl.geosets.forEach((geoset, i) => {
-      // For skeleton, we don't want to override anything but
-      // For some reason, the skull is not included in the baked texture
-      let skip = false;
-      const raceSkeleton = 20;
-      if (prep.rpcParams.race === raceSkeleton) {
-        skip = true;
-        let geosetIds: number[] | undefined;
-        if (geoset.name.includes('Glove') && charMdl.geosets[i - 1].name.includes('Glove')) {
-          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Gloves)?.data.geosetIds;
-        } else if (geoset.name.includes('Boot') && charMdl.geosets[i + 1].name.includes('Boot')) {
-          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Feet)?.data.geosetIds;
-        } else if (geoset.name.includes('Trousers')) {
-          geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Legs)?.data.geosetIds;
-        }
-        if (geosetIds && geosetIds.length > 0) {
-          skip = false;
-        }
+  charMdl.geosets.forEach((geoset, i) => {
+    // For skeleton, we don't want to override anything but
+    // For some reason, the skull is not included in the baked texture
+    let skip = false;
+    const raceSkeleton = 20;
+    if (prep.rpcParams.race === raceSkeleton) {
+      skip = true;
+      let geosetIds: number[] | undefined;
+      if (geoset.name.includes('Glove') && charMdl.geosets[i - 1].name.includes('Glove')) {
+        geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Gloves)?.data.geosetIds;
+      } else if (geoset.name.includes('Boot') && charMdl.geosets[i + 1].name.includes('Boot')) {
+        geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Feet)?.data.geosetIds;
+      } else if (geoset.name.includes('Trousers')) {
+        geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Legs)?.data.geosetIds;
       }
-      if (skip) return;
+      if (geosetIds && geosetIds.length > 0) {
+        skip = false;
+      }
+    }
+    if (skip) return;
 
-      // Replace the base texture with the npc baked texture
-      geoset.material.layers.forEach((layer) => {
-        if (layer.texture.image === baseTexturePath || layer.texture.image === '') {
-          layer.texture.image = newTexturePath;
-        }
-      });
+    // Replace the base texture with the npc baked texture
+    geoset.material.layers.forEach((layer) => {
+      if (layer.texture.image === baseTexturePath || layer.texture.image === '') {
+        layer.texture.image = newTexturePath;
+      }
     });
-  } else {
-    console.log('Character has no prebaked texture. Using default texture:', baseTexturePath);
+  });
+}
+
+async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, prep: Prep, expansion: ZamExpansion) {
+  const baseTexture = charMdl.textures.find((t) => t.wowData.type === 1);
+  if (prep.prebakedTexture) return;
+
+  if (!baseTexture) {
+    throw new Error(`Base texture with wowData.type === 1 not found for ${charMdl.model.name}`);
   }
+
+  console.log('Character has no prebaked texture. Using default texture:', baseTexture.wowData.pngPath);
+  const charCus = await fetchCharacterCustomization({
+    expansion,
+    type: 'character-customization',
+    chrModelId: prep.chrModelId,
+  });
+
+  // Wowhead overlays texture-only items onto the body compositor in a specific slot priority order (hr)
+  // Reference (minified): viewer.min.js hr = [0,16,0,15,1,7,10,5,6,6,8,0,0,17,18,19,14,20,0,9,7,21,22,23,0,24,25,0]
+  const wowheadSlotPriority: Partial<Record<EquipmentSlot, number>> = {
+    [EquipmentSlot.Head]: 16,
+    [EquipmentSlot.Shoulder]: 15,
+    [EquipmentSlot.Shirt]: 1,
+    [EquipmentSlot.Chest]: 7,
+    [EquipmentSlot.Belt]: 10,
+    [EquipmentSlot.Legs]: 5,
+    [EquipmentSlot.Feet]: 6,
+    [EquipmentSlot.Wrist]: 6,
+    [EquipmentSlot.Gloves]: 8,
+    [EquipmentSlot.MainHand]: 17,
+    [EquipmentSlot.OffHand]: 18,
+    // Back (16) not baked here
+    [EquipmentSlot.Tabard]: 9,
+  };
+
+  // Build a list of overlays with slot priority and region id; skip cloaks (Back)
+  const overlays = prep.equipmentSlots
+    .filter((s) => s.slotId !== EquipmentSlot.Back)
+    .flatMap((s) => {
+      // Base priority from Wowhead mapping
+      let basePriority = wowheadSlotPriority[s.slotId] ?? 0;
+      // Wowhead bumps legs priority by +2 when the legs item has GeosetGroup[2] > 0 (robe-like)
+      if (s.slotId === EquipmentSlot.Legs && s.data.originalData?.Item?.GeosetGroup?.[2] > 0) {
+        basePriority += 2;
+      }
+      return s.data.bodyTextureFiles.map((f) => ({
+        slotId: s.slotId,
+        priority: basePriority,
+        componentId: f.componentId,
+        fileDataId: f.fileDataId,
+      }));
+    });
+
+  // Wowhead sorts by slot priority, then applies item regions in ascending SectionType; skip region 12 (cloak)
+  overlays.sort((a, b) => (a.priority - b.priority) || (a.componentId - b.componentId));
+
+  const debug = false;
+  debug && console.log('Overlays:', overlays);
+
+  const textureDraws: PngDraw[] = [];
+  for (const t of overlays) {
+    if (t.slotId === EquipmentSlot.Back) continue; // cloak/back is not baked into base
+    const section = charCus.TextureSections.find((s) => s.SectionType === t.componentId);
+    if (!section) throw new Error(`Texture section not found for file ${t.fileDataId} component ${t.componentId}`);
+    debug && console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
+    const texPath = await exportTexture(t.fileDataId);
+    textureDraws.push({
+      pngPath: path.join(ctx.config.wowExportAssetDir, texPath),
+      x: section.X,
+      y: section.Y,
+      width: section.Width,
+      height: section.Height,
+    });
+  }
+
+  const basePng = path.join(ctx.config.wowExportAssetDir, baseTexture.wowData.pngPath);
+  debug && console.log('Base PNG:', basePng);
+  debug && console.log('Texture draws:', textureDraws);
+
+  const newPng = await drawPngsOnBasePng(basePng, textureDraws);
+
+  let newPngName = createHash('md5').update(JSON.stringify({ basePng, textureDraws })).digest('hex');
+  newPngName = `${ctx.outputFile}-${newPngName}`;
+
+  const newPngPath = path.join(ctx.config.wowExportAssetDir, `${newPngName}.png`);
+  writeFileSync(newPngPath, newPng);
+  const newBlpPath = path.join(ctx.config.assetPrefix, path.relative(ctx.config.wowExportAssetDir, newPngPath))
+    .replace('.png', '.blp');
+
+  charMdl.textures.forEach((t) => {
+    if (t.wowData.type === 1) {
+      t.image = newBlpPath;
+      t.wowData.pngPath = newPngPath;
+    }
+  });
+  ctx.assetManager.addPngTexture(path.relative(ctx.config.wowExportAssetDir, newPngPath));
 }
 
 function getExcludedAnimIds(keepCinematic: boolean, attackTag: AttackTag | undefined): number[] {

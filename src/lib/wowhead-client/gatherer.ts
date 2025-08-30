@@ -1,4 +1,5 @@
 import { g_itembonuses } from './snipped-data/g_itembonuses';
+import { getWowheadPrefix, ZamExpansion } from './zam-url';
 
 export interface GathererAppearancesMap {
   [index: string]: [number, string];
@@ -23,12 +24,13 @@ interface ItemData {
   name: string
 }
 
-export async function gatherItems(items: {itemId: number, itemBonus: number}[]): Promise<ItemData[]> {
+export async function gatherItems(expansion: ZamExpansion, items: {itemId: number, itemBonus: number}[]): Promise<ItemData[]> {
   if (!items.length) {
     return [];
   }
 
-  const url = buildGathererUrl(items.map((v) => v.itemId));
+  const url = buildGathererUrl(expansion, items.map((v) => v.itemId));
+  console.log(url);
   const res = await fetch(url, { method: 'GET' });
   const body = await res.text();
 
@@ -53,16 +55,17 @@ export async function gatherItems(items: {itemId: number, itemBonus: number}[]):
   return result;
 }
 
-function buildGathererUrl(itemIds: number[]): string {
+function buildGathererUrl(expansion: ZamExpansion, itemIds: number[]): string {
   const items = itemIds.join(',');
   const ts = Date.now();
-  return `https://www.wowhead.com/gatherer?items=${items}&_=${ts}`;
+  return `${getWowheadPrefix(expansion)}/gatherer?items=${items}&_=${ts}`;
 }
 
 function extractAddDataPayload(scriptText: string): string {
   // Capture the 3rd argument (object literal) to WH.Gatherer.addData(a, b, {...});
   const match = scriptText.match(/WH\.Gatherer\.addData\([^,]+,[^,]+,\s*(\{[\s\S]*\})\);?/);
   if (!match || !match[1]) {
+    console.log(scriptText);
     throw new Error('Failed to extract Gatherer payload');
   }
   return match[1];

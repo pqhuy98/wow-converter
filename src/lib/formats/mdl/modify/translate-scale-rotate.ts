@@ -67,6 +67,46 @@ export function scale(this: MDLModify, value: number) {
   return this;
 }
 
+export function flipY(this: MDLModify) {
+  this.mdl.geosets.forEach((geoset) => {
+    geoset.vertices.forEach((vertex) => {
+      vertex.position[1] *= -1;
+      vertex.normal[1] *= -1;
+    });
+    geoset.faces.forEach((face) => {
+      const tmp = face.vertices[1];
+      face.vertices[1] = face.vertices[2];
+      face.vertices[2] = tmp;
+    });
+  });
+  this.mdl.getNodes().forEach((node) => {
+    if (node.translation) {
+      [...node.translation.keyFrames.values()].forEach((translation) => {
+        translation[1] *= -1;
+      });
+    }
+    if (node.rotation) {
+      [...node.rotation.keyFrames.values()].forEach((rotation) => {
+        rotation[0] *= -1; // x
+        rotation[2] *= -1; // z
+      });
+    }
+    node.pivotPoint[1] *= -1;
+  });
+  this.mdl.collisionShapes.forEach((shape) => {
+    shape.vertices.forEach((v) => {
+      v[1] *= -1;
+    });
+    shape.pivotPoint[1] *= -1;
+  });
+  this.mdl.cameras.forEach((cam) => {
+    cam.position[1] *= -1;
+    cam.target.position[1] *= -1;
+  });
+  this.mdl.sync();
+  return this;
+}
+
 export function translate(this: MDLModify, delta: Vector3) {
   this.mdl.geosets.forEach((geoset) => {
     geoset.vertices.forEach((vertex) => {

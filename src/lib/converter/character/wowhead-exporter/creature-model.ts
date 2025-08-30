@@ -1,7 +1,7 @@
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { CharacterData } from '@/lib/wowhead-client/npc';
 
-import { applyReplaceableTextrures, ExportContext, exportModelFileIdAsMdl } from '../utils';
+import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '../utils';
 
 export async function exportCreatureNpcAsMdl(ctx: ExportContext, meta: CharacterData): Promise<MDL> {
   if (!meta.Model) throw new Error('Creature NPC must contain Model');
@@ -12,7 +12,7 @@ export async function exportCreatureNpcAsMdl(ctx: ExportContext, meta: Character
     extraGeosets,
   });
 
-  await applyReplaceableTextrures(ctx, mdl, meta.Textures || {});
+  await applyReplaceableTextures(ctx, mdl, meta.Textures || {});
 
   return mdl;
 }

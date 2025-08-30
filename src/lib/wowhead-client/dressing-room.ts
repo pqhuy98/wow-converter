@@ -1,6 +1,8 @@
 import { gatherItems } from './gatherer';
 import { EquipmentSlot } from './item-armor';
 import { CharacterData, EquipmentMap } from './npc';
+import { raceGenderMap } from './snipped-data/dressing-room-transmog-data';
+import { ZamExpansion } from './zam-url';
 
 const PAPERDOLL_SLOTS = {
   1: EquipmentSlot.Head,
@@ -18,7 +20,7 @@ const PAPERDOLL_SLOTS = {
   13: EquipmentSlot.OffHand,
 };
 
-export async function decodeDressingRoom(hash: string): Promise<CharacterData> {
+export async function decodeDressingRoom(expansion: ZamExpansion, hash: string): Promise<CharacterData> {
   const clean = (hash || '').replace(/^#/, '');
   if (!clean) {
     return {};
@@ -48,7 +50,7 @@ export async function decodeDressingRoom(hash: string): Promise<CharacterData> {
   console.log(data);
   const itemsWithBonus = Object.values(data.equipment)
     .filter((v) => v.itemId > 0);
-  const items = await gatherItems(itemsWithBonus);
+  const items = await gatherItems(expansion, itemsWithBonus);
 
   const equipments: EquipmentMap = Object.fromEntries(Object.entries(data.equipment).map(([dollSlotId, item]) => {
     const slotId = PAPERDOLL_SLOTS[dollSlotId];
@@ -59,6 +61,7 @@ export async function decodeDressingRoom(hash: string): Promise<CharacterData> {
     Character: {
       Race: data.settings.race,
       Gender: data.settings.gender,
+      ChrModelId: raceGenderMap[data.settings.race][data.settings.gender],
     },
     Creature: {
       CreatureCustomizations: Object.entries(data.custChoices)

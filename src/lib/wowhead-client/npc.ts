@@ -20,6 +20,7 @@ export interface Customization {
 export interface CharacterMeta {
   Race: number;
   Gender: number;
+  ChrModelId: number;
 }
 
 export interface CreatureMeta {

@@ -178,11 +178,16 @@ const wowheadPattern = {
   item: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?item=/,
 };
 
+const invalidMessage = {
+  npc: 'Invalid Wowhead URL, must contain /npc=... or /dressing-room#...',
+  item: 'Invalid Wowhead URL, must contain /item=...',
+};
+
 export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean): string | null => {
   if (ref.type === 'wowhead') {
     // Allow URLs with expansion prefixes like /wotlk/, /classic/, etc. (only a-z characters)
     if (!wowheadPattern[category].test(ref.value)) {
-      return `Invalid Wowhead URL, must contain /${category}=...`;
+      return invalidMessage[category];
     }
   }
   if (ref.type === 'local') {

@@ -3,15 +3,20 @@ import { MDL } from '@/lib/formats/mdl/mdl';
 import { EquipmentSlot, fetchItemMeta, ItemData } from '@/lib/wowhead-client/item-armor';
 import { ItemZamUrl } from '@/lib/wowhead-client/zam-url';
 
-import { ExportContext, exportModelFileIdAsMdl } from '../utils';
+import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '../utils';
+
+interface FileWithComponent {
+  fileDataId: number;
+  componentId: number;
+}
 
 export interface ItemMetata {
   slotId: number | null;
   displayId: number;
   flags: number;
-  modelFiles: number[];
-  modelTextureFiles: number[];
-  bodyTextureFiles: number[];
+  modelFiles: FileWithComponent[];
+  modelTextureFiles: [FileWithComponent[], FileWithComponent[]];
+  bodyTextureFiles: FileWithComponent[];
   geosetIds?: number[];
   hideGeosetIds?: number[];
   originalData: ItemData;
@@ -201,12 +206,12 @@ export async function processItemData(url: ItemZamUrl, targetRace: number, targe
     slotId: url.slotId,
     displayId: url.displayId,
     flags: itemData.Item.Flags,
-    modelFiles: filterFilesByRaceGender(itemData.ModelFiles || {}, itemData.ComponentModels || {}, targetRace, targetGender),
+    modelFiles: filterFilesByRaceGender(itemData.ModelFiles || {}, itemData.ComponentModels || {}, targetRace, targetGender, false),
     modelTextureFiles: [
-      ...[itemData.Textures, itemData.Textures2].filter((obj) => obj !== null)
-        .flatMap((obj) => Object.entries(obj).flatMap(([, value]) => value)),
+      Object.entries(itemData.Textures || {}).flatMap(([k, value]) => ({ fileDataId: value, componentId: Number(k) })),
+      Object.entries(itemData.Textures2 || {}).flatMap(([k, value]) => ({ fileDataId: value, componentId: Number(k) })),
     ],
-    bodyTextureFiles: filterFilesByRaceGender(itemData.TextureFiles || {}, itemData.ComponentTextures || {}, targetRace, targetGender),
+    bodyTextureFiles: filterFilesByRaceGender(itemData.TextureFiles || {}, itemData.ComponentTextures || {}, targetRace, targetGender, true),
     geosetIds: url.slotId ? resolveCharacterGeosetIds(url.slotId, itemData) : [],
     hideGeosetIds: resolveHideGeosetIds(itemData, targetRace, targetGender),
     originalData: itemData,
@@ -214,27 +219,91 @@ export async function processItemData(url: ItemZamUrl, targetRace: number, targe
   return result;
 }
 
+// From viewer.min.js
+const raceGenderFallback = {
+  86: [4, 0, 4, 1, 4, 0, 4, 1],
+  85: [84, 0, 84, 1, 84, 0, 84, 1],
+  84: [3, 0, 3, 1, 3, 0, 3, 1],
+  77: [5, 1, 0, -1, 5, 0, 0, -1],
+  76: [10, 0, 1, 1, 10, 0, 1, 1],
+  75: [10, 0, 1, 1, 10, 0, 1, 1],
+  74: [5, 1, 0, -1, 5, 0, 0, -1],
+  73: [5, 1, 0, -1, 5, 0, 0, -1],
+  72: [5, 1, 0, -1, 5, 0, 0, -1],
+  71: [5, 1, 0, -1, 5, 0, 0, -1],
+  37: [7, 0, 7, 1, 7, 0, 7, 1],
+  36: [2, 0, 2, 1, 2, 0, 2, 1],
+  34: [3, 0, 3, 1, 3, 0, 3, 1],
+  33: [5, 1, 0, -1, 5, 0, 0, -1],
+  31: [0, -1, 8, 1, 0, -1, 8, 1],
+  30: [11, 0, 11, 1, 11, 0, 11, 1],
+  29: [10, 0, 10, 1, 10, 0, 10, 1],
+  28: [6, 0, 6, 1, 6, 0, 6, 1],
+  27: [4, 0, 4, 1, 4, 0, 4, 1],
+  26: [24, 0, 24, 1, 24, 0, 24, 1],
+  25: [24, 0, 24, 1, 24, 0, 24, 1],
+  23: [1, 0, 1, 1, 1, 0, 1, 1],
+  15: [5, 0, 5, 1, 5, 0, 5, 1],
+  1: [0, -1, 0, -1, 0, -1, 0, 3],
+};
+
 function filterFilesByRaceGender(
   files: ItemData['ModelFiles'] | ItemData['TextureFiles'],
   components: ItemData['ComponentModels'] | ItemData['ComponentTextures'],
   targetRace: number,
   targetGender: number,
-): number[] {
-  const filteredFiles: number[] = [];
+  isTexture: boolean,
+): FileWithComponent[] {
+  const filteredFiles: FileWithComponent[] = [];
   const componentEntries = Object.entries(components || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
   for (let i = 0; i < componentEntries.length; i++) {
-    const [_componentId, id] = componentEntries[i];
+    const [componentId, id] = componentEntries[i];
     const entries = files[id] || [];
     const matchingFiles = entries.filter((fileEntry) => (
       // Check if this entry matches our race and gender OR is universal (Race: 0, Gender: 2)
       (fileEntry.Race === targetRace || fileEntry.Race === 0)
         && (fileEntry.Gender === targetGender || fileEntry.Gender > 1)));
     matchingFiles.sort((a, b) => a.ExtraData - b.ExtraData);
+
     let matchingFile = matchingFiles[0];
     if (matchingFiles.length > 1 && matchingFiles[i]) {
       matchingFile = matchingFiles[i];
     }
-    filteredFiles.push(matchingFile.FileDataId);
+    // Fallback: use raceGenderFallback map like Wowhead. If no direct match, remap race/gender and retry.
+    if (!matchingFile) {
+      // try one-step fallback
+      const remap = (race: number, gender: number): [number, number] | null => {
+        const row = (raceGenderFallback as Record<number, number[] | undefined>)[race];
+        if (!row) return null;
+        const base = isTexture ? 4 : 0;
+        const idx = base + 2 * gender;
+        const r = row[idx];
+        const g = row[idx + 1];
+        if (r === undefined || g === undefined) return null;
+        return [r, g];
+      };
+
+      let cur: [number, number] | null = [targetRace, targetGender];
+      const visited = new Set<string>();
+      while (cur) {
+        const key = cur.join(':');
+        if (visited.has(key)) break;
+        visited.add(key);
+        const [r, g] = cur;
+        const tryFiles = entries.filter((fileEntry) => (
+          (fileEntry.Race === r || (r === 0 && fileEntry.Race === 0))
+            && (g === -1 ? fileEntry.Gender > 1 : (fileEntry.Gender === g || fileEntry.Gender > 1))));
+        tryFiles.sort((a, b) => a.ExtraData - b.ExtraData);
+        if (tryFiles.length) {
+          matchingFile = tryFiles[0];
+          break;
+        }
+        cur = remap(r, g);
+      }
+    }
+    if (matchingFile) {
+      filteredFiles.push({ fileDataId: matchingFile.FileDataId, componentId: Number(componentId) });
+    }
   }
   return filteredFiles;
 }
@@ -251,7 +320,9 @@ export async function exportZamItemAsMdl({
   targetGender: number;
 }): Promise<MDL> {
   const result = await processItemData(zam, targetRace, targetGender);
-  const modelId = result.modelFiles[0];
-  const allTextureIds = result.modelTextureFiles;
-  return exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
+  const modelId = result.modelFiles[0].fileDataId;
+  const allTextureIds = result.modelTextureFiles[0].map((f) => f.fileDataId);
+  const mdl = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
+  await applyReplaceableTextures(ctx, mdl, Object.fromEntries(result.modelTextureFiles[0].map((f) => [f.componentId, f.fileDataId])));
+  return mdl;
 }

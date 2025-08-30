@@ -1,7 +1,7 @@
 import { LRUCache } from 'lru-cache';
 
 export type ZamExpansion = 'classic' | 'tbc' | 'wrath' | 'cata' | 'mists' | 'live' | 'ptr' | 'ptr2' | 'latest-available';
-export type ZamType = 'npc' | 'item' | 'dressing-room';
+export type ZamType = 'npc' | 'item' | 'dressing-room' | 'character-customization';
 
 export type BaseZamUrl = {
   expansion: ZamExpansion;
@@ -10,7 +10,8 @@ export type BaseZamUrl = {
 export type NpcZamUrl = BaseZamUrl & { type: 'npc', displayId: number };
 export type DressingRoomZamUrl = BaseZamUrl & { type: 'dressing-room', hash: string };
 export type ItemZamUrl = BaseZamUrl & { type: 'item', displayId: number, slotId: number | null };
-export type ZamUrl = NpcZamUrl | ItemZamUrl | DressingRoomZamUrl;
+export type CharacterCustomizationZamUrl = BaseZamUrl & { type: 'character-customization', chrModelId: number };
+export type ZamUrl = NpcZamUrl | ItemZamUrl | DressingRoomZamUrl | CharacterCustomizationZamUrl;
 
 export function getZamBaseUrl(expansion: ZamExpansion): string {
   return `https://wow.zamimg.com/modelviewer/${expansion}`;
@@ -34,8 +35,14 @@ const expansionsReverse = [...expansions].reverse();
 export async function getZamUrlFromWowheadUrl(url: string): Promise<ZamUrl> {
   const type = getTypeFromUrl(url);
   if (!type) throw new Error(`Cannot infer type from wowhead url: ${url}`);
+  if (type === 'character-customization') {
+    throw new Error('Cannot get character customization from wowhead url');
+  }
+
   const expansion = getExpansionFromUrl(url) || 'live';
-  if (type === 'dressing-room') return { expansion, type, hash: url.split('#')[1] };
+  if (type === 'dressing-room') return { expansion, type, hash: url.split('#')[1].split('?')[0] };
+
+  // npc or item
   const displayId = await getDisplayIdFromUrl(url);
   if (type === 'item') {
     return {
@@ -52,6 +59,11 @@ export function getExpansionFromUrl(url: string): ZamExpansion | undefined {
     if (url.startsWith(wowheadPrefix) || url.startsWith(wowZamPrefix)) return zamEx;
   }
   return undefined;
+}
+
+export function getWowheadPrefix(expansion: ZamExpansion): string {
+  const [wowheadEx] = expansionsReverse.find(([_, zamEx]) => zamEx === expansion) || [];
+  return `https://www.wowhead.com/${wowheadEx ? `${wowheadEx}/` : ''}`;
 }
 
 export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpansion> {
