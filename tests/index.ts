@@ -44,7 +44,7 @@ async function exportTestCases() {
     const weaponR = Array.isArray(url) ? url[1] : undefined;
     const weaponL = Array.isArray(url) ? url[2] : undefined;
     const sizeStr = Array.isArray(url) ? url[3] : '';
-    const size: Size = sizeStr === '' ? undefined : sizeStr;
+    const size: Size = sizeStr === '' ? undefined : sizeStr as Size;
 
     const attachItems: Record<string, AttachItem> = {};
     if (weaponR) {
@@ -104,6 +104,10 @@ export async function main() {
   map.load(mapDir);
   console.log('Unit types', map.unitTypes.map((t) => t.code), map.unitTypes.length);
 
+  map.unitTypes.forEach((t) => {
+    console.log('Unit type:', t.code, t.data);
+  });
+
   map.units = map.units.filter((unit) => typeof unit.type === 'string'); // all melee units
   map.unitTypes = [];
 
@@ -111,7 +115,8 @@ export async function main() {
     const npc = npcs[i];
     const name = npc.name;
     const mdl = npc.mdl;
-    const deathSequence = mdl?.sequences.find((s) => s.name === 'Death');
+    const deathSequence = mdl?.sequences.find((s) => s.name.startsWith('Death'));
+    const deathTime = deathSequence ? (deathSequence.interval[1] - deathSequence.interval[0]) / 1000 : 6;
     const unitType = map.addUnitType('hero', 'Hpal', [
       { id: 'unam', type: ModificationType.string, value: name },
       { id: 'upro', type: ModificationType.string, value: name },
@@ -120,11 +125,7 @@ export async function main() {
       { id: 'ussc', type: ModificationType.real, value: 2 },
       { id: 'ua1b', type: ModificationType.int, value: 500 },
       { id: 'uabi', type: ModificationType.string, value: 'A003,A001,A002,A000' },
-      {
-        id: 'udtm',
-        type: ModificationType.real,
-        value: deathSequence ? (deathSequence.interval[1] - deathSequence.interval[0]) / 1000 : 6,
-      },
+      { id: 'udtm', type: ModificationType.unreal, value: deathTime },
     ]);
 
     const mapSize = map.terrain.map;

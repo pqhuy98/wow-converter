@@ -207,7 +207,16 @@ export function optimizeKeyFrames(this: MDLModify) {
     optimiseAnim(anim, threshold);
   });
 
-  this.mdl.globalSequences = this.mdl.globalSequences.filter((gs) => usedGlobalSequences.has(gs));
+  this.mdl.globalSequences = this.mdl.globalSequences.filter((gs) => usedGlobalSequences.has(gs))
+    .sort((a, b) => a.duration - b.duration);
+
+  const neverVisible = (obj: {name: string, visibility?: Animation<number>}) => {
+    const visibility = [...(obj.visibility?.keyFrames.values() ?? [])];
+    return visibility.every((v) => !v);
+  };
+  this.mdl.particleEmitter2s = this.mdl.particleEmitter2s.filter((e) => !neverVisible(e));
+  this.mdl.ribbonEmitters = this.mdl.ribbonEmitters.filter((e) => !neverVisible(e));
+  this.mdl.lights = this.mdl.lights.filter((e) => !neverVisible(e));
 
   return this;
 }

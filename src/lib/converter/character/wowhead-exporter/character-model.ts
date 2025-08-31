@@ -61,21 +61,6 @@ export async function exportCharacterAsMdl({
   await applyCloakTexture(ctx, charMdl, prep.equipmentSlots);
   await applyEquipmentsBodyTextures(ctx, charMdl, prep, expansion);
 
-  // Hacky fixes to be removed later
-  // EyeGlow make them a bit transparent with geoset anims
-  charMdl.geosets.forEach((geoset) => {
-    if (geoset.name.startsWith('Eyeglow')) {
-      charMdl.geosetAnims.push({
-        id: -1,
-        geoset,
-        alpha: {
-          static: true,
-          value: 0.3,
-        },
-      });
-    }
-  });
-
   // If the item has trousers, remove the tabard geoset
   if (charMdl.geosets.some((g) => g.name.startsWith('Trousers') && g.name !== 'Trousers1')) {
     charMdl.geosets = charMdl.geosets.filter((g) => !g.name.startsWith('Tabard'));
@@ -121,6 +106,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
       const itemData = await processItemData({
         expansion, type: 'item', displayId: itemId, slotId,
       }, race, gender);
+      console.log(getEquipmentSlotName(slotId), itemData.geosetIds, itemData.hideGeosetIds);
       itemData.geosetIds?.forEach((id: number) => geosetIds.add(id));
       itemData.hideGeosetIds?.forEach((id: number) => hideGeosetIds.add(id));
       equipmentSlots.push({ slotId, data: itemData });
@@ -186,7 +172,6 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
       ? await exportModelFileIdAsMdl(ctx, fileDataId, {})
       : _.cloneDeep(collections.get(fileDataId)!);
 
-    console.log('itemMdl.geosets', itemMdl.geosets.length);
     await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures);
 
     const isCollection = collections.has(fileDataId) || canAddMdlCollectionItemToModel(charMdl, itemMdl);
@@ -264,7 +249,6 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   for (const [slotId, attachmentIds] of Object.entries(attachmentList)) {
     const slot = equipmentSlots.find((s) => s.slotId === Number(slotId));
     if (slot) {
-      console.log(slot.data);
       for (let i = 0; i < slot.data.modelFiles.length; i++) {
         await attachItemModel(slot.data, i, attachmentIds[i] ?? attachmentIds[0] ?? undefined);
       }

@@ -11,6 +11,9 @@ const debug = true;
 export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
   debug && console.log(`Attaching item "${path.basename(item.model.name)}" to bone "${bone.name}"...`);
 
+  item.sequences = [item.sequences[0]];
+  item.modify.optimizeKeyFrames();
+
   item.getNodes().forEach((b) => {
     if (!b.parent) {
       b.parent = bone;
@@ -45,6 +48,10 @@ export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone)
 
 export function addMdlCollectionItemToModel(this: MDLModify, item: MDL) {
   debug && console.log(`Attaching item "${path.basename(item.model.name)}" as collection...`);
+
+  item.sequences = [item.sequences[0]];
+  item.modify.optimizeKeyFrames();
+
   const boneMap = new Map<string, Bone>(this.mdl.bones.map((b) => [b.name, b]));
   const getMainBone = (bone: Bone) => {
     const mainBone = boneMap.get(bone.name);

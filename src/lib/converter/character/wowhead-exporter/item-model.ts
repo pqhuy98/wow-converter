@@ -148,7 +148,7 @@ function resolveCharacterGeosetIds(slotId: number, itemData: ItemData) {
   }
   const geosetIds = Array.from(result);
   debug && console.log(geosetIds.map((id) => getSubmeshName(id)));
-  return geosetIds;
+  return geosetIds.sort((a, b) => a - b);
 }
 
 // Geosets to apply when equipping the item on a character (attach to character groups)
@@ -197,7 +197,7 @@ function resolveHideGeosetIds(itemData: ItemData, targetRace: number, targetGend
       for (let i = 1; i < 100; i++) result.add(band * 100 + i);
     }
   });
-  return Array.from(result);
+  return Array.from(result).sort((a, b) => a - b);
 }
 
 export async function processItemData(url: ItemZamUrl, targetRace: number, targetGender: number): Promise<ItemMetata> {
