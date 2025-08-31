@@ -63,7 +63,7 @@ export function getExpansionFromUrl(url: string): ZamExpansion | undefined {
 
 export function getWowheadPrefix(expansion: ZamExpansion): string {
   const [wowheadEx] = expansionsReverse.find(([_, zamEx]) => zamEx === expansion) || [];
-  return `https://www.wowhead.com/${wowheadEx ? `${wowheadEx}/` : ''}`;
+  return `https://www.wowhead.com${wowheadEx ? `/${wowheadEx}` : ''}`;
 }
 
 export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpansion> {
@@ -83,7 +83,7 @@ export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpa
 function getTypeFromUrl(url: string): ZamType | undefined {
   if (/\/npc[=/]/i.test(url)) return 'npc';
   if (/\/item[=/]/i.test(url)) return 'item';
-  if (/\/dressing-room[#]/i.test(url)) return 'dressing-room';
+  if (/\/dressing-room(\?.+)?[#]/i.test(url)) return 'dressing-room';
   return undefined;
 }
 

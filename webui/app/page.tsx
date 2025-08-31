@@ -336,6 +336,7 @@ export default function WoWNPCExporter() {
           <CharacterConfig
             character={character}
             setCharacter={setCharacter}
+            clearOutputFileName={() => setOutputFileName('')}
           />
           <AttachItems
             character={character}

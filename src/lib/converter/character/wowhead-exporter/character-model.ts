@@ -117,12 +117,18 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
   for (const slotId of slotIds) {
     const itemId = metadata.Equipment?.[slotId.toString()];
     if (!itemId) continue;
-    const itemData = await processItemData({
-      expansion, type: 'item', displayId: itemId, slotId,
-    }, race, gender);
-    itemData.geosetIds?.forEach((id: number) => geosetIds.add(id));
-    itemData.hideGeosetIds?.forEach((id: number) => hideGeosetIds.add(id));
-    equipmentSlots.push({ slotId, data: itemData });
+    try {
+      const itemData = await processItemData({
+        expansion, type: 'item', displayId: itemId, slotId,
+      }, race, gender);
+      itemData.geosetIds?.forEach((id: number) => geosetIds.add(id));
+      itemData.hideGeosetIds?.forEach((id: number) => hideGeosetIds.add(id));
+      equipmentSlots.push({ slotId, data: itemData });
+    } catch (e) {
+      console.error(chalk.red(`Failed to process item ${itemId} for slot ${slotId}: ${e}`));
+      continue;
+      // 124645
+    }
   }
 
   console.log('Equipments:', equipmentSlots.map((s) => getEquipmentSlotName(s.slotId)));
@@ -141,7 +147,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     customizations: Object.fromEntries((metadata.Creature?.CreatureCustomizations || []).map((c) => [c.optionId, c.choiceId])),
     format: 'obj',
     include_animations: true,
-    include_base_clothing: false,
+    include_base_clothing: true,
     geosetIds: Array.from(geosetIds),
     hideGeosetIds: Array.from(hideGeosetIds),
   };
@@ -166,7 +172,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     fileDataId: number,
   }[] = [];
 
-  const debug = true;
+  const debug = false;
 
   // Attach individual item model to the character model
   const attachItemModel = async (itemData: ItemMetata, idx: number, attachmentId: WoWAttachmentID | undefined) => {
@@ -177,11 +183,10 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTextures);
 
     const itemMdl = !collections.has(fileDataId)
-      ? await exportModelFileIdAsMdl(ctx, fileDataId, { textureIds: itemData.modelTextureFiles[idx].map((f) => f.fileDataId) })
+      ? await exportModelFileIdAsMdl(ctx, fileDataId, {})
       : _.cloneDeep(collections.get(fileDataId)!);
 
-    debug && console.log(itemMdl.textures.map((t) => `${t.wowData.type} ${t.image}`));
-
+    console.log('itemMdl.geosets', itemMdl.geosets.length);
     await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures);
 
     const isCollection = collections.has(fileDataId) || canAddMdlCollectionItemToModel(charMdl, itemMdl);
@@ -253,11 +258,13 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     [EquipmentSlot.Shirt]: [],
     [EquipmentSlot.Tabard]: [],
     [EquipmentSlot.Wrist]: [],
+    [EquipmentSlot.Robe]: [],
   };
 
   for (const [slotId, attachmentIds] of Object.entries(attachmentList)) {
     const slot = equipmentSlots.find((s) => s.slotId === Number(slotId));
     if (slot) {
+      console.log(slot.data);
       for (let i = 0; i < slot.data.modelFiles.length; i++) {
         await attachItemModel(slot.data, i, attachmentIds[i] ?? attachmentIds[0] ?? undefined);
       }
@@ -419,17 +426,19 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
   overlays.sort((a, b) => (a.priority - b.priority) || (a.componentId - b.componentId));
 
   const debug = false;
-  debug && console.log('Overlays:', overlays);
 
   const textureDraws: PngDraw[] = [];
   for (const t of overlays) {
     if (t.slotId === EquipmentSlot.Back) continue; // cloak/back is not baked into base
     const section = charCus.TextureSections.find((s) => s.SectionType === t.componentId);
-    if (!section) throw new Error(`Texture section not found for file ${t.fileDataId} component ${t.componentId}`);
-    debug && console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
-    const texPath = await exportTexture(t.fileDataId);
+    if (!section) {
+      console.error(chalk.red(`Texture section not found for file ${t.fileDataId} component ${t.componentId}`));
+      continue;
+    }
+    console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
+    const pngPath = path.join(ctx.config.wowExportAssetDir, await exportTexture(t.fileDataId));
     textureDraws.push({
-      pngPath: path.join(ctx.config.wowExportAssetDir, texPath),
+      pngPath,
       x: section.X,
       y: section.Y,
       width: section.Width,
@@ -457,7 +466,7 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
       t.wowData.pngPath = newPngPath;
     }
   });
-  ctx.assetManager.addPngTexture(path.relative(ctx.config.wowExportAssetDir, newPngPath));
+  ctx.assetManager.addPngTexture(path.relative(ctx.config.wowExportAssetDir, newPngPath), true);
 }
 
 function getExcludedAnimIds(keepCinematic: boolean, attackTag: AttackTag | undefined): number[] {

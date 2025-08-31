@@ -19,7 +19,6 @@ BLOCKED:
 
 BUGS:
 Texture missing:
-https://www.wowhead.com/npc=207939/baron-braunpyke#drops missing weapon texture
 https://www.wowhead.com/npc=111303/nightborne-sage - missing body textures
 https://www.wowhead.com/npc=18806/solarium-priest - broken particle
 https://www.wowhead.com/npc=196636/scalecommander-azurathel - no armor, dragon race

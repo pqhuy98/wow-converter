@@ -55,9 +55,11 @@ const tooltips = {
 export function CharacterConfig({
   character,
   setCharacter,
+  clearOutputFileName,
 }: {
   character: Character
   setCharacter: React.Dispatch<React.SetStateAction<Character>>
+  clearOutputFileName?: () => void
 }) {
   const [particlesDensity, setParticlesDensity] = useState(character.particlesDensity || 1);
 
@@ -73,7 +75,16 @@ export function CharacterConfig({
       <RefInput
         value={character.base}
         onChange={(base) => {
-          setCharacter((prev) => ({ ...prev, base }));
+          setCharacter((prev) => {
+            if (prev.base.type === 'wowhead' && base.type === 'wowhead') {
+              console.log('prev.base.value', prev.base.value);
+              console.log('base.value', base.value);
+              if (!prev.base.value.includes('dressing-room') && base.value.includes('dressing-room')) {
+                clearOutputFileName?.();
+              }
+            }
+            return { ...prev, base };
+          });
         }}
         label="Base Model"
         tooltip={tooltips.baseModel}

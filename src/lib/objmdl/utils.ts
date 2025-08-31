@@ -49,7 +49,7 @@ export function getLayerFilterMode(blendingMode: number, shaderId: number, layer
     debug && console.log('opaquePath', {
       opaquePath, op, blendingMode, shaderId, layerIndex,
     });
-    if (texture.image.includes('armorreflect')) {
+    if (texture.image.includes('reflect')) {
       return undefined;
     }
     if (op === 0) return undefined; // Opaque_Opaque

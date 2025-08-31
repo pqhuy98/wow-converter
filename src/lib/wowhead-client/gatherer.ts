@@ -57,8 +57,7 @@ export async function gatherItems(expansion: ZamExpansion, items: {itemId: numbe
 
 function buildGathererUrl(expansion: ZamExpansion, itemIds: number[]): string {
   const items = itemIds.join(',');
-  const ts = Date.now();
-  return `${getWowheadPrefix(expansion)}/gatherer?items=${items}&_=${ts}`;
+  return `${getWowheadPrefix(expansion)}/gatherer?items=${items}`;
 }
 
 function extractAddDataPayload(scriptText: string): string {

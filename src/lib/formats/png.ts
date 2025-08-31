@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp, { OverlayOptions } from 'sharp';
 
 const debug = false;
 
@@ -20,21 +20,19 @@ export async function resizePng(fromPath: string, targetWidth: number, targetHei
 
   // Split channels
   debug && console.log('Alpha, resizing with separate channels', fromPath);
-  const rgbBuffer = await src.clone().removeAlpha().toBuffer();
-  const alphaChan = await src.clone().extractChannel('alpha').toBuffer();
+  const rgbBuffer = src.clone().removeAlpha();
+  const alphaChan = src.clone().extractChannel('alpha');
 
   // Resize RGB without alpha-weighting
-  const resizedRgb = await sharp(rgbBuffer)
-    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' })
-    .toBuffer();
+  const resizedRgb = rgbBuffer
+    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' });
 
   // Resize alpha separately; if alpha is data/mask
-  const resizedAlpha = await sharp(alphaChan)
-    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' })
-    .toBuffer();
+  const resizedAlpha = alphaChan
+    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' });
 
   // Rejoin
-  return sharp(resizedRgb).joinChannel(resizedAlpha).png().toBuffer();
+  return resizedRgb.joinChannel(await resizedAlpha.toBuffer()).png().toBuffer();
 }
 
 export interface PngDraw {
@@ -63,18 +61,64 @@ export async function drawPngsOnBasePng(
     return baseBuffer;
   }
 
-  const overlays = await Promise.all(draws.map(async (draw) => {
+  const overlays = await Promise.all(draws.map(async (draw): Promise<OverlayOptions> => {
     const targetWidth = Math.max(1, Math.round(meta.width! * draw.width));
     const targetHeight = Math.max(1, Math.round(meta.height! * draw.height));
     const left = Math.round(meta.width! * draw.x);
     const top = Math.round(meta.height! * draw.y);
 
-    const input = await resizePng(draw.pngPath, targetWidth, targetHeight);
-    return { input, left, top } as const;
+    let input: Buffer;
+
+    if (await isAbnormalTransparency(draw.pngPath)) {
+      console.log('Abnormal transparency, removing alpha', draw.pngPath);
+      input = await sharp(
+        // cannot chain sharp operations otherwise RGB will turn to 0
+        await sharp(draw.pngPath).removeAlpha().toBuffer(),
+      ).resize({ width: targetWidth, height: targetHeight, fit: 'outside' })
+        .toBuffer();
+    } else {
+      input = await resizePng(draw.pngPath, targetWidth, targetHeight);
+    }
+
+    return {
+      input, left, top,
+    };
   }));
 
   return sharp(baseBuffer)
-    .composite(overlays.map((o) => ({ input: o.input, left: o.left, top: o.top })))
+    .composite(overlays)
     .png()
     .toBuffer();
+}
+
+async function isAbnormalTransparency(pngPath: string): Promise<boolean> {
+  const png = sharp(pngPath);
+  const metadata = await png.metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error('PNG must have width and height metadata');
+  }
+  const width = metadata.width;
+  const height = metadata.height;
+
+  // If no alpha channel, cannot have this abnormal transparency pattern
+  if (metadata.channels && metadata.channels < 4) {
+    return false;
+  }
+
+  const alphaBuffer = await png
+    .ensureAlpha()
+    .extractChannel('alpha')
+    .raw()
+    .toBuffer();
+
+  // Abnormal if every pixel in 0-based odd columns (1, 3, 5...) are all fully transparent
+  for (let i = 1; i < width; i += 2) {
+    for (let j = 0; j < height; j++) {
+      const idx = j * width + i;
+      if (alphaBuffer[idx] !== 0) {
+        return false;
+      }
+    }
+  }
+  return true;
 }

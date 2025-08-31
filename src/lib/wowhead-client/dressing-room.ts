@@ -55,7 +55,7 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
   const equipments: EquipmentMap = Object.fromEntries(Object.entries(data.equipment).map(([dollSlotId, item]) => {
     const slotId = PAPERDOLL_SLOTS[dollSlotId];
     return [slotId, items.find((v) => v.itemId === item.itemId)?.displayId];
-  }));
+  }).filter(([k, v]) => k !== undefined && v !== undefined));
 
   return {
     Character: {

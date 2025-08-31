@@ -70,7 +70,7 @@ async function exportTestCases() {
       const npcName = base.split('/').pop()!.split('#')[0];
       name = `${npcName}-${npcId}`;
     } else if (base.includes('dressing-room')) {
-      name = base.split('?').at(-1)!;
+      name = base.split('?').at(-1)!.split('#')[0];
     }
     npcs.push({ name });
     if (existsSync(join(mapDir, `${name}.mdx`)) && !ceConfig.overrideModels) {

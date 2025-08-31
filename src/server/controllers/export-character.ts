@@ -103,9 +103,7 @@ export async function ControllerExportCharacter(app: express.Application) {
     let exportedModels = ce.writeAllModels(outputDir, request.format);
     let textures = await ce.writeAllTextures(outputDir);
 
-    console.log('Exported models', exportedModels);
     exportedModels = exportedModels.map((model) => path.relative(outputDir, `${model}.${request.format}`));
-    console.log('Exported models 2', exportedModels);
     textures = textures.map((texture) => path.relative(outputDir, texture));
 
     // Return the list of exported assets to the caller – zipping happens on-demand via the download API

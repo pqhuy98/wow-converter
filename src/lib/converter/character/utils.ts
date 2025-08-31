@@ -21,30 +21,34 @@ export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: nu
   textureIds?: number[]
   extraGeosets?: number[]
 }): Promise<MDL> {
-  const skins = await wowExportClient.getModelSkins(modelFileId);
+  let skinName: string | undefined;
 
-  const skinMatchScore = (extraGeosets: number[], textureIds: number[]) => {
-    const textureScore = guessSkin.textureIds?.filter((id) => textureIds.includes(id)).length ?? 0;
-    const geosetScore = guessSkin.extraGeosets?.filter((id) => extraGeosets.includes(id)).length ?? 0;
-    const extraGeosetPenalty = extraGeosets.filter((id) => !guessSkin.extraGeosets?.includes(id)).length;
-    return geosetScore * 1000000 - extraGeosetPenalty * 1000 + textureScore;
-  };
+  if (guessSkin.textureIds?.length || guessSkin.extraGeosets?.length) {
+    const skins = await wowExportClient.getModelSkins(modelFileId);
 
-  const match = skins.length > 0 ? skins.reduce((acc, s) => {
-    const score = skinMatchScore(s.extraGeosets ?? [], s.textures);
-    if (score > acc.score) {
-      return { skin: s, score };
+    const skinMatchScore = (extraGeosets: number[], textureIds: number[]) => {
+      const textureScore = guessSkin.textureIds?.filter((id) => textureIds.includes(id)).length ?? 0;
+      const geosetScore = guessSkin.extraGeosets?.filter((id) => extraGeosets.includes(id)).length ?? 0;
+      const extraGeosetPenalty = extraGeosets.filter((id) => !guessSkin.extraGeosets?.includes(id)).length;
+      return geosetScore * 1000000 - extraGeosetPenalty * 1000 + textureScore;
+    };
+
+    const match = skins.length > 0 ? skins.reduce((acc, s) => {
+      const score = skinMatchScore(s.extraGeosets ?? [], s.textures);
+      if (score > acc.score) {
+        return { skin: s, score };
+      }
+      return acc;
+    }, { skin: skins[0], score: skinMatchScore(skins[0].extraGeosets ?? [], skins[0].textures) }) : undefined;
+    skinName = match?.skin.id;
+
+    if (match) {
+      const maxScore = skinMatchScore(guessSkin.extraGeosets || [], guessSkin.textureIds || []);
+      const score = skinMatchScore(match?.skin.extraGeosets || [], match?.skin.textures || []);
+      const confidence = score / maxScore;
+      const skinIdx = skins.findIndex((s) => s === match.skin);
+      console.log('Chosen skin:', skinName, 'with confidence:', `${(confidence * 100).toFixed(2)}%`, { score, maxScore, skinIdx });
     }
-    return acc;
-  }, { skin: skins[0], score: skinMatchScore(skins[0].extraGeosets ?? [], skins[0].textures) }) : undefined;
-  const skinName = match?.skin.id;
-
-  if (match) {
-    const maxScore = skinMatchScore(guessSkin.extraGeosets || [], guessSkin.textureIds || []);
-    const score = skinMatchScore(match?.skin.extraGeosets || [], match?.skin.textures || []);
-    const confidence = score / maxScore;
-    const skinIdx = skins.findIndex((s) => s === match.skin);
-    console.log('Chosen skin:', skinName, 'with confidence:', `${(confidence * 100).toFixed(2)}%`, { score, maxScore, skinIdx });
   }
 
   const start = performance.now();
@@ -162,7 +166,7 @@ export async function applyReplaceableTextures(ctx: ExportContext, mdl: MDL, rep
     if (!textureMap.has(fileDataId)) {
       const file = await wowExportClient.exportTextures([fileDataId]);
       textureMap.set(fileDataId, file);
-      console.log('Replaceable texture:', path.relative(ctx.config.wowExportAssetDir, file[0].file));
+      debug && console.log('Replaceable texture:', path.relative(ctx.config.wowExportAssetDir, file[0].file));
     }
     const fileData = textureMap.get(fileDataId)!;
 

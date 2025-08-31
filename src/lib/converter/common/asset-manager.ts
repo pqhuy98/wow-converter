@@ -17,6 +17,8 @@ export class AssetManager {
 
   textures = new Set<string>();
 
+  texturesOverwrite = new Set<string>();
+
   constructor(private config: Config) {
   }
 
@@ -60,14 +62,18 @@ export class AssetManager {
     }
   }
 
-  addPngTexture(texturePath: string) {
+  addPngTexture(texturePath: string, overwrite = false) {
     this.textures.add(texturePath);
+    if (overwrite) {
+      this.texturesOverwrite.add(texturePath);
+    }
   }
 
   async exportTextures(assetPath: string) {
     const exportedTexturePaths: string[] = [];
-    console.log('Exporting textures to', assetPath);
+    console.log('Exporting textures to', assetPath, '...');
     mkdirSync(assetPath, { recursive: true });
+    let writeCount = 0;
     await Promise.all(Array.from(this.textures).map(async (texturePath) => {
       const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
       if (!existsSync(fromPath)) {
@@ -95,11 +101,11 @@ export class AssetManager {
       // Skip only if the existing BLP exactly matches the target size
       const debug = false;
       const toPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
-      if (existsSync(toPath)) {
+      exportedTexturePaths.push(toPath);
+      if (existsSync(toPath) && !this.texturesOverwrite.has(texturePath)) {
         const size = readBlpSizeSync(toPath);
         if (size && size.width === targetWidth && size.height === targetHeight) {
           debug && console.log('Skipping existing texture', toPath);
-          exportedTexturePaths.push(toPath);
           return;
         }
       }
@@ -117,9 +123,9 @@ export class AssetManager {
         }
       }
       await pngToBlp(pngInput, toPath);
-      exportedTexturePaths.push(toPath);
+      writeCount++;
     }));
-    console.log(`Exported ${exportedTexturePaths.length} textures`);
+    console.log(`Wrote ${writeCount}, skipped ${this.textures.size - writeCount} textures. Total: ${exportedTexturePaths.length}`);
     return exportedTexturePaths;
   }
 

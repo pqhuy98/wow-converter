@@ -1925,6 +1925,18 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'FlyDragonSpit': return { wc3Name: 'Attack Alternate', attackTag: '' };
     case 'FlyDeathEnd': return { wc3Name: 'Death Alternate', attackTag: '' };
 
+    // Mount
+    case 'AttackJoust': return { wc3Name: 'Mount AttackJoust', attackTag: '' };
+    case 'HoldJoust': return { wc3Name: 'Mount HoldJoust', attackTag: '' };
+    case 'LoadJoust': return { wc3Name: 'Mount LoadJoust', attackTag: '' };
+    case 'ReadyJoust': return { wc3Name: 'Mount ReadyJoust', attackTag: '' };
+    case 'Mount': return { wc3Name: 'Mount', attackTag: '' };
+    case 'MountChopper': return { wc3Name: 'Mount MountChopper', attackTag: '' };
+    case 'MountCrouch': return { wc3Name: 'Mount MountCrouch', attackTag: '' };
+    case 'MountWide': return { wc3Name: 'Mount MountWide', attackTag: '' };
+    case 'ReclinedMount': return { wc3Name: 'Mount ReclinedMount', attackTag: '' };
+    case 'ReclinedMountPassenger': return { wc3Name: 'Mount ReclinedMountPassenger', attackTag: '' };
+
     default:
       return { wc3Name: `Cinematic ${wowAnimName}`, attackTag: '' };
   }

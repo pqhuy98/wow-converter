@@ -19,6 +19,7 @@ export enum EquipmentSlot {
   OffHand = 13,
   Back = 16,
   Tabard = 19,
+  Robe = 20,
 }
 
 interface ItemFile {
@@ -59,7 +60,12 @@ const ArmorSlots = [
   EquipmentSlot.Gloves,
   EquipmentSlot.Back,
   EquipmentSlot.Tabard,
+  EquipmentSlot.Robe,
 ];
+
+const slotBackup = {
+  5: 20,
+};
 
 export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   if (zam.type !== 'item') throw new Error('fetchItemMeta expects a ZamUrl of type item');
@@ -77,6 +83,13 @@ export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   const base = getZamBaseUrl(expansion);
   const url = `${base}/${path}`;
   debug && console.log('Get item meta from', chalk.blue(url));
-  const res = await fetchWithCache(url);
-  return JSON.parse(res) as unknown as ItemData;
+  try {
+    const res = await fetchWithCache(url);
+    return JSON.parse(res) as unknown as ItemData;
+  } catch (e) {
+    if (slotId && slotBackup[slotId]) {
+      return fetchItemMeta({ ...zam, slotId: slotBackup[slotId] });
+    }
+    throw e;
+  }
 }
