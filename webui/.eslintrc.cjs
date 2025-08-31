@@ -10,5 +10,4 @@ module.exports = {
     tsconfigRootDir: __dirname,
   },
   ignorePatterns: ["**/bin/**/*", "**/dist/**/*", "**/maps/**/*", '**/.eslintrc.cjs', "rollup.config.cjs", "build/**", "wow.export/**/*"],
-
 };

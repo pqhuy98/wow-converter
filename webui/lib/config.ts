@@ -1,10 +1,10 @@
-import { Config } from "./models/export-character.model"
+import { Config } from './models/export-character.model';
 
 export const serverConfig = {
-  wowExportAssetDir: "/Users/huy/Documents/wow-export/assets",
+  wowExportAssetDir: '',
   isSharedHosting: false,
-}
+};
 
 export const setServerConfig = (config: Config) => {
-  Object.assign(serverConfig, config)
-}
+  Object.assign(serverConfig, config);
+};
