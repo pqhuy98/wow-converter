@@ -20,19 +20,21 @@ export async function resizePng(fromPath: string, targetWidth: number, targetHei
 
   // Split channels
   debug && console.log('Alpha, resizing with separate channels', fromPath);
-  const rgbBuffer = src.clone().removeAlpha();
-  const alphaChan = src.clone().extractChannel('alpha');
+  const rgbBuffer = await src.clone().removeAlpha().toBuffer();
+  const alphaChan = await src.clone().extractChannel('alpha').toBuffer();
 
   // Resize RGB without alpha-weighting
-  const resizedRgb = rgbBuffer
-    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' });
+  const resizedRgb = await sharp(rgbBuffer)
+    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' })
+    .toBuffer();
 
   // Resize alpha separately; if alpha is data/mask
-  const resizedAlpha = alphaChan
-    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' });
+  const resizedAlpha = await sharp(alphaChan)
+    .resize({ width: targetWidth, height: targetHeight, fit: 'outside' })
+    .toBuffer();
 
   // Rejoin
-  return resizedRgb.joinChannel(await resizedAlpha.toBuffer()).png().toBuffer();
+  return sharp(resizedRgb).joinChannel(resizedAlpha).png().toBuffer();
 }
 
 export interface PngDraw {

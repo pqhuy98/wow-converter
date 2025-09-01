@@ -212,7 +212,7 @@ export function optimizeKeyFrames(this: MDLModify) {
 
   const neverVisible = (obj: {name: string, visibility?: Animation<number>}) => {
     const visibility = [...(obj.visibility?.keyFrames.values() ?? [])];
-    return visibility.every((v) => !v);
+    return visibility.length > 0 && visibility.every((v) => !v);
   };
   this.mdl.particleEmitter2s = this.mdl.particleEmitter2s.filter((e) => !neverVisible(e));
   this.mdl.ribbonEmitters = this.mdl.ribbonEmitters.filter((e) => !neverVisible(e));

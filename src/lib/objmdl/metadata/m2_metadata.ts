@@ -206,6 +206,13 @@ namespace Data {
     spinVary: number
 
     drag: number // drag coefficient. new velocity = old velocity * (1 - drag * dt)
+
+    twinkleSpeed: number
+    twinklePercent: number
+    twinkleScale: {
+      min: number
+      max: number
+    }
   }
 
   export interface BoundingBox {
@@ -510,7 +517,6 @@ export class M2MetadataFile {
     this.skin.textureUnits.forEach((tu) => {
       const submeshId = tu.skinSectionIndex;
       const material = this.materials[tu.materialIndex];
-      const textAnimId = this.textureTransformsLookup[tu.textureTransformComboIndex];
       const twoSided = (material.flags & 0x04) > 0;
       const shaderId = tu.shaderID;
 
@@ -529,6 +535,20 @@ export class M2MetadataFile {
 
       for (let i = 0; i < Math.min(textureCount, 4); i++) {
         const textureId = this.textureCombos[tu.textureComboIndex + i];
+        let textAnimId = this.textureTransformsLookup[tu.textureTransformComboIndex + i];
+
+        // Disable texture transforms on layers that the selected vertex shader does not animate.
+        // WebWowViewerCpp logic implies:
+        // - For 2+ textures, a separate T2 transform is used only when: !envBit, !envComboBit, and has 0x4000 flag.
+        // - Env paths or T1_T1 paths ignore T2; single-texture paths use only T1.
+        const envBit = (shaderId & 0x80) !== 0;
+        const envComboBit = (shaderId & 0x08) !== 0;
+        const usesT2 = (textureCount > 1) && !envBit && !envComboBit && ((shaderId & 0x4000) !== 0);
+
+        if ((i === 0 && envBit) || (i === 1 && !usesT2) || (i > 1)) {
+          textAnimId = BlizzardNull;
+        }
+
         const texture = textures[textureId];
         const filterMode = getLayerFilterMode(material.blendingMode, shaderId, i, texture);
 
@@ -629,8 +649,8 @@ export class M2MetadataFile {
         const saneFloat = Number.isFinite(f) && Math.abs(f) < 1e4;
 
         if (saneFloat) {
-          // WoW scalar uses -float on Z (viewer applies downward accel). Keep as-is for WC3.
-          return f;
+          // *0.5 because WC3 updates velocity by g*dt^2, while wow uses 0.5*g*dt^2
+          return 0.5 * f;
         }
 
         // Decompression to vector3: https://wowdev.wiki/M2#Compressed_Particle_Gravity
@@ -645,17 +665,21 @@ export class M2MetadataFile {
         // unsign int16 to signed int16
         if (bz & 0x8000) bz -= 0x10000;
 
-        const dirX = x * (1 / 128);
-        const dirY = y * (1 / 128);
-        const dot = dirX * dirX + dirY * dirY;
+        let dir: Vector3 = V3.scale([x, y, 0], 1 / 128);
+        const dot = V3.dot(dir, dir);
         let z = Math.sqrt(Math.max(0, 1 - dot));
         let mag = bz * 0.04238648;
         if (mag < 0) {
           z = -z;
           mag = -mag;
         }
-        z *= mag;
-        return -z;
+        dir[2] = z;
+        dir = V3.scale(dir, mag);
+
+        // *-1 to invert the direction to WC3
+        // *0.5 because WC3 updates velocity by g*dt^2, while wow uses 1/5*g*dt^2
+        const gravity = -1 * 0.5 * dir[2];
+        return gravity;
       };
 
       const speed = this.m2trackToAnimationOrStatic(p.emissionSpeed, 'others')!;
@@ -709,11 +733,7 @@ export class M2MetadataFile {
           const scaling0 = getValueAt(scalingTrack, 0) ?? [1, 1];
           const scaling1 = getValueAt(scalingTrack, timeMid) ?? scaling0;
           const scaling2 = getValueAt(scalingTrack, timeEnd) ?? scaling1;
-
-          // in wow, non-moving particles are scale down by 0.05
-          // as seem in source code of WebWowViewerCpp
-          const factor = 'static' in speed && speed.value < 0.0001 ? 0.05 : 1;
-
+          const factor = (p.twinkleScale.min + p.twinkleScale.max) / 2;
           const f = (scaling: [number, number]) => Math.min(scaling[0], scaling[1]) * factor;
           return [f(scaling0), f(scaling1), f(scaling2)];
         })(),
@@ -763,6 +783,19 @@ export class M2MetadataFile {
         }
       }
 
+      // Make sure UV are within atlas size
+      const ensureUV = (uv: [number, number, number]): [number, number, number] => [
+        Math.max(0, Math.min(p.textureRows - 1, uv[0])),
+        Math.max(0, Math.min(p.textureCols - 1, uv[1])),
+        uv[2],
+      ];
+      node.headIntervals = ensureUV(node.headIntervals);
+      node.decayIntervals = ensureUV(node.decayIntervals);
+      node.tailIntervals = ensureUV(node.tailIntervals);
+      node.tailDecayIntervals = ensureUV(node.tailDecayIntervals);
+
+      // Generate different variants
+
       const varyThreshold = 0.1;
       const chooseRandomTexture = p.flags & 0x10000
         && p.headCellTrack.timestamps.length === 0
@@ -770,7 +803,7 @@ export class M2MetadataFile {
       const scaleVary = (p.scaleVary[0] + p.scaleVary[1]) / 2;
       const hasVary = chooseRandomTexture || p.lifespanVary >= varyThreshold || scaleVary >= varyThreshold;
 
-      const diableVariants = false;
+      const diableVariants = true;
       if (!hasVary || diableVariants) {
         particleEmitter2s.push(node);
         return;
@@ -864,7 +897,7 @@ export class M2MetadataFile {
 
     this.mdl.particleEmitter2s = particleEmitter2s;
     this.mdl.textures.push(...particleEmitter2s.map((e) => e.texture));
-    !this.config.isBulkExport && console.log('Particle emitters 2:', this.mdl.particleEmitter2s.length);
+    !this.config.isBulkExport && console.log('Particle emitters:', this.mdl.particleEmitter2s.length);
   }
 
   extractMDLLights(): void {

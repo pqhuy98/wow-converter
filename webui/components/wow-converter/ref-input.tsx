@@ -174,12 +174,12 @@ export function RefInput({
 }
 
 const wowheadPattern = {
-  npc: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|dressing-room(\?.+)?#)/,
+  npc: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|item=|object=|dressing-room(\?.+)?#)/,
   item: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?item=/,
 };
 
 const invalidMessage = {
-  npc: 'Invalid Wowhead URL, must contain /npc=... or /dressing-room#...',
+  npc: 'Invalid Wowhead URL, must contain either: "/npc=", "/item=", "/object=" or "/dressing-room#"',
   item: 'Invalid Wowhead URL, must contain /item=...',
 };
 

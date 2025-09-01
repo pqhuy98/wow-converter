@@ -1,17 +1,18 @@
 import { LRUCache } from 'lru-cache';
 
 export type ZamExpansion = 'classic' | 'tbc' | 'wrath' | 'cata' | 'mists' | 'live' | 'ptr' | 'ptr2' | 'latest-available';
-export type ZamType = 'npc' | 'item' | 'dressing-room' | 'character-customization';
+export type ZamType = 'npc' | 'object' | 'item' | 'dressing-room' | 'character-customization';
 
 export type BaseZamUrl = {
   expansion: ZamExpansion;
 }
 
 export type NpcZamUrl = BaseZamUrl & { type: 'npc', displayId: number };
+export type ObjectZamUrl = BaseZamUrl & { type: 'object', displayId: number };
 export type DressingRoomZamUrl = BaseZamUrl & { type: 'dressing-room', hash: string };
 export type ItemZamUrl = BaseZamUrl & { type: 'item', displayId: number, slotId: number | null };
 export type CharacterCustomizationZamUrl = BaseZamUrl & { type: 'character-customization', chrModelId: number };
-export type ZamUrl = NpcZamUrl | ItemZamUrl | DressingRoomZamUrl | CharacterCustomizationZamUrl;
+export type ZamUrl = NpcZamUrl | ObjectZamUrl | ItemZamUrl | DressingRoomZamUrl | CharacterCustomizationZamUrl;
 
 export function getZamBaseUrl(expansion: ZamExpansion): string {
   return `https://wow.zamimg.com/modelviewer/${expansion}`;
@@ -77,11 +78,12 @@ export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpa
       // continue
     }
   }
-  throw new Error('No expansion found');
+  throw new Error('Invalid Wowhead URL');
 }
 
 function getTypeFromUrl(url: string): ZamType | undefined {
   if (/\/npc[=/]/i.test(url)) return 'npc';
+  if (/\/object[=/]/i.test(url)) return 'object';
   if (/\/item[=/]/i.test(url)) return 'item';
   if (/\/dressing-room(\?.+)?[#]/i.test(url)) return 'dressing-room';
   return undefined;

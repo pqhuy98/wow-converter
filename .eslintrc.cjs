@@ -34,6 +34,7 @@ module.exports = {
     },
   ],
   rules: {
+    'no-alert': 'off',
     'no-loop-func': 'off',
     "@typescript-eslint/no-shadow": "off",
     "no-multi-assign": "off",

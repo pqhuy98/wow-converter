@@ -17,8 +17,8 @@ export interface ItemMetata {
   modelFiles: FileWithComponent[];
   modelTextureFiles: [FileWithComponent[], FileWithComponent[]];
   bodyTextureFiles: FileWithComponent[];
-  geosetIds?: number[];
   hideGeosetIds?: number[];
+  zamGeosetGroup?: number[];
   originalData: ItemData;
 }
 
@@ -92,7 +92,7 @@ const ZAM_GROUP_BASE_OFFSET: ReadonlyArray<number> = [
 // Slot -> geoset groups order expected by AttachGeosetGroup offsets
 // Search for "i.k(t.b[1], 21)) : 3 == t.C ? i.k(t.b[0], 26) : 4 == t.C ? (i.k(t.b[0], 8),"
 // in https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js
-const ZAM_SLOT_TO_GROUPS: Readonly<Record<number, ReadonlyArray<number>>> = {
+const _ZAM_SLOT_TO_GROUPS: Readonly<Record<number, ReadonlyArray<number>>> = {
   // Head
   1: [27, 21],
   // Shoulder
@@ -118,43 +118,141 @@ const ZAM_SLOT_TO_GROUPS: Readonly<Record<number, ReadonlyArray<number>>> = {
   19: [12],
 };
 
-function computeZamMeshId(group: number, offset: number | undefined): number {
+export function computeZamMeshId(group: number, offset: number | undefined): number {
   const base = ZAM_GROUP_BASE_OFFSET[group] ?? 1;
   const variant = base + (offset ?? 0);
   return group * 100 + variant;
 }
 
-const debug = false;
+export type EquipmentSlotData = {
+  slotId: EquipmentSlot;
+  data: ItemMetata;
+}
 
-// Geosets to show on the item model itself (viewer applies groups 27/21 and also 26 for some)
-function resolveCharacterGeosetIds(slotId: number, itemData: ItemData) {
-  // Use Item.GeosetGroup (viewer stores this as k) to equip onto character model groups
-  const offsets = itemData?.Item?.GeosetGroup ?? [];
-  const groups = ZAM_SLOT_TO_GROUPS[slotId] ?? [];
-  const result = new Set<number>();
-  debug && console.log('resolveGeosetId', slotId, getEquipmentSlotName(slotId), groups, offsets);
-  for (let i = 0; i < groups.length; i++) {
-    const group = groups[i];
+export function getGeosetIdsFromEquipments(equipments: EquipmentSlotData[], chosenEquipments: EquipmentSlotData[] = equipments) {
+  let geosetIds: number[] = [];
+  const hideGeosetIds: number[] = [];
 
-    // special case for boots per reverse engineering
-    if (slotId === EquipmentSlot.Feet && group === SUBMESH_GROUPS.Feet / 100) {
-      result.add(2002);
-      continue;
+  const head = equipments.find((s) => s.slotId === EquipmentSlot.Head);
+  const shoulders = equipments.find((s) => s.slotId === EquipmentSlot.Shoulder);
+  const shirt = equipments.find((s) => s.slotId === EquipmentSlot.Shirt);
+  const chest = equipments.find((s) => s.slotId === EquipmentSlot.Chest);
+  const waist = equipments.find((s) => s.slotId === EquipmentSlot.Waist);
+  const legs = equipments.find((s) => s.slotId === EquipmentSlot.Legs);
+  const feet = equipments.find((s) => s.slotId === EquipmentSlot.Feet);
+  const wrist = equipments.find((s) => s.slotId === EquipmentSlot.Wrist);
+  const hands = equipments.find((s) => s.slotId === EquipmentSlot.Hands);
+  const tabard = equipments.find((s) => s.slotId === EquipmentSlot.Tabard);
+  const cloak = equipments.find((s) => s.slotId === EquipmentSlot.Cloak);
+
+  const removeGroup = (group: number) => {
+    geosetIds = geosetIds.filter((g) => Math.floor(g / 100) !== group);
+  };
+  const hasGeoset = (equiment: EquipmentSlotData | undefined, i: number) => (equiment?.data.zamGeosetGroup?.[i] ?? 0) > 0;
+  const addGeoset = (equiment: EquipmentSlotData | undefined, group: number, i: number) => {
+    if (equiment?.data.zamGeosetGroup?.[i] != null) {
+      if (group === 8) {
+        console.log({
+          hands, equiment, group, i,
+        });
+      }
+      removeGroup(group);
+      geosetIds.push(computeZamMeshId(group, equiment?.data.zamGeosetGroup?.[i]));
     }
+  };
 
-    const off = offsets[i];
-    const geosetId = computeZamMeshId(group, off);
-    result.add(geosetId);
+  const hasChestTrouser = hasGeoset(chest, 2);
+  const hasLegsTrouser = hasGeoset(legs, 2);
+
+  chosenEquipments.forEach((s) => {
+    switch (s.slotId) {
+      case EquipmentSlot.Head:
+        addGeoset(head, 27, 0);
+        addGeoset(head, 21, 1);
+        break;
+      case EquipmentSlot.Shoulder:
+        addGeoset(shoulders, 26, 0);
+        break;
+      case EquipmentSlot.Shirt:
+        !hasGeoset(hands, 0) && addGeoset(shirt, 8, 0);
+        addGeoset(shirt, 10, 1);
+        break;
+      case EquipmentSlot.Chest:
+      case EquipmentSlot.Robe:
+        !hasGeoset(hands, 0) && addGeoset(s, 8, 0);
+        addGeoset(s, 10, 1);
+        addGeoset(s, 13, 2);
+        addGeoset(s, 22, 3);
+        addGeoset(s, 28, 4);
+        break;
+
+      case EquipmentSlot.Waist:
+        addGeoset(waist, 18, 0);
+        break;
+      case EquipmentSlot.Legs:
+        addGeoset(legs, 11, 0);
+        addGeoset(legs, 9, 1);
+        addGeoset(legs, 13, 2);
+        break;
+      case EquipmentSlot.Feet:
+        addGeoset(feet, 5, 0);
+        geosetIds.push(
+          hasGeoset(feet, 1)
+            ? (2000 + (feet?.data.zamGeosetGroup?.[1] ?? 0))
+            : (!feet || (feet.data.flags & 1048576)) ? 2001 : 2002,
+        );
+        break;
+      case EquipmentSlot.Hands: {
+        const chestHasPalms = hasGeoset(chest, 0);
+        const handsHasPalms = hasGeoset(hands, 0);
+        (handsHasPalms || !chestHasPalms) && addGeoset(hands, 4, 0);
+        addGeoset(hands, 23, 1);
+        break;
+      }
+      case EquipmentSlot.Cloak:
+        addGeoset(cloak, 15, 0);
+        break;
+      case EquipmentSlot.Tabard:
+        addGeoset(tabard, 12, 0);
+        break;
+      case EquipmentSlot.Wrist: {
+        const handsHasGlove = hasGeoset(hands, 0);
+        const chestHasWristsTrousers = hasGeoset(chest, 2) && hasGeoset(chest, 0);
+        !handsHasGlove && !chestHasWristsTrousers && addGeoset(wrist, 23, 0);
+        break;
+      }
+      default:
+        break;
+    }
+    hideGeosetIds.push(...s.data.hideGeosetIds ?? []);
+  });
+
+  if (hasChestTrouser) {
+    removeGroup(5);
+    removeGroup(9);
+    removeGroup(11);
+    removeGroup(13);
+    addGeoset(chest, 13, 2);
+  } else if (hasLegsTrouser) {
+    removeGroup(5);
+    removeGroup(9);
+    removeGroup(11);
+    removeGroup(13);
+    addGeoset(legs, 13, 2);
   }
-  const geosetIds = Array.from(result);
-  debug && console.log(geosetIds.map((id) => getSubmeshName(id)));
-  return geosetIds.sort((a, b) => a - b);
+
+  console.log('geosetIds', geosetIds);
+  console.log('hideGeosetIds', hideGeosetIds);
+
+  return { geosetIds, hideGeosetIds };
 }
 
 // Geosets to apply when equipping the item on a character (attach to character groups)
-export function filterCollectionGeosets(slotId: number, itemData: ItemData, model: MDL) {
-  const submeshIds = new Set(resolveCharacterGeosetIds(slotId, itemData));
+export function filterCollectionGeosets(equipmentSlots: EquipmentSlotData[], slotData: EquipmentSlotData, model: MDL) {
+  const debug = false;
+  const submeshIds = new Set(getGeosetIdsFromEquipments(equipmentSlots, [slotData]).geosetIds);
   debug && console.log('submeshIds', submeshIds);
+
   const chosenGeosets = new Set<Geoset>();
   const enabledGroups = new Set<number>();
   // multiple geosets can share same submeshId, we need to include all of them
@@ -212,8 +310,8 @@ export async function processItemData(url: ItemZamUrl, targetRace: number, targe
       Object.entries(itemData.Textures2 || {}).flatMap(([k, value]) => ({ fileDataId: value, componentId: Number(k) })),
     ],
     bodyTextureFiles: filterFilesByRaceGender(itemData.TextureFiles || {}, itemData.ComponentTextures || {}, targetRace, targetGender, true),
-    geosetIds: url.slotId ? resolveCharacterGeosetIds(url.slotId, itemData) : [],
     hideGeosetIds: resolveHideGeosetIds(itemData, targetRace, targetGender),
+    zamGeosetGroup: itemData.Item.GeosetGroup,
     originalData: itemData,
   };
   return result;

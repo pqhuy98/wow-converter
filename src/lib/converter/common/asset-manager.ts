@@ -74,11 +74,11 @@ export class AssetManager {
     console.log('Exporting textures to', assetPath, '...');
     mkdirSync(assetPath, { recursive: true });
     let writeCount = 0;
-    await Promise.all(Array.from(this.textures).map(async (texturePath) => {
+    for (const texturePath of this.textures) {
       const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
       if (!existsSync(fromPath)) {
         console.warn('Skipping texture not found', fromPath);
-        return;
+        continue;
       }
 
       // Read source PNG dimensions once so we can compute the target size for current limit
@@ -106,7 +106,7 @@ export class AssetManager {
         const size = readBlpSizeSync(toPath);
         if (size && size.width === targetWidth && size.height === targetHeight) {
           debug && console.log('Skipping existing texture', toPath);
-          return;
+          continue;
         }
       }
 
@@ -124,7 +124,7 @@ export class AssetManager {
       }
       await pngToBlp(pngInput, toPath);
       writeCount++;
-    }));
+    }
     console.log(`Wrote ${writeCount}, skipped ${this.textures.size - writeCount} textures. Total: ${exportedTexturePaths.length}`);
     return exportedTexturePaths;
   }

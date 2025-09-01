@@ -2,6 +2,7 @@ import chalk from 'chalk';
 
 import {
   fetchWithCache, getLatestExpansionHavingUrl, getZamBaseUrl, NpcZamUrl,
+  ObjectZamUrl,
 } from './zam-url';
 
 export interface FileEntry {
@@ -71,6 +72,34 @@ export async function fetchNpcMeta(zam: NpcZamUrl): Promise<CharacterData> {
   } catch (e) {
     console.log(
       chalk.red('Failed to fetch NPC meta from'),
+      chalk.blue(url),
+      chalk.red(e),
+      chalk.red('falling back to latest available expansion'),
+    );
+    const base2 = getZamBaseUrl(await getLatestExpansionHavingUrl(path));
+    const url2 = `${base2}/${path}`;
+    const res2 = await fetchWithCache(url2);
+    return JSON.parse(res2) as unknown as CharacterData;
+  }
+}
+
+export async function fetchObjectMeta(zam: ObjectZamUrl): Promise<CharacterData> {
+  if (zam.type !== 'object') throw new Error('fetchObjectMeta expects a ZamUrl of type object');
+  const path = `meta/object/${zam.displayId}.json`;
+
+  let expansion = zam.expansion;
+  if (expansion === 'latest-available') {
+    expansion = await getLatestExpansionHavingUrl(path);
+  }
+  const base = getZamBaseUrl(expansion);
+  const url = `${base}/${path}`;
+  debug && console.log('Get object meta from', chalk.blue(url));
+  try {
+    const res = await fetchWithCache(url);
+    return JSON.parse(res) as unknown as CharacterData;
+  } catch (e) {
+    console.log(
+      chalk.red('Failed to fetch object meta from'),
       chalk.blue(url),
       chalk.red(e),
       chalk.red('falling back to latest available expansion'),

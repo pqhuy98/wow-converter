@@ -1,19 +1,19 @@
 import { gatherItems } from './gatherer';
 import { EquipmentSlot } from './item-armor';
-import { CharacterData, EquipmentMap } from './npc';
+import { CharacterData, EquipmentMap } from './npc-object';
 import { raceGenderMap } from './snipped-data/dressing-room-transmog-data';
 import { ZamExpansion } from './zam-url';
 
 const PAPERDOLL_SLOTS = {
   1: EquipmentSlot.Head,
   2: EquipmentSlot.Shoulder,
-  3: EquipmentSlot.Back,
+  3: EquipmentSlot.Cloak,
   4: EquipmentSlot.Chest,
   5: EquipmentSlot.Shirt,
   6: EquipmentSlot.Tabard,
   7: EquipmentSlot.Wrist,
-  8: EquipmentSlot.Gloves,
-  9: EquipmentSlot.Belt,
+  8: EquipmentSlot.Hands,
+  9: EquipmentSlot.Waist,
   10: EquipmentSlot.Legs,
   11: EquipmentSlot.Feet,
   12: EquipmentSlot.MainHand,
@@ -46,10 +46,19 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
     }
     equipment: Record<string, { itemId: number; itemBonus: number }>;
   };
+  Object.entries(data.custChoices).forEach(([k, v]) => {
+    if (v.optionId === 0 || v.choiceId === 0) {
+      delete data.custChoices[k];
+    }
+  });
+  Object.keys(data.equipment).forEach((k) => {
+    if (data.equipment[k].itemId === 0) {
+      delete data.equipment[k];
+    }
+  });
 
   console.log(data);
-  const itemsWithBonus = Object.values(data.equipment)
-    .filter((v) => v.itemId > 0);
+  const itemsWithBonus = Object.values(data.equipment);
   const items = await gatherItems(expansion, itemsWithBonus);
 
   const equipments: EquipmentMap = Object.fromEntries(Object.entries(data.equipment).map(([dollSlotId, item]) => {

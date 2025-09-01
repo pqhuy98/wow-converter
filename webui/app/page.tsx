@@ -143,8 +143,8 @@ export default function WoWNPCExporter() {
     if (validateRef(character.base, 'npc', true)) return 'Invalid base model';
 
     // Check output filename
-    if (!outputFileName.trim()) return 'Output filename is required';
-    if (!isLocalRef(outputFileName)) return 'Invalid output filename';
+    if (!outputFileName.trim()) return 'Output file name is required';
+    if (!isLocalRef(outputFileName)) return 'Invalid output file name';
 
     // Check all attach items have valid references
     const attachItems = character.attachItems || {};

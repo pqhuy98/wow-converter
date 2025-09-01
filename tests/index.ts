@@ -64,13 +64,21 @@ async function exportTestCases() {
 
     let name = '';
     if (base.startsWith('local::')) {
-      name = `${base.split('\\').pop()!.replace('.obj', '')}`;
+      name = `local-${base.split('\\').pop()!.replace('.obj', '')}`;
     } else if (base.includes('npc=')) {
       const npcId = base.split('npc=').pop()?.split('/').shift();
       const npcName = base.split('/').pop()!.split('#')[0];
-      name = `${npcName}-${npcId}`;
+      name = `npc-${npcName}-${npcId}`;
+    } else if (base.includes('object=')) {
+      const objectId = base.split('object=').pop()?.split('/').shift();
+      const objectName = base.split('/').pop()!.split('#')[0];
+      name = `object-${objectName}-${objectId}`;
+    } else if (base.includes('item=')) {
+      const itemId = base.split('item=').pop()?.split('/').shift();
+      const itemName = base.split('/').pop()!.split('#')[0];
+      name = `item-${itemName}-${itemId}`;
     } else if (base.includes('dressing-room')) {
-      name = base.split('?').at(-1)!.split('#')[0];
+      name = `dressing-room-${base.split('?').at(-1)!.split('#')[0]}`;
     }
     npcs.push({ name });
     if (existsSync(join(mapDir, `${name}.mdx`)) && !ceConfig.overrideModels) {
@@ -103,10 +111,6 @@ export async function main() {
   const map = new MapManager();
   map.load(mapDir);
   console.log('Unit types', map.unitTypes.map((t) => t.code), map.unitTypes.length);
-
-  map.unitTypes.forEach((t) => {
-    console.log('Unit type:', t.code, t.data);
-  });
 
   map.units = map.units.filter((unit) => typeof unit.type === 'string'); // all melee units
   map.unitTypes = [];

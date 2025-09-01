@@ -10,7 +10,7 @@ import { Config } from '@/lib/global-config';
 import { getWoWAttachmentName } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { decodeDressingRoom } from '@/lib/wowhead-client/dressing-room';
-import { fetchNpcMeta } from '@/lib/wowhead-client/npc';
+import { CharacterData, fetchNpcMeta, fetchObjectMeta } from '@/lib/wowhead-client/npc-object';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
@@ -187,18 +187,33 @@ export class CharacterExporter {
         ? await getZamUrlFromWowheadUrl(char.base.value)
         : { expansion: 'live', type: 'npc', displayId: Number(char.base.value) };
 
-      if (baseZam.type !== 'npc' && baseZam.type !== 'dressing-room') {
-        throw new Error(`Expected npc zam url, got ${baseZam.type}`);
+      let npcMeta: CharacterData;
+      switch (baseZam.type) {
+        case 'item':
+        case 'npc':
+          npcMeta = await fetchNpcMeta({
+            ...baseZam,
+            type: 'npc',
+            expansion: wowExportClient.isClassic()
+              ? baseZam.expansion
+              : 'latest-available', // in latest wow installation, classic models are not available
+          });
+          break;
+        case 'object':
+          npcMeta = await fetchObjectMeta({
+            ...baseZam,
+            type: 'object',
+            expansion: wowExportClient.isClassic()
+              ? baseZam.expansion
+              : 'latest-available', // in latest wow installation, classic models are not available
+          });
+          break;
+        case 'dressing-room':
+          npcMeta = await decodeDressingRoom(baseZam.expansion, baseZam.hash);
+          break;
+        default:
+          throw new Error(`Unallowed base zam type: ${baseZam.type}`);
       }
-
-      const npcMeta = baseZam.type === 'dressing-room'
-        ? await decodeDressingRoom(baseZam.expansion, baseZam.hash)
-        : await fetchNpcMeta({
-          ...baseZam,
-          expansion: wowExportClient.isClassic()
-            ? baseZam.expansion
-            : 'latest-available', // in latest wow installation, classic models are not available
-        });
 
       if (npcMeta.Model) {
         return exportCreatureNpcAsMdl(ctx, npcMeta);

@@ -14,15 +14,17 @@ import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bo
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchCharacterCustomization } from '@/lib/wowhead-client/character-customization';
 import { EquipmentSlot } from '@/lib/wowhead-client/item-armor';
-import { CharacterData } from '@/lib/wowhead-client/npc';
+import { CharacterData } from '@/lib/wowhead-client/npc-object';
 import { ZamExpansion } from '@/lib/wowhead-client/zam-url';
 
 import {
   applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture,
 } from '../utils';
 import {
+  EquipmentSlotData,
   filterCollectionGeosets,
-  getEquipmentSlotName, getSubmeshName, ItemMetata, processItemData,
+  getEquipmentSlotName, getGeosetIdsFromEquipments,
+  getSubmeshName, processItemData,
 } from './item-model';
 
 export async function exportCharacterAsMdl({
@@ -72,11 +74,6 @@ export async function exportCharacterAsMdl({
   return charMdl;
 }
 
-type EquipmentSlotData = {
-  slotId: EquipmentSlot;
-  data: ItemMetata;
-}
-
 type Prep = {
   rpcParams: ExportCharacterParams;
   prebakedTexture: number | null;
@@ -94,9 +91,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
   const gender = character.Gender;
 
   // Decide which geosets to include/hide based on equipment
-  const geosetIds = new Set<number>();
-  const hideGeosetIds = new Set<number>();
-  const equipmentSlots: {slotId: EquipmentSlot, data: ItemMetata}[] = [];
+  const equipmentSlots: EquipmentSlotData[] = [];
 
   const slotIds = Object.values(EquipmentSlot).filter((v) => typeof v === 'number') as number[];
   for (const slotId of slotIds) {
@@ -106,25 +101,16 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
       const itemData = await processItemData({
         expansion, type: 'item', displayId: itemId, slotId,
       }, race, gender);
-      console.log(getEquipmentSlotName(slotId), itemData.geosetIds, itemData.hideGeosetIds);
-      itemData.geosetIds?.forEach((id: number) => geosetIds.add(id));
-      itemData.hideGeosetIds?.forEach((id: number) => hideGeosetIds.add(id));
       equipmentSlots.push({ slotId, data: itemData });
     } catch (e) {
       console.error(chalk.red(`Failed to process item ${itemId} for slot ${slotId}: ${e}`));
       continue;
-      // 124645
     }
   }
 
   console.log('Equipments:', equipmentSlots.map((s) => getEquipmentSlotName(s.slotId)));
 
-  if (!slotIds.includes(EquipmentSlot.Head)) {
-    // otherwise the model will be missing ears
-    geosetIds.add(701);
-  } else {
-    geosetIds.add(702);
-  }
+  const { geosetIds, hideGeosetIds } = getGeosetIdsFromEquipments(equipmentSlots);
 
   // Prepare RPC params for wowexport
   const rpcParams: ExportCharacterParams = {
@@ -134,8 +120,8 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     format: 'obj',
     include_animations: true,
     include_base_clothing: true,
-    geosetIds: Array.from(geosetIds),
-    hideGeosetIds: Array.from(hideGeosetIds),
+    geosetIds,
+    hideGeosetIds,
   };
 
   const prebakedTexture = metadata.TextureFiles ? Object.values(metadata.TextureFiles)[0]?.[0]?.FileDataId : null;
@@ -161,8 +147,10 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   const debug = false;
 
   // Attach individual item model to the character model
-  const attachItemModel = async (itemData: ItemMetata, idx: number, attachmentId: WoWAttachmentID | undefined) => {
+  const attachItemModel = async (slotData: EquipmentSlotData, idx: number, attachmentId: WoWAttachmentID | undefined) => {
     debug && console.log('attachItemModel', attachmentId ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
+
+    const itemData = slotData.data;
 
     const fileDataId = itemData.modelFiles[idx].fileDataId;
     const itemReplaceableTextures = Object.fromEntries(itemData.modelTextureFiles[idx].map((f) => [f.componentId, f.fileDataId]));
@@ -183,7 +171,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
       const debug = true;
       debug && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
-      const enabledGeosets = filterCollectionGeosets(itemData.slotId!, itemData.originalData, itemMdl);
+      const enabledGeosets = filterCollectionGeosets(equipmentSlots, slotData, itemMdl);
 
       debug && console.log('all available geosets', fileDataId, itemMdl.geosets.map((g) => `${getSubmeshName(g.wowData.submeshId)} (${g.wowData.submeshId})`));
 
@@ -232,12 +220,12 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   const attachmentList: Record<EquipmentSlot, WoWAttachmentID[]> = {
     [EquipmentSlot.Head]: [WoWAttachmentID.Helm],
     [EquipmentSlot.Shoulder]: [WoWAttachmentID.ShoulderLeft, WoWAttachmentID.ShoulderRight],
-    [EquipmentSlot.Belt]: [WoWAttachmentID.BeltBuckle],
-    [EquipmentSlot.Back]: [WoWAttachmentID.Backpack],
+    [EquipmentSlot.Waist]: [WoWAttachmentID.BeltBuckle],
+    [EquipmentSlot.Cloak]: [WoWAttachmentID.Backpack],
     [EquipmentSlot.Chest]: [],
     [EquipmentSlot.Legs]: [],
     [EquipmentSlot.Feet]: [],
-    [EquipmentSlot.Gloves]: [],
+    [EquipmentSlot.Hands]: [],
     [EquipmentSlot.MainHand]: [WoWAttachmentID.HandRight],
     [EquipmentSlot.OffHand]: [WoWAttachmentID.HandLeft],
     [EquipmentSlot.Shirt]: [],
@@ -250,7 +238,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     const slot = equipmentSlots.find((s) => s.slotId === Number(slotId));
     if (slot) {
       for (let i = 0; i < slot.data.modelFiles.length; i++) {
-        await attachItemModel(slot.data, i, attachmentIds[i] ?? attachmentIds[0] ?? undefined);
+        await attachItemModel(slot, i, attachmentIds[i] ?? attachmentIds[0] ?? undefined);
       }
     }
   }
@@ -268,7 +256,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 }
 
 async function applyCloakTexture(ctx: ExportContext, charMdl: MDL, slots: EquipmentSlotData[]) {
-  const cloakSlot = slots.find((s) => s.slotId === EquipmentSlot.Back);
+  const cloakSlot = slots.find((s) => s.slotId === EquipmentSlot.Cloak);
   if (!cloakSlot || cloakSlot.data.bodyTextureFiles.length === 0) return;
 
   const textureFile = cloakSlot.data.bodyTextureFiles[0];
@@ -316,39 +304,15 @@ async function applyCloakTexture(ctx: ExportContext, charMdl: MDL, slots: Equipm
 async function applyPrebakedTextrure(ctx: ExportContext, charMdl: MDL, prep: Prep) {
   if (!prep.prebakedTexture) return;
 
-  const baseTexturePath = charMdl.textures.find((t) => t.wowData.type === 1)?.image;
   const prebakedTexturePath = await exportTexture(prep.prebakedTexture);
   console.log('Character has prebaked texture', prep.prebakedTexture, prebakedTexturePath);
   ctx.assetManager.addPngTexture(prebakedTexturePath);
 
-  // console.log('baseTexturePath', baseTexturePath);
-
   const newTexturePath = path.join(ctx.config.assetPrefix, prebakedTexturePath).replace('.png', '.blp');
-
-  charMdl.geosets.forEach((geoset, i) => {
-    // For skeleton, we don't want to override anything but
-    // For some reason, the skull is not included in the baked texture
-    let skip = false;
-    const raceSkeleton = 20;
-    if (prep.rpcParams.race === raceSkeleton) {
-      skip = true;
-      let geosetIds: number[] | undefined;
-      if (geoset.name.includes('Glove') && charMdl.geosets[i - 1].name.includes('Glove')) {
-        geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Gloves)?.data.geosetIds;
-      } else if (geoset.name.includes('Boot') && charMdl.geosets[i + 1].name.includes('Boot')) {
-        geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Feet)?.data.geosetIds;
-      } else if (geoset.name.includes('Trousers')) {
-        geosetIds = prep.equipmentSlots.find((s) => s.slotId === EquipmentSlot.Legs)?.data.geosetIds;
-      }
-      if (geosetIds && geosetIds.length > 0) {
-        skip = false;
-      }
-    }
-    if (skip) return;
-
+  charMdl.geosets.forEach((geoset) => {
     // Replace the base texture with the npc baked texture
     geoset.material.layers.forEach((layer) => {
-      if (layer.texture.image === baseTexturePath || layer.texture.image === '') {
+      if (layer.texture.wowData.type === 1) {
         layer.texture.image = newTexturePath;
       }
     });
@@ -377,11 +341,11 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
     [EquipmentSlot.Shoulder]: 15,
     [EquipmentSlot.Shirt]: 1,
     [EquipmentSlot.Chest]: 7,
-    [EquipmentSlot.Belt]: 10,
+    [EquipmentSlot.Waist]: 10,
     [EquipmentSlot.Legs]: 5,
     [EquipmentSlot.Feet]: 6,
     [EquipmentSlot.Wrist]: 6,
-    [EquipmentSlot.Gloves]: 8,
+    [EquipmentSlot.Hands]: 8,
     [EquipmentSlot.MainHand]: 17,
     [EquipmentSlot.OffHand]: 18,
     // Back (16) not baked here
@@ -390,7 +354,7 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
 
   // Build a list of overlays with slot priority and region id; skip cloaks (Back)
   const overlays = prep.equipmentSlots
-    .filter((s) => s.slotId !== EquipmentSlot.Back)
+    .filter((s) => s.slotId !== EquipmentSlot.Cloak)
     .flatMap((s) => {
       // Base priority from Wowhead mapping
       let basePriority = wowheadSlotPriority[s.slotId] ?? 0;
@@ -413,13 +377,13 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
 
   const textureDraws: PngDraw[] = [];
   for (const t of overlays) {
-    if (t.slotId === EquipmentSlot.Back) continue; // cloak/back is not baked into base
+    if (t.slotId === EquipmentSlot.Cloak) continue; // cloak/back is not baked into base
     const section = charCus.TextureSections.find((s) => s.SectionType === t.componentId);
     if (!section) {
       console.error(chalk.red(`Texture section not found for file ${t.fileDataId} component ${t.componentId}`));
       continue;
     }
-    console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
+    debug && console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
     const pngPath = path.join(ctx.config.wowExportAssetDir, await exportTexture(t.fileDataId));
     textureDraws.push({
       pngPath,
