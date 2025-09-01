@@ -43,7 +43,7 @@ const queueConfig: QueueConfig<ExportCharacterRequest, ExportCharacterResponse> 
   concurrency: 1,
   maxPendingJobs: 100,
   jobTTL: 5 * 60 * 1000,
-  jobTimeout: 60 * 1000,
+  jobTimeout: 60 * 1000 + (isSharedHosting ? 60 * 1000 : 0),
 };
 
 type ExportCharacterJob = Job<ExportCharacterRequest, ExportCharacterResponse>;
