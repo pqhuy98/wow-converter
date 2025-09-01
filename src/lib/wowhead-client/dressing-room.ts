@@ -57,7 +57,7 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
     }
   });
 
-  console.log(data);
+  console.log(JSON.stringify(data, null, 2));
   const itemsWithBonus = Object.values(data.equipment);
   const items = await gatherItems(expansion, itemsWithBonus);
 

@@ -62,8 +62,9 @@ export function convertToSd800(this: MDLModify) {
     };
 
     geoset.vertices.forEach((v) => {
-      // Build weight-aware matrix using phantom bones to approximate weights
-      const resolution = 8;
+      // Build weight-aware matrix using minimal necessary phantom bones
+      const MAX_RESOLUTION = 8; // upper cap for tokenization
+      const TOLERANCE = 0.02; // acceptable max absolute error per bone
       const weights = (v.skinWeights ?? [])
         .filter((sw) => sw.weight > 0)
         .map((sw) => ({ bone: sw.bone, weight: sw.weight }));
@@ -74,33 +75,53 @@ export function convertToSd800(this: MDLModify) {
         const sum = weights.reduce((a, b) => a + b.weight, 0);
         const normalized = weights.map((w) => ({ bone: w.bone, weight: w.weight / (sum || 1) }));
 
-        // Quantize with largest-remainder to sum exactly to <= resolution, dropping tiny contributions
-        const raw = normalized.map((w) => ({ bone: w.bone, raw: w.weight * resolution }));
-        const floor = raw.map((r) => ({ bone: r.bone, count: Math.floor(r.raw), frac: r.raw - Math.floor(r.raw) }));
-        let total = floor.reduce((a, b) => a + b.count, 0);
+        // Try smallest resolution that approximates within tolerance
+        type CountEntry = { bone: Bone; count: number };
+        let chosen: CountEntry[] | undefined;
 
-        // Distribute remaining tokens by fractional part, but cap at resolution
-        if (total < resolution) {
-          const remaining = resolution - total;
-          floor
-            .slice()
-            .sort((a, b) => b.frac - a.frac)
-            .slice(0, remaining)
-            .forEach((item) => item.count++);
-          total = floor.reduce((a, b) => a + b.count, 0);
+        for (let k = 1; k <= MAX_RESOLUTION && !chosen; k++) {
+          const raw = normalized.map((w) => ({ bone: w.bone, raw: w.weight * k }));
+          const base = raw.map((r) => ({ bone: r.bone, count: Math.floor(r.raw), frac: r.raw - Math.floor(r.raw) }));
+          const used = base.reduce((a, b) => a + b.count, 0);
+
+          if (used < k) {
+            const remaining = k - used;
+            const sortedByFrac = base.slice().sort((a, b) => b.frac - a.frac);
+            for (let i = 0; i < remaining; i++) sortedByFrac[i].count++;
+          }
+
+          const maxError = normalized.reduce((max, n) => {
+            const entry = base.find((b) => b.bone === n.bone)!;
+            const approx = entry.count / k;
+            const err = Math.abs(n.weight - approx);
+            return err > max ? err : max;
+          }, 0);
+
+          if (maxError <= TOLERANCE) {
+            chosen = base.filter((c) => c.count > 0).map((c) => ({ bone: c.bone, count: c.count }));
+          }
         }
 
-        // Remove zero-count small contributors
-        const counts = floor.filter((c) => c.count > 0);
-        // Edge-case: if all counts are zero (extreme tiny weights), keep strongest one
-        if (counts.length === 0) {
-          const strongest = normalized.slice().sort((a, b) => b.weight - a.weight)[0];
-          counts.push({ bone: strongest.bone, count: 1, frac: 0 });
+        if (!chosen) {
+          // Fallback: use MAX_RESOLUTION largest-remainder
+          const k = MAX_RESOLUTION;
+          const raw = normalized.map((w) => ({ bone: w.bone, raw: w.weight * k }));
+          const base = raw.map((r) => ({ bone: r.bone, count: Math.floor(r.raw), frac: r.raw - Math.floor(r.raw) }));
+          const used = base.reduce((a, b) => a + b.count, 0);
+          if (used < k) {
+            const remaining = k - used;
+            const sortedByFrac = base.slice().sort((a, b) => b.frac - a.frac);
+            for (let i = 0; i < remaining; i++) sortedByFrac[i].count++;
+          }
+          chosen = base.filter((c) => c.count > 0).map((c) => ({ bone: c.bone, count: c.count }));
+          if (chosen.length === 0) {
+            const strongest = normalized.slice().sort((a, b) => b.weight - a.weight)[0];
+            chosen = [{ bone: strongest.bone, count: 1 }];
+          }
         }
 
-        // For each bone: include original bone once, plus (count-1) phantom bones
-        counts.forEach(({ bone, count }) => {
-          if (count <= 0) return;
+        // Emit bones for matrix (one original per bone, plus minimal required phantoms)
+        chosen.forEach(({ bone, count }) => {
           bonesForMatrix.push(bone);
           if (count > 1) {
             const phantoms = ensurePhantomBones(bone, count - 1);
