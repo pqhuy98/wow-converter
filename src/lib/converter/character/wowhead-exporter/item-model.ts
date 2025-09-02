@@ -145,8 +145,9 @@ export function getGeosetIdsFromEquipments(equipments: EquipmentSlotData[], chos
   const tabard = equipments.find((s) => s.slotId === EquipmentSlot.Tabard);
   const cloak = equipments.find((s) => s.slotId === EquipmentSlot.Cloak);
 
-  const removeGroup = (group: number) => {
+  const removeGroup = (group: number, hideDefault: boolean) => {
     geosetIds = geosetIds.filter((g) => Math.floor(g / 100) !== group);
+    hideDefault && hideGeosetIds.push(group * 100 + 1);
   };
   const hasGeoset = (equiment: EquipmentSlotData | undefined, i: number) => (equiment?.data.zamGeosetGroup?.[i] ?? 0) > 0;
   const addGeoset = (equiment: EquipmentSlotData | undefined, group: number, i: number) => {
@@ -156,7 +157,7 @@ export function getGeosetIdsFromEquipments(equipments: EquipmentSlotData[], chos
           hands, equiment, group, i,
         });
       }
-      removeGroup(group);
+      removeGroup(group, false);
       geosetIds.push(computeZamMeshId(group, equiment?.data.zamGeosetGroup?.[i]));
     }
   };
@@ -228,16 +229,16 @@ export function getGeosetIdsFromEquipments(equipments: EquipmentSlotData[], chos
   });
 
   if (hasChestTrouser) {
-    removeGroup(5);
-    removeGroup(9);
-    removeGroup(11);
-    removeGroup(13);
+    removeGroup(5, true);
+    removeGroup(9, true);
+    removeGroup(11, true);
+    removeGroup(13, true);
     addGeoset(chest, 13, 2);
   } else if (hasLegsTrouser) {
-    removeGroup(5);
-    removeGroup(9);
-    removeGroup(11);
-    removeGroup(13);
+    removeGroup(5, true);
+    removeGroup(9, true);
+    removeGroup(11, true);
+    removeGroup(13, true);
     addGeoset(legs, 13, 2);
   }
 

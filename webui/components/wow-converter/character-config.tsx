@@ -76,14 +76,16 @@ export function CharacterConfig({
         value={character.base}
         onChange={(base) => {
           setCharacter((prev) => {
+            let attachItems = prev.attachItems;
             if (prev.base.type === 'wowhead' && base.type === 'wowhead') {
               console.log('prev.base.value', prev.base.value);
               console.log('base.value', base.value);
               if (!prev.base.value.includes('dressing-room') && base.value.includes('dressing-room')) {
                 clearOutputFileName?.();
+                attachItems = {};
               }
             }
-            return { ...prev, base };
+            return { ...prev, base, attachItems };
           });
         }}
         label="Base Model"
