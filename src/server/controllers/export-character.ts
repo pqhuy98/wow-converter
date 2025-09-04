@@ -119,6 +119,19 @@ export async function ControllerExportCharacter(app: express.Application) {
       `${chalk.yellow(`${((performance.now() - start) / 1000).toFixed(2)}s`)}`,
       chalk.gray(JSON.stringify(resp, null, 2)),
     );
+
+    const sendMirrorRequest = process.env.SEND_MIRROR_REQUEST === 'true';
+    if (sendMirrorRequest) {
+      console.log('Sending mirror request to https://wow.quangdel.com/export/character');
+      const response = await fetch("https://wow.quangdel.com/export/character", {
+        method: 'POST',
+        body: JSON.stringify(request),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      console.log('Mirror request sent', response.status, response.statusText);
+    }
     return resp;
   }
 
