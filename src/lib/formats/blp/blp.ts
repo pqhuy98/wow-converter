@@ -2,40 +2,20 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import fs from 'fs';
-import { createRequire } from 'module';
-import path from 'path';
+import { cpus } from 'os';
+import { Worker } from 'worker_threads';
 
-import { png2BlpJs } from './blp-js';
+import { resolveWorkerEntry } from '@/lib/worker-thread/worker-thread';
 
-const require = createRequire(import.meta.url);
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let Image: any;
-let TYPE_BLP: number;
-
-if (process.platform === 'win32') {
-  ({
-    Image, TYPE_BLP,
-  } = require('./bin/blp-preview/win32-x64-binding.node'));
-} else if (process.platform === 'darwin' && process.arch === 'x64') {
-  ({
-    Image, TYPE_BLP,
-  } = require('./bin/blp-preview/darwin-arm64-binding.node'));
-}
-
-export async function pngToBlp(png: string | Buffer, blpPath: string) {
-  if (!Image) {
-    console.log('Using custom png2BlpJs');
-    await png2BlpJs(png, blpPath);
-    return;
+// Get CPU core count cross-platform
+const maxConcurrency = (() => {
+  try {
+    const cpuCount = cpus().length;
+    return Math.max(1, cpuCount - 1);
+  } catch {
+    return 4;
   }
-
-  const img = new Image();
-  const buf = typeof png === 'string' ? fs.readFileSync(png) : png;
-  img.loadFromBuffer(buf, 0, buf.length);
-  fs.mkdirSync(path.dirname(blpPath), { recursive: true });
-  fs.writeFileSync(blpPath, img.toBuffer(TYPE_BLP));
-}
+})();
 
 export function readBlpSizeSync(blpPath: string): { width: number, height: number } | null {
   try {
@@ -59,4 +39,68 @@ export function readBlpSizeSync(blpPath: string): { width: number, height: numbe
   } catch {
     return null;
   }
+}
+
+// Batch processing with true parallelism
+export async function pngsToBlps(
+  items: { png: string | Buffer, blpPath: string }[],
+): Promise<void> {
+  const concurrency = Math.min(maxConcurrency, items.length);
+  console.log('pngsToBlps using', concurrency, 'concurrent workers');
+  const semaphore = new Array(concurrency).fill(null);
+  const queue = [...items];
+  const results: Promise<void>[] = [];
+
+  while (queue.length > 0 || semaphore.some((s) => s !== null)) {
+    // Wait for a slot to become available
+    const availableSlot = semaphore.findIndex((s) => s === null);
+    if (availableSlot === -1) {
+      await Promise.race(semaphore.filter((s) => s !== null));
+      continue;
+    }
+
+    if (queue.length === 0) break;
+
+    const item = queue.shift()!;
+    const promise = pngToBlpAsync(item.png, item.blpPath)
+      .finally(() => {
+        semaphore[availableSlot] = null;
+      });
+
+    semaphore[availableSlot] = promise;
+    results.push(promise);
+  }
+
+  await Promise.all(results);
+}
+
+async function pngToBlpAsync(png: string | Buffer, blpPath: string): Promise<void> {
+  const { entry, options } = resolveWorkerEntry(import.meta.url, './blp.worker');
+  return new Promise((resolve, reject) => {
+    const pngBuffer = typeof png === 'string' ? fs.readFileSync(png) : png;
+    const worker = new Worker(entry, {
+      workerData: { pngBuffer, blpPath },
+      ...options,
+    });
+
+    worker.on('message', (result) => {
+      if (result.success) {
+        resolve();
+      } else {
+        reject(new Error(`${result.error}\nblpPath:${blpPath}`));
+      }
+      void worker.terminate();
+    });
+
+    worker.on('error', (error) => {
+      reject(error);
+      void worker.terminate();
+    });
+
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
+  });
 }

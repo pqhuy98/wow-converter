@@ -9,7 +9,8 @@
     "assets": [
       "webui/out/**",
       "node_modules/sharp/build/Release/sharp.node",
-      "node_modules/sharp/vendor/**"
+      "node_modules/sharp/vendor/**",
+      "build/**.cjs"
     ],
     "targets": [
       "node18-win-x64"
@@ -22,24 +23,25 @@
   "scripts": {
     "lint": "eslint src/**/*.ts --fix",
     "dev": "tsx watch src/server/index.ts",
-    "start": "node build/src/server/index.js",
+    "start": "node build/server.bundle.cjs",
     "test": "tsx tests/index.ts",
     "prisma:generate": "prisma generate",
+    "clean": "shx rm -rf build dist",
     "build:webui": "cd webui && npm run build",
-    "build:0": "shx rm -rf build && tsc && tsc-alias",
-    "build:1": "rollup -c",
-    "build:2": "shx rm -rf dist && pkg build/server.bundle.js --config package.json --compress Gzip --options max-old-space-size=99999 --output dist/wow-converter",
-    "build:3": "cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin && shx mkdir -p dist/sharp/build/Release dist/sharp/vendor && shx cp -r node_modules/sharp/build/Release dist/sharp/build && shx cp -r node_modules/sharp/vendor dist/sharp/vendor",
-    "build:app": "npm run prisma:generate && npm run build:0 && npm run build:1 && npm run build:2 && npm run build:3",
+    "build:rollup": "rollup -c",
+    "build:pkg": "pkg build/server.bundle.cjs --config package.json --compress Gzip --options max-old-space-size=99999 --output dist/wow-converter",
+    "build:copy": "shx rm -rf dist/webui dist/bin dist/sharp && cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin && shx mkdir -p dist/sharp/build/Release dist/sharp/vendor && shx cp -r node_modules/sharp/build/Release dist/sharp/build && shx cp -r node_modules/sharp/vendor dist/sharp/vendor && shx cp -r build/**.worker.cjs dist",
+    "build:app": "npm run prisma:generate && npm run build:rollup && npm run build:pkg && npm run build:copy",
     "build:server": "npm run prisma:generate && npm run build:webui && npm run build:0",
     "build:wow.export": "cd wow.export && npm run build && cd .. && shx cp -r wow.export/bin/win-x64/* dist && shx rm dist/update dist/update.json",
-    "build": "npm run build:webui && npm run build:app && npm run build:wow.export && npm run zip",
+    "build": "npm run clean && npm run build:webui && npm run build:app && npm run build:wow.export && npm run zip",
     "zip": "powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath wow-converter.zip -Force\""
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-typescript": "^12.1.4",
     "@stylistic/eslint-plugin-ts": "^2.8.0",
     "@types/archiver": "^6.0.3",
     "@types/assert": "^1.5.11",
@@ -70,7 +72,9 @@
     "prisma": "^6.11.1",
     "rollup": "^4.45.1",
     "shx": "^0.4.0",
-    "tsc-alias": "^1.8.16"
+    "tsc-alias": "^1.8.16",
+    "tslib": "^2.8.1",
+    "tsx": "^4.20.5"
   },
   "dependencies": {
     "@pqhuy98/mdx-m3-viewer": "^5.12.2",
@@ -94,6 +98,7 @@
     "lru-cache": "^11.1.0",
     "open": "^10.2.0",
     "pngjs": "^7.0.0",
+    "rolldown": "^1.0.0-beta.34",
     "round-to": "^6.0.0",
     "sharp": "0.32.6",
     "typescript": "^5.8.3",

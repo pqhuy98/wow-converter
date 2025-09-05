@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 
-import { pngToBlp, readBlpSizeSync } from '@/lib/formats/blp/blp';
+import { pngsToBlps, readBlpSizeSync } from '@/lib/formats/blp/blp';
 import { resizePng } from '@/lib/formats/png';
 
 import { Config } from '../../global-config';
@@ -74,6 +74,11 @@ export class AssetManager {
     console.log('Exporting textures to', assetPath, '...');
     mkdirSync(assetPath, { recursive: true });
     let writeCount = 0;
+    // Collect all textures that need processing
+    const texturesToProcess: Array<{
+      png: string | Buffer;
+      blpPath: string;
+    }> = [];
     for (const texturePath of this.textures) {
       const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
       if (!existsSync(fromPath)) {
@@ -100,12 +105,12 @@ export class AssetManager {
 
       // Skip only if the existing BLP exactly matches the target size
       const debug = false;
-      const toPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
-      exportedTexturePaths.push(toPath);
-      if (existsSync(toPath) && !this.texturesOverwrite.has(texturePath)) {
-        const size = readBlpSizeSync(toPath);
+      const blpPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
+      exportedTexturePaths.push(blpPath);
+      if (existsSync(blpPath) && !this.texturesOverwrite.has(texturePath)) {
+        const size = readBlpSizeSync(blpPath);
         if (size && size.width === targetWidth && size.height === targetHeight) {
-          debug && console.log('Skipping existing texture', toPath);
+          debug && console.log('Skipping existing texture', blpPath);
           continue;
         }
       }
@@ -122,9 +127,20 @@ export class AssetManager {
           console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
         }
       }
-      await pngToBlp(pngInput, toPath);
       writeCount++;
+      texturesToProcess.push({ png: pngInput, blpPath });
     }
+
+    // Process textures in parallel using the new non-blocking conversion
+    if (texturesToProcess.length > 0) {
+      console.log(`Processing ${texturesToProcess.length} textures to BLP...`);
+      const startTime = Date.now();
+      await pngsToBlps(texturesToProcess);
+      const endTime = Date.now();
+      console.log(`Texture conversion to BLP completed in ${endTime - startTime}ms`);
+    }
+
+    // const writeCount = texturesToProcess.length;
     console.log(`Wrote ${writeCount}, skipped ${this.textures.size - writeCount} textures. Total: ${exportedTexturePaths.length}`);
     return exportedTexturePaths;
   }

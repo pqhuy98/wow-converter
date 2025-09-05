@@ -2,11 +2,13 @@
   "compilerOptions": {
     "target": "esnext",
     "module": "esnext",
+    "moduleResolution": "node",
     "lib": [
       "es2022"
     ],
     "outDir": "./build",
-    "moduleResolution": "node",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "esModuleInterop": true,
     "strictNullChecks": true,
     "resolveJsonModule": true,
@@ -15,7 +17,7 @@
       "@/*": [
         "./src/*"
       ]
-    },
+    }
   },
   "tsc-alias": {
     "resolveFullPaths": true,

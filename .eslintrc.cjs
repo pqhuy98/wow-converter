@@ -4,6 +4,7 @@ module.exports = {
     es2021: true,
   },
   extends: [
+    'airbnb-base',
     'plugin:@typescript-eslint/recommended-requiring-type-checking',
     'plugin:import/typescript',
   ],
