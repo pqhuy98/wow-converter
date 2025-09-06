@@ -66,7 +66,7 @@ export function CharacterConverter() {
     if (serverConfig.isClassic && !optimization.maxTextureSize) {
       setOptimization({ ...optimization, maxTextureSize: '512' });
     }
-  }, [serverConfig]);
+  }, [serverConfig.isClassic]);
 
   // Job/queue tracking
   const [jobStatus, setJobStatus] = useState<JobStatus | undefined>(undefined);
