@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { createHash, randomUUID } from 'crypto';
 import express from 'express';
 import fsExtra from 'fs-extra';
+import _ from 'lodash';
 import path from 'path';
 import z from 'zod';
 
@@ -33,8 +34,29 @@ export const ExporCharacterRequestSchema = z.object({
 export type ExportCharacterRequest = z.infer<typeof ExporCharacterRequestSchema>;
 
 export type ExportCharacterResponse = {
-  exportedModels: string[]
-  exportedTextures: string[]
+  exportedModels: { path: string, size: number }[]
+  exportedTextures: { path: string, size: number }[]
+  modelStats: {
+    formatVersion: number;
+    vertices: number;
+    faces: number;
+    globalSequences: number;
+    sequences: number;
+    geosets: number;
+    geosetAnims: number;
+    materials: number;
+    textures: number;
+    textureAnims: number;
+    bones: number;
+    lights: number;
+    ribbonEmitters: number;
+    particles: number;
+    attachments: number;
+    eventObjects: number;
+    helpers: number;
+    collisionShapes: number;
+    cameras: number;
+  }
   outputDirectory?: string
   versionId: string
 }
@@ -49,6 +71,18 @@ const queueConfig: QueueConfig<ExportCharacterRequest, ExportCharacterResponse> 
 type ExportCharacterJob = Job<ExportCharacterRequest, ExportCharacterResponse>;
 
 let ceConfig: Config;
+
+export function getCeConfig() {
+  return ceConfig;
+}
+
+let logs: string[] = [];
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+  logs.push(args.join(' '));
+  if (logs.length > 2) logs.shift();
+  originalConsoleLog(...args);
+};
 
 export async function ControllerExportCharacter(app: express.Application) {
   await waitUntil(() => wowExportClient.isReady);
@@ -68,6 +102,7 @@ export async function ControllerExportCharacter(app: express.Application) {
         : undefined,
     });
     console.log(`Start exporting ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
+    logs = [];
 
     await wowExportClient.syncConfig();
     await ce.exportCharacter(request.character, request.outputFileName);
@@ -100,47 +135,64 @@ export async function ControllerExportCharacter(app: express.Application) {
       mdl.sync();
     });
 
-    let exportedModels = ce.writeAllModels(outputDir, request.format);
-    let textures = await ce.writeAllTextures(outputDir);
+    const modelPaths = ce.writeAllModels(outputDir, request.format);
+    const texturePaths = await ce.writeAllTextures(outputDir);
 
-    exportedModels = exportedModels.map((model) => path.relative(outputDir, `${model}.${request.format}`));
-    textures = textures.map((texture) => path.relative(outputDir, texture));
+    const exportedModels = modelPaths.map((modelPath) => ({
+      path: path.relative(outputDir, `${modelPath}.${request.format}`),
+      size: fsExtra.statSync(`${modelPath}.${request.format}`).size,
+    }));
+    const exportedTextures = texturePaths.map((texturePath) => ({
+      path: path.relative(outputDir, texturePath),
+      size: fsExtra.statSync(texturePath).size,
+    }));
+    exportedTextures.sort((a, b) => a.path.localeCompare(b.path));
 
     // Return the list of exported assets to the caller – zipping happens on-demand via the download API
     const resp: ExportCharacterResponse = {
       exportedModels,
-      exportedTextures: textures,
+      exportedTextures,
       outputDirectory: !isSharedHosting ? path.resolve(outputDir) : undefined,
       versionId: job.id,
+      modelStats: {
+        formatVersion: request.formatVersion === '800' ? 800 : 1000,
+        globalSequences: ce.models.reduce((acc, [mdl]) => acc + mdl.globalSequences.length, 0),
+        sequences: ce.models.reduce((acc, [mdl]) => acc + mdl.sequences.length, 0),
+        geosets: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.length, 0),
+        geosetAnims: ce.models.reduce((acc, [mdl]) => acc + mdl.geosetAnims.length, 0),
+        materials: ce.models.reduce((acc, [mdl]) => acc + mdl.materials.length, 0),
+        textures: ce.models.reduce((acc, [mdl]) => acc + mdl.textures.length, 0),
+        textureAnims: ce.models.reduce((acc, [mdl]) => acc + mdl.textureAnims.length, 0),
+        bones: ce.models.reduce((acc, [mdl]) => acc + mdl.bones.length, 0),
+        lights: ce.models.reduce((acc, [mdl]) => acc + mdl.lights.length, 0),
+        ribbonEmitters: ce.models.reduce((acc, [mdl]) => acc + mdl.ribbonEmitters.length, 0),
+        particles: ce.models.reduce((acc, [mdl]) => acc + mdl.particleEmitter2s.length, 0),
+        attachments: ce.models.reduce((acc, [mdl]) => acc + mdl.attachments.length, 0),
+        eventObjects: ce.models.reduce((acc, [mdl]) => acc + mdl.eventObjects.length, 0),
+        helpers: ce.models.reduce((acc, [mdl]) => acc + mdl.helpers.length, 0),
+        collisionShapes: ce.models.reduce((acc, [mdl]) => acc + mdl.collisionShapes.length, 0),
+        cameras: ce.models.reduce((acc, [mdl]) => acc + mdl.cameras.length, 0),
+        vertices: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.reduce((acc, g) => acc + g.vertices.length, 0), 0),
+        faces: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.reduce((acc, g) => acc + g.faces.length, 0), 0),
+      },
     };
 
     console.log(
       'Job finished',
       `${chalk.yellow(`${((performance.now() - start) / 1000).toFixed(2)}s`)}`,
-      chalk.gray(JSON.stringify(resp, null, 2)),
+      chalk.gray(JSON.stringify(_.omit(resp, 'exportedTextures'), null, 2)),
     );
 
-    const sendMirrorRequest = process.env.SEND_MIRROR_REQUEST === 'true';
-    if (sendMirrorRequest) {
-      console.log('Sending mirror request to https://wow.quangdel.com/export/character');
-      const response = await fetch("https://wow.quangdel.com/export/character", {
-        method: 'POST',
-        body: JSON.stringify(request),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      console.log('Mirror request sent', response.status, response.statusText);
-    }
     return resp;
   }
 
-  queueConfig.jobCompletedCallback = () => {
-    fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentCompletedJobs, null, 2));
-  };
-
   const jobQueue = new JobQueue<ExportCharacterRequest, ExportCharacterResponse>(
-    queueConfig,
+    {
+      ...queueConfig,
+      jobCompletedCallback: () => {
+        fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentCompletedJobs, null, 2));
+      },
+    },
     (job) => handleExport(job),
   );
 
@@ -205,7 +257,18 @@ export async function ControllerExportCharacter(app: express.Application) {
       return res.status(404).json({ error: 'Export request not found' });
     }
 
-    return res.json(jobQueue.getJobStatus(jobId));
+    const status = jobQueue.getJobStatus(jobId);
+
+    return res.json({
+      ...status,
+      logs: status?.status === 'processing' ? logs : undefined,
+    });
+  });
+
+  app.post('/export/character/clean', (req, res) => {
+    fsExtra.removeSync(outputDir);
+    fsExtra.mkdirSync(outputDir);
+    return res.json({ message: 'Exported assets cleaned' });
   });
 
   // Serve exported assets. When running on shared hosting enable HTTP caching to reduce bandwidth
@@ -238,13 +301,6 @@ export async function ControllerExportCharacter(app: express.Application) {
 
   app.get('/export/character/demos', (req, res) => {
     res.json(jobs.map((job) => jobQueue.getJob(job.id)).filter((job) => job?.status === 'done'));
-  });
-
-  app.get('/export/character/config', (req, res) => {
-    res.json({
-      wowExportAssetDir: ceConfig.wowExportAssetDir,
-      isSharedHosting,
-    });
   });
 
   app.get('/export/character/check-local-file', (req, res) => {

@@ -14,7 +14,8 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  AttachItem, Character, commonAttachments, otherAttachments,
+  allAttachments,
+  AttachItem, Character,
 } from '@/lib/models/export-character.model';
 
 import { AttachmentSelector } from './attachment-selector';
@@ -53,7 +54,7 @@ export function AttachItems({
           {Object.entries(character.attachItems || {}).map(([id, item]) => {
             const attachmentId = Number(id);
             const usedIds = new Set(Object.keys(character.attachItems || {}).map(Number));
-            const attachmentName = [...commonAttachments, ...otherAttachments].find((att) => att.id === attachmentId)?.name
+            const attachmentName = allAttachments.find((att) => att.id === attachmentId)?.name
               || 'Unknown';
 
             return (

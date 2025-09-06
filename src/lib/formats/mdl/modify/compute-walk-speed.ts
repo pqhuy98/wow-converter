@@ -157,8 +157,10 @@ export function computeWalkMovespeed(this: MDLModify) {
             moveSpeed,
           });
         }
-        if (moveSpeed > 0.2 * diag && moveSpeed < diag) {
-          debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed', moveSpeed);
+
+        const sizeX = globalMax[0] - globalMin[0];
+        if (moveSpeed > 0.5 * sizeX && moveSpeed < sizeX * 2) {
+          debug && console.log('setting moveSpeed', seq.name, { moveSpeed, sizeX });
           seq.moveSpeed = moveSpeed;
         } else {
           debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed to 0');

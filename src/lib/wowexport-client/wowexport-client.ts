@@ -103,6 +103,12 @@ export interface ExportCharacterParams {
   excludeAnimationIds?: number[];
 }
 
+export type ExportCharacterResult = {
+  exportPath: string;
+  fileName: string;
+  fileManifest: ExportFile[];
+}
+
 export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COMPLETE';
 
 const debug = false;
@@ -730,16 +736,7 @@ export class WowExportClient extends EventEmitter {
     throw new Error('Failed to start texture export');
   }
 
-  /**
-     * Export character
-     * @param data - Character export data
-     * @returns Promise with export files
-     */
-  async exportCharacter(data: ExportCharacterParams): Promise<{
-    exportPath: string;
-    fileName: string;
-    fileManifest: ExportFile[];
-  }> {
+  async exportCharacter(data: ExportCharacterParams): Promise<ExportCharacterResult> {
     let exportID = -1;
     const isComplete = (eventData: any) => {
       if (exportID === -1) {

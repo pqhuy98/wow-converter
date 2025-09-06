@@ -1,7 +1,6 @@
 import { AlertCircle, CheckCircle, HelpCircle } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
-import { host } from '@/app/config';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -10,8 +9,9 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { serverConfig } from '@/lib/config';
 import { RefSchema, RefType } from '@/lib/models/export-character.model';
+
+import { useServerConfig } from '../server-config';
 
 export type RefCategory = 'npc' | 'item'
 
@@ -28,6 +28,7 @@ export function RefInput({
   category: RefCategory
   tooltip: string
 }) {
+  const { isSharedHosting } = useServerConfig();
   const [currentValues, setCurrentValues] = useState<Record<RefType, RefSchema>>({
     wowhead: value.type === 'wowhead' ? value : { type: 'wowhead', value: '' },
     local: value.type === 'local' ? value : { type: 'local', value: '' },
@@ -54,7 +55,7 @@ export function RefInput({
   const fullValidAndFix = useCallback((value: RefSchema) => {
     if (!clientValidation(value, true)) return;
     if (value.type === 'local') {
-      void fetch(`${host}/export/character/check-local-file?localPath=${value.value}`)
+      void fetch(`/export/character/check-local-file?localPath=${value.value}`)
         .then((res) => res.json())
         .then((data) => setServerValidationResult(data));
     } else {
@@ -93,7 +94,7 @@ export function RefInput({
           </SelectTrigger>
           <SelectContent align="start">
             <SelectItem value="wowhead">Wowhead URL</SelectItem>
-            {!serverConfig?.isSharedHosting ? (
+            {!isSharedHosting ? (
               <SelectItem value="local">Local File</SelectItem>
             ) : null}
             <SelectItem value="displayID">Display ID</SelectItem>
@@ -111,7 +112,6 @@ export function RefInput({
             }
             value={currentValues[value.type].value}
             onChange={(e) => {
-              console.log('new', e.target.value);
               const newValue = { ...currentValues[value.type], value: e.target.value };
               setCurrentValues((prev) => ({ ...prev, [value.type]: newValue }));
               clientValidation(newValue, false);
@@ -194,6 +194,7 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
     if (fix) {
       if (ref.value.startsWith('"')) ref.value = ref.value.slice(1);
       if (ref.value.endsWith('"')) ref.value = ref.value.slice(0, -1);
+      const serverConfig = useServerConfig();
       if (serverConfig?.wowExportAssetDir && ref.value.startsWith(serverConfig.wowExportAssetDir)) {
         ref.value = ref.value.slice(serverConfig.wowExportAssetDir.length);
       }

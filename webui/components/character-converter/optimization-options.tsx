@@ -17,7 +17,6 @@ const tooltips = {
   removeUnusedNodes: 'Remove nodes that are not used in any geosets or do not contain used children nodes.',
   removeUnusedMaterials: 'Remove materials and textures that are not used in any geosets.',
   optimizeKeyFrames: 'Remove key frames that are not used in any animation, or are insignificant.',
-  // eslint-disable-next-line max-len
   maxTextureSize: 'Downscale texture images that are larger than this value; smaller ones stay unchanged. Select "Original" to leave textures size unchanged. This is useful to reduce file size, but will decrease visual quality when looking closely. 256px is acceptable for most unit models in Warcraft 3\'s RTS top-down view.',
 };
 

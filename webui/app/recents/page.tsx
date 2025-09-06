@@ -11,55 +11,11 @@ import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import {
-  commonAttachments, FullJobStatus, otherAttachments,
+  allAttachments, FullJobStatus,
 } from '@/lib/models/export-character.model';
+import { formatDurationBetween, formatTimestamp } from '@/lib/utils/format.utils';
 
-import { host } from '../config';
-import ModelViewerUi from '../model-viewer';
-
-// Utility function to format timestamps
-const formatTimestamp = (timestamp: number, showAbsolute: boolean = false): string => {
-  if (showAbsolute) {
-    const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-  }
-
-  const now = Date.now();
-  const diff = now - timestamp;
-  const minutes = Math.floor(diff / (1000 * 60));
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-  if (days > 0) {
-    return `${days} day${days > 1 ? 's' : ''} ago`;
-  } if (hours > 0) {
-    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-  } if (minutes > 0) {
-    return `${minutes} min${minutes > 1 ? 's' : ''} ago`;
-  }
-  return 'Just now';
-};
-
-// Utility function to calculate duration
-const calculateDuration = (startTime?: number, endTime?: number): string | null => {
-  if (!startTime || !endTime) return null;
-
-  const duration = endTime - startTime;
-  const seconds = Math.floor(duration / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-
-  if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s`;
-  }
-  return `${seconds}s`;
-};
+import ModelViewerUi from '../../components/common/model-viewer';
 
 export default function RecentsPage() {
   const [jobs, setJobs] = useState<FullJobStatus[]>([]);
@@ -71,7 +27,7 @@ export default function RecentsPage() {
   useEffect(() => {
     const fetchRecentJobs = async () => {
       try {
-        const response = await fetch(`${host}/export/character/recent`);
+        const response = await fetch('/export/character/recent');
         if (!response.ok) {
           throw new Error('Failed to fetch recent jobs');
         }
@@ -93,13 +49,13 @@ export default function RecentsPage() {
     void fetchRecentJobs();
   }, []);
 
-  const getSimplifiedWowheadUrl = (url: string, type: 'npc' | 'item'): string => {
+  const getSimplifiedWowheadUrl = (url: string): string => {
     try {
       const urlObj = new URL(url);
       const pathParts = urlObj.pathname.split('/');
       const categoryPart = pathParts.find((part) => part.includes('='));
       if (categoryPart) {
-        const [category, id] = categoryPart.split('=');
+        const [_category, id] = categoryPart.split('=');
         const slug = pathParts[pathParts.length - 1] || id;
         return `${slug} [${id}]`;
       }
@@ -109,9 +65,9 @@ export default function RecentsPage() {
     return url;
   };
 
-  const getSimplifiedRef = (ref: { type: string; value: string }, type: 'npc' | 'item'): string => {
+  const getSimplifiedRef = (ref: { type: string; value: string }): string => {
     if (ref.type === 'wowhead') {
-      return getSimplifiedWowheadUrl(ref.value, type);
+      return getSimplifiedWowheadUrl(ref.value);
     } if (ref.type === 'displayID') {
       return `Display ID [${ref.value}]`;
     }
@@ -123,11 +79,11 @@ export default function RecentsPage() {
       return [<span key="none">None</span>];
     }
 
-    const attachmentNames = Object.fromEntries([...commonAttachments, ...otherAttachments].map((a) => [a.id, a.name]));
+    const attachmentNames = Object.fromEntries(allAttachments.map((a) => [a.id, a.name]));
 
     return Object.entries(attachItems).map(([attachmentId, item], index) => {
       const attachmentName = attachmentNames[attachmentId] || `Attachment ${attachmentId}`;
-      const itemRef = getSimplifiedRef(item.path, 'item');
+      const itemRef = getSimplifiedRef(item.path);
 
       if (item.path.type === 'wowhead') {
         return (
@@ -188,7 +144,7 @@ export default function RecentsPage() {
     }
 
     try {
-      const res = await fetch(`${host}/download`, {
+      const res = await fetch('/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files }),
@@ -227,31 +183,31 @@ export default function RecentsPage() {
   }
 
   return (
-    <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex flex-col">
-      <div className="mx-auto flex-1 flex flex-col">
-        <div className="flex justify-between items-center mb-6">
-          <div className="text-center flex-1">
+    <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex flex-col overflow-x-hidden">
+      <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1 text-center px-4">
             <h1 className="text-4xl font-bold text-gray-900">Recent Exports</h1>
             <p className="text-lg text-gray-600 mt-2">View recent character exports</p>
           </div>
           <Button
             variant="outline"
             onClick={() => window.location.href = '/'}
-            className="flex items-center gap-2"
+            className="hidden sm:flex items-center gap-2 flex-shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Exporter
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ height: 'calc(100vh - 125px)' }}>
+        <div className="flex flex-col lg:flex-row gap-6 h-full min-w-0" style={{ height: 'calc(100vh - 125px)' }}>
           {/* Left Column - Job List */}
-          <div className="lg:col-span-1 h-full overflow-hidden">
-            <Card className="h-full flex flex-col">
-              <CardHeader className="border-b border-gray-200">
+          <div className="lg:w-1/4 w-full lg:h-full h-[40vh] overflow-hidden min-w-0">
+            <Card className="h-full flex flex-col min-w-0">
+              <CardHeader className="border-b border-gray-200 py-3">
                 <CardTitle className="text-lg">Export History</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 flex-1 overflow-y-auto p-3">
+              <CardContent className="space-y-2 flex-1 overflow-y-auto p-3 min-w-0">
                 {jobs.length === 0 ? (
                   <div className="text-center text-gray-500 py-8">
                     No recent exports found
@@ -267,7 +223,7 @@ export default function RecentsPage() {
                     return (
                       <div
                         key={job.id}
-                        className={`border rounded-lg p-3 cursor-pointer transition-all duration-200 ${
+                        className={`border rounded-lg p-2 cursor-pointer transition-all duration-200 ${
                           isSelected
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -302,44 +258,49 @@ export default function RecentsPage() {
                             </div>
 
                             <div className="text-xs text-gray-600 space-y-1">
-                              <div className="flex items-center gap-1">
-                                <span className="font-medium">Base:</span>
-                                {character.base.type === 'wowhead' ? (
-                                  <a
-                                    href={character.base.value}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:underline flex items-center gap-1 font-bold"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {getSimplifiedRef(character.base, 'npc')}
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                ) : (
-                                  <span className="font-bold">{getSimplifiedRef(character.base, 'npc')}</span>
-                                )}
+                              <div className="flex items-start gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">Base:</span>
+                                <div className="min-w-0 flex-1">
+                                  {character.base.type === 'wowhead' ? (
+                                    <a
+                                      href={character.base.value}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:underline flex items-center gap-1 font-bold break-all"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {getSimplifiedRef(character.base)}
+                                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                    </a>
+                                  ) : (
+                                    <span className="font-bold break-all">{getSimplifiedRef(character.base)}</span>
+                                  )}
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-4">
-                                <span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="whitespace-nowrap">
                                   <span className="font-medium">Attack:</span> <span className="font-bold">{character.attackTag || 'All'}</span>
                                 </span>
-                                <span>
+                                <span className="whitespace-nowrap">
                                   <span className="font-medium">Size:</span> <span className="font-bold">{character.size || 'Default'}</span>
                                 </span>
                               </div>
 
-                              <div>
-                                <span className="font-medium">Items:</span> <span className="font-bold">{getAttachItemsString(character.attachItems)}</span>
+                              <div className="flex items-start gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">Items:</span>
+                                <div className="min-w-0 flex-1">
+                                  <span className="font-bold break-words">{getAttachItemsString(character.attachItems)}</span>
+                                </div>
                               </div>
                               <div className="border-t border-gray-200 mt-2 pt-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-48 flex items-center gap-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="flex items-center gap-1 min-w-0">
                                     <span className="font-medium whitespace-nowrap">Submitted at: </span>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="text-xs h-auto p-1 font-bold hover:bg-blue-50 border-gray-300"
+                                      className="text-xs h-auto p-1 font-bold hover:bg-blue-50 border-gray-300 whitespace-nowrap"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setShowAbsoluteTime(!showAbsoluteTime);
@@ -349,10 +310,10 @@ export default function RecentsPage() {
                                     </Button>
                                   </div>
                                   {job.startedAt && job.finishedAt && job.submittedAt && job.startedAt && (
-                                    <div className="w-32 flex items-center gap-1">
-                                      <span className="font-medium">Duration: </span>
-                                      <span className="font-bold">
-                                        {calculateDuration(job.submittedAt, job.startedAt)} + {calculateDuration(job.startedAt, job.finishedAt)}
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      <span className="font-medium whitespace-nowrap">Duration: </span>
+                                      <span className="font-bold whitespace-nowrap">
+                                        {formatDurationBetween(job.submittedAt, job.startedAt)} + {formatDurationBetween(job.startedAt, job.finishedAt)}
                                       </span>
                                     </div>
                                   )}
@@ -368,38 +329,39 @@ export default function RecentsPage() {
                             isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
                           }`}
                         >
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="w-48 flex items-center gap-1">
-                                <span className="font-medium">Walk Speed:</span> <span className="font-bold">{character.inGameMovespeed}</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">Walk Speed:</span> <span className="font-bold">{character.inGameMovespeed}</span>
                               </div>
-                              <div className="w-48 flex items-center gap-1">
-                                <span className="font-medium">Scale:</span> <span className="font-bold">{character.scale || '1.0'}</span>
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">Scale:</span> <span className="font-bold">{character.scale || '1.0'}</span>
                               </div>
-                              <div className="w-48 flex items-center gap-1">
-                                <span className="font-medium">Format:</span> <span className="font-bold">{job.request.format}</span>
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">Format:</span> <span className="font-bold">{job.request.format}</span>
                               </div>
-                              <div className="w-48 flex items-center gap-1">
-                                <span className="font-medium">Model Version:</span> <span className="font-bold">{job.request.formatVersion || '1000'}</span>
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">Model Version:</span> <span className="font-bold">{job.request.formatVersion || '1000'}</span>
                               </div>
-                              <div className="w-48 flex items-center gap-1">
-                                <span className="font-medium">Keep Cinematic:</span> <span className="font-bold">{character.keepCinematic ? 'Yes' : 'No'}</span>
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">Keep Cinematic:</span> <span className="font-bold">{character.keepCinematic ? 'Yes' : 'No'}</span>
                               </div>
-                              <div className="w-48 flex items-center gap-1">
-                                <span className="font-medium">No Decay:</span> <span className="font-bold">{character.noDecay ? 'Yes' : 'No'}</span>
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="font-medium whitespace-nowrap">No Decay:</span> <span className="font-bold">{character.noDecay ? 'Yes' : 'No'}</span>
                               </div>
-                              <div className="w-48 flex items-center gap-1">
-                                <span className="font-medium">Portrait Camera:</span> <span className="font-bold">{character.portraitCameraSequenceName || 'None'}</span>
+                              <div className="flex items-start gap-1 min-w-0 sm:col-span-2">
+                                <span className="font-medium whitespace-nowrap">Portrait Camera:</span>
+                                <span className="font-bold break-words flex-1">{character.portraitCameraSequenceName || 'None'}</span>
                               </div>
                             </div>
 
                             {job.request.optimization && (
-                              <div>
+                              <div className="min-w-0">
                                 <span className="font-medium">Optimizations:</span>
-                                <div className="mt-1 space-y-1">
-                                  {job.request.optimization.sortSequences && <Badge variant="secondary" className="text-xs mr-1">Sort Sequences</Badge>}
-                                  {job.request.optimization.removeUnusedVertices && <Badge variant="secondary" className="text-xs mr-1">Remove Vertices</Badge>}
-                                  {job.request.optimization.removeUnusedNodes && <Badge variant="secondary" className="text-xs mr-1">Remove Nodes</Badge>}
-                                  {job.request.optimization.removeUnusedMaterialsTextures && <Badge variant="secondary" className="text-xs mr-1">Optimize Materials</Badge>}
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {job.request.optimization.sortSequences && <Badge variant="secondary" className="text-xs">Sort Sequences</Badge>}
+                                  {job.request.optimization.removeUnusedVertices && <Badge variant="secondary" className="text-xs">Remove Vertices</Badge>}
+                                  {job.request.optimization.removeUnusedNodes && <Badge variant="secondary" className="text-xs">Remove Nodes</Badge>}
+                                  {job.request.optimization.removeUnusedMaterialsTextures && <Badge variant="secondary" className="text-xs">Optimize Materials</Badge>}
                                 </div>
                               </div>
                             )}
@@ -437,9 +399,9 @@ export default function RecentsPage() {
           </div>
 
           {/* Right Column - Model Viewer */}
-          <div className="lg:col-span-2 h-full overflow-hidden">
-            <div className="p-0 h-full relative overflow-hidden">
-              <ModelViewerUi modelPath={selectedModelPath} />
+          <div className="lg:w-3/4 w-full h-full overflow-hidden min-w-0">
+            <div className="p-0 h-full relative overflow-hidden min-w-0">
+              <ModelViewerUi modelPath={selectedModelPath?.path} />
               {!selectedModelPath && (
                 <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
                   <div className="text-center text-gray-500">

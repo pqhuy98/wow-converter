@@ -312,7 +312,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   debug && console.log('computeWalkMovespeed took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   const totalTimeS = (performance.now() - start0) / 1000;
-  !config.isBulkExport && console.log(chalk.green('Successfully converted:'), objFilePath, '-', chalk.yellow(totalTimeS.toFixed(2)), 's\n');
+  !config.isBulkExport && console.log(chalk.green('Converted:'), objFilePath, '-', chalk.yellow(totalTimeS.toFixed(2)), 's\n');
 
   return { mdl, texturePaths };
 }

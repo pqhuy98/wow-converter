@@ -43,6 +43,7 @@ export async function exportCharacterAsMdl({
   // Export the base model
   const prep = await prepareCharacterExport(metaData, expansion);
   const start = performance.now();
+  !ctx.config.isBulkExport && console.log('wow.export exportCharacter - race:', prep.rpcParams.race, 'gender:', prep.rpcParams.gender);
   const result = await wowExportClient.exportCharacter({
     ...prep.rpcParams,
     excludeAnimationIds: getExcludedAnimIds(keepCinematic, attackTag),
@@ -55,13 +56,11 @@ export async function exportCharacterAsMdl({
 
   // Replace the base texture with the prebaked texture
   await applyPrebakedTextrure(ctx, charMdl, prep);
+  await applyEquipmentsBodyTextures(ctx, charMdl, prep, expansion);
+  await applyCloakTexture(ctx, charMdl, prep.equipmentSlots);
 
   // Attach items with models
   await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots);
-
-  // Cloak etc additional textures
-  await applyCloakTexture(ctx, charMdl, prep.equipmentSlots);
-  await applyEquipmentsBodyTextures(ctx, charMdl, prep, expansion);
 
   // If the item has trousers, remove the tabard geoset
   if (charMdl.geosets.some((g) => g.name.startsWith('Trousers') && g.name !== 'Trousers1')) {
@@ -328,6 +327,12 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
   }
 
   console.log('Character has no prebaked texture. Using default texture:', baseTexture.wowData.pngPath);
+  if (baseTexture.image === '') {
+    throw new Error(`Cannot find the model's base texture.\nIf you are using wowhead dressing room URL,
+      it means the expansions of the wowhead URL (${expansion}) doesn't work in WoW ${wowExportClient.cascInfo?.build.Version}
+    `);
+  }
+
   const charCus = await fetchCharacterCustomization({
     expansion,
     type: 'character-customization',

@@ -11,6 +11,7 @@ TODO (not in any priority order):
 - Auto-updater for wow-converter to keep users up-to-date.
 - Collect anonymous analytics to understand common usage patterns.
 - Handle adhoc requests with post-processing script and AI prompt to help generate script.
+- Option to export textures as PNG/DDS
 
 BLOCKED:
 - Some later models have advanced materials e.g. firehawk that requires UV2 layer that Wc3 doesn't have.
@@ -42,6 +43,7 @@ https://www.wowhead.com/classic/npc=14988/ohgan - 2nd layer reflect texture inco
 
 
 DONE:
+- Fix bug when char customization uses more than 1 geoset
 - Some creatures using textures not in DB skin list cannot be exported because skin not found.
 - Feet and trouser geoset wrong in some cases
 - Bug: inputting new URLs into base/itme input box doesn't update React state.

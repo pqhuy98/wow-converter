@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 
 import { Button } from '@/components/ui/button';
 
-import ModelViewerUi from '../model-viewer';
+import ModelViewerUi from '../../components/common/model-viewer';
 
 export default function ViewerPage() {
   return (
@@ -26,7 +26,6 @@ function Viewer() {
       <div className="h-screen w-screen bg-black flex items-center justify-center">
         <div className="text-white text-center">
           <h1 className="text-2xl mb-4">No model specified</h1>
-          <p className="mb-4">Please provide a model path via the 'model' query parameter.</p>
           <Button
             variant="secondary"
             onClick={() => router.back()}

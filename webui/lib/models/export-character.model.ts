@@ -50,22 +50,44 @@ export interface ExportRequest {
 }
 
 export interface ExportCharacterResponse {
-  exportedModels: string[]
-  exportedTextures: string[]
+  exportedModels: { path: string, size: number }[]
+  exportedTextures: { path: string, size: number }[]
   outputDirectory?: string
   versionId: string
+  modelStats: {
+    formatVersion: number;
+    vertices: number;
+    faces: number;
+    globalSequences: number;
+    sequences: number;
+    geosets: number;
+    geosetAnims: number;
+    materials: number;
+    textures: number;
+    textureAnims: number;
+    bones: number;
+    lights: number;
+    ribbonEmitters: number;
+    particles: number;
+    attachments: number;
+    eventObjects: number;
+    helpers: number;
+    collisionShapes: number;
+    cameras: number;
+  }
 }
 
 export interface JobStatus {
   id: string
   status: 'pending' | 'processing' | 'done' | 'failed'
-  position: number | null
-  result: ExportCharacterResponse | null
-  error: string | null
+  position?: number
+  result?: ExportCharacterResponse
+  error?: string
   request?: ExportRequest
   submittedAt: number
   startedAt?: number
   finishedAt?: number
+  logs: string[]
 }
 
 export interface FullJobStatus extends JobStatus {
@@ -140,6 +162,17 @@ export const commonAttachments = [
   { id: WoWAttachmentID.Shield, name: 'Shield' },
 ];
 
+export const sheathAttachments = [
+  { id: WoWAttachmentID.SheathMainHand, name: 'Sheath Main Hand' },
+  { id: WoWAttachmentID.SheathOffHand, name: 'Sheath Off Hand' },
+  { id: WoWAttachmentID.SheathShield, name: 'Sheath Shield' },
+];
+
+export const hipAttachments = [
+  { id: WoWAttachmentID.HipWeaponLeft, name: 'Hip Weapon Left' },
+  { id: WoWAttachmentID.HipWeaponRight, name: 'Hip Weapon Right' },
+];
+
 export const otherAttachments = [
   { id: WoWAttachmentID.ElbowRight, name: 'Elbow Right' },
   { id: WoWAttachmentID.ElbowLeft, name: 'Elbow Left' },
@@ -164,14 +197,9 @@ export const otherAttachments = [
   { id: WoWAttachmentID.Special1, name: 'Special 1' },
   { id: WoWAttachmentID.Special2, name: 'Special 2' },
   { id: WoWAttachmentID.Special3, name: 'Special 3' },
-  { id: WoWAttachmentID.SheathMainHand, name: 'Sheath Main Hand' },
-  { id: WoWAttachmentID.SheathOffHand, name: 'Sheath Off Hand' },
-  { id: WoWAttachmentID.SheathShield, name: 'Sheath Shield' },
   { id: WoWAttachmentID.PlayerNameMounted, name: 'Player Name Mounted' },
   { id: WoWAttachmentID.LargeWeaponLeft, name: 'Large Weapon Left' },
   { id: WoWAttachmentID.LargeWeaponRight, name: 'Large Weapon Right' },
-  { id: WoWAttachmentID.HipWeaponLeft, name: 'Hip Weapon Left' },
-  { id: WoWAttachmentID.HipWeaponRight, name: 'Hip Weapon Right' },
   { id: WoWAttachmentID.Chest, name: 'Chest' },
   { id: WoWAttachmentID.HandArrow, name: 'Hand Arrow' },
   { id: WoWAttachmentID.Bullet, name: 'Bullet' },
@@ -197,4 +225,11 @@ export const otherAttachments = [
   { id: WoWAttachmentID.VirtualSpellDirected, name: 'Virtual Spell Directed' },
   { id: WoWAttachmentID.Backpack, name: 'Backpack' },
   { id: WoWAttachmentID.Unknown, name: 'Unknown' },
+];
+
+export const allAttachments = [
+  ...commonAttachments,
+  ...sheathAttachments,
+  ...hipAttachments,
+  ...otherAttachments,
 ];

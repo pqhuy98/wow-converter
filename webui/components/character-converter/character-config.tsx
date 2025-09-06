@@ -42,13 +42,11 @@ const tooltips = {
   baseModel: 'The base character model to use. Can be a Wowhead URL, local file inside wow.export folder, or Display ID number.',
   attackAnimation: 'Determines which attack animations the character will use.',
   characterSize: 'How tall the character is in the game.',
-  // eslint-disable-next-line max-len
   movementSpeed: 'Animation - walk speed ("uwal") of the unit in World Editor. The tool will try to slow down/speed up the Walk animations to match the Warcraft movement speed. If you experience a bug with too fast or too slow walk animation, set to 0 to keep the original WoW animation speed.',
   scaleMultiplier: 'Additional scale multiplier, optional. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
   keepCinematic: 'Preserve cinematic animation sequences in the exported model. Warning: WoW models have many cinematic sequences, this significantly increases file size.',
   noDecay: 'Do not automatically add Decay animations.',
   particleDensity: 'Particle density, e.g. 1.0 = default, 0.5 = half, 2.0 = double, 0 = none... Higher density will decrease in-game FPS due to more particles.',
-  // eslint-disable-next-line max-len
   portraitCamera: 'Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.',
 };
 
@@ -78,8 +76,6 @@ export function CharacterConfig({
           setCharacter((prev) => {
             let attachItems = prev.attachItems;
             if (prev.base.type === 'wowhead' && base.type === 'wowhead') {
-              console.log('prev.base.value', prev.base.value);
-              console.log('base.value', base.value);
               if (!prev.base.value.includes('dressing-room') && base.value.includes('dressing-room')) {
                 clearOutputFileName?.();
                 attachItems = {};

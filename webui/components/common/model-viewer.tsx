@@ -14,8 +14,9 @@ import {
 } from 'react';
 
 import { Button } from '@/components/ui/button';
-
-import { host } from './config';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface ModelViewerProps {
   modelPath?: string
@@ -101,17 +102,10 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     };
   }, [canvasRef.current]);
 
-  // Keep track of which model path has already been loaded to avoid the extra
-  // invocation that happens under React 18 Strict Mode while still allowing
-  // re-loading when the `modelPath` prop actually changes.
-  const lastLoadedPathRef = useRef<string | undefined>(undefined);
+  console.log('Model path:', modelPath);
+
   useEffect(() => {
     if (!modelPath || !canvasRef.current || !viewer || !scene || !camera) return undefined;
-    // if (lastLoadedPathRef.current === modelPath) {
-    //   console.log('Model already loaded, skipping');
-    //   return
-    // }
-    lastLoadedPathRef.current = modelPath;
 
     // references for cleanup
     const canvas = canvasRef.current;
@@ -120,6 +114,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     let endDrag: (() => void) | null = null;
     let onWheel: ((e: WheelEvent) => void) | null = null;
     let resizeCanvas: (() => void) | null = null;
+    let onTouchStart: ((e: TouchEvent) => void) | null = null;
+    let onTouchMove: ((e: TouchEvent) => void) | null = null;
+    let onTouchEnd: ((e: TouchEvent) => void) | null = null;
 
     let modelInstance: MdxModelInstance | null = null;
 
@@ -131,7 +128,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         }
       }
       // Path solver so the viewer fetches every dependant file via our /asset route
-      const pathSolver = (src: unknown) => `${host}/assets/${normalizePath(src as string)}`;
+      const pathSolver = (src: unknown) => `/assets/${normalizePath(src as string)}`;
 
       // Load the model (assumed to be in MDX|MDL format)
       const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver);
@@ -191,6 +188,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       let isDragging = false;
       let lastX = 0;
       let lastY = 0;
+      let lastDistance = 0;
       let horizontalAngle = 0;
       let verticalAngle = Math.PI / 6;
       let distance = 500;
@@ -227,6 +225,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
       // Mouse & wheel controls
       let button = 0;
+      let isTouch = false;
+
       onMouseDown = (e: MouseEvent) => {
         e.preventDefault();
         button = e.button;
@@ -237,8 +237,26 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         }
       };
 
+      onTouchStart = (e: TouchEvent) => {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+          isTouch = true;
+          isDragging = true;
+          button = 0; // treat as left click
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          isTouch = true;
+          isDragging = true;
+          // Calculate initial distance between two fingers
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          lastDistance = Math.sqrt(dx * dx + dy * dy);
+        }
+      };
+
       onMouseMove = (e: MouseEvent) => {
-        if (!isDragging) return;
+        if (!isDragging || isTouch) return;
         if (button === 0) { // left click to rotate
           const dx = e.clientX - lastX;
           const dy = e.clientY - lastY;
@@ -275,6 +293,44 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         updateCamera();
       };
 
+      onTouchMove = (e: TouchEvent) => {
+        if (!isDragging || !isTouch) return;
+        e.preventDefault();
+        if (e.touches.length === 1) {
+          const dx = e.touches[0].clientX - lastX;
+          const dy = e.touches[0].clientY - lastY;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+          const ROT_SPEED = Math.PI / 360; // radians per pixel
+          horizontalAngle -= dx * ROT_SPEED;
+          verticalAngle += dy * ROT_SPEED;
+          verticalAngle = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, verticalAngle));
+          updateCamera();
+        } else if (e.touches.length === 2) {
+          // Pinch to zoom
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const currentDistance = Math.sqrt(dx * dx + dy * dy);
+
+          if (lastDistance > 0) {
+            const scale = currentDistance / lastDistance;
+            const ZOOM_SPEED = 0.1;
+            distance *= 1 + (scale - 1) * ZOOM_SPEED;
+            distance = Math.max(1, Math.min(20000, distance));
+            updateCamera();
+          }
+
+          lastDistance = currentDistance;
+        }
+      };
+
+      onTouchEnd = (e: TouchEvent) => {
+        e.preventDefault();
+        isDragging = false;
+        isTouch = false;
+        lastDistance = 0; // Reset distance for next gesture
+      };
+
       endDrag = () => {
         isDragging = false;
       };
@@ -292,6 +348,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       if (canvas) {
         canvas.addEventListener('mousedown', onMouseDown);
         canvas.addEventListener('wheel', onWheel!, { passive: false });
+        canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+        canvas.addEventListener('touchend', onTouchEnd, { passive: false });
       }
 
       window.addEventListener('resize', resizeCanvas);
@@ -300,9 +359,12 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     })();
 
     return () => {
-      if (canvas && onMouseDown && onWheel && onMouseMove && endDrag && resizeCanvas) {
+      if (canvas && onMouseDown && onWheel && onMouseMove && endDrag && resizeCanvas && onTouchStart && onTouchMove && onTouchEnd) {
         canvas.removeEventListener('mousedown', onMouseDown);
         canvas.removeEventListener('wheel', onWheel);
+        canvas.removeEventListener('touchstart', onTouchStart);
+        canvas.removeEventListener('touchmove', onTouchMove);
+        canvas.removeEventListener('touchend', onTouchEnd);
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', endDrag!);
         window.removeEventListener('resize', resizeCanvas!);
@@ -401,8 +463,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
   }, [isFullscreen, alwaysFullscreen]);
 
   return (
-    <div className={`flex w-full h-full ${alwaysFullscreen ? 'fixed inset-0 z-50' : isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      <div className={`relative ${alwaysFullscreen || isFullscreen ? 'flex-1 h-full' : 'flex-grow h-full'}`}>
+    <div className={`flex flex-col lg:flex-row w-full h-full ${alwaysFullscreen ? 'fixed inset-0 z-50' : isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      <div className={`relative flex-1 min-h-0 ${alwaysFullscreen || isFullscreen ? 'h-full' : 'h-full'}`}>
         {!alwaysFullscreen && (
           <div className="absolute top-2 left-2 z-10 flex gap-2">
             <Button
@@ -410,27 +472,51 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
               size="sm"
               onClick={handleFullscreenToggle}
               className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl"
-              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
             >
-              {isFullscreen ? '✕' : '⛶'}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>{isFullscreen ? '✕' : '⛶'}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </Button>
             <Button
               variant="secondary"
               size="sm"
               onClick={handleToggleCollisions}
               className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
-              title={collisionsVisible ? 'Hide collisions' : 'Show collisions'}
             >
-              {collisionsVisible ? '•' : '◱'}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>{collisionsVisible ? '•' : '◱'}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {collisionsVisible ? 'Hide collision shapes' : 'Show collision shapes'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </Button>
             <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => void handleCopyLink()}
-                className={'bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl'}
-                title={copied ? 'Link copied!' : 'Copy viewer link'}
+                className={'bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl '}
               >
-                {copied ? '✔' : '🔗'}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>{copied ? '✔' : '🔗'}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Copy viewer link
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </Button>
           </div>
         )}
@@ -438,29 +524,34 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
           ref={canvasRef}
           width={1}
           height={1}
-          className="bg-gray-800 shadow-inner w-full h-full"
+          className="bg-gray-800 shadow-inner w-full h-full min-h-0"
+          onClick={(e) => {
+            if (e.detail === 2) { // double click to enter fullscreen
+              handleFullscreenToggle();
+            }
+          }}
         />
       </div>
-      <div className={`w-60 ${alwaysFullscreen || isFullscreen ? 'h-full' : 'h-full'} overflow-y-auto bg-gray-800/90 border-l border-gray-600`}>
-        <div className="sticky top-0 z-10 bg-gray-900 px-3 py-2 text-white font-semibold border-b border-black">
-          Animations
+      <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] overflow-y-auto bg-gray-800/90 lg:border-l lg:border-t-0 border-t border-gray-600 flex-shrink-0 relative z-10'}>
+          <div className="sticky top-0 z-10 bg-gray-900 px-3 py-2 text-white font-semibold border-b border-black">
+            Animations
+          </div>
+          <ul className="divide-y divide-gray-600">
+            {sequences.length === 0 ? (
+              <div className="p-3 text-gray-400">Loading animations...</div>
+            ) : (
+              sequences.map((name, idx) => (
+              <li
+                key={idx}
+                onClick={() => setCurrentSeq(idx)}
+                className={`px-3 py-2 cursor-pointer text-white ${idx === currentSeq ? 'bg-gray-800' : 'hover:bg-gray-700'}`}
+              >
+                {name || `Sequence ${idx}`}
+              </li>
+              ))
+            )}
+          </ul>
         </div>
-        <ul className="divide-y divide-gray-600">
-          {sequences.length === 0 ? (
-            <div className="p-3 text-gray-400">Loading...</div>
-          ) : (
-            sequences.map((name, idx) => (
-            <li
-              key={idx}
-              onClick={() => setCurrentSeq(idx)}
-              className={`px-3 py-2 cursor-pointer text-white ${idx === currentSeq ? 'bg-gray-800' : 'hover:bg-gray-700'}`}
-            >
-              {name || `Sequence ${idx}`}
-            </li>
-            ))
-          )}
-        </ul>
-      </div>
     </div>
   );
 }

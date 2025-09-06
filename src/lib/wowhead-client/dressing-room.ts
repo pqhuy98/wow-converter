@@ -46,6 +46,9 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
     }
     equipment: Record<string, { itemId: number; itemBonus: number }>;
   };
+  data.equipment ||= {};
+  data.custChoices ||= {};
+
   Object.entries(data.custChoices).forEach(([k, v]) => {
     if (v.optionId === 0 || v.choiceId === 0) {
       delete data.custChoices[k];
