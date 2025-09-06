@@ -180,7 +180,7 @@ export async function ControllerExportCharacter(app: express.Application) {
     console.log(
       'Job finished',
       `${chalk.yellow(`${((performance.now() - start) / 1000).toFixed(2)}s`)}`,
-      chalk.gray(JSON.stringify(_.omit(resp, 'exportedTextures'), null, 2)),
+      chalk.gray(JSON.stringify(_.omit(resp, 'exportedTextures', 'modelStats'), null, 2)),
     );
 
     return resp;
