@@ -26,7 +26,7 @@ import { OptimizationOptions } from './optimization-options';
 const tooltips = {
   format: 'Model format (MDX vs MDL). MDX is the binary format, the file is most compact and lowest file size. MDL is the text format for debugging purposes, the file is human readable when opened in text editors, but has larger file size.',
   formatVersion: "Model format version (HD vs SD). HD models work in all Warcraft 3 Retail's Reforged and Classic graphics modes, it has the highest fidelity with precise WoW model data. However HD models cannot be opened in legacy modeling tools like Magos Model Editor. If you want to use those legacy tools for post-processing, choose SD 800 instead. WARNING: wow-converter might export broken SD models on complex WoW models. SD conversion does not guarantee to work, after exporting you need to check if each animation is working.",
-  delete: 'Delele all exported files inside the "exported-assets" folder',
+  delete: 'Delete all exported files inside the "exported-assets" folder',
 };
 
 export function ExportSection({
