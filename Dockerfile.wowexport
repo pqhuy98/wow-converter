@@ -34,6 +34,8 @@ WORKDIR /opt/wow.export
 # X/GTK/Audio libs required by the UI binary even when only using RCP
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   xvfb \
+  xauth \
+  x11-xkb-utils \
   libgbm1 \
   libgl1 \
   libgl1-mesa-dri \
@@ -81,8 +83,6 @@ COPY --from=builder /app/wow.export/src/ /opt/wow.export/src/
 
 # RPC listens on 17751 by default
 EXPOSE 17751
-
-ENV DISPLAY=:99
 
 # Add entrypoint to run under Xvfb
 COPY docker/entrypoint-wowexport.sh /entrypoint.sh

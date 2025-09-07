@@ -19,13 +19,13 @@ EOF
 
 mkdir -p /opt/wow.export/exports
 
-# Use xvfb-run to manage DISPLAY and Xauthority automatically. Pass Chromium flags for root/headless.
-export NW_DISABLE_GPU=1
-exec xvfb-run -a -s "-screen 0 1280x800x24" \
+# Start wow.export under Xvfb with stable flags
+exec xvfb-run -a -s "-screen 0 1280x800x24 -nolisten tcp" \
   /opt/wow.export/wow.export \
   --no-sandbox \
   --disable-gpu \
   --disable-software-rasterizer \
   --disable-dev-shm-usage \
-  "$@"
+  --disable-features=UseOzonePlatform \
+  --ozone-platform=x11
 
