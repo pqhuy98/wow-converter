@@ -32,7 +32,7 @@
     "build:webui": "cd webui && npm run build",
     "build:rollup": "npm run prisma:generate && rollup -c",
     "build:pkg": "pkg build/server.bundle.cjs --config package.json --compress Gzip --options max-old-space-size=99999 --output dist/wow-converter",
-    "build:copy": "shx rm -rf dist/webui dist/bin dist/sharp && cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin && shx mkdir -p dist/sharp/build/Release dist/sharp/vendor && shx cp -r node_modules/sharp/build/Release dist/sharp/build && shx cp -r node_modules/sharp/vendor dist/sharp/vendor && shx cp -r build/**.worker.cjs dist",
+    "build:copy": "shx rm -rf dist/webui dist/bin dist/node_modules && cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin && shx cp -r build/**.worker.cjs dist && npm i --omit=dev --prefix dist --no-audit --no-fund sharp@0.32.6",
     "build:wow.export": "cd wow.export && npm run build && cd .. && shx cp -r wow.export/bin/win-x64/. dist && shx rm -f dist/update dist/update.json",
     "zip": "powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath wow-converter.zip -Force\"",
     "build:app": "run-p build:rollup build:webui build:wow.export && run-s build:pkg build:copy zip",
