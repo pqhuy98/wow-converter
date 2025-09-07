@@ -19,8 +19,8 @@ import { AttackTag, Character, ModelSize } from '@/lib/models/export-character.m
 import { RefInput } from './ref-input';
 
 const attackTagOptions: { value: AttackTag | 'all', label: string, description: string }[] = [
+  { value: 'Auto', label: 'Auto', description: 'Detect attack tag from weapons' },
   { value: 'all', label: 'All', description: 'Include all attack animations' },
-  { value: 'Auto', label: 'Auto', description: 'Auto detect attack type export settings' },
   { value: '1H', label: '1H Weapon', description: 'The model uses 1H weapon(s)' },
   { value: '2H', label: '2H Weapon', description: 'The model uses a 2H weapon' },
   { value: '2HL', label: '2HL Weapon', description: 'The model uses a 2H polearm' },
