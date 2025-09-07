@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/tooltip';
 import { RefSchema, RefType } from '@/lib/models/export-character.model';
 
-import { useServerConfig } from '../server-config';
+import { getServerConfig, useServerConfig } from '../server-config';
 
 export type RefCategory = 'npc' | 'item'
 
@@ -194,7 +194,7 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
     if (fix) {
       if (ref.value.startsWith('"')) ref.value = ref.value.slice(1);
       if (ref.value.endsWith('"')) ref.value = ref.value.slice(0, -1);
-      const serverConfig = useServerConfig();
+      const serverConfig = getServerConfig();
       if (serverConfig?.wowExportAssetDir && ref.value.startsWith(serverConfig.wowExportAssetDir)) {
         ref.value = ref.value.slice(serverConfig.wowExportAssetDir.length);
       }

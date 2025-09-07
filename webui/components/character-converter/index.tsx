@@ -62,7 +62,6 @@ export function CharacterConverter() {
   });
 
   useEffect(() => {
-    console.log('serverConfig', serverConfig);
     if (serverConfig.isClassic && !optimization.maxTextureSize) {
       setOptimization({ ...optimization, maxTextureSize: '512' });
     }

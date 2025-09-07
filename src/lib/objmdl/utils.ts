@@ -37,14 +37,13 @@ function m2BlendModeToWc3FilterMode(m2BlendMode: number): BlendMode {
   }
 }
 
-const debug = false;
-
 // Map M2 shader combiner (from shaderId) to WC3 per-layer filter. This is all hacks and reverse-engineering.
 export function getLayerFilterMode(blendingMode: number, shaderId: number, layerIndex: number, texture: Texture): BlendMode | undefined {
   if (layerIndex === 0) return m2BlendModeToWc3FilterMode(blendingMode);
   const opaquePath = (shaderId & 0x70) === 0;
   const op = (shaderId & 7);
 
+  const debug = true;
   debug && console.log('opaquePath', {
     opaquePath, op, blendingMode, shaderId, layerIndex, img: texture.image,
   });
@@ -60,8 +59,10 @@ export function getLayerFilterMode(blendingMode: number, shaderId: number, layer
       const texturePath = texture.image.replace('.png', '').replace('.blp', '');
       // A hack to skip textures like "armorreflect" that has same op as glow textures but should be skipped
       // We need to be aggressive in skipping secondary textures, only add when absolutely certain
-      debug && console.log('texturePath', texturePath);
-      return 'Additive';
+      if (texturePath.includes('glow')) {
+        return 'Additive';
+      }
+      return undefined;
     }
     return 'Additive';
     // https://www.wowhead.com/mop-classic/npc=71953/xuen op=[2,5,6]

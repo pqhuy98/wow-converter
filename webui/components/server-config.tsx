@@ -18,6 +18,13 @@ const defaultConfig: ServerConfig = {
   isClassic: false,
 };
 
+// Keep an up-to-date copy of the latest server config for non-React consumers
+let latestConfig: ServerConfig = defaultConfig;
+
+export function getServerConfig(): ServerConfig {
+  return latestConfig;
+}
+
 async function fetchConfig(): Promise<ServerConfig> {
   return fetch('/get-config').then((res) => res.json());
 }
@@ -30,11 +37,13 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     void fetchConfig().then((config) => {
+      latestConfig = config;
       setConfig(config);
       setIsLoaded(true);
     });
     const itv = setInterval(() => {
       void fetchConfig().then((config) => {
+        latestConfig = config;
         setConfig(config);
       });
     }, 5000);
