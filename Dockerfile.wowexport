@@ -6,7 +6,7 @@ ARG WOW_EXPORT_REPO=https://github.com/pqhuy98/wow.export
 
 # --- Builder: fetch latest wow.export and build linux-x64 binary
 FROM ${NODE_IMAGE} AS builder
-ARG WOW_EXPORT_REPO
+ARG WOW_EXPORT_REPO=https://github.com/pqhuy98/wow.export
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,6 +34,13 @@ WORKDIR /opt/wow.export
 # X/GTK/Audio libs required by the UI binary even when only using RCP
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   xvfb \
+  libgbm1 \
+  libgl1 \
+  libgl1-mesa-dri \
+  libglu1-mesa \
+  libegl1 \
+  libxshmfence1 \
+  libpciaccess0 \
   libatk1.0-0 \
   libcups2 \
   libxcomposite1 \
@@ -68,7 +75,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
   && rm -rf /var/lib/apt/lists/*
 
 # Copy built wow.export app directory
+# Copy built app binaries and default config/resources
 COPY --from=builder /app/wow.export/bin/linux-x64/ /opt/wow.export/
+COPY --from=builder /app/wow.export/src/ /opt/wow.export/src/
 
 # RPC listens on 17751 by default
 EXPOSE 17751
