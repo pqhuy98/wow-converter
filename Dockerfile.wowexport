@@ -1,0 +1,81 @@
+# Multi-stage build for wow.export (Linux x64)
+
+ARG NODE_IMAGE=node:14-bullseye
+ARG UBUNTU_IMAGE=ubuntu:22.04
+ARG WOW_EXPORT_REPO=https://github.com/pqhuy98/wow.export
+
+# --- Builder: fetch latest wow.export and build linux-x64 binary
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  git \
+  python3 \
+  make \
+  g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+# Always clone the latest wow.export to get freshest binary
+RUN git clone --depth 1 ${WOW_EXPORT_REPO} /app/wow.export
+
+WORKDIR /app/wow.export
+RUN npm install --no-audit --no-fund
+
+# Build the linux-x64 binary into bin/linux-x64/
+RUN node build linux-x64
+
+
+# --- Runtime: minimal Ubuntu with required GUI/X dependencies + xvfb
+FROM ${UBUNTU_IMAGE} AS runtime
+WORKDIR /opt/wow.export
+
+# X/GTK/Audio libs required by the UI binary even when only using RCP
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  xvfb \
+  libatk1.0-0 \
+  libcups2 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
+  libpango-1.0-0 \
+  libcairo2 \
+  libasound2 \
+  libatspi2.0-0 \
+  libxrandr2 \
+  libxss1 \
+  libgtk-3-0 \
+  libgdk-pixbuf2.0-0 \
+  libnss3 \
+  libnspr4 \
+  libdrm2 \
+  libxcb1 \
+  libx11-6 \
+  libxext6 \
+  libxrender1 \
+  libxinerama1 \
+  libxi6 \
+  libxtst6 \
+  libxkbcommon0 \
+  libpangocairo-1.0-0 \
+  libx11-xcb1 \
+  libxcb-dri3-0 \
+  upower \
+  dbus \
+  libatomic1 \
+  ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy built wow.export app directory
+COPY --from=builder /app/wow.export/bin/linux-x64/ /opt/wow.export/
+
+# RPC listens on 17751 by default
+EXPOSE 17751
+
+ENV DISPLAY=:99
+
+# Add entrypoint to run under Xvfb
+COPY docker/entrypoint-wowexport.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
