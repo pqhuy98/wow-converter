@@ -43,6 +43,20 @@ https://www.wowhead.com/classic/npc=14988/ohgan - 2nd layer reflect texture inco
 
 
 DONE:
+
+
+7/9/2025
+- Fix missing geosets in some character races like Undead' arm/face or Dwarf's beard.
+- Add attack options Bow, Gun, Thrown
+- Now the tool can automatically detect suitable attack options based on given weapons.
+- UI improvements
+- Texture PNG->BLP conversion is now significantly faster by utilizing all CPU cores.
+- Improved in-game Portrait by cloning Stand anims into "Portrait" anims.
+- Improved keyframe optimization to give smaller model size and fix a very rare bug.
+- Add a UI button to clean up everything inside export-assets folder.
+
+
+Before 7/9/2025
 - Fix bug when char customization uses more than 1 geoset
 - Some creatures using textures not in DB skin list cannot be exported because skin not found.
 - Feet and trouser geoset wrong in some cases

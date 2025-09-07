@@ -267,8 +267,7 @@ export async function ControllerExportCharacter(app: express.Application) {
 
   app.post('/export/character/clean', (req, res) => {
     fsExtra.removeSync('recent-exports.json');
-    fsExtra.removeSync(outputDir);
-    fsExtra.mkdirSync(outputDir);
+    fsExtra.emptyDirSync(outputDir);
     return res.json({ message: 'Exported assets cleaned' });
   });
 
