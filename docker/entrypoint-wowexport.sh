@@ -20,11 +20,17 @@ EOF
 mkdir -p /opt/wow.export/exports
 
 # Start wow.export under Xvfb with stable flags
+# Favour software rendering and X11
+export NO_AT_BRIDGE=1
+export LIBGL_ALWAYS_SOFTWARE=1
+export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+export GDK_BACKEND=x11
+export LANG=C.UTF-8
+
 exec xvfb-run -a -s "-screen 0 1280x800x24 -nolisten tcp" \
   /opt/wow.export/wow.export \
   --no-sandbox \
   --disable-gpu \
-  --disable-software-rasterizer \
   --disable-dev-shm-usage \
   --disable-features=UseOzonePlatform \
   --ozone-platform=x11
