@@ -238,16 +238,37 @@ export class WowExportClient extends EventEmitter {
           if (!this.status.connected || !this.status.configLoaded) {
             console.error(chalk.yellow(`⏳ Cannot connecting to wow.export RCP server at ${host}:${port}, did you run it?`));
           } else if (!this.status.cascLoaded) {
-            if (process.env.CASC_REMOTE_REGION && process.env.CASC_REMOTE_PRODUCT) {
-              const [region, product] = [process.env.CASC_REMOTE_REGION, process.env.CASC_REMOTE_PRODUCT];
-              console.log({ region, product });
-              const cascRemote = await this.loadCASCRemote(region);
-              const buildIdx = cascRemote.findIndex((build: any) => build.Product === product);
-              console.log('Selected build:', cascRemote[buildIdx]);
-              const cascInfo = await this.loadCASCBuild(buildIdx);
-              console.log({ cascInfo });
-            } else {
-              console.error(chalk.yellow('⏳ Cannot getting wow.export CASC info, did you select game installation?'));
+            if (process.env.CASC_LOCAL_WOW) {
+              try {
+                const [localPath, product] = [process.env.CASC_LOCAL_WOW, process.env.CASC_LOCAL_PRODUCT];
+                console.log(chalk.gray(`Attempting to load local CASC from "${localPath}", product: ${product}`));
+                const cascLocal = await this.loadCASCLocal(localPath);
+                const buildIdx = Math.max(0, cascLocal.findIndex((b) => b.Product === product));
+                console.log('Selected build:', cascLocal[buildIdx]);
+                const cascInfo = await this.loadCASCBuild(buildIdx);
+                this.cascInfo = cascInfo;
+                this.status.cascLoaded = true;
+                console.log(chalk.green('✅ Loaded local CASC:'), cascInfo.build.Product, cascInfo.buildName);
+              } catch (e) {
+                console.error(chalk.yellow(`⚠️ Failed to load local CASC: ${e}`));
+              }
+            }
+            if (!this.status.cascLoaded && process.env.CASC_REMOTE_REGION && process.env.CASC_REMOTE_PRODUCT) {
+              try {
+                const [region, product] = [process.env.CASC_REMOTE_REGION, process.env.CASC_REMOTE_PRODUCT];
+                console.log(chalk.gray(`Attempting to load remote CASC, region: ${region}, product: ${product}`));
+                const cascRemote = await this.loadCASCRemote(region);
+                const buildIdx = Math.max(0, cascRemote.findIndex((build) => build.Product === product));
+                console.log('Selected build:', cascRemote[buildIdx]);
+                const cascInfo = await this.loadCASCBuild(buildIdx);
+                this.cascInfo = cascInfo;
+                this.status.cascLoaded = true;
+              } catch (e) {
+                console.error(chalk.yellow(`⚠️ Failed to load remote CASC: ${e}`));
+              }
+            }
+            if (!this.status.cascLoaded) {
+              console.error(chalk.yellow('⏳ Cannot getting wow.export CASC info, set CASC_LOCAL_WOW or CASC_REMOTE_REGION/CASC_REMOTE_PRODUCT'));
             }
           }
         }
