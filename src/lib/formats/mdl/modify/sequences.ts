@@ -8,7 +8,7 @@ import { Sequence } from '../components/sequence';
 import { interpolateTransformQuat } from '../mdl-traverse';
 import { MDLModify } from '.';
 
-const animPrefixOrder = ['Stand', 'Walk', 'Attack', 'Spell', 'Death', 'Decay'];
+const animPrefixOrder = ['Stand', 'Walk', 'Attack', 'Spell', 'Death', 'Decay', 'Portrait'];
 
 function getPrefixIndex(str: string): number {
   for (let i = 0; i < animPrefixOrder.length; i++) {
@@ -258,4 +258,107 @@ export function addDecayAnimation(this: MDLModify) {
     }
   });
   return this;
+}
+
+export function cloneSequence(this: MDLModify, sequence: Sequence, newWc3Name: string) {
+  const maxInterval = _.max(this.mdl.sequences.map((s) => s.interval[1])) ?? 0;
+
+  const newSequence = _.cloneDeep(sequence);
+  newSequence.name = newSequence.data.wc3Name = newWc3Name;
+  newSequence.interval = [maxInterval + 1, maxInterval + 1 + (sequence.interval[1] - sequence.interval[0])];
+  newSequence.data.wowName = '';
+
+  this.mdl.sequences.push(newSequence);
+
+  const cloneSeqKeyFrame = <T>(keyFrame: Map<number, T>) => {
+    const keys = [...keyFrame.keys()];
+    let minTimestamp = Infinity;
+    let minValue: T | null = null;
+    let maxTimestamp = -Infinity;
+    let maxValue: T | null = null;
+    keys.forEach((timestamp) => {
+      if (newSequence.interval[0] <= timestamp && timestamp <= newSequence.interval[1]) {
+        // This timestamp is a left over from a deleted sequence but haven't been removed yet
+        // remove so it won't be in the new sequence
+        keyFrame.delete(timestamp);
+        return;
+      }
+
+      if (timestamp < sequence.interval[0] || timestamp > sequence.interval[1]) {
+        return;
+      }
+      const newTimestamp = timestamp - sequence.interval[0] + newSequence.interval[0];
+      const value = _.cloneDeep(keyFrame.get(timestamp)!);
+      keyFrame.set(newTimestamp, value);
+      if (newTimestamp < minTimestamp) {
+        minTimestamp = newTimestamp;
+        minValue = value;
+      }
+      if (newTimestamp > maxTimestamp) {
+        maxTimestamp = newTimestamp;
+        maxValue = value;
+      }
+    });
+    if (minValue) keyFrame.set(newSequence.interval[0], minValue);
+    if (maxValue) keyFrame.set(newSequence.interval[1], maxValue);
+  };
+
+  const animated = this.mdl.getAnimated();
+  animated.forEach((anim) => {
+    if (anim.globalSeq) return;
+    cloneSeqKeyFrame(anim.keyFrames);
+  });
+
+  return this;
+}
+
+export function concatenateSequences(this: MDLModify, sequences: Sequence[], newWc3Name: string) {
+  const maxInterval = _.max(this.mdl.sequences.map((s) => s.interval[1])) ?? 0;
+  const totalDuration = _.sum(sequences.map((s) => s.interval[1] - s.interval[0])) + sequences.length - 1;
+  const newSequence = _.cloneDeep(sequences[0]);
+  newSequence.name = newSequence.data.wc3Name = newWc3Name;
+  newSequence.interval = [maxInterval + 1, maxInterval + 1 + totalDuration];
+  newSequence.data.wowName = '';
+  this.mdl.sequences.push(newSequence);
+
+  const animated = this.mdl.getAnimated();
+
+  animated.forEach((anim) => {
+    if (anim.globalSeq) return;
+
+    const updateAnimKeyFrame = <T>(keyFrame: Map<number, T>) => {
+      const keys = [...keyFrame.keys()];
+      let minTimestamp = Infinity;
+      let minValue: T | null = null;
+      let maxTimestamp = -Infinity;
+      let maxValue: T | null = null;
+      let durationAccum = 0;
+      sequences.forEach((seq) => {
+        keys.forEach((timestamp) => {
+          if (newSequence.interval[0] <= timestamp && timestamp <= newSequence.interval[1]) {
+            keyFrame.delete(timestamp);
+            return;
+          }
+          if (timestamp < seq.interval[0] || timestamp > seq.interval[1]) return;
+          const newTimestamp = timestamp - seq.interval[0] + newSequence.interval[0] + durationAccum;
+          const value = _.cloneDeep(keyFrame.get(timestamp)!);
+          keyFrame.set(newTimestamp, value);
+          if (newTimestamp < minTimestamp) {
+            minTimestamp = newTimestamp;
+            minValue = value;
+          }
+          if (newTimestamp > maxTimestamp) {
+            maxTimestamp = newTimestamp;
+            maxValue = value;
+          }
+        });
+        durationAccum += seq.interval[1] - seq.interval[0] + 1;
+      });
+      if (minValue) keyFrame.set(newSequence.interval[0], minValue);
+      if (maxValue) keyFrame.set(newSequence.interval[1], maxValue);
+    };
+
+    updateAnimKeyFrame(anim.keyFrames);
+  });
+  return newSequence;
 }

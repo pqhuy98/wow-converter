@@ -36,6 +36,9 @@ export interface ItemData {
   TextureFiles: { [textureId: string]: ItemFile[] };
   Item: {
     Flags: number;
+    InventoryType: number;
+    ItemClass: number;
+    ItemSubClass: number;
     GeosetGroup: number[];
     AttachGeosetGroup?: number[];
     GeosetGroupOverride?: number[];

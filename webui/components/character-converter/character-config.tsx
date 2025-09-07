@@ -20,13 +20,14 @@ import { RefInput } from './ref-input';
 
 const attackTagOptions: { value: AttackTag | 'all', label: string, description: string }[] = [
   { value: 'all', label: 'All', description: 'Include all attack animations' },
+  { value: 'Auto', label: 'Auto', description: 'Auto detect attack type export settings' },
   { value: '1H', label: '1H Weapon', description: 'The model uses 1H weapon(s)' },
   { value: '2H', label: '2H Weapon', description: 'The model uses a 2H weapon' },
   { value: '2HL', label: '2HL Weapon', description: 'The model uses a 2H polearm' },
   { value: 'Unarmed', label: 'Unarmed', description: 'The model uses fists and kicks' },
-  // { value: "Bow", label: "Bow", description: "The model uses a bow." },
-  // { value: "Rifle", label: "Rifle", description: "The model uses a rifle." },
-  // { value: "Thrown", label: "Thrown", description: "The model uses a thrown weapon." },
+  { value: 'Bow', label: 'Bow', description: 'The model uses a bow.' },
+  { value: 'Rifle', label: 'Rifle', description: 'The model uses a rifle.' },
+  { value: 'Thrown', label: 'Thrown', description: 'The model uses a thrown weapon.' },
 ];
 
 const sizeOptions: { value: ModelSize | 'none', label: string, description: string }[] = [

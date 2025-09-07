@@ -8,9 +8,8 @@ import { join } from 'path';
 import {
   Character, CharacterExporter, displayID, wowhead,
 } from '../converter/character';
+import { guessAttackTag, inventoryTypeToEquipmentSlot } from '../converter/character/item-mapper';
 import { Config } from '../global-config';
-import { AttackTag } from '../objmdl/animation/animation_mapper';
-import { WoWAttachmentID } from '../objmdl/animation/bones_mapper';
 import { toMap } from '../utils';
 
 const prismaClient = new PrismaClient();
@@ -166,7 +165,10 @@ export async function exportCreatureModels(
       }
 
       const ex = new CharacterExporter(config);
-      const attackTag = c.equipment ? getAttackTag(c.equipment) : undefined;
+      const attackTag = c.equipment ? guessAttackTag(
+        c.equipment.item1?.InventoryType ?? 0,
+        c.equipment.item2?.InventoryType ?? 0,
+      ) : undefined;
       console.log('Attack tag:', attackTag);
       await ex.exportCharacter({
         base: displayID(displayId),
@@ -189,75 +191,4 @@ export async function exportCreatureModels(
       console.log(chalk.green(`=> Exported creature ${c.template.name} in ${chalk.yellow(((end - start0) / 1000).toFixed(2))}s`));
     }));
   }
-}
-
-enum INVENTORY_TYPE {
-  WEAPON = 13,
-  SHIELD = 14,
-  RANGED = 15,
-  RANGEDRIGHT = 26,
-  TWO_HANDED_WEAPON = 17,
-  WEAPONMAINHAND = 21,
-  WEAPONOFFHAND = 22,
-  HOLDABLE = 23,
-  THROWN = 25,
-  RELIC = 28,
-}
-
-function inventoryTypeToEquipmentSlot(inventoryType: number, idx: number): WoWAttachmentID | undefined {
-  switch (inventoryType) {
-    case INVENTORY_TYPE.WEAPON:
-      return idx === 0 ? WoWAttachmentID.HandRight : WoWAttachmentID.HandLeft;
-    case INVENTORY_TYPE.WEAPONMAINHAND:
-      return WoWAttachmentID.HandRight;
-    case INVENTORY_TYPE.SHIELD:
-      return WoWAttachmentID.Shield;
-    case INVENTORY_TYPE.RANGED:
-    case INVENTORY_TYPE.RANGEDRIGHT:
-      return WoWAttachmentID.HandRight;
-    case INVENTORY_TYPE.TWO_HANDED_WEAPON:
-      return WoWAttachmentID.HandRight;
-    case INVENTORY_TYPE.HOLDABLE:
-      return WoWAttachmentID.HandLeft;
-    case INVENTORY_TYPE.WEAPONOFFHAND:
-    case INVENTORY_TYPE.THROWN:
-      return WoWAttachmentID.HandRight;
-    case INVENTORY_TYPE.RELIC:
-      return WoWAttachmentID.HandRight;
-    default:
-      return undefined;
-  }
-}
-
-function getAttackTag(equipment: Equipment): AttackTag {
-  const inventoryType1 = equipment.item1?.InventoryType ?? 0;
-  const inventoryType2 = equipment.item2?.InventoryType ?? 0;
-  console.log({ inventoryType1, inventoryType2 });
-
-  if (inventoryType1 === INVENTORY_TYPE.TWO_HANDED_WEAPON && !inventoryType2) {
-    return '2H';
-  }
-
-  const rightCanMelee = inventoryType1 === INVENTORY_TYPE.WEAPON
-    || inventoryType1 === INVENTORY_TYPE.WEAPONMAINHAND
-    || inventoryType1 === INVENTORY_TYPE.WEAPONOFFHAND
-    || inventoryType1 === INVENTORY_TYPE.TWO_HANDED_WEAPON;
-  const leftCanMelee = inventoryType2 === INVENTORY_TYPE.WEAPON
-    || inventoryType2 === INVENTORY_TYPE.WEAPONMAINHAND
-    || inventoryType2 === INVENTORY_TYPE.WEAPONOFFHAND
-    || inventoryType2 === INVENTORY_TYPE.TWO_HANDED_WEAPON;
-
-  if (rightCanMelee || leftCanMelee) {
-    return '1H';
-  }
-
-  if (inventoryType1 === INVENTORY_TYPE.RANGED || inventoryType1 === INVENTORY_TYPE.RANGEDRIGHT) {
-    return 'Bow';
-  }
-
-  if (inventoryType1 === INVENTORY_TYPE.THROWN) {
-    return 'Thrown';
-  }
-
-  return 'Unarmed';
 }

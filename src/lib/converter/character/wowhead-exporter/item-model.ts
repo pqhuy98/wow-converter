@@ -12,6 +12,9 @@ interface FileWithComponent {
 
 export interface ItemMetata {
   slotId: number | null;
+  inventoryType: number;
+  itemClass: number;
+  itemSubClass: number;
   displayId: number;
   flags: number;
   modelFiles: FileWithComponent[];
@@ -242,8 +245,9 @@ export function getGeosetIdsFromEquipments(equipments: EquipmentSlotData[], chos
     addGeoset(legs, 13, 2);
   }
 
-  console.log('geosetIds', geosetIds);
-  console.log('hideGeosetIds', hideGeosetIds);
+  const debug = false;
+  debug && console.log('geosetIds', geosetIds);
+  debug && console.log('hideGeosetIds', hideGeosetIds);
 
   return { geosetIds, hideGeosetIds };
 }
@@ -303,6 +307,9 @@ export async function processItemData(url: ItemZamUrl, targetRace: number, targe
   const itemData = await fetchItemMeta(url);
   const result: ItemMetata = {
     slotId: url.slotId,
+    inventoryType: itemData.Item.InventoryType,
+    itemClass: itemData.Item.ItemClass,
+    itemSubClass: itemData.Item.ItemSubClass,
     displayId: url.displayId,
     flags: itemData.Item.Flags,
     modelFiles: filterFilesByRaceGender(itemData.ModelFiles || {}, itemData.ComponentModels || {}, targetRace, targetGender, false),
@@ -417,11 +424,11 @@ export async function exportZamItemAsMdl({
   zam: ItemZamUrl;
   targetRace: number;
   targetGender: number;
-}): Promise<MDL> {
+}): Promise<{mdl: MDL, itemData: ItemMetata}> {
   const result = await processItemData(zam, targetRace, targetGender);
   const modelId = result.modelFiles[0].fileDataId;
   const allTextureIds = result.modelTextureFiles[0].map((f) => f.fileDataId);
   const mdl = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
   await applyReplaceableTextures(ctx, mdl, Object.fromEntries(result.modelTextureFiles[0].map((f) => [f.componentId, f.fileDataId])));
-  return mdl;
+  return { mdl, itemData: result };
 }

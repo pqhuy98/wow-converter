@@ -28,7 +28,7 @@ import { useServerConfig } from '../server-config';
 const defaultCharacter = {
   base: { type: 'wowhead', value: 'https://www.wowhead.com/wotlk/npc=36597/the-lich-king' },
   size: 'hero',
-  attackTag: '2H',
+  attackTag: 'Auto',
   inGameMovespeed: 270,
   attachItems: {
     1: {

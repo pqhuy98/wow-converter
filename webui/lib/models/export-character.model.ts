@@ -4,7 +4,7 @@ export interface Config {
 }
 
 export type RefType = 'local' | 'wowhead' | 'displayID'
-export type AttackTag = '' | '1H' | '2H' | '2HL' | 'Unarmed' | 'Bow' | 'Rifle' | 'Thrown'
+export type AttackTag = '' | 'Auto' | '1H' | '2H' | '2HL' | 'Unarmed' | 'Bow' | 'Rifle' | 'Thrown'
 export type ModelSize = 'small' | 'medium' | 'large' | 'hero' | 'giant'
 export type ModelFormat = 'mdx' | 'mdl'
 

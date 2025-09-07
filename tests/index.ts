@@ -33,6 +33,7 @@ const ceConfig: Config = {
   ...(await getDefaultConfig()),
   // overrideModels: true,
   overrideModels: false,
+  maxTextureSize: 512,
 };
 
 async function exportTestCases() {

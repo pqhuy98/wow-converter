@@ -20,7 +20,7 @@ import {
   optimizeKeyFrames, removeCinematicSequences, removeUnusedMaterialsTextures, removeUnusedNodes, removeUnusedVertices,
 } from './optimizations';
 import {
-  addDecayAnimation, addEventObjectBySequenceName, debugSequence, removeWowSequence, renameSequencesByWowName, sortSequences, useWalkSequenceByWowName,
+  addDecayAnimation, addEventObjectBySequenceName, cloneSequence, concatenateSequences, debugSequence, removeWowSequence, renameSequencesByWowName, sortSequences, useWalkSequenceByWowName,
 } from './sequences';
 import {
   flipY,
@@ -175,4 +175,8 @@ export class MDLModify {
     });
     return this;
   }
+
+  cloneSequence = cloneSequence;
+
+  concatenateSequences = concatenateSequences;
 }

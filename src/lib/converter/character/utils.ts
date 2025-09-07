@@ -15,6 +15,7 @@ export interface ExportContext {
   assetManager: AssetManager;
   config: Config;
   outputFile: string;
+  weaponInventoryTypes: [undefined | number, undefined | number];
 }
 
 export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, guessSkin: {

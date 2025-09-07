@@ -60,6 +60,7 @@ const testCases: string[][] = [ // [base, weaponR, weaponL, size][]
     'https://www.wowhead.com/npc=71865/garrosh-hellscream',
     'https://www.wowhead.com/item=28773/gorehowl',
   ],
+  ['https://www.wowhead.com/npc=9448/scarlet-praetorian#modelviewer'],
   ['https://www.wowhead.com/npc=16867/shattered-hand-grunt'],
   ['https://www.wowhead.com/npc=37007/deathbound-ward'],
   ['https://www.wowhead.com/mop-classic/item=87777/reins-of-the-astral-cloud-serpent#modelviewer'],

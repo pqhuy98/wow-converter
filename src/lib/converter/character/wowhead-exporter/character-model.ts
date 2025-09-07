@@ -17,6 +17,7 @@ import { EquipmentSlot } from '@/lib/wowhead-client/item-armor';
 import { CharacterData } from '@/lib/wowhead-client/npc-object';
 import { ZamExpansion } from '@/lib/wowhead-client/zam-url';
 
+import { InventoryType } from '../item-mapper';
 import {
   applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture,
 } from '../utils';
@@ -43,12 +44,12 @@ export async function exportCharacterAsMdl({
   // Export the base model
   const prep = await prepareCharacterExport(metaData, expansion);
   const start = performance.now();
-  !ctx.config.isBulkExport && console.log('wow.export exportCharacter - race:', prep.rpcParams.race, 'gender:', prep.rpcParams.gender);
+  !ctx.config.isBulkExport && console.log('wow.export character - race:', prep.rpcParams.race, 'gender:', prep.rpcParams.gender);
   const result = await wowExportClient.exportCharacter({
     ...prep.rpcParams,
     excludeAnimationIds: getExcludedAnimIds(keepCinematic, attackTag),
   });
-  console.log('wow.export exportCharacter took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+  console.log('wow.export character took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   const baseDir = await wowExportClient.getAssetDir();
   const relative = path.relative(baseDir, result.exportPath);
@@ -147,7 +148,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
   // Attach individual item model to the character model
   const attachItemModel = async (slotData: EquipmentSlotData, idx: number, attachmentId: WoWAttachmentID | undefined) => {
-    debug && console.log('attachItemModel', attachmentId ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
+    debug && console.log('attachItemModel', attachmentId != null ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
 
     const itemData = slotData.data;
 
@@ -186,7 +187,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
     // not a collection, add to bone
 
-    if (!attachmentId) {
+    if (attachmentId == null) {
       console.error(chalk.red(`Cannot add item ${fileDataId} to model as bone because no attachment id is provided.`));
       return;
     }
@@ -233,11 +234,35 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     [EquipmentSlot.Robe]: [],
   };
 
+  const isWeapon = (slot: EquipmentSlotData) => [
+    InventoryType.WEAPON,
+    InventoryType.SHIELD,
+    InventoryType.RANGED,
+    InventoryType.RANGEDRIGHT,
+    InventoryType.TWO_HANDED_WEAPON,
+    InventoryType.WEAPONMAINHAND,
+    InventoryType.WEAPONOFFHAND,
+    InventoryType.HOLDABLE,
+    InventoryType.THROWN,
+    InventoryType.RELIC,
+  ].includes(slot.data.inventoryType);
+
   for (const [slotId, attachmentIds] of Object.entries(attachmentList)) {
     const slot = equipmentSlots.find((s) => s.slotId === Number(slotId));
     if (slot) {
+      if (isWeapon(slot)) {
+        if (Number(slotId) === EquipmentSlot.MainHand) ctx.weaponInventoryTypes[0] ??= slot.data.inventoryType;
+        if (Number(slotId) === EquipmentSlot.OffHand) ctx.weaponInventoryTypes[1] ??= slot.data.inventoryType;
+      }
       for (let i = 0; i < slot.data.modelFiles.length; i++) {
-        await attachItemModel(slot, i, attachmentIds[i] ?? attachmentIds[0] ?? undefined);
+        let attachmentId = attachmentIds[i] ?? attachmentIds[0] ?? undefined;
+        if (Number(slotId) === EquipmentSlot.OffHand && slot.data.inventoryType === InventoryType.SHIELD) {
+          attachmentId = WoWAttachmentID.Shield;
+        }
+        if (Number(slotId) === EquipmentSlot.MainHand && slot.data.inventoryType === InventoryType.RANGED) {
+          attachmentId = WoWAttachmentID.HandLeft;
+        }
+        await attachItemModel(slot, i, attachmentId);
       }
     }
   }
@@ -432,7 +457,7 @@ function getExcludedAnimIds(keepCinematic: boolean, attackTag: AttackTag | undef
       excludedAnimIds.push(animId);
       continue;
     }
-    if (attackTag && wc3Anim.attackTag !== '' && wc3Anim.attackTag !== attackTag) {
+    if (attackTag && attackTag !== 'Auto' && wc3Anim.attackTag !== '' && wc3Anim.attackTag !== attackTag) {
       excludedAnimIds.push(animId);
       continue;
     }

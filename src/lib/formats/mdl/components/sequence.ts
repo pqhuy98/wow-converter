@@ -12,8 +12,7 @@ export interface Sequence extends Bound {
     wowVariant: number
     wowFrequency: number
     attackTag: string
-  }
-  ,
+  },
   rarity?: number
   keep?: boolean;
 }

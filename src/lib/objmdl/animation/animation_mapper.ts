@@ -1791,7 +1791,7 @@ export function getWowAnimName(anim_id: number): WowAnimName {
   return 'unknown';
 }
 
-export const AttackTagSchema = z.enum(['', '1H', '2H', '2HL', 'Unarmed', 'Bow', 'Rifle', 'Thrown']);
+export const AttackTagSchema = z.enum(['', 'Auto', '1H', '2H', '2HL', 'Unarmed', 'Bow', 'Rifle', 'Thrown']);
 export type AttackTag = z.infer<typeof AttackTagSchema>
 
 export const EmptySequenceData: SequenceData = {
@@ -1873,9 +1873,11 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'Ready2HL': return { wc3Name: 'Stand Ready', attackTag: '2HL' };
 
     case 'ReadyBow': return { wc3Name: 'Stand Ready', attackTag: 'Bow' };
+    case 'LoadBow': return { wc3Name: 'Attack', attackTag: 'Bow' };
     case 'AttackBow': return { wc3Name: 'Attack', attackTag: 'Bow' };
 
     case 'ReadyRifle': return { wc3Name: 'Stand Ready', attackTag: 'Rifle' };
+    case 'LoadRifle': return { wc3Name: 'Attack', attackTag: 'Rifle' };
     case 'AttackRifle': return { wc3Name: 'Attack', attackTag: 'Rifle' };
 
     case 'AttackThrown': return { wc3Name: 'Attack', attackTag: 'Thrown' };
@@ -1991,5 +1993,9 @@ export function isLoopAnimation(wowAnimation: string) {
     'ChannelCastOmni',
     'Whirlwind',
     'EmoteTalk',
+    'EmoteTalkExclamation',
+    'EmoteTalkQuestion',
+    'EmoteTalkSubdued',
+    'EmoteTalkFrustrated',
   ].includes(wowAnimation);
 }

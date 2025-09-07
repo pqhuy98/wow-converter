@@ -107,48 +107,73 @@ export function optimizeKeyFrames(this: MDLModify) {
     .sort((a, b) => a[0] - b[0]);
 
   // Cursor-based helper – much cheaper than Array.some/Array.find each time.
-  const inSequence = (timestamp: number, cursor: { idx: number }): boolean => {
+  const inSequence = (anim: Animation<unknown>, timestamp: number, cursor: { idx: number }): boolean => {
+    if (anim.globalSeq) {
+      return timestamp < anim.globalSeq.duration;
+    }
     let i = cursor.idx;
     while (i < seqIntervals.length && seqIntervals[i][1] < timestamp) i++;
     cursor.idx = i;
     return i < seqIntervals.length && seqIntervals[i][0] <= timestamp;
   };
 
+  const thresholds = {
+    translation: 0.005,
+    rotation: 0.001,
+    scaling: 0.01,
+    alpha: 0.01,
+    color: 0.01,
+    tvertex: 0.01,
+    tvertexAnim: 0.01,
+    default: 0.01,
+  } as const;
+
+  const diffBetween = (a: number | number[], b: number | number[]): number => {
+    if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b);
+    if (Array.isArray(a) && Array.isArray(b)) {
+      let acc = 0;
+      for (let i = 0; i < a.length; i++) acc += Math.abs(a[i] - b[i]);
+      return acc;
+    }
+    return Number.POSITIVE_INFINITY;
+  };
+
+  let initialKfCount = 0;
+  let deletedKfCount = 0;
+
   const optimiseAnim = <T extends number[] | number>(anim: Animation<T>, threshold: number) => {
+    initialKfCount += anim.keyFrames.size;
     if (!anim || anim.keyFrames.size <= 2) return; // nothing to prune
 
     const times = Array.from(anim.keyFrames.keys()).sort((a, b) => a - b);
-    let prevT = times[0];
+    let t0 = times[0];
     const cursor = { idx: 0 };
 
     for (let k = 1; k < times.length; k++) {
-      const t = times[k];
-      const v1 = anim.keyFrames.get(t)!;
-      const v0 = anim.keyFrames.get(prevT)!;
+      const v0 = anim.keyFrames.get(t0)!;
+      const t1 = times[k];
+      const v1 = anim.keyFrames.get(t1)!;
+      const t2 = times[k + 1];
+      const v2 = anim.keyFrames.get(t2);
 
-      const inside = inSequence(t, cursor);
+      const inside = inSequence(anim, t1, cursor);
       if (!inside) { // always drop keys that sit in no sequence
-        anim.keyFrames.delete(t);
+        anim.keyFrames.delete(t1);
+        deletedKfCount++;
         continue;
       }
 
-      // Early-exit diff calculation
-      let diff = 0;
-      if (Array.isArray(v1)) {
-        for (let j = 0; j < v1.length && diff < threshold; j++) diff += Math.abs(v1[j] - v0[j]);
-      } else if (typeof v1 === 'number' && typeof v0 === 'number') {
-        diff = Math.abs(v1 - v0);
-      }
-
-      if (diff >= threshold) {
-        prevT = t;
-        continue; // keep – movement above threshold
+      if (k < times.length - 1) {
+        if (diffBetween(v0, v1) >= threshold) {
+          t0 = t1;
+          continue; // keep – movement above threshold
+        }
       }
 
       let firstFrame = false;
       for (let sIdx = 0; sIdx < seqIntervals.length; sIdx++) {
         const sStart = seqIntervals[sIdx][0];
-        if (prevT < sStart && sStart <= t) { firstFrame = true; break; }
+        if (t0 < sStart && sStart <= t1) { firstFrame = true; break; }
       }
 
       const nextT = k + 1 < times.length ? times[k + 1] : Number.POSITIVE_INFINITY;
@@ -156,16 +181,23 @@ export function optimizeKeyFrames(this: MDLModify) {
       if (!lastFrame) {
         for (let sIdx = 0; sIdx < seqIntervals.length; sIdx++) {
           const sEnd = seqIntervals[sIdx][1];
-          if (t <= sEnd && sEnd < nextT) { lastFrame = true; break; }
+          if (t1 <= sEnd && sEnd < nextT) { lastFrame = true; break; }
         }
       }
 
-      if (!inside || (!firstFrame && !lastFrame)) {
-        // Prune – insignificant change inside idle segment
-        anim.keyFrames.delete(t);
-      } else {
-        prevT = t; // keep – important boundary frame
+      if ((!inside || (!firstFrame && !lastFrame)) && v2 && diffBetween(v0, v2) < threshold) {
+        anim.keyFrames.delete(t1);
+        deletedKfCount++;
+        continue;
       }
+
+      // keep – important boundary frame
+      t0 = t1;
+    }
+
+    if (!inSequence(anim, times[0], { idx: 0 })) {
+      anim.keyFrames.delete(times[0]);
+      deletedKfCount++;
     }
   };
 
@@ -174,38 +206,16 @@ export function optimizeKeyFrames(this: MDLModify) {
   this.mdl.getAnimated().forEach((anim) => {
     if (anim.globalSeq) {
       usedGlobalSequences.add(anim.globalSeq);
-      return;
     }
 
-    let threshold = 0.005;
-    switch (anim.type) {
-      case 'translation':
-        threshold = 0.005;
-        break;
-      case 'rotation':
-        threshold = 0.001;
-        break;
-      case 'scaling':
-        threshold = 0.01;
-        break;
-      case 'alpha':
-        threshold = 0.01;
-        break;
-      case 'color':
-        threshold = 0.01;
-        break;
-      case 'tvertex':
-        threshold = 0.001;
-        break;
-      case 'tvertexAnim':
-        threshold = 0.001;
-        break;
-      default:
-        threshold = 0.0001;
-        break;
-    }
+    const threshold = thresholds[anim.type] ?? thresholds.default;
     optimiseAnim(anim, threshold);
   });
+
+  const debug = false;
+  const reduction = deletedKfCount / Math.max(1, initialKfCount);
+  debug && console.log(chalk.green(`Reduced key frames by ${(reduction * 100).toFixed(2)}% `
+  + `after deleting ${deletedKfCount}/${initialKfCount} key frames`));
 
   this.mdl.globalSequences = this.mdl.globalSequences.filter((gs) => usedGlobalSequences.has(gs))
     .sort((a, b) => a.duration - b.duration);

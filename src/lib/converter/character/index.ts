@@ -5,15 +5,17 @@ import path, { dirname, join } from 'path';
 import { z } from 'zod';
 
 import { AssetManager } from '@/lib/converter/common/asset-manager';
+import { Sequence } from '@/lib/formats/mdl/components/sequence';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
-import { getWoWAttachmentName } from '@/lib/objmdl/animation/bones_mapper';
+import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { decodeDressingRoom } from '@/lib/wowhead-client/dressing-room';
 import { CharacterData, fetchNpcMeta, fetchObjectMeta } from '@/lib/wowhead-client/npc-object';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
+import { guessAttackTag, InventoryType } from './item-mapper';
 import { ensureLocalModelFileExists, ExportContext } from './utils';
 import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
 import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
@@ -96,14 +98,17 @@ export class CharacterExporter {
 
     console.log('Exporting character', char.base.value);
 
-    const ctx: ExportContext = { assetManager: this.assetManager, config: this.config, outputFile };
+    const start = performance.now();
+    const ctx: ExportContext = {
+      assetManager: this.assetManager,
+      config: this.config,
+      outputFile,
+      weaponInventoryTypes: [undefined, undefined],
+    };
 
     const model = await this.exportBaseMdl(ctx, char);
     this.includeMdlToOutput(model, outputFile);
 
-    if (char.attackTag != null) {
-      model.sequences = model.sequences.filter((seq) => !char.attackTag || seq.data.attackTag === '' || seq.data.attackTag === char.attackTag);
-    }
     if (!char.keepCinematic) {
       model.sequences = model.sequences.filter((seq) => !seq.name.includes('Cinematic') || seq.keep);
     }
@@ -114,7 +119,13 @@ export class CharacterExporter {
       for (const [wowAttachmentId, itemPath] of Object.entries(char.attachItems)) {
         const wowAttachment = model.wowAttachments.find((a) => a.wowAttachmentId === Number(wowAttachmentId));
         if (wowAttachment) {
-          const itemMdl = await this.exportItem(ctx, itemPath.path);
+          const { mdl: itemMdl, inventoryType } = await this.exportItem(ctx, itemPath.path);
+          if (inventoryType) {
+            if (Number(wowAttachmentId) === WoWAttachmentID.HandRight) ctx.weaponInventoryTypes[0] ??= inventoryType;
+            if (Number(wowAttachmentId) === WoWAttachmentID.HandLeft) ctx.weaponInventoryTypes[1] ??= inventoryType;
+            if (Number(wowAttachmentId) === WoWAttachmentID.Shield) ctx.weaponInventoryTypes[1] ??= inventoryType;
+          }
+
           itemMdl.bones[0].name += `_atm_${wowAttachmentId}`;
           if (itemPath.scale) {
             itemMdl.modify.scale(itemPath.scale);
@@ -133,6 +144,14 @@ export class CharacterExporter {
           }
         }
       }
+    }
+
+    if (char.attackTag != null) {
+      if (char.attackTag === 'Auto') {
+        char.attackTag = guessAttackTag(ctx.weaponInventoryTypes[0] ?? 0, ctx.weaponInventoryTypes[1] ?? 0);
+      }
+      console.log('Chosen attack tag:', char.attackTag);
+      model.sequences = model.sequences.filter((seq) => !char.attackTag || seq.data.attackTag === '' || seq.data.attackTag === char.attackTag);
     }
 
     if (char.size) {
@@ -173,7 +192,31 @@ export class CharacterExporter {
       model.modify.addDecayAnimation();
     }
 
+    if (model.sequences.find((seq) => seq.name.startsWith('Portrait Talk'))) {
+      model.sequences.forEach((seq) => {
+        if (seq.name === 'Stand') {
+          model.modify.cloneSequence(seq, 'Portrait');
+        }
+      });
+    }
+
+    // Concatenate Bow, Rifle, Thrown sequences from wow Load and Attack
+    ['Bow', 'Rifle', 'Thrown'].forEach((attackTag) => {
+      const attacks = model.sequences.filter((seq) => seq.data.attackTag === attackTag && seq.name === 'Attack');
+      if (attacks.length === 0) return;
+      const score = (seq: Sequence) => {
+        if (seq.data.wowName.startsWith('Load')) return 1;
+        if (seq.data.wowName.startsWith('Attack')) return 2;
+        return 3;
+      };
+      attacks.sort((a, b) => score(a) - score(b));
+      console.log('concatenate animations', 'Attack', attackTag, 'from', attacks.map((s) => s.data.wowName));
+      model.modify.concatenateSequences(attacks, 'Attack');
+      model.sequences = model.sequences.filter((seq) => !attacks.includes(seq));
+    });
+
     model.modify.optimizeKeyFrames();
+    console.log('CharacterExporter.exportCharacter took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
     return model;
   }
 
@@ -230,10 +273,10 @@ export class CharacterExporter {
     throw new Error('Unknown base type');
   }
 
-  private async exportItem(ctx: ExportContext, ref: Ref): Promise<MDL> {
+  private async exportItem(ctx: ExportContext, ref: Ref): Promise<{mdl: MDL, inventoryType?: InventoryType}> {
     if (ref.type === 'local') {
       await ensureLocalModelFileExists(ref.value);
-      return this.assetManager.parse(ref.value, true).mdl;
+      return { mdl: this.assetManager.parse(ref.value, true).mdl };
     }
     if (ref.type === 'wowhead' || ref.type === 'displayID') {
       const zam: ZamUrl = ref.type === 'wowhead'
@@ -242,12 +285,13 @@ export class CharacterExporter {
           expansion: 'live', type: 'item', displayId: Number(ref.value), slotId: null,
         };
       if (zam.type !== 'item') throw new Error('Expected item zam url');
-      return exportZamItemAsMdl({
+      const { mdl, itemData } = await exportZamItemAsMdl({
         ctx,
         zam,
         targetRace: 0, // universal
         targetGender: 2, // universal
       });
+      return { mdl, inventoryType: itemData.inventoryType };
     }
     throw new Error('Unknown item type');
   }
