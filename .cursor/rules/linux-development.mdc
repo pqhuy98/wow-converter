@@ -1,0 +1,5 @@
+---
+description: Linux/WSL2 development rules; follow docs/DEVELOPMENT-LINUX.md and wow.export Docker usage
+alwaysApply: false
+---
+- If OS is Linux (including WSL2), always consult and follow `docs/DEVELOPMENT-LINUX.md` for environment setup, install, dev start, and Dockerized `wow.export` usage. Execute commands verbatim.
