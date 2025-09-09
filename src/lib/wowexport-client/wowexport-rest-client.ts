@@ -193,7 +193,7 @@ export class WowExportRestClient {
   private async bootstrap(isReset: boolean = false): Promise<void> {
     try {
       // Connected if REST server responds to any request.
-      await this.syncConfig();
+      await this.getConfig();
       this.status.connected = true;
       this.status.configLoaded = true;
       debug && console.log('REST config retrieved');
