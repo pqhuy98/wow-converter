@@ -1,7 +1,9 @@
 import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import _ from 'lodash';
-import { dirname, join, relative } from 'path';
+import {
+  dirname, join, normalize, relative,
+} from 'path';
 
 import { Animation, AnimationOrStatic, AnimationType } from '@/lib/formats/mdl/components/animation';
 import { Geoset } from '@/lib/formats/mdl/components/geoset';
@@ -484,8 +486,9 @@ export class M2MetadataFile {
 
     // Textures
     const textures: Texture[] = this.textures.map((tex, i) => {
+      const dir = dirname(normalize(this.filePath.replaceAll('\\', '/')));
       const pngPath = tex.fileNameExternal
-        ? relative(this.config.wowExportAssetDir, join(dirname(this.filePath), tex.fileNameExternal))
+        ? relative(this.config.wowExportAssetDir, join(dir, tex.fileNameExternal))
         : '';
 
       return {

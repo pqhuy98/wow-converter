@@ -43,7 +43,7 @@ export function getLayerFilterMode(blendingMode: number, shaderId: number, layer
   const opaquePath = (shaderId & 0x70) === 0;
   const op = (shaderId & 7);
 
-  const debug = true;
+  const debug = false;
   debug && console.log('opaquePath', {
     opaquePath, op, blendingMode, shaderId, layerIndex, img: texture.image,
   });

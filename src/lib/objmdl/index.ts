@@ -65,7 +65,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   });
   metadata.mapSubMeshesToMdlGeosets(mdl);
 
-  const parentDir = path.dirname(objFilePath);
+  const parentDir = path.dirname(path.normalize(objFilePath.replaceAll('\\', '/')));
 
   // Extract material data
 

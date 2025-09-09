@@ -135,7 +135,7 @@ export class JobQueue<T, V> {
           console.error(err);
           this.jobsFailed++;
           if (err instanceof Error && err.message.includes('Job timeout')) {
-            await wowExportClient.restart();
+            await wowExportClient.resetConnection();
           }
         } finally {
           this.activeJobs--;

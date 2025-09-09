@@ -37,7 +37,13 @@ async function run() {
 
     // Use native binding if available
     const img = new Image();
-    img.loadFromBuffer(pngBuffer, 0, pngBuffer.length);
+    try {
+      img.loadFromBuffer(pngBuffer, 0, pngBuffer.length);
+    } catch (error: unknown) {
+      // Retry once after 1 second in case the image is still being written
+      await new Promise((resolve) => { setTimeout(resolve, 1000); });
+      img.loadFromBuffer(pngBuffer, 0, pngBuffer.length);
+    }
     const blpBuffer = img.toBuffer(TYPE_BLP);
     fs.mkdirSync(path.dirname(blpPath), { recursive: true });
     fs.writeFileSync(blpPath, blpBuffer);
