@@ -1,0 +1,84 @@
+{
+  "id": "ee5e866e-0032-412c-ae4f-261f6ac267b2",
+  "status": "done",
+  "result": {
+    "exportedModels": [
+      {
+        "path": "lady-deathwhisper.mdx",
+        "size": 662755
+      }
+    ],
+    "exportedTextures": [
+      {
+        "path": "wow/creature/elementalearth/watermist.blp",
+        "size": 3228
+      },
+      {
+        "path": "wow/creature/ministerofdeath/ministerofdeath.blp",
+        "size": 525468
+      },
+      {
+        "path": "wow/creature/ministerofdeath/ministerofdeath512.blp",
+        "size": 525468
+      },
+      {
+        "path": "wow/item/objectcomponents/shield/armorreflect4.blp",
+        "size": 9372
+      },
+      {
+        "path": "wow/item/objectcomponents/weapon/armorreflect4.blp",
+        "size": 9372
+      },
+      {
+        "path": "wow/item/objectcomponents/weapon/ashpurple.blp",
+        "size": 9372
+      },
+      {
+        "path": "wow/item/objectcomponents/weapon/flare.blp",
+        "size": 3228
+      },
+      {
+        "path": "wow/item/objectcomponents/weapon/glowball.blp",
+        "size": 1692
+      },
+      {
+        "path": "wow/item/objectcomponents/weapon/star5tga.blp",
+        "size": 9372
+      },
+      {
+        "path": "wow/item/objectcomponents/weapon/sword_2h_artifactashbringer_d_01_gold.blp",
+        "size": 132252
+      },
+      {
+        "path": "wow/spells/shockwavewater1.blp",
+        "size": 33948
+      }
+    ],
+    "outputDirectory": "/workspace/exported-assets",
+    "versionId": "ee5e866e-0032-412c-ae4f-261f6ac267b2",
+    "modelStats": {
+      "formatVersion": 1000,
+      "globalSequences": 3,
+      "sequences": 13,
+      "geosets": 6,
+      "geosetAnims": 4,
+      "materials": 6,
+      "textures": 15,
+      "textureAnims": 0,
+      "bones": 136,
+      "lights": 0,
+      "ribbonEmitters": 0,
+      "particles": 9,
+      "attachments": 11,
+      "eventObjects": 0,
+      "helpers": 0,
+      "collisionShapes": 3,
+      "cameras": 1,
+      "vertices": 4104,
+      "faces": 3806
+    }
+  },
+  "submittedAt": 1757472312341,
+  "startedAt": 1757472312342,
+  "finishedAt": 1757472315433
+}
