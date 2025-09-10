@@ -26,36 +26,46 @@ async function run() {
 	const browser = await chromium.launch({ headless: true });
 	const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
 	const page = await context.newPage();
-	await page.goto(APP_URL, { waitUntil: 'load' });
+	await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+
+	// Wait UI ready (server config loaded renders content)
+	await page.getByText('Character Configuration').waitFor({ timeout: 60000 });
 
 	// Fill Base Model Wowhead URL
-	const npcInput = page.getByPlaceholder(/wowhead\.com\/(?:[a-z-]+\/)?npc=/i);
+	const npcInput = page.getByPlaceholder(/wowhead\.com\/(?:[a-z-]+\/)?npc=/i).first();
 	await npcInput.click();
 	await npcInput.fill(NPC_URL);
 	await npcInput.blur();
 
 	// Fill attached item Wowhead URL (Item Reference)
-	const itemInput = page.getByPlaceholder(/wowhead\.com\/(?:[a-z-]+\/)?item=/i);
+	const itemInput = page.getByPlaceholder(/wowhead\.com\/(?:[a-z-]+\/)?item=/i).first();
 	await itemInput.click();
 	await itemInput.fill(ITEM_URL);
 	await itemInput.blur();
 
-	// Ensure Attachment Point is Hand Right (1) if selector exists
+	// Set output file name explicitly to ensure validation
+	const filenameInput = page.locator('#filename');
+	await filenameInput.scrollIntoViewIfNeeded();
+	await filenameInput.fill('lady-deathwhisper');
+
+	// Try to select Hand Right attachment point if present (best-effort)
 	try {
-		// Open the closest combobox after the "Attachment Point" label
 		const attachmentLabel = page.getByText('Attachment Point');
 		await attachmentLabel.first().scrollIntoViewIfNeeded();
-		const comboboxes = page.getByRole('combobox');
-		await comboboxes.first().click();
+		const combo = attachmentLabel.first().locator('..').locator('..').getByRole('combobox');
+		await combo.first().click();
 		await page.getByRole('option', { name: /Hand Right \(1\)/ }).click();
 	} catch (e) {
 		console.warn('Attachment point selection skipped or not needed:', e?.message || e);
 	}
 
-	// Click Export Character
-	await page.getByRole('button', { name: /Export Character/i }).click();
+	// Click Export Character using robust text selector
+	const exportBtn = page.locator('button:has-text("Export Character")');
+	await exportBtn.scrollIntoViewIfNeeded();
+	await exportBtn.waitFor({ state: 'visible', timeout: 60000 });
+	await exportBtn.click();
 
-	// Wait for completion: either Export Successful text or model viewer canvas appears
+	// Wait for completion: success text or model viewer canvas
 	await Promise.race([
 		page.getByText(/Export Successful/i).waitFor({ timeout: 600_000 }),
 		page.locator('canvas').first().waitFor({ state: 'visible', timeout: 600_000 })
