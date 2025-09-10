@@ -268,6 +268,7 @@ export async function ControllerExportCharacter(app: express.Application) {
   app.post('/export/character/clean', (req, res) => {
     fsExtra.removeSync('recent-exports.json');
     fsExtra.emptyDirSync(outputDir);
+    wowExportClient.clearCacheFiles();
     return res.json({ message: 'Exported assets cleaned' });
   });
 

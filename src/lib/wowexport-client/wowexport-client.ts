@@ -1,21 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/*!
- * Wow.Export RCP Client Library
- * A complete client library for communicating with wow.export's Remote Control Protocol
- *
- * Usage:
- * const client = new WowExportClient();
- * await client.connect('localhost', 17751);
- * await client.loadCASC('C:/World of Warcraft');
- * await client.exportModel(12345, './output/model.obj');
- */
+import axios, { AxiosInstance } from 'axios';
 import chalk from 'chalk';
-import { randomUUID } from 'crypto';
-import { EventEmitter } from 'events';
-import { Socket } from 'net';
+import fs, { existsSync } from 'fs';
+import { emptyDirSync, ensureDirSync } from 'fs-extra';
+import path from 'path';
 
 import { waitUntil } from '../utils';
-import { WowExportRestClient } from './wowexport-rest-client';
 
 // Type definitions
 export interface ServerInfo {
@@ -31,7 +20,7 @@ export interface CASCInfo {
       Product: string;
       Version: string;
     };
-    buildConfig: any;
+    buildConfig: unknown;
     buildName: string;
     buildKey: string;
 }
@@ -71,17 +60,17 @@ export interface ExportResult {
 }
 
 export interface ConfigResponse {
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface HookEvent {
     hookID: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface RCPResponse {
     id: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface ModelSkin {
@@ -114,33 +103,45 @@ export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COM
 
 const debug = false;
 
-export class WowExportClient extends EventEmitter {
-  private socket: Socket;
+export class WowExportRestClient {
+  private readonly http: AxiosInstance;
 
-  private buffer: string = '';
+  private assetDir = '';
+
+  private remoteAssetDir = '';
+
+  private readonly isRemote: boolean;
+
+  private readonly cacheDir = path.resolve('.cache');
 
   public status = {
     connected: false,
     configLoaded: false,
     cascLoaded: false,
-    exportHookRegistered: false,
+    // REST does not use hooks; keep true to maintain isReady contract.
+    exportHookRegistered: true,
   };
 
   cascInfo: CASCInfo | null = null;
 
-  public isClassic() {
-    return this.cascInfo?.build.Product.includes('classic');
-  }
-
-  private assetDir = '';
-
-  async getAssetDir() {
-    if (this.assetDir) {
-      return this.assetDir;
+  constructor(private baseURL = 'http://127.0.0.1:17752') {
+    this.isRemote = baseURL !== 'http://127.0.0.1:17752' && baseURL !== 'http://localhost:17752';
+    this.isRemote = true;
+    if (this.isRemote) {
+      ensureDirSync(this.cacheDir);
     }
-    const config = await this.getConfig();
-    this.assetDir = config.exportDirectory;
-    return this.assetDir;
+
+    this.http = axios.create({ baseURL, timeout: 300000 });
+    const debug = false;
+    this.http.interceptors.request.use((config) => {
+      debug && console.log('request', config.method, config.url, config.data);
+      return config;
+    });
+    this.http.interceptors.response.use((response) => {
+      debug && console.log('response', response.status, response.data);
+      return response;
+    });
+    void this.bootstrap();
   }
 
   public get isReady() {
@@ -148,335 +149,24 @@ export class WowExportClient extends EventEmitter {
   }
 
   public async waitUntilReady() {
-    if (this.isReady) {
-      return;
-    }
+    if (this.isReady) return;
     await waitUntil(() => this.isReady);
   }
 
-  constructor(private host: string = '127.0.0.1', private port: number = 17751) {
-    super();
-    this.setMaxListeners(100);
-
-    this.socket = new Socket();
-    void this.connect(host, port);
+  public isClassic() {
+    return this.cascInfo?.build.Product.includes('classic');
   }
 
-  /**
-     * Connect to a wow.export RCP server
-     * @param host - Server hostname (default: 'localhost')
-     * @param port - Server port (default: 17751)
-     * @returns Promise that resolves when connected
-     */
-  private async connect(host: string = 'localhost', port: number = 17751): Promise<void> {
-    if (this.status.connected) {
-      return;
-    }
-    for (let failedAttempts = 0; ;) {
-      try {
-        if (!this.status.connected) {
-          // Create a new socket if the current one is in use
-          if (this.socket) {
-            this.socket.removeAllListeners();
-            this.socket.end();
-            this.socket.destroy();
-          }
-          this.socket = new Socket();
-          this.socket.on('data', (data: Buffer) => this.onData(data));
-          this.socket.on('close', () => this.onConnectionClose());
-
-          await new Promise<void>((resolve, reject) => {
-            debug && console.log(`Connecting to wow.export RCP at [${host}]:${port}`);
-
-            this.socket.connect(port, host, () => {
-              this.status.connected = true;
-              this.emit('CONNECTED');
-              debug && console.log('Connected to wow.export RCP server');
-              this.socket.on('error', () => {
-                this.status.connected = false;
-                this.status.configLoaded = false;
-                this.status.cascLoaded = false;
-              });
-              resolve();
-            });
-            this.socket.once('error', reject);
-          });
-
-          await this.syncConfig();
-          console.log(chalk.green('✅ Connected to wow.export RCP'), chalk.gray(`at ${host}:${port}`));
-          failedAttempts = 0;
-        }
-        if (!this.status.configLoaded) {
-          const config = await this.getConfig();
-          this.assetDir = config.exportDirectory;
-          this.status.configLoaded = true;
-          console.log(chalk.green('✅ Retrieved wow.export asset dir:'), chalk.gray(this.assetDir));
-          failedAttempts = 0;
-        }
-        if (!this.status.cascLoaded) {
-          const info = await this.getCASCInfo();
-          this.cascInfo = info;
-          this.status.cascLoaded = true;
-          console.log(chalk.green('✅ Retrieved wow.export CASC info:'), info.build.Product, info.buildName);
-          failedAttempts = 0;
-        }
-        if (!this.status.exportHookRegistered) {
-          await this.registerHook('HOOK_EXPORT_COMPLETE');
-          this.status.exportHookRegistered = true;
-          console.log(chalk.green('✅ Registered export hook'));
-          failedAttempts = 0;
-        }
-        if (this.isReady) {
-          this.on('disconnected', () => {
-            this.disconnect();
-            console.log('wow.export client disconnected, reconnecting...');
-            void this.connect(host, port);
-          });
-          return;
-        }
-      } catch (err) {
-        if (failedAttempts === 0) {
-          if (!this.status.connected || !this.status.configLoaded) {
-            console.error(chalk.yellow(`⏳ Cannot connecting to wow.export RCP server at ${host}:${port}, did you run it?`));
-          } else if (!this.status.cascLoaded) {
-            if (process.env.CASC_LOCAL_WOW) {
-              try {
-                const [localPath, product] = [process.env.CASC_LOCAL_WOW, process.env.CASC_LOCAL_PRODUCT];
-                console.log(chalk.gray(`Attempting to load local CASC from "${localPath}", product: ${product}`));
-                const cascLocal = await this.loadCASCLocal(localPath);
-                const buildIdx = Math.max(0, cascLocal.findIndex((b) => b.Product === product));
-                console.log('Selected build:', cascLocal[buildIdx]);
-                const cascInfo = await this.loadCASCBuild(buildIdx);
-                this.cascInfo = cascInfo;
-                this.status.cascLoaded = true;
-                console.log(chalk.green('✅ Loaded local CASC:'), cascInfo.build.Product, cascInfo.buildName);
-              } catch (e) {
-                console.error(chalk.yellow(`⚠️ Failed to load local CASC: ${e}`));
-              }
-            }
-            if (!this.status.cascLoaded && process.env.CASC_REMOTE_REGION && process.env.CASC_REMOTE_PRODUCT) {
-              try {
-                const [region, product] = [process.env.CASC_REMOTE_REGION, process.env.CASC_REMOTE_PRODUCT];
-                console.log(chalk.gray(`Attempting to load remote CASC, region: ${region}, product: ${product}`));
-                const cascRemote = await this.loadCASCRemote(region);
-                const buildIdx = Math.max(0, cascRemote.findIndex((build) => build.Product === product));
-                console.log('Selected build:', cascRemote[buildIdx]);
-                const cascInfo = await this.loadCASCBuild(buildIdx);
-                this.cascInfo = cascInfo;
-                this.status.cascLoaded = true;
-              } catch (e) {
-                console.error(chalk.yellow(`⚠️ Failed to load remote CASC: ${e}`));
-              }
-            }
-            if (!this.status.cascLoaded) {
-              console.error(chalk.yellow('⏳ Cannot getting wow.export CASC info, set CASC_LOCAL_WOW or CASC_REMOTE_REGION/CASC_REMOTE_PRODUCT'));
-            }
-          }
-        }
-        failedAttempts++;
-      }
-      await new Promise((resolve) => { setTimeout(resolve, 1000); });
-    }
+  async getAssetDir() {
+    if (this.assetDir) return this.assetDir;
+    this.remoteAssetDir = (await this.getConfig()).exportDirectory as string;
+    this.assetDir = this.isRemote
+      ? this.cacheDir
+      : this.remoteAssetDir;
+    return this.assetDir;
   }
 
-  /**
-   * Disconnect from the server
-   */
-  private disconnect(): void {
-    this.removeAllListeners();
-    this.socket.removeAllListeners();
-    this.socket.end();
-    this.socket.destroy();
-    this.onConnectionClose();
-  }
-
-  public async resetConnection(): Promise<void> {
-    console.log('Restarting wow.export connection...');
-    this.disconnect();
-    await this.connect(this.host, this.port);
-    console.log('wow.export connection restarted');
-  }
-
-  private waitForConnection(): Promise<void> {
-    return new Promise((resolve) => {
-      this.once('CONNECTED', resolve);
-    });
-  }
-
-  /**
-     * Send a command to the server and wait for response
-     * @param command - Command ID
-     * @param data - Command data
-     * @returns Promise that resolves with response data
-     */
-  private async sendCommand(command: string, data: any = {}): Promise<RCPResponse> {
-    if (!this.status.connected) {
-      await this.waitForConnection();
-    }
-
-    const requestId = randomUUID();
-    const payload = { id: command, ...data, requestId };
-
-    let timeoutS: number | undefined = 30000;
-    if (command === 'LOAD_CASC_BUILD' || command === 'HOOK_REGISTER') {
-      timeoutS = undefined; // load casc build can take a long time
-    }
-
-    return new Promise((resolve, reject) => {
-      // Set up response handler - listen for the specific response type
-      const responseHandler = (response: RCPResponse) => {
-        // Handle different response patterns based on command
-        let shouldResolve = false;
-
-        switch (command) {
-          case 'LISTFILE_SEARCH':
-            shouldResolve = response.id === 'LISTFILE_SEARCH_RESULT';
-            break;
-          case 'LISTFILE_QUERY_ID':
-          case 'LISTFILE_QUERY_NAME':
-            shouldResolve = response.id === 'LISTFILE_RESULT';
-            break;
-          case 'EXPORT_MODEL':
-          case 'EXPORT_TEXTURE':
-          case 'EXPORT_CHARACTER':
-            shouldResolve = response.id === 'EXPORT_START' && response.requestId === requestId || response.id === 'ERR_INVALID_PARAMETERS';
-            break;
-          case 'CONFIG_GET':
-            shouldResolve = response.id === 'CONFIG_SINGLE' || response.id === 'CONFIG_FULL';
-            break;
-          case 'CONFIG_SET':
-            shouldResolve = response.id === 'CONFIG_SET_DONE';
-            break;
-          case 'CONFIG_RESET':
-            shouldResolve = response.id === 'CONFIG_SINGLE' || response.id === 'CONFIG_FULL';
-            break;
-          case 'LOAD_CASC_LOCAL':
-          case 'LOAD_CASC_REMOTE':
-            shouldResolve = response.id === 'CASC_INSTALL_BUILDS' || response.id === 'ERR_INVALID_INSTALL';
-            break;
-          case 'LOAD_CASC_BUILD':
-            shouldResolve = response.id === 'CASC_INFO' || response.id === 'ERR_NO_CASC_SETUP' || response.id === 'ERR_INVALID_CASC_BUILD' || response.id === 'ERR_CASC_FAILED';
-            break;
-          case 'GET_CASC_INFO':
-            shouldResolve = response.id === 'CASC_INFO' || response.id === 'CASC_UNAVAILABLE';
-            break;
-          case 'CLEAR_CACHE':
-            shouldResolve = response.id === 'CACHE_CLEARED';
-            break;
-          case 'HOOK_REGISTER':
-            shouldResolve = response.id === 'HOOK_REGISTERED';
-            break;
-          case 'HOOK_DEREGISTER':
-            shouldResolve = response.id === 'HOOK_DEREGISTERED';
-            break;
-          case 'GET_CONSTANTS':
-            shouldResolve = response.id === 'CONSTANTS';
-            break;
-          case 'GET_CDN_REGIONS':
-            shouldResolve = response.id === 'CDN_REGIONS';
-            break;
-          case 'GET_MODEL_SKINS':
-            shouldResolve = response.id === 'MODEL_SKINS' && response.fileDataID === data.fileDataID;
-            break;
-          default:
-            // For unknown commands, resolve on any response
-            shouldResolve = true;
-        }
-
-        if (shouldResolve) {
-          this.removeListener('response', responseHandler);
-          resolve(response);
-        }
-      };
-
-      this.on('response', responseHandler);
-
-      // Send the command
-      this.write(payload);
-
-      if (timeoutS) {
-        setTimeout(() => {
-          this.removeListener('response', responseHandler);
-          reject(new Error(`Command ${command} timed out`));
-        }, timeoutS);
-      }
-    });
-  }
-
-  /**
-     * Write data to the socket using RCP protocol
-     * @param data - Data to send
-     */
-  private write(data: any): void {
-    const json = JSON.stringify(data);
-    const message = `${json.length}\0${json}`;
-    this.socket.write(message);
-    if (debug && data.id !== 'CONFIG_SET') {
-      debug && console.log(`→ ${data.id} (${json.length} bytes)`);
-    }
-  }
-
-  /**
-     * Handle incoming data from the server
-     * @param data - Raw data from socket
-     */
-  private onData(data: Buffer): void {
-    this.buffer += data.toString('utf8');
-    this.processBuffer();
-  }
-
-  /**
-     * Process the message buffer for complete messages
-     */
-  private processBuffer(): void {
-    const delimiter = this.buffer.indexOf('\0');
-    if (delimiter > 0) {
-      // eslint-disable-next-line radix
-      const size = parseInt(this.buffer.substring(0, delimiter));
-      if (isNaN(size) || size <= 0) {
-        throw new Error('Invalid stream segmentation');
-      }
-
-      const offset = delimiter + 1;
-      const availableSize = this.buffer.length - offset;
-
-      if (availableSize >= size) {
-        // Extract complete message
-        const messageData = this.buffer.substring(offset, offset + size);
-        const json: RCPResponse = JSON.parse(messageData);
-
-        if (debug && json.id !== 'CONFIG_SET_DONE') {
-          debug && console.log(`← ${json.id} (${size} bytes)`);
-          debug && console.log(JSON.stringify(json, null, 2));
-        }
-        // Emit the message with both the specific ID and generic 'response' event
-        this.emit(json.id, json);
-        this.emit('response', json);
-
-        // Remove processed message from buffer
-        this.buffer = this.buffer.substring(offset + size);
-
-        // Process any remaining messages
-        if (this.buffer.length > 0) {
-          this.processBuffer();
-        }
-      }
-    }
-  }
-
-  /**
-     * Handle connection close
-     */
-  private onConnectionClose(): void {
-    debug && console.log('Connection to wow.export RCP server closed');
-    this.status.connected = false;
-    this.status.configLoaded = false;
-    this.status.cascLoaded = false;
-    this.status.exportHookRegistered = false;
-    this.emit('disconnected');
-  }
-
-  // ===== HIGH-LEVEL API METHODS =====
+  // ===== HIGH-LEVEL API METHODS (public) =====
 
   public async syncConfig(): Promise<void> {
     const config = await this.getConfig();
@@ -488,342 +178,278 @@ export class WowExportClient extends EventEmitter {
     }));
   }
 
-  /**
-     * Get configuration
-     * @param key - Optional config key
-     * @returns Promise with configuration data
-     */
   public async getConfig(key?: string): Promise<ConfigResponse> {
-    const data = key ? { key } : {};
-    const response = await this.sendCommand('CONFIG_GET', data);
-
-    if (response.id === 'CONFIG_SINGLE') {
-      return { [response.key]: response.value };
-    } if (response.id === 'CONFIG_FULL') {
-      return response.config;
-    }
-
-    throw new Error('Unexpected response to CONFIG_GET');
+    const params = key ? { key } : undefined;
+    const json = await this.getJSON('/rest/getConfig', params);
+    if (json.id === 'CONFIG_SINGLE') return { [json.key]: json.value };
+    if (json.id === 'CONFIG_FULL') return json.config;
+    throw new Error('Unexpected response to getConfig');
   }
 
-  /**
-     * Set configuration value
-     * @param key - Config key
-     * @param value - Config value
-     * @returns Promise with updated config
-     */
-  public async setConfig(key: string, value: any): Promise<ConfigResponse> {
-    console.log('setConfig', key, value);
-    const response = await this.sendCommand('CONFIG_SET', { key, value });
-
-    if (response.id === 'CONFIG_SET_DONE') {
-      return { [response.key]: response.value };
-    }
-
+  public async setConfig(key: string, value: unknown): Promise<ConfigResponse> {
+    const json = await this.postJSON('/rest/setConfig', { key, value });
+    if (json.id === 'CONFIG_SET_DONE') return { [json.key]: json.value };
     throw new Error('Failed to set configuration');
   }
 
-  /**
-     * Load CASC from local installation
-     * @param installDirectory - WoW installation path
-     * @returns Promise with CASC builds information
-     */
   public async loadCASCLocal(installDirectory: string): Promise<CASCBuild[]> {
-    const response = await this.sendCommand('LOAD_CASC_LOCAL', { installDirectory });
-
-    if (response.id === 'CASC_INSTALL_BUILDS') {
-      return response.builds;
-    } if (response.id === 'ERR_INVALID_INSTALL') {
-      throw new Error('Invalid WoW installation directory');
-    } else if (response.id === 'ERR_CASC_ACTIVE') {
-      throw new Error('CASC is already active');
-    }
-
-    throw new Error('Failed to load CASC');
+    const json = await this.postJSON('/rest/loadCascLocal', { installDirectory });
+    if (json.id === 'CASC_INSTALL_BUILDS') return json.builds;
+    if (json.id === 'ERR_INVALID_INSTALL') throw new Error('Invalid WoW installation directory');
+    if (json.id === 'ERR_CASC_ACTIVE') throw new Error('CASC is already active');
+    throw new Error('Failed to load CASC (local)');
   }
 
-  /**
-     * Load CASC from remote CDN
-     * @param regionTag - CDN region (e.g., 'eu', 'us')
-     * @returns Promise with CASC builds information
-     */
   public async loadCASCRemote(regionTag: string): Promise<CASCBuild[]> {
-    const response = await this.sendCommand('LOAD_CASC_REMOTE', { regionTag });
-
-    if (response.id === 'CASC_INSTALL_BUILDS') {
-      return response.builds;
-    } if (response.id === 'ERR_INVALID_INSTALL') {
-      throw new Error('Invalid CDN region');
-    } else if (response.id === 'ERR_CASC_ACTIVE') {
-      throw new Error('CASC is already active');
-    }
-
-    throw new Error('Failed to load CASC');
+    const json = await this.postJSON('/rest/loadCascRemote', { regionTag });
+    if (json.id === 'CASC_INSTALL_BUILDS') return json.builds;
+    if (json.id === 'ERR_INVALID_INSTALL') throw new Error('Invalid CDN region');
+    if (json.id === 'ERR_CASC_ACTIVE') throw new Error('CASC is already active');
+    throw new Error('Failed to load CASC (remote)');
   }
 
-  /**
-     * Load specific CASC build
-     * @param buildIndex - Build index from builds list
-     * @returns Promise with CASC information
-     */
   public async loadCASCBuild(buildIndex: number): Promise<CASCInfo> {
-    const response = await this.sendCommand('LOAD_CASC_BUILD', { buildIndex });
-
-    if (response.id === 'CASC_INFO') {
-      return response as unknown as CASCInfo;
-    } if (response.id === 'ERR_NO_CASC_SETUP') {
-      throw new Error('No CASC setup available');
-    } else if (response.id === 'ERR_INVALID_CASC_BUILD') {
-      throw new Error('Invalid build index');
-    } else if (response.id === 'ERR_CASC_FAILED') {
-      throw new Error('Failed to load CASC build');
-    }
-
+    const json = await this.postJSON('/rest/loadCascBuild', { buildIndex });
+    if (json.id === 'CASC_INFO') return json as unknown as CASCInfo;
+    if (json.id === 'ERR_NO_CASC_SETUP') throw new Error('No CASC setup available');
+    if (json.id === 'ERR_INVALID_CASC_BUILD') throw new Error('Invalid build index');
+    if (json.id === 'ERR_CASC_FAILED') throw new Error('Failed to load CASC build');
     throw new Error('Failed to load CASC build');
   }
 
-  /**
-     * Get CASC information
-     * @returns Promise with CASC information
-     */
   public async getCASCInfo(): Promise<CASCInfo> {
-    const response = await this.sendCommand('GET_CASC_INFO');
-
-    if (response.id === 'CASC_INFO') {
-      return response as unknown as CASCInfo;
-    } if (response.id === 'CASC_UNAVAILABLE') {
-      throw new Error('CASC not available');
-    }
-
+    const res = await this.safeGetJSON('/rest/getCascInfo');
+    if (res.ok && res.json.id === 'CASC_INFO') return res.json as unknown as CASCInfo;
+    if (res.json?.id === 'CASC_UNAVAILABLE') throw new Error('CASC not available');
     throw new Error('Failed to get CASC info');
   }
 
-  /**
-   * Search for files in listfile
-   * @param search - Search pattern
-   * @param useRegex - Use regular expression
-   * @returns Promise with search results
-   */
   private searchFileBlocked = false;
 
   public async searchFiles(search: string, useRegex: boolean = false): Promise<FileEntry[]> {
-    if (this.searchFileBlocked) {
-      await waitUntil(() => !this.searchFileBlocked);
-    }
+    if (this.searchFileBlocked) await waitUntil(() => !this.searchFileBlocked);
     this.searchFileBlocked = true;
-    const response = await this.sendCommand('LISTFILE_SEARCH', { search, useRegularExpression: useRegex });
-    this.searchFileBlocked = false;
-
-    if (response.id === 'LISTFILE_SEARCH_RESULT') {
-      return response.entries;
-    } if (response.id === 'ERR_LISTFILE_NOT_LOADED') {
-      throw new Error('Listfile not loaded');
+    try {
+      const json = await this.getJSON('/rest/searchFiles', { search, useRegularExpression: useRegex ? '1' : '0' });
+      if (json.id === 'LISTFILE_SEARCH_RESULT') return (json as SearchResult).entries;
+      if (json.id === 'ERR_LISTFILE_NOT_LOADED') throw new Error('Listfile not loaded');
+      throw new Error('Failed to search files');
+    } finally {
+      this.searchFileBlocked = false;
     }
-
-    throw new Error('Failed to search files');
   }
 
-  /**
-     * Get file by ID
-     * @param fileDataID - File data ID
-     * @returns Promise with file information
-     */
   public async getFileByID(fileDataID: number): Promise<FileEntry> {
-    const response = await this.sendCommand('LISTFILE_QUERY_ID', { fileDataID });
-
-    if (response.id === 'LISTFILE_RESULT') {
-      return response as unknown as FileEntry;
-    } if (response.id === 'ERR_LISTFILE_NOT_LOADED') {
-      throw new Error('Listfile not loaded');
-    }
-
+    const json = await this.getJSON('/rest/getFileById', { fileDataID: String(fileDataID) });
+    if (json.id === 'LISTFILE_RESULT') return json as unknown as FileEntry;
+    if (json.id === 'ERR_LISTFILE_NOT_LOADED') throw new Error('Listfile not loaded');
     throw new Error('Failed to get file by ID');
   }
 
-  /**
-     * Get file by name
-     * @param fileName - File name
-     * @returns Promise with file information
-     */
   public async getFileByName(fileName: string): Promise<FileEntry> {
-    const response = await this.sendCommand('LISTFILE_QUERY_NAME', { fileName });
-
-    if (response.id === 'LISTFILE_RESULT') {
-      return response as unknown as FileEntry;
-    } if (response.id === 'ERR_LISTFILE_NOT_LOADED') {
-      throw new Error('Listfile not loaded');
-    }
-
+    const json = await this.getJSON('/rest/getFileByName', { fileName });
+    if (json.id === 'LISTFILE_RESULT') return json as unknown as FileEntry;
+    if (json.id === 'ERR_LISTFILE_NOT_LOADED') throw new Error('Listfile not loaded');
     throw new Error('Failed to get file by name');
   }
 
   public async getModelSkins(fileDataID: number): Promise<ModelSkin[]> {
-    const response = await this.sendCommand('GET_MODEL_SKINS', { fileDataID });
-    if (response.id === 'MODEL_SKINS') {
-      return response.skins;
-    }
+    const json = await this.getJSON('/rest/getModelSkins', { fileDataID: String(fileDataID) });
+    if (json.id === 'MODEL_SKINS') return json.skins as ModelSkin[];
     throw new Error('Failed to get model skins');
   }
 
-  /**
-     * Export models
-     * @param fileDataIDs - File data ID(s)
-     * @returns Promise that resolves with export results when export completes
-     */
-  public async exportModels(models: { fileDataID: number, skinName?: string }[]): Promise<ExportResult[]> {
-    if (models.length === 0) {
-      return [];
+  public async exportModels(models: { fileDataID: number; skinName?: string }[]): Promise<ExportResult[]> {
+    if (models.length === 0) return [];
+    const json = await this.postJSON('/rest/exportModels', { models });
+    if (json.id === 'EXPORT_RESULT') {
+      const results = json.succeeded as ExportResult[];
+      await Promise.all(results.map(async (result) => {
+        await this.prefetchFiles(result.files, (file) => file.endsWith('.png'));
+        result.files.forEach((_, i) => {
+          result.files[i].file = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.files[i].file));
+        });
+      }));
+      return results;
     }
-
-    let exportID = -1;
-    const isComplete = (eventData: any) => {
-      if (exportID === -1) {
-        return 'not ready';
-      }
-      return eventData.hookID === 'HOOK_EXPORT_COMPLETE' && eventData.exportID === exportID;
-    };
-    const hookEventPromise = this.waitForHookEvent(isComplete);
-
-    debug && console.log('exportModels start', models);
-    const response = await this.sendCommand('EXPORT_MODEL', { models });
-
-    if (response.id === 'EXPORT_START') {
-      const exportInfo = response as unknown as ExportInfo;
-      debug && console.log(`Export model started with ID: ${exportInfo.exportID}`);
-      exportID = exportInfo.exportID;
-
-      // Emit a synthetic event to re-evaluate any events that arrived before exportID was known
-      this.emit('HOOK_EVENT', { hookID: '__intern_flush__' });
-
-      const result = await hookEventPromise;
-      return result.succeeded;
-    } if (response.id === 'ERR_NO_CASC') {
-      throw new Error('No CASC loaded');
-    }
-
+    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
     throw new Error('Failed to start model export');
   }
 
-  /**
-     * Export textures
-     * @param fileDataIDs - File data ID(s)
-     * @returns Promise that resolves with export results when export completes
-     */
   public async exportTextures(fileDataIDs: number[]): Promise<ExportFile[]> {
-    if (fileDataIDs.length === 0) {
-      return [];
+    if (fileDataIDs.length === 0) return [];
+    const json = await this.postJSON('/rest/exportTextures', { fileDataID: fileDataIDs });
+    if (json.id === 'EXPORT_RESULT') {
+      const results = json.succeeded as ExportFile[];
+      await this.prefetchFiles(results);
+      results.forEach((_, i) => {
+        results[i].file = path.join(this.assetDir, path.relative(this.remoteAssetDir, results[i].file));
+      });
+      return results;
     }
-
-    let exportID = -1;
-    const isComplete = (eventData: any) => {
-      if (exportID === -1) {
-        return 'not ready';
-      }
-      return eventData.hookID === 'HOOK_EXPORT_COMPLETE' && eventData.exportID === exportID;
-    };
-    const hookEventPromise = this.waitForHookEvent(isComplete);
-
-    const response = await this.sendCommand('EXPORT_TEXTURE', { fileDataID: fileDataIDs });
-
-    if (response.id === 'EXPORT_START') {
-      const exportInfo = response as unknown as ExportInfo;
-      debug && console.log(`Export textures started with ID: ${exportInfo.exportID}`);
-      exportID = exportInfo.exportID;
-
-      // Emit a synthetic event to re-evaluate any events that arrived before exportID was known
-      this.emit('HOOK_EVENT', { hookID: '__intern_flush__' });
-      return (await hookEventPromise).succeeded;
-    } if (response.id === 'ERR_NO_CASC') {
-      throw new Error('No CASC loaded');
-    }
-
+    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
     throw new Error('Failed to start texture export');
   }
 
   public async exportCharacter(data: ExportCharacterParams): Promise<ExportCharacterResult> {
-    let exportID = -1;
-    const isComplete = (eventData: any) => {
-      if (exportID === -1) {
-        return 'not ready';
-      }
-
-      if (eventData.hookID === 'HOOK_EXPORT_COMPLETE') {
-        debug && console.log('export character complete', eventData);
-      }
-
-      return eventData.hookID === 'HOOK_EXPORT_COMPLETE'
-        && eventData.exportPath && eventData.fileName
-        && eventData.fileManifest && eventData.exportID === exportID;
-    };
-    const hookEventPromise = this.waitForHookEvent(isComplete);
-    const response = await this.sendCommand('EXPORT_CHARACTER', data);
-
-    if (response.id === 'EXPORT_START') {
-      const exportInfo = response as unknown as ExportInfo;
-      debug && console.log(`Export character started with ID: ${exportInfo.exportID}`);
-      exportID = exportInfo.exportID;
-
-      // Emit a synthetic event to re-evaluate any events that arrived before exportID was known
-      this.emit('HOOK_EVENT', { hookID: '__intern_flush__' });
-
-      return hookEventPromise;
-    } if (response.id === 'ERR_NO_CASC') {
-      throw new Error('No CASC loaded');
+    const json = await this.postJSON('/rest/exportCharacter', data);
+    if (json.id === 'EXPORT_RESULT') {
+      const result = json as ExportCharacterResult;
+      console.log('exportCharacter', result);
+      await this.prefetchFiles(result.fileManifest, (file) => file.endsWith('.png'));
+      result.exportPath = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.exportPath));
+      result.fileManifest.forEach((_, i) => {
+        result.fileManifest[i].file = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.fileManifest[i].file));
+      });
+      return result;
     }
-
-    throw new Error(`Failed to start character export: ${JSON.stringify(response, null, 2)}`);
+    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    throw new Error('Failed to start character export');
   }
 
-  private waitForHookEvent(matcher: (eventData: any) => boolean | 'not ready'): Promise<any> {
-    return new Promise((resolve) => {
-      const pending: unknown[] = [];
-      const eventHandler = (eventData: any) => {
-        debug && console.log(`Recevied hook event "${eventData.hookID}"`);
-        const result = matcher(eventData);
-        if (result === 'not ready') {
-          pending.push(eventData);
-          return;
-        }
-        if (result) {
-          this.off('HOOK_EVENT', eventHandler);
-          resolve(eventData);
-        } else {
-          pending.forEach((event) => {
-            if (matcher(event)) {
-              this.off('HOOK_EVENT', eventHandler);
-              resolve(event);
-            }
-          });
-          pending.length = 0;
-        }
-      };
-
-      this.on('HOOK_EVENT', eventHandler);
-    });
+  public async resetConnection(): Promise<void> {
+    await this.bootstrap(true);
   }
 
-  /**
-     * Register for events
-     * @param hookID - Hook ID to register for
-     * @returns Promise that resolves when registered
-     */
-  private async registerHook(hookID: HookID): Promise<void> {
-    const response = await this.sendCommand('HOOK_REGISTER', { hookID });
+  public clearCacheFiles() {
+    if (this.isRemote) {
+      emptyDirSync(this.cacheDir);
+    }
+  }
 
-    if (response.id === 'HOOK_REGISTERED') {
-      return;
-    } if (response.id === 'ERR_UNKNOWN_HOOK') {
-      throw new Error('Unknown hook ID');
+  // ===== HELPERS (private) =====
+
+  private async bootstrap(isReset: boolean = false): Promise<void> {
+    try {
+      // Connected if REST server responds to any request.
+      await this.getConfig();
+      this.status.connected = true;
+      this.status.configLoaded = true;
+      debug && console.log('REST config retrieved');
+
+      try {
+        const info = await this.getCASCInfo();
+        this.cascInfo = info;
+        this.status.cascLoaded = true;
+        console.log(chalk.green('✅ Retrieved wow.export CASC info (REST):'), info.build.Product, info.buildName);
+      } catch (err) {
+        // Attempt automatic CASC loading using environment hints
+        await this.tryAutoLoadCASC();
+      }
+
+      if (this.isReady && !isReset) {
+        console.log(chalk.green('✅ Connected to wow.export REST'), chalk.gray(`at ${this.baseURL}`));
+      }
+    } catch (e) {
+      console.error(chalk.yellow(`⏳ Cannot connect to wow.export REST at ${this.baseURL}. Is it running?`));
+    }
+  }
+
+  private async tryAutoLoadCASC(): Promise<void> {
+    if (this.status.cascLoaded) return;
+
+    const localPath = process.env.CASC_LOCAL_WOW;
+    const localProduct = process.env.CASC_LOCAL_PRODUCT;
+    const remoteRegion = process.env.CASC_REMOTE_REGION;
+    const remoteProduct = process.env.CASC_REMOTE_PRODUCT;
+
+    if (localPath) {
+      try {
+        console.log(chalk.gray(`Attempting to load local CASC (REST) from "${localPath}", product: ${localProduct}`));
+        const builds = await this.loadCASCLocal(localPath);
+        const buildIdx = Math.max(0, builds.findIndex((b) => b.Product === localProduct));
+        const info = await this.loadCASCBuild(buildIdx);
+        this.cascInfo = info;
+        this.status.cascLoaded = true;
+        console.log(chalk.green('✅ Loaded local CASC (REST):'), info.build.Product, info.buildName);
+        return;
+      } catch (e) {
+        console.error(chalk.yellow(`⚠️ Failed to load local CASC (REST): ${e}`));
+      }
     }
 
-    throw new Error('Failed to register hook');
+    if (!this.status.cascLoaded && remoteRegion && remoteProduct) {
+      try {
+        console.log(chalk.gray(`Attempting to load remote CASC (REST), region: ${remoteRegion}, product: ${remoteProduct}`));
+        const builds = await this.loadCASCRemote(remoteRegion);
+        const buildIdx = Math.max(0, builds.findIndex((b) => b.Product === remoteProduct));
+        const info = await this.loadCASCBuild(buildIdx);
+        this.cascInfo = info;
+        this.status.cascLoaded = true;
+        console.log(chalk.green('✅ Loaded remote CASC (REST):'), info.build.Product, info.buildName);
+        return;
+      } catch (e) {
+        console.error(chalk.yellow(`⚠️ Failed to load remote CASC (REST): ${e}`));
+      }
+    }
+
+    if (!this.status.cascLoaded) console.error(chalk.yellow('⏳ CASC not available (REST). Set CASC_LOCAL_WOW or CASC_REMOTE_REGION/CASC_REMOTE_PRODUCT'));
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async getJSON(path: string, params?: Record<string, unknown>): Promise<any> {
+    const res = await this.http.get(path, { params });
+    return res.data;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async postJSON(path: string, body?: unknown): Promise<any> {
+    const res = await this.http.post(path, body ?? {});
+    return res.data;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async safeGetJSON(path: string, params?: Record<string, unknown>): Promise<{ ok: boolean; json: any }> {
+    try {
+      const res = await this.http.get(path, { params, validateStatus: () => true });
+      return { ok: res.status >= 200 && res.status < 300, json: res.data };
+    } catch (e) {
+      return { ok: false, json: null };
+    }
+  }
+
+  // ===== FILE TRANSFER (remote mode) =====
+
+  private normalizeRelative(p: string) {
+    return p.replace(/\\/g, '/').replace(/^\/+/, '');
+  }
+
+  private async prefetchFiles(files: ExportFile[], allowCache: (file: string) => boolean = () => true): Promise<void> {
+    if (!this.isRemote || files.length === 0) return;
+    await this.getAssetDir();
+    await Promise.all(files.map(async (file) => this.fetchFile(
+      path.relative(this.remoteAssetDir, file.file),
+      allowCache,
+    )));
+  }
+
+  private async fetchFile(relativePath: string, allowCache: (file: string) => boolean): Promise<string> {
+    console.log('Fetch file from remote wow.export', relativePath);
+    if (!this.isRemote) return path.resolve(relativePath);
+
+    const rel = this.normalizeRelative(relativePath);
+    const dest = path.resolve(this.cacheDir, rel);
+    if (allowCache(rel) && existsSync(dest)) return dest;
+
+    const dir = path.dirname(dest);
+    ensureDirSync(dir);
+
+    const res = await this.http.get('/rest/download', { params: { path: rel }, responseType: 'arraybuffer', validateStatus: () => true });
+    if (res.status !== 200 || !(res.data instanceof ArrayBuffer || Buffer.isBuffer(res.data))) {
+      throw new Error(`Failed to download remote file: ${rel} (${res.status})`);
+    }
+    const buf = Buffer.isBuffer(res.data) ? res.data : Buffer.from(res.data);
+
+    fs.writeFileSync(dest, buf);
+    return dest;
   }
 }
 
-export const wowExportClient = new WowExportRestClient();
-// export const wowExportClient = new WowExportClient();
+export const wowExportClient = new WowExportRestClient(
+  process.env.WOW_EXPORT_BASE_URL || 'http://127.0.0.1:17752',
+);
 
-export const desiredConfig = {
+const desiredConfig = {
   copyMode: 'FULL',
   listfileShowFileDataIDs: true,
   enableM2Skins: true,
