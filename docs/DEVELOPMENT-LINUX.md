@@ -26,16 +26,18 @@ Notes:
 npm run dev   # runs server + webui concurrently
 ```
 
-### wow.export (Docker)
-- Build context MUST be the `wow.export` subrepo (Docker COPY paths are relative there).
+### wow.export (reference-only)
+- wow.export is included only for code reference. Do not run it locally and do not modify its code from this repository.
+- If you need to inspect behavior, read the code or use prebuilt artifacts referenced by the team.
+- Build context MUST be the `wow.export` subrepo (Docker COPY paths are relative there) if you are working in the dedicated wow.export repository.
 
-Build image:
+Build image (only in wow.export repo):
 ```bash
 cd wow.export/docker
 ./build-docker.sh
 ```
 
-Run container (RPC on localhost:17751 by default):
+Run container (only in wow.export repo, RPC on localhost:17751 by default):
 ```bash
 # Optional env (override as needed)
 export WOWEXPORT_PORT=17751          # host port -> container 17751
@@ -47,18 +49,18 @@ export WOWEXPORT_WOW_DIR=/path/to/WoW/installation # optional, mounted read-only
 # Waits for RPC readiness and performs a healthcheck automatically.
 ```
 
-Healthcheck (manual):
+Healthcheck (manual, only in wow.export repo):
 ```bash
 python3 ./healthcheck.py --host 127.0.0.1 --port ${WOWEXPORT_PORT:-17751}
 ```
 
-Tail logs (runtime or container):
+Tail logs (runtime or container, only in wow.export repo):
 ```bash
 ./tail-logs.sh --lines 200                 # runtime log inside container
 ./tail-logs.sh --container --lines 200     # docker logs
 ```
 
-Stop/remove container:
+Stop/remove container (only in wow.export repo):
 ```bash
 docker rm -f ${WOWEXPORT_NAME:-wow.export}
 ```

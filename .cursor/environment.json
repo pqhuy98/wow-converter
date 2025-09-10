@@ -1,18 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2019-09/schema",
   "agentCanUpdateSnapshot": true,
-  "install": "bash -lc 'set -euo pipefail; export NVM_DIR=\"$HOME/.nvm\"; command -v git >/dev/null 2>&1 || (sudo apt-get update -y && sudo apt-get install -y git curl ca-certificates); if [ ! -d \"$NVM_DIR\" ]; then curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash; fi; . \"$NVM_DIR/nvm.sh\"; nvm install 24; nvm alias default 24; rm -rf wow.export && git clone https://github.com/pqhuy98/wow.export.git && cd wow.export && npm ci || npm install'",
-  "terminals": [
-    {
-      "name": "Run wow-converter",
-      "command": "bash -lc 'cd wow.export && WOW_EXPORT_BASE_URL=\"https://wow.quangdel.com:27752\" CASC_REMOTE_REGION=eu CASC_REMOTE_PRODUCT=wow npm run dev 2>&1 | tee -a ../wow-converter.log'",
-      "description": "Starts the server with required env vars and writes stdout/stderr to wow-converter.log"
-    },
-    {
-      "name": "Tail wow-converter logs",
-      "command": "bash -lc 'tail -n +1 -F ./wow-converter.log'",
-      "description": "Tails the dev server log so the agent can see live output"
-    }
-  ]
+  "install": "bash -lc 'set -euo pipefail; export NVM_DIR=\"$HOME/.nvm\"; command -v git >/dev/null 2>&1 || (sudo apt-get update -y && sudo apt-get install -y git curl ca-certificates); if [ ! -d \"$NVM_DIR\" ]; then curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash; fi; . \"$NVM_DIR/nvm.sh\"; nvm install 24; nvm alias default 24; cd /workspace && npm install'",
+  "terminals": []
 }
 
