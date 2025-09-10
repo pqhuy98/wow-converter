@@ -378,7 +378,6 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
     [EquipmentSlot.Hands]: 8,
     [EquipmentSlot.MainHand]: 17,
     [EquipmentSlot.OffHand]: 18,
-    // Back (16) not baked here
     [EquipmentSlot.Tabard]: 9,
   };
 

@@ -101,7 +101,7 @@ export class WowExportRestClient {
   cascInfo: CASCInfo | null = null;
 
   constructor(private baseURL = 'http://127.0.0.1:17752') {
-    this.isRemote = baseURL !== 'http://127.0.0.1:17752' && baseURL !== 'http://localhost:17752';
+    this.isRemote = !/(http(s)?:\/\/)?(127\.0\.0\.1|localhost)/.test(baseURL);
     this.isRemote = true;
     if (this.isRemote) {
       ensureDirSync(this.cacheDir);
