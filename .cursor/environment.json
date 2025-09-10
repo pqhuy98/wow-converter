@@ -5,8 +5,8 @@
   "terminals": [
     {
       "name": "Run wow-converter",
-      "command": "bash -lc 'cd /workspace && WOW_EXPORT_BASE_URL=\"https://wow.quangdel.com:27752\" CASC_REMOTE_REGION=eu CASC_REMOTE_PRODUCT=wow nohup npm run dev > ./wow-converter.log 2>&1 & echo $! > ./wow-converter.pid'",
-      "description": "Starts wow-converter dev server in background, logs to wow-converter.log"
+      "command": "bash -lc 'cd /workspace && WOW_EXPORT_BASE_URL=\"https://wow.quangdel.com:27752\" CASC_REMOTE_REGION=eu CASC_REMOTE_PRODUCT=wow npm run dev 2>&1 | tee -a ./wow-converter.log'",
+      "description": "Runs dev server in tmux foreground; output is also tee'd to wow-converter.log"
     },
     {
       "name": "Tail wow-converter logs",
