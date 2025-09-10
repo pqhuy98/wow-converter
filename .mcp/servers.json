@@ -1,0 +1,9 @@
+{
+  "playwright": {
+    "command": "npx",
+    "args": ["@playwright/mcp@latest"],
+    "env": {
+      "PW_MCP_HEADLESS": "1"
+    }
+  }
+}
