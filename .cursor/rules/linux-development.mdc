@@ -1,123 +1,16 @@
 ---
 description: Linux/WSL2/background agent development rules 
-alwaysApply: false
+alwaysApply: true
 ---
-
-### Linux Dev Setup for Cursor background agent
-
-### Prereqs
-- **Docker**: running daemon
-- **Node.js 20+** and **npm**
-- **Git** with submodule support
-- **Python 3** (used by wow.export healthcheck)
-
-### Clone & Install
-```bash
-git clone --recurse-submodules https://github.com/pqhuy98/wow-converter.git
-cd wow-converter
-git submodule update --init --recursive  # if already cloned
-npm install  # runs postinstall to set up webui and wow.export
-```
-
-### wow.export (Docker)
-See workflow below; build context is the `wow.export` subrepo.
-
-### CI/Agent Notes
-- Use absolute paths where possible.
-- Long-running `docker`/dev servers should run detached.
-- Network bind is 127.0.0.1 only; use `${WOWEXPORT_PORT}` when calling RPC.
- - Ensure `wow.export` is running before launching `wow-converter` (npm run dev or npm start) or hitting RPC endpoints.
-
-### Quickstart (one-shot)
-```bash
-git clone --recurse-submodules https://github.com/pqhuy98/wow-converter.git && \
-cd wow-converter && npm install && \
-./wow.export/docker/build-docker.sh && ./wow.export/docker/run-docker.sh
-npm run dev   # runs server + webui concurrently, this will run indefinitely and prints to terminal
-```
-
-Ensure `wow.export` is ready before running `npm run dev` (the run script waits for readiness).
-
-### wow.export Docker workflow (Linux/WSL2)
-
-Compact guide for an AI agent to build, run, validate, and tail logs for the wow.export Docker image. Scripts can be invoked from any directory; use repo-root relative paths or set `REPO=/abs/path/to/repo` and call `$REPO/...`. The run script uses your current working directory to create/mount `./exports` → `/exports`.
-
-### Prereqs
-- **Docker** and **Python 3** available on PATH.
-- Build context is the `wow.export` subrepo.
- - Publishing images is human-only; agents must not publish.
-
-### Build
-```bash
-# from repo root
-./wow.export/docker/build-docker.sh
-
-# from anywhere
-$REPO/wow.export/docker/build-docker.sh
-```
-- Builds `wow.export:latest` using `wow.export/Dockerfile` and the `wow.export` context.
- 
- - Rebuild when app code changes under `wow.export/src/` (e.g., any `*.js`) or other files copied into the image. No rebuild is needed for editing host scripts under `wow.export/docker/*.sh`.
-
-### Run (idempotent)
-```bash
-# from repo root
-./wow.export/docker/run-docker.sh
-
-# from anywhere
-$REPO/wow.export/docker/run-docker.sh
-```
-- Starts container `wow.export` on `127.0.0.1:17751` by default and waits for RPC readiness, runs healthcheck, then selects CASC.
-- Environment overrides if necessary (prefer defaults):
-  - `WOWEXPORT_PORT` (default `17751`)
-  - `WOWEXPORT_NAME` (default `wow.export`)
-  - `WOWEXPORT_ASSET_DIR` (default `/tmp/wow.export`)
-  - `WOWEXPORT_WOW_DIR` (optional host WoW path; will be mounted read-only at same path)
-  - `WAIT_SECONDS` (default `60`)
-
-### Tail logs (bounded)
-- Runtime log inside container (default path `/tmp/wow.profile/Default/runtime.log`):
-```bash
-# from repo root
-./wow.export/docker/tail-logs.sh --duration 15
-
-# from anywhere
-$REPO/wow.export/docker/tail-logs.sh --duration 15
-```
-- Docker container logs instead of runtime log:
-```bash
-# from repo root
-./wow.export/docker/tail-logs.sh --container --duration 15
-
-# from anywhere
-$REPO/wow.export/docker/tail-logs.sh --container --duration 15
-```
-- Options: `--name NAME`, `--lines N`, `--profile-log PATH`.
-
-### Stop/remove container
-```bash
-docker rm -f ${WOWEXPORT_NAME:-wow.export}
-```
-
-### Validate readiness (manual check if needed)
-```bash
-# from repo root
-python3 wow.export/docker/helpers/healthcheck.py --host 127.0.0.1 --port 17751
-
-# from anywhere
-python3 $REPO/wow.export/docker/helpers/healthcheck.py --host 127.0.0.1 --port 17751
-```
-- Expect HTTP 200 and OK. The run script already performs this check; use manually after changes.
-
-### Agent workflow for edits
-1) Edit app code in `wow.export/src/` (e.g., `*.js`) or other files bundled into the image.
-2) If app code changed (e.g., any `wow.export/src/**/*.js`), rebuild the image; if only host shell scripts changed (`wow.export/docker/*.sh`), skip rebuild.
-3) Start fresh container: run script (removes old, maps port, waits, healthchecks, selects CASC).
-4) Tail logs briefly to verify behavior.
-5) If applicable, run manual healthcheck.
-
-### Troubleshooting
-- Port in use: set `WOWEXPORT_PORT` to a free port and re-run.
-- Stale NW.js locks: auto-removed on run; verify in `WOWEXPORT_ASSET_DIR`.
-- CASC selection fails: set `CASC_LOCAL_WOW`/`CASC_LOCAL_PRODUCT` or `CASC_REMOTE_REGION`/`CASC_REMOTE_PRODUCT` envs (consumed by helper `select-casc.py`).
-- Container name conflicts: the run script removes any existing container with the same name.
+- Run the app with `npm run dev` as background daemon emitting logs to `log.txt`. Tail the log file, when the message `Serving UI web interface at http://127.0.0.1:3001/` appears means server started successfully. Always kill the old server on port 3000 and 3001 before starting a new one. Server `npm run dev` has hot-reload, so no need to kill every code change.
+- wow.export is included only for code reference. Never locally and do not modify its code from this repository.
+- Commit hygiene: squash commits before merging to `main`.
+  ```bash
+  git fetch origin
+  git rebase -i origin/main   # squash
+  git push -f <your-branch>
+  ```
+- Screenshots are mandatory in PR to provide proof of change correctness. Use Playwright MCP to make screenshot under `.playwright-mcp/`; copy into `docs/` before commit. Every change in PR must have a corresponding screenshot.
+- When using playwright MCP to export model, fill in the fields, click Export Character and wait for text `Export Successful` 10s then 20s then 40s. If taking more than 40s then check browser error message.
+- When taking screenshot of the exported model, click `⛶` to expand, `setViewport(1440, 900)`.
+- Documentation updates: before raising PR, always incorporate maintainer feedback into this file promptly. Keep it extremely compact and high-signal (short bullets over long prose).

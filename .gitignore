@@ -1,7 +1,9 @@
 exported-assets
 recent-exports.json
+.playwright-mcp
 wow-converter.code-workspace
 build
+log.txt
 notes.txt
 target
 dist
