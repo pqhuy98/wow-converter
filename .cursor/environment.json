@@ -1,0 +1,10 @@
+{
+  "snapshot": "snapshot-20250909-0bde163d-490c-42d5-86c8-1f3cdc87536c",
+  "install": "rm -rf wow.export && git clone https://github.com/pqhuy98/wow.export.git && npm install",
+  "terminals": [
+    {
+      "name": "Run wow-converter",
+      "command": "npm run dev"
+    }
+  ]
+}
