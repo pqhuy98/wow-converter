@@ -8,9 +8,9 @@ Demo video: https://youtu.be/FLgBKT7c2TI?si=wdPLJ6pVaEVFE5iS
 
 HiveWorkshop thread: https://www.hiveworkshop.com/threads/wow-converter-export-wow-npcs-to-warcraft-3.363033/
 
-![screenshot 1](https://github.com/pqhuy98/wow-converter/blob/main/docs/elwin-forest-1.jpg?raw=true)
+![screenshot 1](https://github.com/pqhuy98/wow-converter/blob/main/docs/screenshots/elwin-forest-1.jpg?raw=true)
 
-![screenshot 2](https://github.com/pqhuy98/wow-converter/blob/main/docs/icecrown.jpg?raw=true)
+![screenshot 2](https://github.com/pqhuy98/wow-converter/blob/main/docs/screenshots/icecrown.jpg?raw=true)
 
 Note: the tool works well for Wrath of the Lich King models and below. Later expansions will work but do expect some bugs!
 
@@ -52,7 +52,7 @@ This is my fork of Kruithne's https://github.com/Kruithne/wow.export with the re
     - Turn **ON** the RCP server with `Enable Remote Control Protocol` (leave default port **17751**)
     - Make sure **all** `Use Absolute … Paths` options are **OFF**.
 
-![wow.export.exe](https://github.com/pqhuy98/wow-converter/blob/main/docs/wow.export-1.jpg?raw=true)
+![wow.export.exe](https://github.com/pqhuy98/wow-converter/blob/main/docs/screenshots/wow.export-1.jpg?raw=true)
 
 
 ### 3. Start **wow-converter**
