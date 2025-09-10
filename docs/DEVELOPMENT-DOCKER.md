@@ -1,6 +1,6 @@
 ### wow.export Docker workflow (Linux/WSL2)
 
-Compact guide for an AI agent to build, run, validate, and tail logs for the wow.export Docker image. Scripts can be invoked from any directory; use repo-root relative paths or set `REPO=/abs/path/to/repo` and call `$REPO/...`. The run script uses your current working directory to create/mount `./exports` → `/exports`.
+Compact guide to build, run, validate, and tail logs for the wow.export Docker image. Scripts can be invoked from any directory; use repo-root relative paths or set `REPO=/abs/path/to/repo` and call `$REPO/...`. The run script uses your current working directory to create/mount `./exports` → `/exports`.
 
 ### Prereqs
 - **Docker** and **Python 3** available on PATH.
