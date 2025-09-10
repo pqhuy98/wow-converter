@@ -12,8 +12,8 @@ const DownloadRequestSchema = z.object({
   files: z.array(LocalRefValueSchema).min(1),
 });
 
-export function ControllerDownload(app: express.Application) {
-  app.post('/download', (req, res) => {
+export function ControllerDownload(router: express.Router) {
+  router.post('/download', (req, res) => {
     try {
       const { files } = DownloadRequestSchema.parse(req.body);
 

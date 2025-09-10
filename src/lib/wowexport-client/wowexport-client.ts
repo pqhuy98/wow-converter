@@ -1,20 +1,16 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, {
+  AxiosInstance,
+} from 'axios';
 import chalk from 'chalk';
 import fs, { existsSync } from 'fs';
 import { emptyDirSync, ensureDirSync } from 'fs-extra';
+import { Agent as HttpAgent } from 'http';
+import { Agent as HttpsAgent } from 'https';
 import path from 'path';
 
 import { waitUntil } from '../utils';
 
-// Type definitions
-export interface ServerInfo {
-    version: string;
-    flavour: string;
-    build: string;
-    rcp: number;
-}
-
-export interface CASCInfo {
+interface CASCInfo {
     type: string;
     build: {
       Product: string;
@@ -25,7 +21,7 @@ export interface CASCInfo {
     buildKey: string;
 }
 
-export interface CASCBuild {
+interface CASCBuild {
     Product: string;
     Region: string;
     BuildConfig: string;
@@ -35,17 +31,13 @@ export interface CASCBuild {
     VersionsName: string;
 }
 
-export interface FileEntry {
+interface FileEntry {
     fileDataID: number;
     fileName: string;
 }
 
-export interface SearchResult {
+interface SearchResult {
     entries: FileEntry[];
-}
-
-export interface ExportInfo {
-    exportID: number;
 }
 
 export interface ExportFile {
@@ -54,22 +46,12 @@ export interface ExportFile {
     file: string;
 }
 
-export interface ExportResult {
+interface ExportResult {
     fileDataID: number;
     files: ExportFile[];
 }
 
 export interface ConfigResponse {
-    [key: string]: unknown;
-}
-
-export interface HookEvent {
-    hookID: string;
-    [key: string]: unknown;
-}
-
-export interface RCPResponse {
-    id: string;
     [key: string]: unknown;
 }
 
@@ -99,10 +81,6 @@ export type ExportCharacterResult = {
   fileManifest: ExportFile[];
 }
 
-export type HookID = 'HOOK_BUSY_STATE' | 'HOOK_INSTALL_READY' | 'HOOK_EXPORT_COMPLETE';
-
-const debug = false;
-
 export class WowExportRestClient {
   private readonly http: AxiosInstance;
 
@@ -118,8 +96,6 @@ export class WowExportRestClient {
     connected: false,
     configLoaded: false,
     cascLoaded: false,
-    // REST does not use hooks; keep true to maintain isReady contract.
-    exportHookRegistered: true,
   };
 
   cascInfo: CASCInfo | null = null;
@@ -131,7 +107,16 @@ export class WowExportRestClient {
       ensureDirSync(this.cacheDir);
     }
 
-    this.http = axios.create({ baseURL, timeout: 300000 });
+    // Keep TCP connections alive to avoid handshake overhead and reduce resets.
+    const httpAgent = new HttpAgent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15000 });
+    const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15000 });
+
+    this.http = axios.create({
+      baseURL,
+      timeout: 300000,
+      httpAgent,
+      httpsAgent,
+    });
     const debug = false;
     this.http.interceptors.request.use((config) => {
       debug && console.log('request', config.method, config.url, config.data);
@@ -141,11 +126,11 @@ export class WowExportRestClient {
       debug && console.log('response', response.status, response.data);
       return response;
     });
-    void this.bootstrap();
+    this.startHeartbeat();
   }
 
   public get isReady() {
-    return this.status.connected && this.status.configLoaded && this.status.cascLoaded && this.status.exportHookRegistered;
+    return this.status.connected && this.status.configLoaded && this.status.cascLoaded;
   }
 
   public async waitUntilReady() {
@@ -308,7 +293,7 @@ export class WowExportRestClient {
   }
 
   public async resetConnection(): Promise<void> {
-    await this.bootstrap(true);
+    await this.bootstrap();
   }
 
   public clearCacheFiles() {
@@ -319,31 +304,72 @@ export class WowExportRestClient {
 
   // ===== HELPERS (private) =====
 
-  private async bootstrap(isReset: boolean = false): Promise<void> {
-    try {
-      // Connected if REST server responds to any request.
-      await this.getConfig();
-      this.status.connected = true;
-      this.status.configLoaded = true;
-      debug && console.log('REST config retrieved');
+  private bootPromise: Promise<void> | null = null;
 
+  private logWarnedBootstrap = false;
+
+  private async bootstrap(): Promise<void> {
+    if (this.bootPromise) return this.bootPromise;
+    this.bootPromise = (async () => {
       try {
-        const info = await this.getCASCInfo();
-        this.cascInfo = info;
-        this.status.cascLoaded = true;
-        console.log(chalk.green('✅ Retrieved wow.export CASC info (REST):'), info.build.Product, info.buildName);
-      } catch (err) {
-        // Attempt automatic CASC loading using environment hints
-        await this.tryAutoLoadCASC();
-      }
+        // Connected if REST server responds to any request.
+        await this.getConfig();
+        this.status.connected = true;
+        this.status.configLoaded = true;
 
-      if (this.isReady && !isReset) {
-        console.log(chalk.green('✅ Connected to wow.export REST'), chalk.gray(`at ${this.baseURL}`));
+        try {
+          const info = await this.getCASCInfo();
+          this.cascInfo = info;
+          this.status.cascLoaded = true;
+          console.log(chalk.green('✅ Retrieved wow.export WoW installation:'), info.build.Product, info.buildName);
+        } catch (err) {
+          // Attempt automatic CASC loading using environment hints
+          await this.tryAutoLoadCASC();
+        }
+
+        if (this.isReady) {
+          console.log(chalk.green('✅ Connected to wow.export:'), chalk.gray(this.baseURL));
+          this.logWarnedBootstrap = false;
+        }
+      } catch (e) {
+        if (!this.logWarnedBootstrap) {
+          console.error(chalk.yellow(`⏳ Cannot connect to wow.export at ${this.baseURL}. Is it running?`));
+          this.logWarnedBootstrap = true;
+        }
+        this.status.connected = false;
+        this.status.configLoaded = false;
+        this.status.cascLoaded = false;
       }
-    } catch (e) {
-      console.error(chalk.yellow(`⏳ Cannot connect to wow.export REST at ${this.baseURL}. Is it running?`));
-    }
+    })().finally(() => {
+      this.bootPromise = null;
+    });
+    return this.bootPromise;
   }
+
+  private startHeartbeat(): void {
+    const tick = () => {
+      try {
+        if (!this.isReady) {
+          if (!this.bootPromise) {
+            void this.bootstrap();
+          }
+        } else {
+          void this.safeGetJSON('/rest/getCascInfo').then((res) => {
+            if (!(res.ok && res.json?.id === 'CASC_INFO')) {
+              this.status.connected = false;
+              this.status.cascLoaded = false;
+            }
+          });
+        }
+      } catch (e) {
+        this.status.connected = false;
+      }
+    };
+    setInterval(tick, 500);
+    tick();
+  }
+
+  private logWarnedCASC = false;
 
   private async tryAutoLoadCASC(): Promise<void> {
     if (this.status.cascLoaded) return;
@@ -355,53 +381,69 @@ export class WowExportRestClient {
 
     if (localPath) {
       try {
-        console.log(chalk.gray(`Attempting to load local CASC (REST) from "${localPath}", product: ${localProduct}`));
+        console.log(chalk.gray(`Attempting to load local CASC from "${localPath}", product: ${localProduct}`));
         const builds = await this.loadCASCLocal(localPath);
         const buildIdx = Math.max(0, builds.findIndex((b) => b.Product === localProduct));
         const info = await this.loadCASCBuild(buildIdx);
         this.cascInfo = info;
         this.status.cascLoaded = true;
-        console.log(chalk.green('✅ Loaded local CASC (REST):'), info.build.Product, info.buildName);
+        console.log(chalk.green('✅ Loaded local CASC:'), info.build.Product, info.buildName);
+        this.logWarnedCASC = false;
         return;
       } catch (e) {
-        console.error(chalk.yellow(`⚠️ Failed to load local CASC (REST): ${e}`));
+        if (!this.logWarnedCASC) {
+          console.error(chalk.yellow(`⚠️ Failed to load local CASC: ${e}`));
+          this.logWarnedCASC = true;
+        }
       }
     }
 
     if (!this.status.cascLoaded && remoteRegion && remoteProduct) {
       try {
-        console.log(chalk.gray(`Attempting to load remote CASC (REST), region: ${remoteRegion}, product: ${remoteProduct}`));
+        console.log(chalk.gray(`Attempting to load remote CASC, region: ${remoteRegion}, product: ${remoteProduct}`));
         const builds = await this.loadCASCRemote(remoteRegion);
         const buildIdx = Math.max(0, builds.findIndex((b) => b.Product === remoteProduct));
         const info = await this.loadCASCBuild(buildIdx);
         this.cascInfo = info;
         this.status.cascLoaded = true;
-        console.log(chalk.green('✅ Loaded remote CASC (REST):'), info.build.Product, info.buildName);
+        console.log(chalk.green('✅ Loaded remote CASC:'), info.build.Product, info.buildName);
+        this.logWarnedCASC = false;
         return;
       } catch (e) {
-        console.error(chalk.yellow(`⚠️ Failed to load remote CASC (REST): ${e}`));
+        if (!this.logWarnedCASC) {
+          console.error(chalk.yellow(`⚠️ Failed to load remote CASC: ${e}`));
+          this.logWarnedCASC = true;
+        }
       }
     }
 
-    if (!this.status.cascLoaded) console.error(chalk.yellow('⏳ CASC not available (REST). Set CASC_LOCAL_WOW or CASC_REMOTE_REGION/CASC_REMOTE_PRODUCT'));
+    if (!this.status.cascLoaded && !this.logWarnedCASC) {
+      console.error(chalk.yellow('⏳ Please choose your WoW installation in wow.export.'));
+      this.logWarnedCASC = true;
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async getJSON(path: string, params?: Record<string, unknown>): Promise<any> {
-    const res = await this.http.get(path, { params });
+    const res = await this.http.request({ method: 'GET', url: path, params });
     return res.data;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async postJSON(path: string, body?: unknown): Promise<any> {
-    const res = await this.http.post(path, body ?? {});
+    const res = await this.http.request({ method: 'POST', url: path, data: body ?? {} });
     return res.data;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async safeGetJSON(path: string, params?: Record<string, unknown>): Promise<{ ok: boolean; json: any }> {
     try {
-      const res = await this.http.get(path, { params, validateStatus: () => true });
+      const res = await this.http.request({
+        method: 'GET',
+        url: path,
+        params,
+        validateStatus: () => true,
+      });
       return { ok: res.status >= 200 && res.status < 300, json: res.data };
     } catch (e) {
       return { ok: false, json: null };
@@ -434,7 +476,15 @@ export class WowExportRestClient {
     const dir = path.dirname(dest);
     ensureDirSync(dir);
 
-    const res = await this.http.get('/rest/download', { params: { path: rel }, responseType: 'arraybuffer', validateStatus: () => true });
+    const res = await this.http.request<ArrayBuffer | Buffer>({
+      method: 'GET',
+      url: '/rest/download',
+      params: {
+        path: rel,
+      },
+      responseType: 'arraybuffer',
+      validateStatus: () => true,
+    });
     if (res.status !== 200 || !(res.data instanceof ArrayBuffer || Buffer.isBuffer(res.data))) {
       throw new Error(`Failed to download remote file: ${rel} (${res.status})`);
     }
@@ -473,3 +523,5 @@ const desiredConfig = {
   modelsExportAlpha: true,
   modelsExportAnimations: true,
 };
+
+// backoff helper removed; no request-level retries used.

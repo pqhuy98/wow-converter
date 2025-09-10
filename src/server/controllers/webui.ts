@@ -7,10 +7,10 @@ import path from 'path';
 
 import { isDev } from '../config';
 
-export function ControllerWebUi(app: express.Application, uiDir: string) {
+export function ControllerWebUi(router: express.Router, uiDir: string) {
   if (isDev) {
     // Proxy to nextjs dev server for hot reload
-    devProxyServer(app);
+    devProxyServer(router);
     return true;
   }
 
@@ -18,10 +18,10 @@ export function ControllerWebUi(app: express.Application, uiDir: string) {
     return false;
   }
 
-  app.use(express.static(uiDir));
+  router.use(express.static(uiDir));
 
   // Handle client-side routing - serve the correct HTML file based on the path
-  app.use((req, res, next) => {
+  router.use((req, res, next) => {
     // Skip static file requests (they should be handled by express.static)
     if (req.path.includes('.')) {
       return next();
@@ -48,11 +48,11 @@ export function ControllerWebUi(app: express.Application, uiDir: string) {
 
 let devWsProxy: ReturnType<typeof httpProxy.createProxyServer> | null = null;
 
-function devProxyServer(app: express.Application) {
+function devProxyServer(router: express.Router) {
   const target = 'http://localhost:3000';
 
   // HTTP proxy for normal requests
-  app.use('/', expressHttpProxy(target, {
+  router.use('/', expressHttpProxy(target, {
     // Align headers with Next.js dev server expectations
     proxyReqOptDecorator: (proxyReqOpts) => {
       const headers = proxyReqOpts.headers ?? {};

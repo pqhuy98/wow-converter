@@ -27,7 +27,7 @@ export default function RecentsPage() {
   useEffect(() => {
     const fetchRecentJobs = async () => {
       try {
-        const response = await fetch('/export/character/recent');
+        const response = await fetch('/api/export/character/recent');
         if (!response.ok) {
           throw new Error('Failed to fetch recent jobs');
         }
@@ -144,7 +144,7 @@ export default function RecentsPage() {
     }
 
     try {
-      const res = await fetch('/download', {
+      const res = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files }),

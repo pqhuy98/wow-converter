@@ -84,7 +84,7 @@ console.log = (...args) => {
   originalConsoleLog(...args);
 };
 
-export async function ControllerExportCharacter(app: express.Application) {
+export async function ControllerExportCharacter(router: express.Router) {
   await waitUntil(() => wowExportClient.isReady);
   ceConfig = await getDefaultConfig();
   if (isSharedHosting) {
@@ -204,11 +204,11 @@ export async function ControllerExportCharacter(app: express.Application) {
     // Ignore
   }
 
-  app.get('/export/character/recent', (req, res) => {
+  router.get('/export/character/recent', (req, res) => {
     res.json(jobQueue.recentCompletedJobs);
   });
 
-  app.post('/export/character', (req, res) => {
+  router.post('/export/character', (req, res) => {
     if (!wowExportClient.isReady) {
       return res.status(500).json({ error: 'wow.export RCP server is not ready' });
     }
@@ -249,7 +249,7 @@ export async function ControllerExportCharacter(app: express.Application) {
     }
   });
 
-  app.get('/export/character/status/:jobId', (req, res) => {
+  router.get('/export/character/status/:jobId', (req, res) => {
     const { jobId } = req.params;
     const job = jobQueue.getJob(jobId);
 
@@ -265,15 +265,18 @@ export async function ControllerExportCharacter(app: express.Application) {
     });
   });
 
-  app.post('/export/character/clean', (req, res) => {
-    fsExtra.removeSync('recent-exports.json');
+  router.post('/export/character/clean', (req, res) => {
+    fsExtra.removeSync('./recent-exports.json');
+    console.log(`Removed ${path.resolve('./recent-exports.json')}`);
     fsExtra.emptyDirSync(outputDir);
+    console.log(`Cleared ${path.resolve(outputDir)}`);
     wowExportClient.clearCacheFiles();
+    console.log(`Cleared ${path.resolve('.cache')}`);
     return res.json({ message: 'Exported assets cleaned' });
   });
 
   // Serve exported assets. When running on shared hosting enable HTTP caching to reduce bandwidth
-  app.use('/assets', isSharedHosting
+  router.use('/assets', isSharedHosting
     ? express.static(outputDir, {
       maxAge: '1h',
       setHeaders: (res) => {
@@ -300,11 +303,11 @@ export async function ControllerExportCharacter(app: express.Application) {
     });
   }
 
-  app.get('/export/character/demos', (req, res) => {
+  router.get('/export/character/demos', (req, res) => {
     res.json(jobs.map((job) => jobQueue.getJob(job.id)).filter((job) => job?.status === 'done'));
   });
 
-  app.get('/export/character/check-local-file', (req, res) => {
+  router.get('/export/character/check-local-file', (req, res) => {
     try {
       const { localPath } = req.query as { localPath: string };
       const parsed = LocalRefSchema.safeParse({ type: 'local', value: localPath });

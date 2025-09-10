@@ -73,7 +73,7 @@ export function CharacterConverter() {
 
   useEffect(() => {
     const checkExportResult = async () => {
-      const res = await fetch('/export/character/demos');
+      const res = await fetch('/api/export/character/demos');
       const jobs = (await res.json()) as JobStatus[];
       if (jobs.length > 0) {
         setViewerModelPath(jobs[0].result?.exportedModels[0].path);
@@ -169,7 +169,7 @@ export function CharacterConverter() {
         formatVersion,
       };
 
-      const response = await fetch('/export/character', {
+      const response = await fetch('/api/export/character', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -215,7 +215,7 @@ export function CharacterConverter() {
       try {
         pendingFetches++;
         if (pendingFetches > 1) return;
-        const res = await fetch(`/export/character/status/${jobStatus.id}`);
+        const res = await fetch(`/api/export/character/status/${jobStatus.id}`);
         if (!res.ok) {
           throw new Error(await res.text());
         }
@@ -274,7 +274,7 @@ export function CharacterConverter() {
     }
 
     try {
-      const res = await fetch('/download', {
+      const res = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: files.map(({ path }) => path) }),

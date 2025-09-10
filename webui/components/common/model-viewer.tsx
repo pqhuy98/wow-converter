@@ -52,7 +52,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     const scene = viewer.addScene();
     setScene(scene);
     scene.color.fill(0.15);
-    void createGridModel(viewer, scene, 10, 100);
+    void createGridModel(viewer, scene, 10, 128);
 
     const camera = scene.camera;
     setCamera(camera);
@@ -128,7 +128,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         }
       }
       // Path solver so the viewer fetches every dependant file via our /asset route
-      const pathSolver = (src: unknown) => `/assets/${normalizePath(src as string)}`;
+      const pathSolver = (src: unknown) => `/api/assets/${normalizePath(src as string)}`;
 
       // Load the model (assumed to be in MDX|MDL format)
       const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver);

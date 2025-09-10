@@ -60,7 +60,7 @@ export function CharacterConfig({
   setCharacter: React.Dispatch<React.SetStateAction<Character>>
   clearOutputFileName?: () => void
 }) {
-  const [particlesDensity, setParticlesDensity] = useState(character.particlesDensity || 1);
+  const [particlesDensity, setParticlesDensity] = useState(character.particlesDensity);
 
   return <Card>
     <CardHeader className="pb-4">

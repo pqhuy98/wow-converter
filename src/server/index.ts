@@ -38,14 +38,22 @@ if (!isSharedHosting || isDev) {
 
 app.use(express.json());
 
+const router = express.Router();
+const uiRouter = express.Router();
+
 async function main() {
-  await ControllerExportCharacter(app);
-  ControllerDownload(app);
-  ControllerGetConfig(app);
+  await ControllerExportCharacter(router);
+  ControllerDownload(router);
+  ControllerGetConfig(router);
 
   // serve the static UI
   const uiDir = path.join('webui', 'out');
-  const isWithUI = ControllerWebUi(app, uiDir);
+  const isWithUI = ControllerWebUi(uiRouter, uiDir);
+
+  app.use('/api', router);
+  if (isWithUI) {
+    app.use('/', uiRouter);
+  }
 
   // Error-handling middleware (must be **after** all routes)
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -58,7 +66,7 @@ async function main() {
     if (isWithUI) {
       console.log(`Serving UI web interface at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
     } else {
-      console.log(`Serving only REST API at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
+      console.log(`Found no UI, serving only REST API at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
     }
   });
 

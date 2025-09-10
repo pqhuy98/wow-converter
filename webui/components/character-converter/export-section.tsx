@@ -1,4 +1,5 @@
 import {
+  Check,
   Download, HelpCircle, Loader2, Trash,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -55,11 +56,14 @@ export function ExportSection({
 }) {
   const serverConfig = useServerConfig();
 
-  const [isCleaningAssets, setIsCleaningAssets] = useState(false);
+  const [cleaningAssets, setCleaningAssets] = useState<'ready' | 'pending' | 'cooldown'>('ready');
   const cleanAssets = useCallback(() => {
-    setIsCleaningAssets(true);
-    void fetch('/export/character/clean', { method: 'POST' }).then(() => {
-      setIsCleaningAssets(false);
+    setCleaningAssets('pending');
+    void fetch('/api/export/character/clean', { method: 'POST' }).then(() => {
+      setCleaningAssets('cooldown');
+      setTimeout(() => {
+        setCleaningAssets('ready');
+      }, 1000);
     });
   }, []);
 
@@ -153,15 +157,17 @@ export function ExportSection({
             {!serverConfig.isSharedHosting && (
               <Button className="px-3 shrink-0" size="lg" variant="destructive"
                 onClick={() => cleanAssets()}
-                disabled={isCleaningAssets}
+                disabled={cleaningAssets !== 'ready'}
               >
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex ">
-                      {isCleaningAssets
+                      {cleaningAssets === 'pending'
                         ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <Trash className="h-4 w-4" />
+                        : cleaningAssets === 'cooldown'
+                          ? <Check className="h-4 w-4" />
+                          : <Trash className="h-4 w-4" />
                        }
                       </span>
                     </TooltipTrigger>

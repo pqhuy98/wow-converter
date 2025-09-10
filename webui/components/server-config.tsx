@@ -26,7 +26,7 @@ export function getServerConfig(): ServerConfig {
 }
 
 async function fetchConfig(): Promise<ServerConfig> {
-  return fetch('/get-config').then((res) => res.json());
+  return fetch('/api/get-config').then((res) => res.json());
 }
 
 const ServerConfigContext = createContext<ServerConfig>(defaultConfig);
