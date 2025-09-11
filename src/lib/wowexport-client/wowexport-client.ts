@@ -101,8 +101,7 @@ export class WowExportRestClient {
   cascInfo: CASCInfo | null = null;
 
   constructor(private baseURL = 'http://127.0.0.1:17752') {
-    this.isRemote = !/(http(s)?:\/\/)?(127\.0\.0\.1|localhost)/.test(baseURL);
-    this.isRemote = true;
+    this.isRemote = !/^(http(s)?:\/\/)?(127\.0\.0\.1|localhost)/.test(baseURL);
     if (this.isRemote) {
       ensureDirSync(this.cacheDir);
     }
@@ -466,7 +465,6 @@ export class WowExportRestClient {
   }
 
   private async fetchFile(relativePath: string, allowCache: (file: string) => boolean): Promise<string> {
-    console.log('Fetch file from remote wow.export', relativePath);
     if (!this.isRemote) return path.resolve(relativePath);
 
     const rel = this.normalizeRelative(relativePath);
@@ -476,6 +474,7 @@ export class WowExportRestClient {
     const dir = path.dirname(dest);
     ensureDirSync(dir);
 
+    console.log('Fetch file from remote wow.export', relativePath, this.isRemote);
     const res = await this.http.request<ArrayBuffer | Buffer>({
       method: 'GET',
       url: '/rest/download',
