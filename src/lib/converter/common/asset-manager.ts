@@ -31,7 +31,7 @@ export class AssetManager {
     const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
     const { mdl, texturePaths } = convertWowExportModel(objFullPath, this.config);
     const model: Model = {
-      relativePath: path.join(this.config.assetPrefix, `${objectPath}.mdl`),
+      relativePath: mdl.model.name,
       mdl,
     };
     if (!noCache) {

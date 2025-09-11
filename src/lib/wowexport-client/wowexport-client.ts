@@ -11,48 +11,48 @@ import path from 'path';
 import { waitUntil } from '../utils';
 
 interface CASCInfo {
-    type: string;
-    build: {
-      Product: string;
-      Version: string;
-    };
-    buildConfig: unknown;
-    buildName: string;
-    buildKey: string;
+  type: string;
+  build: {
+    Product: string;
+    Version: string;
+  };
+  buildConfig: unknown;
+  buildName: string;
+  buildKey: string;
 }
 
 interface CASCBuild {
-    Product: string;
-    Region: string;
-    BuildConfig: string;
-    CDNConfig: string;
-    KeyRing: string;
-    BuildId: string;
-    VersionsName: string;
+  Product: string;
+  Region: string;
+  BuildConfig: string;
+  CDNConfig: string;
+  KeyRing: string;
+  BuildId: string;
+  VersionsName: string;
 }
 
 interface FileEntry {
-    fileDataID: number;
-    fileName: string;
+  fileDataID: number;
+  fileName: string;
 }
 
 interface SearchResult {
-    entries: FileEntry[];
+  entries: FileEntry[];
 }
 
 export interface ExportFile {
-    type: string;
-    fileDataID: number;
-    file: string;
+  type: string;
+  fileDataID: number;
+  file: string;
 }
 
 interface ExportResult {
-    fileDataID: number;
-    files: ExportFile[];
+  fileDataID: number;
+  files: ExportFile[];
 }
 
 export interface ConfigResponse {
-    [key: string]: unknown;
+  [key: string]: unknown;
 }
 
 export interface ModelSkin {

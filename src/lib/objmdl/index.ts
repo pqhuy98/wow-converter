@@ -28,7 +28,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
 
   const mdl = new MDL({
     formatVersion: 1000,
-    name: path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', ''),
+    name: path.join(config.assetPrefix, path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', '')),
   });
 
   const animation = new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'), config);
@@ -293,6 +293,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
 
   start = performance.now();
   mdl.modify.scale(config.rawModelScaleUp);
+  mdl.accumScale = 1;
   debug && console.log('scale took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   start = performance.now();

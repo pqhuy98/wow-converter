@@ -17,6 +17,7 @@ import { EquipmentSlot } from '@/lib/wowhead-client/item-armor';
 import { CharacterData } from '@/lib/wowhead-client/npc-object';
 import { ZamExpansion } from '@/lib/wowhead-client/zam-url';
 
+import { Model } from '../../common/models';
 import { InventoryType } from '../item-mapper';
 import {
   applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture,
@@ -136,7 +137,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
 }
 
 async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[]) {
-  const collections = new Map<number, MDL>();
+  const collections = new Map<number, Model>();
   const attachmentResults: {
     attachmentId: WoWAttachmentID | undefined,
     itemMdl: MDL,
@@ -156,9 +157,10 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     const itemReplaceableTextures = Object.fromEntries(itemData.modelTextureFiles[idx].map((f) => [f.componentId, f.fileDataId]));
     debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTextures);
 
-    const itemMdl = !collections.has(fileDataId)
+    const itemModel = !collections.has(fileDataId)
       ? await exportModelFileIdAsMdl(ctx, fileDataId, {})
       : _.cloneDeep(collections.get(fileDataId)!);
+    const itemMdl = itemModel.mdl;
 
     await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures);
 
@@ -166,7 +168,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
     if (isCollection) {
       if (!collections.has(fileDataId)) {
-        collections.set(fileDataId, _.cloneDeep(itemMdl));
+        collections.set(fileDataId, _.cloneDeep(itemModel));
       }
 
       const debug = true;

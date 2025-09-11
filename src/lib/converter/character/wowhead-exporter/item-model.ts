@@ -3,6 +3,7 @@ import { MDL } from '@/lib/formats/mdl/mdl';
 import { EquipmentSlot, fetchItemMeta, ItemData } from '@/lib/wowhead-client/item-armor';
 import { ItemZamUrl } from '@/lib/wowhead-client/zam-url';
 
+import { Model } from '../../common/models';
 import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '../utils';
 
 interface FileWithComponent {
@@ -424,11 +425,11 @@ export async function exportZamItemAsMdl({
   zam: ItemZamUrl;
   targetRace: number;
   targetGender: number;
-}): Promise<{mdl: MDL, itemData: ItemMetata}> {
+}): Promise<{model: Model, itemData: ItemMetata}> {
   const result = await processItemData(zam, targetRace, targetGender);
   const modelId = result.modelFiles[0].fileDataId;
   const allTextureIds = result.modelTextureFiles[0].map((f) => f.fileDataId);
-  const mdl = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
-  await applyReplaceableTextures(ctx, mdl, Object.fromEntries(result.modelTextureFiles[0].map((f) => [f.componentId, f.fileDataId])));
-  return { mdl, itemData: result };
+  const model = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
+  await applyReplaceableTextures(ctx, model.mdl, Object.fromEntries(result.modelTextureFiles[0].map((f) => [f.componentId, f.fileDataId])));
+  return { model, itemData: result };
 }

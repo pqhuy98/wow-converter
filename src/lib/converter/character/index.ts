@@ -15,6 +15,7 @@ import { CharacterData, fetchNpcMeta, fetchObjectMeta } from '@/lib/wowhead-clie
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
+import { Model } from '../common/models';
 import { guessAttackTag, InventoryType } from './item-mapper';
 import { ensureLocalModelFileExists, ExportContext } from './utils';
 import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
@@ -107,6 +108,7 @@ export class CharacterExporter {
     };
 
     const model = await this.exportBaseMdl(ctx, char);
+    model.model.name = outputFile;
     this.includeMdlToOutput(model, outputFile);
 
     if (!char.keepCinematic) {
@@ -119,7 +121,8 @@ export class CharacterExporter {
       for (const [wowAttachmentId, itemPath] of Object.entries(char.attachItems)) {
         const wowAttachment = model.wowAttachments.find((a) => a.wowAttachmentId === Number(wowAttachmentId));
         if (wowAttachment) {
-          const { mdl: itemMdl, inventoryType } = await this.exportItem(ctx, itemPath.path);
+          const { model: itemModel, inventoryType } = await this.exportItem(ctx, itemPath.path);
+          const itemMdl = itemModel.mdl;
           if (inventoryType) {
             if (Number(wowAttachmentId) === WoWAttachmentID.HandRight) ctx.weaponInventoryTypes[0] ??= inventoryType;
             if (Number(wowAttachmentId) === WoWAttachmentID.HandLeft) ctx.weaponInventoryTypes[1] ??= inventoryType;
@@ -134,8 +137,8 @@ export class CharacterExporter {
           if (!useAttachmentPath) {
             model.modify.addMdlItemToBone(itemMdl, wowAttachment.bone);
           } else {
-            this.includeMdlToOutput(itemMdl, itemPath.path.value);
-            model.modify.addItemPathToBone(`${itemPath.path.value}.mdx`, wowAttachment.bone);
+            this.includeMdlToOutput(itemMdl, itemModel.relativePath);
+            model.modify.addItemPathToBone(`${itemModel.relativePath}.mdx`, wowAttachment.bone);
           }
         } else {
           console.error(chalk.red(`Cannot find bone for wow attachment ${wowAttachmentId} (${getWoWAttachmentName(Number(wowAttachmentId))})`));
@@ -273,10 +276,10 @@ export class CharacterExporter {
     throw new Error('Unknown base type');
   }
 
-  private async exportItem(ctx: ExportContext, ref: Ref): Promise<{mdl: MDL, inventoryType?: InventoryType}> {
+  private async exportItem(ctx: ExportContext, ref: Ref): Promise<{model: Model, inventoryType?: InventoryType}> {
     if (ref.type === 'local') {
       await ensureLocalModelFileExists(ref.value);
-      return { mdl: this.assetManager.parse(ref.value, true).mdl };
+      return { model: this.assetManager.parse(ref.value, true) };
     }
     if (ref.type === 'wowhead' || ref.type === 'displayID') {
       const zam: ZamUrl = ref.type === 'wowhead'
@@ -285,13 +288,13 @@ export class CharacterExporter {
           expansion: 'live', type: 'item', displayId: Number(ref.value), slotId: null,
         };
       if (zam.type !== 'item') throw new Error('Expected item zam url');
-      const { mdl, itemData } = await exportZamItemAsMdl({
+      const { model, itemData } = await exportZamItemAsMdl({
         ctx,
         zam,
         targetRace: 0, // universal
         targetGender: 2, // universal
       });
-      return { mdl, inventoryType: itemData.inventoryType };
+      return { model, inventoryType: itemData.inventoryType };
     }
     throw new Error('Unknown item type');
   }

@@ -25,10 +25,6 @@ async function ebonBladeCommanders() {
       inGameMovespeed: 270,
       portraitCameraSequenceName: 'Stand Ready',
     }, `ebon-blade-commander-${i}`);
-    if (urls[i].includes('30859')) {
-      mdl.modify.setWowAttachmentScale(WoWAttachmentID.ShoulderLeft, 2);
-      mdl.modify.setWowAttachmentScale(WoWAttachmentID.ShoulderRight, 2);
-    }
     if (urls[i].includes('30862')) {
       mdl.geosets.find((g) => g.name.includes('Facial'))!.material = mdl.materials[0];
     }

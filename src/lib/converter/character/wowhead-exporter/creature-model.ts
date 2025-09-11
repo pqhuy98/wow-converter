@@ -7,12 +7,12 @@ export async function exportCreatureNpcAsMdl(ctx: ExportContext, meta: Character
   if (!meta.Model) throw new Error('Creature NPC must contain Model');
   const modelId = meta.Model;
   const extraGeosets = meta.Creature?.CreatureGeosetData?.map((g) => (g.GeosetIndex + 1) * 100 + g.GeosetValue) || [];
-  const mdl = await exportModelFileIdAsMdl(ctx, modelId, {
+  const model = await exportModelFileIdAsMdl(ctx, modelId, {
     textureIds: Object.values(meta.Textures || {}),
     extraGeosets,
   });
 
-  await applyReplaceableTextures(ctx, mdl, meta.Textures || {});
+  await applyReplaceableTextures(ctx, model.mdl, meta.Textures || {});
 
-  return mdl;
+  return model.mdl;
 }

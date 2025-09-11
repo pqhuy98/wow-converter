@@ -8,7 +8,7 @@ import {
 } from '../mdl-traverse';
 import { addItemPathToBone, addMdlCollectionItemToModel, addMdlItemToBone } from './add-item-to-model';
 import { addPortraitCamera } from './add-portrait-camera';
-import { addWc3AttachmentPoint, setWowAttachmentScale } from './attachments';
+import { addWc3AttachmentPoint } from './attachments';
 import { addCollisionShapes } from './compute-collision-shapes';
 import { computeWalkMovespeed } from './compute-walk-speed';
 import { convertToSd800 } from './convert-to-sd800';
@@ -75,8 +75,6 @@ export class MDLModify {
 
   // Attachments
   addWc3AttachmentPoint = addWc3AttachmentPoint;
-
-  setWowAttachmentScale = setWowAttachmentScale;
 
   // Optimizations
   removeUnusedMaterialsTextures = removeUnusedMaterialsTextures;

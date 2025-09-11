@@ -10,6 +10,7 @@ import { waitUntil } from '@/lib/utils';
 import { ExportFile, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import { AssetManager } from '../common/asset-manager';
+import { Model } from '../common/models';
 
 export interface ExportContext {
   assetManager: AssetManager;
@@ -21,7 +22,7 @@ export interface ExportContext {
 export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, guessSkin: {
   textureIds?: number[]
   extraGeosets?: number[]
-}): Promise<MDL> {
+}): Promise<Model> {
   let skinName: string | undefined;
 
   if (guessSkin.textureIds?.length || guessSkin.extraGeosets?.length) {
@@ -72,7 +73,7 @@ export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: nu
 
   const baseDir = await wowExportClient.getAssetDir();
   const relative = path.relative(baseDir, obj);
-  return ctx.assetManager.parse(relative, true).mdl;
+  return ctx.assetManager.parse(relative, true);
 }
 
 export async function exportTexture(textureId: number): Promise<string> {

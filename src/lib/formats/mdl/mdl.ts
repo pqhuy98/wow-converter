@@ -77,6 +77,8 @@ export class MDL {
 
   wowAttachments: WowAttachment[] = [];
 
+  accumScale = 1;
+
   constructor(props: {formatVersion: number, name: string}) {
     this.version = { formatVersion: props.formatVersion };
     this.model = {

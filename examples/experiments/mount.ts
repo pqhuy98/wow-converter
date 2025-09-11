@@ -1,7 +1,9 @@
+import 'dotenv/config';
+
 import esMain from 'es-main';
 
 import { Character, wowhead } from '@/lib/converter/character';
-import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 
 import { ce } from '../units/common';
 
@@ -24,6 +26,14 @@ async function mountTest() {
   rider.sequences.filter((s) => s.name.includes('Mount')).forEach((s) => {
     s.name = 'Stand';
   });
+  const newOverhead = rider.attachments.find((a) => a.data?.wowAttachment.wowAttachmentId === WoWAttachmentID.PlayerNameMounted);
+  const oldOverhead = rider.attachments.find((a) => a.data?.wowAttachment.wowAttachmentId === WoWAttachmentID.PlayerName);
+  if (newOverhead) {
+    newOverhead.name = 'Overhead';
+    if (oldOverhead) {
+      oldOverhead.name = `Wow:${WoWAttachmentID.PlayerName}:${getWoWAttachmentName(WoWAttachmentID.PlayerName)}`;
+    }
+  }
 
   const mount1 = await ce.exportCharacter({
     base: wowhead('https://www.wowhead.com/wotlk/item=50818/invincibles-reins'),
@@ -31,14 +41,14 @@ async function mountTest() {
   }, 'invincible-reins');
 
   const mount2 = await ce.exportCharacter({
-    base: wowhead('https://www.wowhead.com/wotlk/npc=28531/frost-wyrm-mount'),
+    base: wowhead('https://www.wowhead.com/npc=28531/frost-wyrm-mount'),
     inGameMovespeed: 270,
   }, 'frost-wyrm');
   mount2.modify.scale(0.75);
 
   [mount1, mount2].forEach((mount) => {
     const mountBone = mount.wowAttachments.find((a) => a.wowAttachmentId === WoWAttachmentID.Shield)!.bone;
-    const atm = mount.modify.addItemPathToBone('rider.mdx', mountBone);
+    const atm = mount.modify.addItemPathToBone('rider.mdx', mountBone, true);
     if (mount === mount1) {
       atm.translation = {
         type: 'translation',

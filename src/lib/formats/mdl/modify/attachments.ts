@@ -1,7 +1,4 @@
-import chalk from 'chalk';
-
-import { Vector3 } from '@/lib/math/common';
-import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 
 import { MDLModify } from '.';
 
@@ -30,7 +27,11 @@ export function addWc3AttachmentPoint(this: MDLModify) {
     const wc3Key = WoWToWC3AttachmentMap[wowAttachmentId];
     const attachmentName = wc3Key
       ? `${wc3Key} Ref`
-      : `Wow:${wowAttachmentId}:${Object.keys(WoWAttachmentID)[Object.values(WoWAttachmentID).indexOf(wowAttachmentId)]}`;
+      : `Wow:${wowAttachmentId}:${getWoWAttachmentName(wowAttachmentId)}`;
+
+    if (!this.mdl.globalSequences.length) {
+      this.mdl.globalSequences.push({ id: -1, duration: 1000 });
+    }
 
     this.mdl.attachments.push({
       attachmentId: 0,
@@ -39,22 +40,23 @@ export function addWc3AttachmentPoint(this: MDLModify) {
       name: attachmentName,
       parent: bone,
       pivotPoint: [...wowAttachment.bone.pivotPoint],
+      data: {
+        wowAttachment,
+      },
       flags: [],
+      scaling: {
+        interpolation: 'DontInterp',
+        globalSeq: this.mdl.globalSequences[0],
+        keyFrames: new Map([[0, [1, 1, 1]]]),
+        type: 'scaling',
+      },
+      translation: {
+        interpolation: 'DontInterp',
+        globalSeq: this.mdl.globalSequences[0],
+        keyFrames: new Map([[0, [0, 0, 0]]]),
+        type: 'translation',
+      },
     });
   });
-  return this;
-}
-
-export function setWowAttachmentScale(this: MDLModify, wowAttachmentId: WoWAttachmentID, scale: number) {
-  const attachment = this.mdl.wowAttachments.find((a) => a.wowAttachmentId === wowAttachmentId);
-  if (!attachment) {
-    console.error(chalk.red(`Cannot find wow attachment ${wowAttachmentId}`));
-    return this;
-  }
-  attachment.bone.scaling = {
-    interpolation: 'DontInterp',
-    keyFrames: new Map(this.mdl.sequences.map((s) => <[number, Vector3]>[s.interval[0], [scale, scale, scale]])),
-    type: 'scaling',
-  };
   return this;
 }

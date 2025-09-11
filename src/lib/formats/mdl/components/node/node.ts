@@ -1,5 +1,6 @@
 import { QuaternionRotation, Vector3 } from '@/lib/math/common';
 
+import { WowAttachment } from '../../mdl';
 import { Animation, animationToString } from '../animation';
 import { f, fVector } from '../formatter';
 import { Geoset, GeosetAnim } from '../geoset';
@@ -38,6 +39,9 @@ export interface AttachmentPoint extends Node {
   type: 'AttachmentPoint'
   path?: string;
   attachmentId: number;
+  data?: {
+    wowAttachment: WowAttachment;
+  }
 }
 
 export interface EventObject extends Node {

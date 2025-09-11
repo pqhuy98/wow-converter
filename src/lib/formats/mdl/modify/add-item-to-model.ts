@@ -25,7 +25,7 @@ export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
   return this;
 }
 
-export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone) {
+export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone, keepRatio: boolean = true) {
   if (!this.mdl.globalSequences.length) {
     this.mdl.globalSequences.push({ id: -1, duration: 1000 });
   }
@@ -41,7 +41,9 @@ export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone)
     scaling: {
       interpolation: 'DontInterp',
       globalSeq: this.mdl.globalSequences[0],
-      keyFrames: new Map([[0, [1, 1, 1]]]),
+      keyFrames: new Map([[0, keepRatio
+        ? [this.mdl.accumScale, this.mdl.accumScale, this.mdl.accumScale]
+        : [1, 1, 1]]]),
       type: 'scaling',
     },
   });
@@ -112,8 +114,8 @@ function mergeItemObjects(main: MDL, item: MDL) {
   main.geosetAnims.push(...item.geosetAnims);
 
   main.bones.push(...item.bones);
-  // main.attachments.push(...extra.attachments);
+  // main.attachments.push(...item.attachments);
   main.eventObjects.push(...item.eventObjects);
-  // main.collisionShapes.push(...extra.collisionShapes);
+  // main.collisionShapes.push(...item.collisionShapes);
   main.particleEmitter2s.push(...item.particleEmitter2s);
 }

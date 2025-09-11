@@ -6,6 +6,7 @@ import { Sequence } from '../components/sequence';
 import { MDLModify } from '.';
 
 export function scale(this: MDLModify, value: number) {
+  this.mdl.accumScale *= value;
   this.mdl.geosets.forEach((geoset) => {
     geoset.vertices.forEach((vertex) => {
       vertex.position[0] *= value;
@@ -19,6 +20,13 @@ export function scale(this: MDLModify, value: number) {
         translation[0] *= value;
         translation[1] *= value;
         translation[2] *= value;
+      });
+    }
+    if (node.type === 'AttachmentPoint') {
+      node.scaling?.keyFrames.forEach((scaling) => {
+        scaling[0] *= value;
+        scaling[1] *= value;
+        scaling[2] *= value;
       });
     }
     node.pivotPoint = V3.scale(node.pivotPoint, value);
