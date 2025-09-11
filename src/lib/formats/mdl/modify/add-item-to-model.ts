@@ -11,9 +11,6 @@ const debug = true;
 export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
   debug && console.log(`Attaching item "${path.basename(item.model.name)}" to bone "${bone.name}"...`);
 
-  item.sequences = [item.sequences[0]];
-  item.modify.optimizeKeyFrames();
-
   item.getNodes().forEach((b) => {
     if (!b.parent) {
       b.parent = bone;
@@ -29,6 +26,10 @@ export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
 }
 
 export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone) {
+  if (!this.mdl.globalSequences.length) {
+    this.mdl.globalSequences.push({ id: -1, duration: 1000 });
+  }
+
   this.mdl.attachments.push({
     type: 'AttachmentPoint',
     name: `Item_${itemPath}`,
@@ -39,11 +40,12 @@ export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone)
     attachmentId: 0,
     scaling: {
       interpolation: 'DontInterp',
-      keyFrames: new Map(this.mdl.sequences.map((seq) => [seq.interval[0], [2, 2, 2]])),
+      globalSeq: this.mdl.globalSequences[0],
+      keyFrames: new Map([[0, [1, 1, 1]]]),
       type: 'scaling',
     },
   });
-  return this;
+  return this.mdl.attachments.at(-1)!;
 }
 
 export function addMdlCollectionItemToModel(this: MDLModify, item: MDL) {

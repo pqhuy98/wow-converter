@@ -1802,35 +1802,36 @@ export const EmptySequenceData: SequenceData = {
   attackTag: '',
 };
 
-export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name' | 'attackTag'> => {
+export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name' | 'attackTag' | 'loop'> => {
   switch (wowAnimName) {
-    case 'Stand': return { wc3Name: 'Stand', attackTag: '' };
+    case 'Stand': return { wc3Name: 'Stand', attackTag: '', loop: true };
     case 'Death': return { wc3Name: 'Death', attackTag: '' };
     case 'Spell': return { wc3Name: 'Spell', attackTag: '' };
     case 'Dead': return { wc3Name: 'Decay', attackTag: '' };
     case 'Rise': return { wc3Name: 'Birth', attackTag: '' };
     case 'Birth': return { wc3Name: 'Birth', attackTag: '' };
-    case 'Sleep': return { wc3Name: 'Sleep', attackTag: '' };
-    case 'Whirlwind': return { wc3Name: 'Attack Walk Stand Spin', attackTag: '' };
+    case 'Sleep': return { wc3Name: 'Sleep', attackTag: '', loop: true };
+    case 'Whirlwind': return { wc3Name: 'Attack Walk Stand Spin', attackTag: '', loop: true };
     // case 'StandWound': return { wc3Name: 'Stand Hit', attackTag: '' };
     // case 'CombatCritical': return { wc3Name: 'Stand Hit', attackTag: '' };
 
-    case 'EmoteTalk': return { wc3Name: 'Portrait Talk', attackTag: '' };
-    case 'EmoteTalkExclamation': return { wc3Name: 'Portrait Talk', attackTag: '' };
-    case 'EmoteTalkQuestion': return { wc3Name: 'Portrait Talk', attackTag: '' };
-    case 'EmoteTalkSubdued': return { wc3Name: 'Portrait Talk', attackTag: '' };
-    case 'EmoteTalkFrustrated': return { wc3Name: 'Portrait Talk', attackTag: '' };
+    case 'EmoteTalk': return { wc3Name: 'Portrait Talk', attackTag: '', loop: true };
+    case 'EmoteTalkExclamation': return { wc3Name: 'Portrait Talk', attackTag: '', loop: true };
+    case 'EmoteTalkQuestion': return { wc3Name: 'Portrait Talk', attackTag: '', loop: true };
+    case 'EmoteTalkSubdued': return { wc3Name: 'Portrait Talk', attackTag: '', loop: true };
+    case 'EmoteTalkFrustrated': return { wc3Name: 'Portrait Talk', attackTag: '', loop: true };
 
-    case 'Walk': return { wc3Name: 'Cinematic Walk', attackTag: '' };
-    case 'Run': return { wc3Name: 'Walk', attackTag: '' };
-    case 'Sprint': return { wc3Name: 'Walk Fast', attackTag: '' };
+    case 'Walk': return { wc3Name: 'Cinematic Walk', attackTag: '', loop: true };
+    case 'Run': return { wc3Name: 'Walk', attackTag: '', loop: true };
+    case 'Sprint': return { wc3Name: 'Walk Fast', attackTag: '', loop: true };
 
-    case 'SwimIdle': return { wc3Name: 'Stand Swim', attackTag: '' };
-    case 'Swim': return { wc3Name: 'Walk Swim', attackTag: '' };
+    case 'SwimIdle': return { wc3Name: 'Stand Swim', attackTag: '', loop: true };
+    case 'MountSwimIdle': return { wc3Name: 'Stand Swim', attackTag: '', loop: true };
+    case 'Swim': return { wc3Name: 'Walk Swim', attackTag: '', loop: true };
     case 'Drown': return { wc3Name: 'Death Swim', attackTag: '' };
     case 'Drowned': return { wc3Name: 'Decay Swim', attackTag: '' };
 
-    case 'ReadyUnarmed': return { wc3Name: 'Stand Ready', attackTag: 'Unarmed' };
+    case 'ReadyUnarmed': return { wc3Name: 'Stand Ready', attackTag: 'Unarmed', loop: true };
     case 'AttackUnarmed': return { wc3Name: 'Attack', attackTag: 'Unarmed' };
     case 'AttackFist1H': return { wc3Name: 'Attack', attackTag: 'Unarmed' };
     case 'AttackFist1HOff': return { wc3Name: 'Attack', attackTag: 'Unarmed' };
@@ -1839,7 +1840,7 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'Kick': return { wc3Name: 'Attack', attackTag: 'Unarmed' };
     case 'SwimAttackUnarmed': return { wc3Name: 'Attack Swim', attackTag: 'Unarmed' };
 
-    case 'Ready1H': return { wc3Name: 'Stand Ready', attackTag: '1H' };
+    case 'Ready1H': return { wc3Name: 'Stand Ready', attackTag: '1H', loop: true };
     case 'Attack1H': return { wc3Name: 'Attack', attackTag: '1H' };
     case 'AttackFL': return { wc3Name: 'Attack', attackTag: '1H' };
     case 'AttackFLOff': return { wc3Name: 'Attack', attackTag: '1H' };
@@ -1859,7 +1860,7 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'SpecialDual': return { wc3Name: 'Attack Slam', attackTag: '1H' };
     case 'CombatAbilityDualWield01': return { wc3Name: 'Attack Slam', attackTag: '1H' };
 
-    case 'Ready2H': return { wc3Name: 'Stand Ready', attackTag: '2H' };
+    case 'Ready2H': return { wc3Name: 'Stand Ready', attackTag: '2H', loop: true };
     case 'Attack2H': return { wc3Name: 'Attack', attackTag: '2H' };
     case 'Attack2HLoosePierce': return { wc3Name: 'Attack', attackTag: '2H' };
     case 'Special2H': return { wc3Name: 'Attack Slam', attackTag: '2H' };
@@ -1870,19 +1871,19 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'CombatAbility2HBig02': return { wc3Name: 'Attack Slam', attackTag: '2H' };
 
     case 'Attack2HL': return { wc3Name: 'Attack', attackTag: '2HL' };
-    case 'Ready2HL': return { wc3Name: 'Stand Ready', attackTag: '2HL' };
+    case 'Ready2HL': return { wc3Name: 'Stand Ready', attackTag: '2HL', loop: true };
 
-    case 'ReadyBow': return { wc3Name: 'Stand Ready', attackTag: 'Bow' };
+    case 'ReadyBow': return { wc3Name: 'Stand Ready', attackTag: 'Bow', loop: true };
     case 'LoadBow': return { wc3Name: 'Attack', attackTag: 'Bow' };
     case 'AttackBow': return { wc3Name: 'Attack', attackTag: 'Bow' };
 
-    case 'ReadyRifle': return { wc3Name: 'Stand Ready', attackTag: 'Rifle' };
+    case 'ReadyRifle': return { wc3Name: 'Stand Ready', attackTag: 'Rifle', loop: true };
     case 'LoadRifle': return { wc3Name: 'Attack', attackTag: 'Rifle' };
     case 'AttackRifle': return { wc3Name: 'Attack', attackTag: 'Rifle' };
 
     case 'AttackThrown': return { wc3Name: 'Attack', attackTag: 'Thrown' };
 
-    case 'SpellPrecast': return { wc3Name: 'Spell Channel', attackTag: '' };
+    case 'SpellPrecast': return { wc3Name: 'Spell Channel', attackTag: '', loop: true };
     case 'SpellCast': return { wc3Name: 'Spell', attackTag: '' };
     case 'SpellCastArea': return { wc3Name: 'Spell', attackTag: '' };
     case 'SpellCastOmni': return { wc3Name: 'Spell', attackTag: '' };
@@ -1895,49 +1896,59 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'CastSweepRight': return { wc3Name: 'Spell', attackTag: '' };
     case 'CastTwistUpBoth': return { wc3Name: 'Spell', attackTag: '' };
     case 'ChannelCastOmniUp': return { wc3Name: 'Spell', attackTag: '' };
-    case 'ReadySpellDirected': return { wc3Name: 'Stand Channel', attackTag: '' };
-    case 'ReadySpellOmni': return { wc3Name: 'Stand Channel', attackTag: '' };
+    case 'ReadySpellDirected': return { wc3Name: 'Stand Channel', attackTag: '', loop: true };
+    case 'ReadySpellOmni': return { wc3Name: 'Stand Channel', attackTag: '', loop: true };
 
     case 'SpellCastDirected': return { wc3Name: 'Spell Throw', attackTag: '' };
-    case 'ChannelCastDirected': return { wc3Name: 'Spell Channel Throw', attackTag: '' };
-    case 'ChannelCastOmni': return { wc3Name: 'Spell Channel', attackTag: '' };
-    case 'Cannibalize': return { wc3Name: 'Spell Channel', attackTag: '' };
+    case 'ChannelCastDirected': return { wc3Name: 'Spell Channel Throw', attackTag: '', loop: true };
+    case 'ChannelCastOmni': return { wc3Name: 'Spell Channel', attackTag: '', loop: true };
+    case 'Cannibalize': return { wc3Name: 'Spell Channel', attackTag: '', loop: true };
 
     case 'BattleRoar': return { wc3Name: 'Spell Slam', attackTag: '' };
     case 'DragonStomp': return { wc3Name: 'Spell Slam', attackTag: '' };
 
-      // Door doodads
+    // Door doodads
     case 'Close': return { wc3Name: 'Birth', attackTag: '' };
-    case 'Closed': return { wc3Name: 'Stand', attackTag: '' };
+    case 'Closed': return { wc3Name: 'Stand', attackTag: '', loop: true };
     case 'Open': return { wc3Name: 'Death', attackTag: '' };
 
     // Flying
-    case 'FlyStand': return { wc3Name: 'Stand Alternate', attackTag: '' };
-    case 'Hover': return { wc3Name: 'Stand Alternate', attackTag: '' };
-    case 'Fly': return { wc3Name: 'Walk Alternate', attackTag: '' };
-    case 'FlyWalk': return { wc3Name: 'Walk Alternate', attackTag: '' };
+    case 'FlyStand': return { wc3Name: 'Stand Alternate', attackTag: '', loop: true };
+    case 'Hover': return { wc3Name: 'Stand Alternate', attackTag: '', loop: true };
+    case 'MountFlightIdle': return { wc3Name: 'Stand Alternate', attackTag: '', loop: true };
+    case 'Fly': return { wc3Name: 'Walk Alternate', attackTag: '', loop: true };
+    case 'FlyFly': return { wc3Name: 'Walk Alternate', attackTag: '', loop: true };
+    case 'FlyWalk': return { wc3Name: 'Walk Alternate', attackTag: '', loop: true };
+    case 'MountFlightRun': return { wc3Name: 'Walk Alternate', attackTag: '', loop: true };
+
     case 'Land': return { wc3Name: 'Morph Alternate', attackTag: '' };
+    case 'MountFlightLand': return { wc3Name: 'Morph Alternate', attackTag: '' };
+
     case 'LiftOff': return { wc3Name: 'Morph', attackTag: '' };
-    case 'FlyChannelCastDirected': return { wc3Name: 'Spell Channel Alternate Throw', attackTag: '' };
-    case 'FlyChannelCastOmni': return { wc3Name: 'Spell Channel Alternate', attackTag: '' };
+    case 'MountFlightStart': return { wc3Name: 'Morph', attackTag: '' };
+
+    case 'FlyChannelCastDirected': return { wc3Name: 'Spell Channel Alternate Throw', attackTag: '', loop: true };
+    case 'FlyChannelCastOmni': return { wc3Name: 'Spell Channel Alternate', attackTag: '', loop: true };
     case 'FlySpellCastDirected': return { wc3Name: 'Spell Alternate Throw', attackTag: '' };
     case 'FlySpellCastOmni': return { wc3Name: 'Spell Alternate', attackTag: '' };
 
     case 'FlyAttackUnarmed': return { wc3Name: 'Attack Alternate', attackTag: '' };
     case 'FlyDragonSpit': return { wc3Name: 'Attack Alternate', attackTag: '' };
+    case 'DragonSpitHover': return { wc3Name: 'Attack Alternate', attackTag: '' };
+
     case 'FlyDeathEnd': return { wc3Name: 'Death Alternate', attackTag: '' };
 
     // Mount
     case 'AttackJoust': return { wc3Name: 'Mount AttackJoust', attackTag: '' };
-    case 'HoldJoust': return { wc3Name: 'Mount HoldJoust', attackTag: '' };
+    case 'HoldJoust': return { wc3Name: 'Mount HoldJoust', attackTag: '', loop: true };
     case 'LoadJoust': return { wc3Name: 'Mount LoadJoust', attackTag: '' };
-    case 'ReadyJoust': return { wc3Name: 'Mount ReadyJoust', attackTag: '' };
-    case 'Mount': return { wc3Name: 'Mount', attackTag: '' };
-    case 'MountChopper': return { wc3Name: 'Mount MountChopper', attackTag: '' };
-    case 'MountCrouch': return { wc3Name: 'Mount MountCrouch', attackTag: '' };
-    case 'MountWide': return { wc3Name: 'Mount MountWide', attackTag: '' };
-    case 'ReclinedMount': return { wc3Name: 'Mount ReclinedMount', attackTag: '' };
-    case 'ReclinedMountPassenger': return { wc3Name: 'Mount ReclinedMountPassenger', attackTag: '' };
+    case 'ReadyJoust': return { wc3Name: 'Mount ReadyJoust', attackTag: '', loop: true };
+    case 'Mount': return { wc3Name: 'Mount', attackTag: '', loop: true };
+    case 'MountChopper': return { wc3Name: 'Mount MountChopper', attackTag: '', loop: true };
+    case 'MountCrouch': return { wc3Name: 'Mount MountCrouch', attackTag: '', loop: true };
+    case 'MountWide': return { wc3Name: 'Mount MountWide', attackTag: '', loop: true };
+    case 'ReclinedMount': return { wc3Name: 'Mount ReclinedMount', attackTag: '', loop: true };
+    case 'ReclinedMountPassenger': return { wc3Name: 'Mount ReclinedMountPassenger', attackTag: '', loop: true };
 
     default:
       return { wc3Name: `Cinematic ${wowAnimName}`, attackTag: '' };
@@ -1952,6 +1963,8 @@ export function getWacraftSequenceData(animation: Data.Animation): SequenceData 
 }
 
 export function isLoopAnimation(wowAnimation: string) {
+  const wcName = getWc3AnimName(wowAnimation);
+  if (!wcName.wc3Name.includes('Cinematic')) return wcName.loop;
   return [
     'Stand',
     'FlyStand',

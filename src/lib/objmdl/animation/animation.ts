@@ -356,11 +356,14 @@ export class AnimationFile implements AnimationData {
 
     // Find secondary Stand animations and set their rarity
 
-    const standSeqs = sequences.filter((seq) => seq.data.wc3Name === 'Stand');
-    if (standSeqs.length > 1) {
-      const mainStandSeq = standSeqs.reduce((best, seq) => (seq.data.wowFrequency > best.data.wowFrequency ? seq : best));
-      standSeqs.filter((seq) => seq !== mainStandSeq).forEach((seq) => seq.rarity = 4);
-    }
+    const animNames = ['Stand', 'Stand Alternate', 'Walk', 'Walk Alternate'];
+    animNames.forEach((name) => {
+      const seqs = sequences.filter((seq) => seq.data.wc3Name === name);
+      if (seqs.length > 1) {
+        const mainStandSeq = seqs.reduce((best, seq) => (seq.data.wowFrequency > best.data.wowFrequency ? seq : best));
+        seqs.filter((seq) => seq !== mainStandSeq).forEach((seq) => seq.rarity = 4);
+      }
+    });
 
     const wowAttachments = this.extractWowAttachments(bones);
     debug && console.log('AnimationFile toMdl took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
