@@ -51,9 +51,9 @@ const tooltips = {
   particleDensity: 'Particle density, e.g. 1.0 = default, 0.5 = half, 2.0 = double, 0 = none... Higher density will decrease in-game FPS due to more particles.',
   portraitCamera: 'Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.',
   mount: 'The mount model to use, can be a Wowhead URL, local file inside wow.export folder, or Display ID number. The mount model must have attachment point "Shield" - WoW uses it to attach the rider. If mount is provided, the character must have animation "Mount".',
-  mountScale: 'The scale of the mount model. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
-  seatOffsetForward: 'The forward (horizontal) offset of the seat. Use this field if you want to adjust the rider\'s seat position. E.g. 0 = no change, 10 = 10 units forward, -10 = 10 units backward.',
-  seatOffsetUpward: 'The upward (vertical) offset of the seat. Use this field if you want to adjust the rider\'s seat position. E.g. 0 = no change, 10 = 10 units upward, -10 = 10 units downward.',
+  mountScale: 'Additional scale multiplier of the mount model. Firstly the mount model is scaled equivalently to the character model, then this multiplier is applied. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
+  seatOffsetForward: 'The forward (horizontal) offset of the seat. Use this field if you want to adjust the rider\'s seat position. Positive values move the seat forward, negative values move the seat backward.',
+  seatOffsetUpward: 'The upward (vertical) offset of the seat. Use this field if you want to adjust the rider\'s seat position. Positive values move the seat upward, negative values move the seat downward.',
 };
 
 export function CharacterConfig({
@@ -438,7 +438,7 @@ export function CharacterConfig({
           ...prev,
           mount: {
             path: { type: 'wowhead', value: 'https://www.wowhead.com/wotlk/item=50818/invincibles-reins' },
-            seatOffset: [-20, 0, 20],
+            seatOffset: [-15, 0, 15],
           },
         }))}
         >

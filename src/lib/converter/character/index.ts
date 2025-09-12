@@ -9,6 +9,7 @@ import { Sequence } from '@/lib/formats/mdl/components/sequence';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
+import { V3 } from '@/lib/math/vector';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { decodeDressingRoom } from '@/lib/wowhead-client/dressing-room';
@@ -110,11 +111,7 @@ export class CharacterExporter {
 
     if (char.mount && char.mount.path.value !== '') {
       console.log('exportCharacterWithMount', char);
-      const { mountMdl } = await this.exportCharacterWithMount(char, outputFile);
-      const mount = this.includeMdlToOutput(mountMdl, `${outputFile}_mount`);
-      // Put mount model to first position
-      this.models = [mount, ...this.models.filter((m) => m !== mount)];
-      return mountMdl;
+      return (await this.exportCharacterWithMount(char, outputFile)).mountMdl;
     }
 
     const ctx: ExportContext = {
@@ -323,25 +320,27 @@ export class CharacterExporter {
     // Export mount model
     const mount = char.mount;
     const mountName = `${outputFile}_mount`;
-    const mountMdl = await this.exportBaseMdl({
-      assetManager: this.assetManager,
-      config: this.config,
-      outputFile: mountName,
-      weaponInventoryTypes: [undefined, undefined],
-    }, {
+    const mountMdl = await this.exportCharacter({
       base: mount.path,
       inGameMovespeed: char.inGameMovespeed,
       attackTag: char.attackTag,
       keepCinematic: char.keepCinematic,
-    });
+      noDecay: char.noDecay,
+      particlesDensity: char.particlesDensity,
+      portraitCameraSequenceName: char.portraitCameraSequenceName,
+      size: undefined,
+      scale: undefined,
+      attachItems: undefined,
+      mount: undefined,
+    }, mountName);
     const mountBone = mountMdl.wowAttachments.find((a) => a.wowAttachmentId === WoWAttachmentID.Shield)?.bone;
-    if (!mountBone) throw new Error('Mount model doesn\'t have an attachment for rider');
+    if (!mountBone) throw new Error('Mount model doesn\'t have any attachment for rider');
 
     // Export character without mount and keep only mount related animations
     const charMdl = await this.exportCharacter({ ...char, mount: undefined }, outputFile);
     charMdl.sequences = charMdl.sequences.filter((s) => ['Mount', 'Death'].some((name) => s.name === name));
     if (!charMdl.sequences.some((s) => s.name.includes('Mount'))) {
-      throw new Error('Character model doesn\'t have a mount animation');
+      throw new Error('Character model doesn\'t have any Mount animation');
     }
     charMdl.sequences.filter((s) => s.name.includes('Mount')).forEach((s) => {
       s.name = 'Stand';
@@ -364,7 +363,7 @@ export class CharacterExporter {
         type: 'translation',
         globalSeq: mountMdl.globalSequences.at(-1)!,
         interpolation: 'DontInterp',
-        keyFrames: new Map([[0, mount.seatOffset as Vector3]]),
+        keyFrames: new Map([[0, V3.scale(mount.seatOffset as Vector3, charMdl.accumScale)]]),
       };
     }
     return { charMdl, mountMdl };
