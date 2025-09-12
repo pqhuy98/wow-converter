@@ -383,6 +383,7 @@ export function CharacterConfig({
               step="0.1"
               placeholder="0"
               className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              value={character.mount?.seatOffset?.at(0) || ''}
               onChange={(e) => setCharacter((prev) => ({
                 ...prev,
                 mount: {
@@ -417,6 +418,7 @@ export function CharacterConfig({
               step="0.1"
               placeholder="0"
               className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              value={character.mount?.seatOffset?.at(2) || ''}
               onChange={(e) => setCharacter((prev) => ({
                 ...prev,
                 mount: {
@@ -432,7 +434,13 @@ export function CharacterConfig({
           </div>
         </div>
       </div> : <Button variant="outline"
-        onClick={() => setCharacter((prev) => ({ ...prev, mount: { path: { type: 'wowhead', value: '' } } }))}
+        onClick={() => setCharacter((prev) => ({
+          ...prev,
+          mount: {
+            path: { type: 'wowhead', value: 'https://www.wowhead.com/wotlk/item=50818/invincibles-reins' },
+            seatOffset: [-20, 0, 20],
+          },
+        }))}
         >
           Add Mount
         </Button>
