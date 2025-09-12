@@ -347,9 +347,14 @@ async function applyPrebakedTextrure(ctx: ExportContext, charMdl: MDL, prep: Pre
 
 async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, prep: Prep, expansion: ZamExpansion) {
   if (prep.prebakedTexture) return;
+  if (prep.equipmentSlots.filter((s) => s.slotId !== EquipmentSlot.Cloak).length === 0) return;
 
-  console.log('applyEquipmentsBodyTextures', charMdl.textures.map((t) => `${t.image} ${t.wowData.type}`));
-  const baseTexture = charMdl.textures.find((t) => t.wowData.type === 1) ?? charMdl.textures[0];
+  const baseTexture = charMdl.textures.find((t) => t.wowData.type === 1);
+
+  if (!baseTexture) {
+    console.log(chalk.yellow('Character has no base texture with wowData.type === 1. Skipping body texture baking.'));
+    return;
+  }
 
   console.log('Character has no prebaked texture. Using default texture:', baseTexture.wowData.pngPath);
   if (baseTexture.image === '') {
@@ -398,6 +403,7 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
         fileDataId: f.fileDataId,
       }));
     });
+  if (overlays.length === 0) return;
 
   // Wowhead sorts by slot priority, then applies item regions in ascending SectionType; skip region 12 (cloak)
   overlays.sort((a, b) => (a.priority - b.priority) || (a.componentId - b.componentId));
@@ -406,7 +412,6 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
 
   const textureDraws: PngDraw[] = [];
   for (const t of overlays) {
-    if (t.slotId === EquipmentSlot.Cloak) continue; // cloak/back is not baked into base
     const section = charCus.TextureSections.find((s) => s.SectionType === t.componentId);
     if (!section) {
       console.error(chalk.red(`Texture section not found for file ${t.fileDataId} component ${t.componentId}`));
