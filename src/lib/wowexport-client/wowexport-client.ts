@@ -517,7 +517,7 @@ const desiredConfig = {
   modelsExportSkel: true,
   modelsExportBone: true,
   modelsExportAnim: true,
-  modelsExportUV2: false,
+  modelsExportUV2: true,
   modelsExportTextures: true,
   modelsExportAlpha: true,
   modelsExportAnimations: true,

@@ -48,6 +48,9 @@ export class OBJFile {
         case 'vt': // Texture Coords
           this.parseTextureCoords(lineItems);
           break;
+        case 'vt2': // Second UV set (non-standard extension)
+          this.parseTextureCoords2(lineItems);
+          break;
         case 'vn': // Define a vertex normal for the current model
           this.parseVertexNormal(lineItems);
           break;
@@ -77,6 +80,7 @@ export class OBJFile {
         faces: [],
         name: this.defaultModelName,
         textureCoords: [],
+        textureCoords2: [],
         vertexNormals: [],
         vertices: [],
       });
@@ -93,6 +97,7 @@ export class OBJFile {
       faces: [],
       name: modelName,
       textureCoords: [],
+      textureCoords2: [],
       vertexNormals: [],
       vertices: [],
     });
@@ -123,6 +128,16 @@ export class OBJFile {
     const w = lineItems.length >= 4 ? parseFloat(lineItems[3]) : 0.0;
 
     this.currentModel().textureCoords.push({ u, v, w });
+  }
+
+  private parseTextureCoords2(lineItems: string[]): void {
+    const u = lineItems.length >= 2 ? parseFloat(lineItems[1]) : 0.0;
+    const v = lineItems.length >= 3 ? parseFloat(lineItems[2]) : 0.0;
+    const w = lineItems.length >= 4 ? parseFloat(lineItems[3]) : 0.0;
+
+    // Note: OBJ has no face index for vt2; writer ensures vt2 lines are emitted
+    // in the same order as used vt entries. Consumers should map by vt index.
+    this.currentModel().textureCoords2.push({ u, v, w });
   }
 
   private parseVertexNormal(lineItems: string[]): void {
@@ -228,6 +243,7 @@ export interface IModel {
   group: IGroup[];
   vertices: IVertex[];
   textureCoords: ITextureVertex[];
+  textureCoords2: ITextureVertex[];
   vertexNormals: IVertex[];
   faces: IFace[];
 }

@@ -564,6 +564,12 @@ export class M2MetadataFile {
           });
         }
 
+        const coordId = 0;
+        // let coordId = Math.max(0, Math.min(1, tu.textureCoordComboIndex));
+        // if (i === 1 && usesT2) {
+        //   coordId = 1;
+        // }
+
         layers.push({
           texture,
           filterMode,
@@ -581,6 +587,7 @@ export class M2MetadataFile {
             static: true,
             value: 1,
           },
+          coordId,
         });
       }
     });

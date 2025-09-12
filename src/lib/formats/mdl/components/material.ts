@@ -4,25 +4,28 @@ import { TextureAnim } from './texture-anim';
 
 export type BlendMode = 'None' | 'Transparent' | 'Blend' | 'Additive' | 'AddAlpha' | 'Modulate' | 'Modulate2x'
 
+export interface Layer {
+  filterMode: BlendMode;
+  texture: Texture;
+  tvertexAnim?: TextureAnim;
+  alpha: AnimationOrStatic<number>;
+  coordId?: number;
+
+  // flags
+  unshaded: boolean;
+  sphereEnvMap: boolean;
+  twoSided: boolean;
+  unfogged: boolean;
+  unlit: boolean;
+  noDepthTest: boolean;
+  noDepthSet: boolean;
+}
+
 export interface Material {
   id: number
   constantColor: boolean;
   twoSided: boolean;
-  layers: {
-    filterMode: BlendMode;
-    texture: Texture;
-    tvertexAnim?: TextureAnim;
-    alpha: AnimationOrStatic<number>;
-
-    // flags
-    unshaded: boolean;
-    sphereEnvMap: boolean;
-    twoSided: boolean;
-    unfogged: boolean;
-    unlit: boolean;
-    noDepthTest: boolean;
-    noDepthSet: boolean;
-  }[];
+  layers: Layer[];
 }
 
 export function materialsToString(version: number, materials: Material[]) {
@@ -43,6 +46,7 @@ export function materialsToString(version: number, materials: Material[]) {
           ${layer.noDepthTest ? 'NoDepthTest,' : ''}
           ${layer.noDepthSet ? 'NoDepthSet,' : ''}
           ${layer.unlit ? 'Unlit,' : ''}
+          ${layer.coordId && layer.coordId !== 0 ? `CoordId ${layer.coordId},` : ''}
           ${layer.tvertexAnim != null ? `TVertexAnimId ${layer.tvertexAnim.id},` : ''}
         }`).join('\n')}
       }`).join('\n')}

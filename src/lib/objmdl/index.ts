@@ -222,6 +222,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
         if (!vMap.has(v.vertexIndex)) {
           const objN = obj.models[0].vertexNormals[v.vertexNormalIndex - 1];
           const objT = obj.models[0].textureCoords[v.textureCoordsIndex - 1];
+          const objT2 = obj.models[0].textureCoords2 ? obj.models[0].textureCoords2[v.textureCoordsIndex - 1] : undefined;
           if (!objT) {
             console.error('No texture coords found for vertex', v.vertexIndex, 'in', objFilePath);
             console.error('obj.models[0].textureCoords.length', obj.models[0].textureCoords.length);
@@ -245,6 +246,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
             position: [objV.x, -objV.z, objV.y],
             normal: [objN.x, -objN.z, objN.y],
             texPosition: [objT.u, 1 - objT.v],
+            texPosition2: objT2 ? [objT2.u, 1 - objT2.v] : undefined,
             matrix,
             skinWeights,
           });

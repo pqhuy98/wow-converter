@@ -45,6 +45,7 @@ export interface GeosetVertex {
   position: Vector3
   normal: Vector3
   texPosition: Vector2
+  texPosition2?: Vector2
   matrix?: Matrix
   skinWeights?: SkinWeight[]
 }
@@ -137,6 +138,11 @@ export function geosetsToString(version: number, geosets: Geoset[], bones: Bone[
       TVertices ${geoset.vertices.length} {
         ${geoset.vertices.map((vertex) => `{ ${fVector(vertex.texPosition)} },`).join('\n')}
       }
+      ${''
+  //   geoset.vertices.some((v) => v.texPosition2) ? `TVertices ${geoset.vertices.length} {
+  //   ${geoset.vertices.map((vertex) => `{ ${fVector(vertex.texPosition2 || vertex.texPosition)} },`).join('\n')}
+  // }` : ''
+}
 
       ${vertexGroupBlock}
       ${skinWeightsBlock}
