@@ -29,6 +29,11 @@ export interface Character {
   noDecay?: boolean
   particlesDensity?: number
   portraitCameraSequenceName?: string
+  mount?: {
+    path: RefSchema
+    scale?: number
+    seatOffset?: [number, number, number]
+  }
 }
 
 export type ModelFormatVersion = '800' | '1000'

@@ -13,7 +13,7 @@ import { RefSchema, RefType } from '@/lib/models/export-character.model';
 
 import { getServerConfig, useServerConfig } from '../server-config';
 
-export type RefCategory = 'npc' | 'item'
+export type RefCategory = 'npc' | 'item' | 'mount'
 
 export function RefInput({
   value,
@@ -54,8 +54,9 @@ export function RefInput({
 
   const fullValidAndFix = useCallback((value: RefSchema) => {
     if (!clientValidation(value, true)) return;
-    if (value.type === 'local') {
-      void fetch(`/export/character/check-local-file?localPath=${value.value}`)
+    const isEmptyMount = (value.value === '' && category === 'mount');
+    if (value.type === 'local' && !isEmptyMount) {
+      void fetch(`/api/export/character/check-local-file?localPath=${value.value}`)
         .then((res) => res.json())
         .then((data) => setServerValidationResult(data));
     } else {
@@ -107,7 +108,7 @@ export function RefInput({
               value.type === 'local'
                 ? 'Enter relative OBJ file name...'
                 : value.type === 'wowhead'
-                  ? `https://www.wowhead.com/${category}=12345/...`
+                  ? `https://www.wowhead.com/${category === 'mount' ? 'item' : category}=12345/...`
                   : 'Enter Display ID number...'
             }
             value={currentValues[value.type].value}
@@ -176,14 +177,20 @@ export function RefInput({
 const wowheadPattern = {
   npc: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|item=|object=|dressing-room(\?.+)?#)/,
   item: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?item=/,
+  mount: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|item=)/,
 };
 
 const invalidMessage = {
   npc: 'Invalid Wowhead URL, must contain either: "/npc=", "/item=", "/object=" or "/dressing-room#"',
   item: 'Invalid Wowhead URL, must contain /item=...',
+  mount: 'Invalid Wowhead URL, must contain /npc= or /item=...',
 };
 
 export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean): string | null => {
+  if (category === 'mount' && ref.value === '') {
+    return null; // allow empty mount
+  }
+
   if (ref.type === 'wowhead') {
     // Allow URLs with expansion prefixes like /wotlk/, /classic/, etc. (only a-z characters)
     if (!wowheadPattern[category].test(ref.value)) {

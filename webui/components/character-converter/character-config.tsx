@@ -1,6 +1,7 @@
 import { HelpCircle, User } from 'lucide-react';
 import { useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import {
   Card, CardContent,
   CardDescription, CardHeader, CardTitle,
@@ -49,6 +50,10 @@ const tooltips = {
   noDecay: 'Do not automatically add Decay animations.',
   particleDensity: 'Particle density, e.g. 1.0 = default, 0.5 = half, 2.0 = double, 0 = none... Higher density will decrease in-game FPS due to more particles.',
   portraitCamera: 'Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.',
+  mount: 'The mount model to use, can be a Wowhead URL, local file inside wow.export folder, or Display ID number. The mount model must have attachment point "Shield" - WoW uses it to attach the rider. If mount is provided, the character must have animation "Mount".',
+  mountScale: 'The scale of the mount model. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
+  seatOffsetForward: 'The forward (horizontal) offset of the seat. Use this field if you want to adjust the rider\'s seat position. E.g. 0 = no change, 10 = 10 units forward, -10 = 10 units backward.',
+  seatOffsetUpward: 'The upward (vertical) offset of the seat. Use this field if you want to adjust the rider\'s seat position. E.g. 0 = no change, 10 = 10 units upward, -10 = 10 units downward.',
 };
 
 export function CharacterConfig({
@@ -222,83 +227,216 @@ export function CharacterConfig({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="keepCinematic"
+              checked={character.keepCinematic || false}
+              onCheckedChange={(checked) => setCharacter((prev) => ({ ...prev, keepCinematic: checked as boolean }))}
+            />
+            <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
+              Keep Cinematic Animations
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">{tooltips.keepCinematic}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+          </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="keepCinematic"
-            checked={character.keepCinematic || false}
-            onCheckedChange={(checked) => setCharacter((prev) => ({ ...prev, keepCinematic: checked as boolean }))}
-          />
-          <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
-            Keep Cinematic Animations
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.keepCinematic}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
+          {/* <div className="flex items-center space-x-2">
+            <Checkbox
+              id="noDecay"
+              checked={character.noDecay || false}
+              onCheckedChange={(checked) => setCharacter((prev) => ({ ...prev, noDecay: checked as boolean }))}
+            />
+            <Label htmlFor="noDecay" className="flex items-center gap-2 text-sm">
+              No Decay
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">{tooltips.noDecay}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+          </div> */}
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="noDecay"
-            checked={character.noDecay || false}
-            onCheckedChange={(checked) => setCharacter((prev) => ({ ...prev, noDecay: checked as boolean }))}
-          />
-          <Label htmlFor="noDecay" className="flex items-center gap-2 text-sm">
-            No Decay
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.noDecay}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="noParticles" className="flex items-center gap-2 text-sm">
+              Particle Density
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">{tooltips.particleDensity}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="particlesDensity"
+              type="number"
+              placeholder="1.0"
+              min={0}
+              max={5}
+              value={particlesDensity}
+              onChange={(e) => {
+                const value = Number.parseFloat(e.target.value);
+                setParticlesDensity(value);
+                setCharacter((prev) => ({ ...prev, particlesDensity: isNaN(value) ? 1 : value }));
+              }}
+              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <Label htmlFor="noParticles" className="flex items-center gap-2 text-sm">
-            Particle Density
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.particleDensity}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <Input
-            id="particlesDensity"
-            type="number"
-            placeholder="1.0"
-            min={0}
-            max={5}
-            value={particlesDensity}
-            onChange={(e) => {
-              const value = Number.parseFloat(e.target.value);
-              setParticlesDensity(value);
-              setCharacter((prev) => ({ ...prev, particlesDensity: isNaN(value) ? 1 : value }));
-            }}
-            className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
-          />
+      <hr className="my-4" />
+
+      {character.mount ? <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="space-y-2 col-span-5">
+            <RefInput
+              value={character.mount?.path || { type: 'wowhead', value: '' }}
+              onChange={(mountRef) => setCharacter((prev) => ({
+                ...prev,
+                mount: { path: mountRef, scale: prev.mount?.scale },
+              }))}
+              label="Mount Model"
+              tooltip={tooltips.mount}
+              category="mount"
+            />
+          </div>
+
+          <div className="space-y-2 col-span-1">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Scale</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">{tooltips.mountScale}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Input
+              id="mountScale"
+              type="number"
+              step="0.1"
+              placeholder="1.0"
+              value={character.mount?.scale || ''}
+              disabled={character.mount?.path.value === ''}
+              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              onChange={(e) => setCharacter((prev) => {
+                if (!prev.mount) {
+                  return prev;
+                }
+                if (prev.mount.path.value === '') {
+                  return { ...prev, mount: undefined };
+                }
+                return {
+                  ...prev,
+                  mount: {
+                    path: prev.mount.path,
+                    scale: Number.parseFloat(e.target.value) || undefined,
+                  },
+                };
+              })
+              }
+            />
+          </div>
         </div>
-      </div>
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="flex items-center space-x-2 col-span-3">
+            <Label htmlFor="seatOffsetForward" className="flex items-center gap-2 text-sm">
+              Seat Offset Forward
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">{tooltips.seatOffsetForward}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="seatOffsetForward"
+              type="number"
+              step="0.1"
+              placeholder="0"
+              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              onChange={(e) => setCharacter((prev) => ({
+                ...prev,
+                mount: {
+                  ...prev.mount!,
+                  seatOffset: [
+                    Number.parseFloat(e.target.value) || 0,
+                    prev.mount?.seatOffset?.at(1) ?? 0,
+                    prev.mount?.seatOffset?.at(2) ?? 0,
+                  ],
+                },
+              }))}
+            />
+          </div>
+
+          <div className="flex items-center space-x-2 col-span-3">
+            <Label htmlFor="seatOffsetUpward" className="flex items-center gap-2 text-sm">
+              Seat Offset Upward
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">{tooltips.seatOffsetUpward}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="seatOffsetUpward"
+              type="number"
+              step="0.1"
+              placeholder="0"
+              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              onChange={(e) => setCharacter((prev) => ({
+                ...prev,
+                mount: {
+                  ...prev.mount!,
+                  seatOffset: [
+                    prev.mount?.seatOffset?.at(0) ?? 0,
+                    prev.mount?.seatOffset?.at(1) ?? 0,
+                    Number.parseFloat(e.target.value) || 0,
+                  ],
+                },
+              }))}
+            />
+          </div>
+        </div>
+      </div> : <Button variant="outline"
+        onClick={() => setCharacter((prev) => ({ ...prev, mount: { path: { type: 'wowhead', value: '' } } }))}
+        >
+          Add Mount
+        </Button>
+      }
     </CardContent>
   </Card>;
 }
