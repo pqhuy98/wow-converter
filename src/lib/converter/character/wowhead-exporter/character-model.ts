@@ -346,12 +346,10 @@ async function applyPrebakedTextrure(ctx: ExportContext, charMdl: MDL, prep: Pre
 }
 
 async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, prep: Prep, expansion: ZamExpansion) {
-  const baseTexture = charMdl.textures.find((t) => t.wowData.type === 1);
   if (prep.prebakedTexture) return;
 
-  if (!baseTexture) {
-    throw new Error(`Base texture with wowData.type === 1 not found for ${charMdl.model.name}`);
-  }
+  console.log('applyEquipmentsBodyTextures', charMdl.textures.map((t) => `${t.image} ${t.wowData.type}`));
+  const baseTexture = charMdl.textures.find((t) => t.wowData.type === 1) ?? charMdl.textures[0];
 
   console.log('Character has no prebaked texture. Using default texture:', baseTexture.wowData.pngPath);
   if (baseTexture.image === '') {
