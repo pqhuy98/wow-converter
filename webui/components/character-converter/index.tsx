@@ -443,7 +443,7 @@ export function CharacterConverter() {
                 </div>
                 <div>
                   <h4 className="font-semibold mb-2">
-                  Exported files
+                  Exported files:
                   <span className="text-gray-400 font-normal ml-4">{
                     (() => {
                       const modelsSize = jobStatus.result.exportedModels?.reduce((acc, { size }) => acc + size, 0) || 0;

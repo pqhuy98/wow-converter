@@ -5,6 +5,60 @@ import {
 } from './zam-url';
 
 export interface CharacterCustomization {
+  Options: {
+    Id: number
+    Name: string
+    OrderIndex: number
+    Choices: {
+      Id: number
+      Name: string
+      OrderIndex: number
+      CustReqId: number
+      Elements: {
+        Id: number
+        VariationIndex: number
+        VariationChoiceID: number
+        Geoset?: {
+          GeosetType: number
+          GeosetID: number
+          Modifier: number
+        }
+        SkinnedModel?: {
+          CollectionFileDataID: number
+          GeosetType: number
+          GeosetID: number
+          Modifier: number
+          Flags: number
+        }
+        Material?: {
+          TextureTarget: number
+          MaterialResourcesID: number
+        }
+        BoneSet?: {
+          BoneFileDataID: number
+          ModelFileDataID: number
+        }
+        CondModelFileDataId: number
+        ChrCustItemGeoModifyID: number
+      }[]
+    }[]
+  }[]
+  TextureFiles: {
+    [k: string]: {
+      FileDataId: number
+      Gender: number
+      Class: number
+      Race: number
+      ExtraData: number
+    }[]
+  }
+  Materials: {
+    TextureType: number
+    Width: number
+    Height: number
+    Flags: number
+    // Unk_34615_1: number
+  }[]
   TextureLayers: {
     TextureType: number;
     Layer: number;

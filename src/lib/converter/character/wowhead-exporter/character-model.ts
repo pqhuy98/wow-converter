@@ -63,6 +63,7 @@ export async function exportCharacterAsMdl({
 
   // Attach items with models
   await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots);
+  await applyCustomzationCollections(ctx, charMdl, metaData, prep, expansion);
 
   // If the item has trousers, remove the tabard geoset
   if (charMdl.geosets.some((g) => g.name.startsWith('Trousers') && g.name !== 'Trousers1')) {
@@ -134,6 +135,78 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     replaceableTextures: metadata.Textures || {},
     chrModelId: character.ChrModelId,
   };
+}
+
+async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, metadata: CharacterData, prep: Prep, expansion: ZamExpansion) {
+  const charCus = await fetchCharacterCustomization({
+    expansion,
+    type: 'character-customization',
+    chrModelId: prep.chrModelId,
+  });
+
+  const customizations = metadata.Creature?.CreatureCustomizations ?? [];
+  const collections = new Map<number, [Model, Set<number>]>();
+  const replaceableTextures: Record<number, number> = {};
+  const choiceIds = new Set<number>(customizations.map((c) => c.choiceId));
+
+  for (const option of charCus.Options) {
+    for (const choice of option.Choices) {
+      const customization = customizations.find((c) => c.optionId === option.Id && c.choiceId === choice.Id);
+      if (!customization) continue;
+      for (const element of choice.Elements) {
+        if (element.SkinnedModel && (element.VariationChoiceID <= 0 || choiceIds.has(element.VariationChoiceID))) {
+          const collectionFileId = element.SkinnedModel.CollectionFileDataID;
+          if (!collections.has(collectionFileId)) {
+            const collectionModel = await exportModelFileIdAsMdl(ctx, element.SkinnedModel.CollectionFileDataID, {});
+            collections.set(element.SkinnedModel.CollectionFileDataID, [collectionModel, new Set<number>()]);
+          }
+          const [, geosetIds] = collections.get(collectionFileId)!;
+          const geosetId = element.SkinnedModel.GeosetType * 100 + element.SkinnedModel.GeosetID;
+          geosetIds.add(geosetId);
+        }
+        if (element.Material) {
+          for (const t of charCus.TextureFiles[element.Material.MaterialResourcesID]) {
+            if ((t.Race === prep.rpcParams.race || t.Race === 0)
+                && (t.Gender === prep.rpcParams.gender || t.Gender > 1)) {
+              const textureTarget = element.Material.TextureTarget;
+              const material = charCus.TextureLayers.find((l) => l.ChrModelTextureTargetID === textureTarget);
+              if (material) {
+                replaceableTextures[material.TextureType] = t.FileDataId;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const textureTypeToImage: Record<number, string> = {};
+  if (replaceableTextures[1]) {
+    for (const t of charMdl.textures) {
+      if (t.wowData.type === 1 && t.image !== '') {
+        textureTypeToImage[t.wowData.type] = t.image;
+        delete replaceableTextures[t.wowData.type];
+      }
+    }
+  }
+  const debug = false;
+  await Promise.all(Array.from(collections.entries()).map(async ([fileDataId, [model, geosetIds]]) => {
+    debug && console.log('applyCustomzationCollections', fileDataId, geosetIds);
+    const mdl = model.mdl;
+    debug && console.log('model.geosets', mdl.geosets.map((g) => g.wowData.submeshId));
+    mdl.geosets = mdl.geosets.filter((g) => geosetIds.has(g.wowData.submeshId));
+    debug && console.log('replaceableTextures', replaceableTextures);
+    debug && console.log('mdl.textures.wowData.type', mdl.textures.map((t) => t.wowData.type));
+
+    mdl.textures.forEach((t) => {
+      if (textureTypeToImage[t.wowData.type]) {
+        t.image = textureTypeToImage[t.wowData.type];
+      }
+    });
+
+    await applyReplaceableTextures(ctx, mdl, replaceableTextures);
+    charMdl.modify.addMdlCollectionItemToModel(mdl);
+  }));
 }
 
 async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[]) {

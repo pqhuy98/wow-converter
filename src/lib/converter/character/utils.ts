@@ -163,7 +163,6 @@ export async function applyReplaceableTextures(ctx: ExportContext, mdl: MDL, rep
   const textureMap = new Map<number, ExportFile[]>();
 
   for (const texture of mdl.textures) {
-    // if (texture.image !== '') continue;
     const type = texture.wowData.type.toString();
     if (!replaceableTextures[type]) continue;
 

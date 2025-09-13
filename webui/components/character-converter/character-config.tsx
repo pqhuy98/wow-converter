@@ -53,7 +53,7 @@ const tooltips = {
   noDecay: 'Do not automatically add Decay animations.',
   particleDensity: 'Particle density, e.g. 1.0 = default, 0.5 = half, 2.0 = double, 0 = none... Higher density will decrease in-game FPS due to more particles.',
   portraitCamera: 'Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.',
-  mount: 'The mount model to use, can be a Wowhead URL, local file inside wow.export folder, or Display ID number. The mount model must have attachment point "Shield" - WoW uses it to attach the rider. If mount is provided, the character must have animation "Mount".',
+  mount: 'The mount model to use, can be a Wowhead URL, local file inside wow.export folder, or Display ID number. The mount model must have attachment point "Shield" - WoW uses it to attach the rider; and the character must have mount animation.',
   mountScale: 'Additional scale multiplier of the mount model. Firstly the mount model is scaled equivalently to the character model, then this multiplier is applied. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
   mountType: <span>
     The character's mount animation to use. For most cases, you should use "Mount".

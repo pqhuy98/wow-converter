@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { AssetManager } from '@/lib/converter/common/asset-manager';
 import { Sequence } from '@/lib/formats/mdl/components/sequence';
 import { MDL } from '@/lib/formats/mdl/mdl';
+import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
 import { Config } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
@@ -139,6 +140,11 @@ export class CharacterExporter {
         if (wowAttachment) {
           const { model: itemModel, inventoryType } = await this.exportItem(ctx, itemPath.path);
           const itemMdl = itemModel.mdl;
+          if (canAddMdlCollectionItemToModel(model, itemMdl)) {
+            model.modify.addMdlCollectionItemToModel(itemMdl);
+            continue;
+          }
+
           if (inventoryType) {
             if (Number(wowAttachmentId) === WoWAttachmentID.HandRight) ctx.weaponInventoryTypes[0] ??= inventoryType;
             if (Number(wowAttachmentId) === WoWAttachmentID.HandLeft) ctx.weaponInventoryTypes[1] ??= inventoryType;
