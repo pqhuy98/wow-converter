@@ -320,7 +320,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
           if (lastDistance > 0) {
             const scale = currentDistance / lastDistance;
-            const ZOOM_SPEED = 1;
+            const ZOOM_SPEED = -1;
             distance *= 1 + (scale - 1) * ZOOM_SPEED;
             distance = Math.max(1, Math.min(20000, distance));
             updateCamera();
