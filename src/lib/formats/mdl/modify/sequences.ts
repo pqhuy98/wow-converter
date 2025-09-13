@@ -8,7 +8,7 @@ import { Sequence } from '../components/sequence';
 import { interpolateTransformQuat } from '../mdl-traverse';
 import { MDLModify } from '.';
 
-const animPrefixOrder = ['Stand', 'Walk', 'Attack', 'Spell', 'Death', 'Decay', 'Portrait'];
+const animPrefixOrder = ['Stand', 'Walk', 'Attack', 'Spell', 'Morph', 'Death', 'Decay', 'Portrait'];
 
 function getPrefixIndex(str: string): number {
   for (let i = 0; i < animPrefixOrder.length; i++) {

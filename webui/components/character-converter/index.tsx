@@ -429,7 +429,7 @@ export function CharacterConverter() {
                     { label: 'Materials', value: jobStatus.result!.modelStats.materials },
                     { label: 'Lights', value: jobStatus.result!.modelStats.lights },
                     { label: 'Ribbon Emitters', value: jobStatus.result!.modelStats.ribbonEmitters },
-                    { label: 'Particles', value: jobStatus.result!.modelStats.particles },
+                    { label: 'Particle Emitters', value: jobStatus.result!.modelStats.particles },
                     { label: 'Attachments', value: jobStatus.result!.modelStats.attachments },
                     { label: 'Event Objects', value: jobStatus.result!.modelStats.eventObjects },
                     { label: 'Helpers', value: jobStatus.result!.modelStats.helpers },

@@ -7,25 +7,28 @@ import { FourCCGenerator } from './war3-fourcc';
 export const baseDoodadType = 'YOlb'; // Lightning Bolt
 export const baseDestructibleType = 'OTds'; // Demon Storm
 
-export interface IUnitType {
+export interface IObjectData {
   code: string
   parent: string
   data: Modification[]
+}
+
+export interface IUnitType extends IObjectData {
 }
 
 export interface IUnit extends Omit<Unit, 'type'> {
   type: IUnitType | string
 }
 
-export interface IDoodadType {
-  code: string
-  parent: string
-  data: Modification[]
+export interface IDoodadType extends IObjectData {
   isDestructible: boolean
 }
 
 export interface IDoodad extends Omit<Doodad, 'type'> {
   type: IDoodadType | string
+}
+
+export interface IAbilityType extends IObjectData {
 }
 
 export class MapManager {
@@ -42,6 +45,8 @@ export class MapManager {
   units: IUnit[] = [];
 
   doodads: IDoodad[] = [];
+
+  abilities: IAbilityType[] = [];
 
   constructor() {
     this.mapData = new MapTranslator();
@@ -102,6 +107,14 @@ export class MapManager {
       const type = this.doodadTypes.find((type) => type.code === doodad.type) ?? doodad.type;
       return { ...doodad, type };
     });
+    Object.entries(this.mapData.abilityData.custom).forEach(([key, value]) => {
+      const [code, parent] = key.split(':');
+      this.abilities.push({
+        code,
+        parent,
+        data: value,
+      });
+    });
   }
 
   get terrain() {
@@ -152,6 +165,15 @@ export class MapManager {
     return this.doodads[this.doodads.length - 1];
   }
 
+  addAbility(parentCode: string, data: Modification[]) {
+    this.abilities.push({
+      code: this.fourCCGenerator.generate().codeString,
+      parent: parentCode,
+      data,
+    });
+    return this.abilities[this.abilities.length - 1];
+  }
+
   save(mapDir: string) {
     this.mapData.unitData.custom = {};
     this.unitTypes.forEach((unitType) => {
@@ -179,6 +201,10 @@ export class MapManager {
         type: typeof doodad.type === 'string' ? doodad.type : doodad.type.code,
       });
     });
+    this.mapData.abilityData.custom = {};
+    this.abilities.forEach((ability) => {
+      this.mapData.abilityData.custom[`${ability.code}:${ability.parent}`] = ability.data;
+    });
     this.mapData.setMapDir(mapDir);
     this.mapData.save('units');
     this.mapData.save('doodads');
@@ -186,5 +212,6 @@ export class MapManager {
     this.mapData.save('unitData');
     this.mapData.save('doodadData');
     this.mapData.save('destructibleData');
+    this.mapData.save('abilityData');
   }
 }

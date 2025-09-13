@@ -50,7 +50,7 @@ export function getLayerFilterMode(blendingMode: number, shaderId: number, layer
 
   // Aligns with WebWowViewer combiner groupings; simplified to WC3 filter modes
   if (opaquePath) {
-    if (texture.image.includes('reflect')) {
+    if (texture.image.includes('reflect') || texture.image.includes('shine')) {
       return undefined;
     }
     if (op === 0) return undefined; // Opaque_Opaque

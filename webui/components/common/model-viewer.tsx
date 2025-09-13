@@ -6,6 +6,7 @@ import blpHandler from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/blp/hand
 import mdxHandler from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/handler';
 import MdxModel from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/model';
 import MdxModelInstance from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/modelinstance';
+import Sequence from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/sequence';
 import Scene from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/scene';
 import ModelViewer from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/viewer';
 import { vec3 } from 'gl-matrix';
@@ -28,7 +29,7 @@ const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 
 export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [sequences, setSequences] = useState<string[]>([]);
+  const [sequences, setSequences] = useState<Sequence[]>([]);
   const [currentSeq, setCurrentSeq] = useState<number>(0);
   const instanceRef = useRef<MdxModelInstance | null>(null);
   const vecHeap = vec3.create();
@@ -42,6 +43,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
   const boxModelRef = useRef<MdxModel | undefined>(undefined);
   const sphereModelRef = useRef<MdxModel | undefined>(undefined);
   const primsReadyRef = useRef<Promise<void> | undefined>(undefined);
+  const loadRequestIdRef = useRef(0);
   useEffect(() => {
     if (!canvasRef.current) return undefined;
     const viewer = new ModelViewer(canvasRef.current);
@@ -109,6 +111,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
     // references for cleanup
     const canvas = canvasRef.current;
+    const requestId = ++loadRequestIdRef.current;
+    let cancelled = false;
     let onMouseDown: ((e: MouseEvent) => void) | null = null;
     let onMouseMove: ((e: MouseEvent) => void) | null = null;
     let endDrag: (() => void) | null = null;
@@ -132,13 +136,15 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
       // Load the model (assumed to be in MDX|MDL format)
       const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver);
+      if (cancelled || loadRequestIdRef.current !== requestId) return;
       if (!(model instanceof MdxModel)) return;
       modelInstance = model.addInstance();
 
+      if (cancelled || loadRequestIdRef.current !== requestId) return;
       instanceRef.current = modelInstance;
       modelInstance.setSequence(0);
       modelInstance.sequenceLoopMode = 2; // always loop
-      setSequences(model.sequences.map((s) => s.name || `Sequence ${model.sequences.indexOf(s)}`));
+      setSequences(model.sequences);
 
       // Add scene and basic camera, grid setup
       scene.addInstance(modelInstance);
@@ -314,7 +320,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
           if (lastDistance > 0) {
             const scale = currentDistance / lastDistance;
-            const ZOOM_SPEED = 0.1;
+            const ZOOM_SPEED = 1;
             distance *= 1 + (scale - 1) * ZOOM_SPEED;
             distance = Math.max(1, Math.min(20000, distance));
             updateCamera();
@@ -359,6 +365,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     })();
 
     return () => {
+      cancelled = true;
       if (canvas && onMouseDown && onWheel && onMouseMove && endDrag && resizeCanvas && onTouchStart && onTouchMove && onTouchEnd) {
         canvas.removeEventListener('mousedown', onMouseDown);
         canvas.removeEventListener('wheel', onWheel);
@@ -379,6 +386,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         }
       }
       collisionInstancesRef.current = [];
+      if (instanceRef.current === modelInstance) {
+        instanceRef.current = null;
+      }
     };
   }, [modelPath, canvasRef.current, viewer, scene]);
 
@@ -389,7 +399,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       inst.setSequence(currentSeq);
       inst.sequenceLoopMode = 2;
     }
-  }, [currentSeq, instanceRef.current]);
+  }, [currentSeq]);
 
   const [isFullscreen, setIsFullscreen] = useState(alwaysFullscreen ?? false);
   const scrollPositionRef = useRef<{ x: number; y: number } | null>(null);
@@ -505,7 +515,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
                 variant="secondary"
                 size="sm"
                 onClick={() => void handleCopyLink()}
-                className={'bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl '}
+                className={'bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 w-10 h-10 text-2xl'}
               >
                 <TooltipProvider>
                   <Tooltip>
@@ -534,19 +544,24 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       </div>
       <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] overflow-y-auto bg-gray-800/90 lg:border-l lg:border-t-0 border-t border-gray-600 flex-shrink-0 relative z-10'}>
           <div className="sticky top-0 z-10 bg-gray-900 px-3 py-2 text-white font-semibold border-b border-black">
-            Animations
+            Animations ({sequences.length})
           </div>
           <ul className="divide-y divide-gray-600">
             {sequences.length === 0 ? (
               <div className="p-3 text-gray-400">Loading animations...</div>
             ) : (
-              sequences.map((name, idx) => (
+              sequences.map((seq, idx) => (
               <li
                 key={idx}
                 onClick={() => setCurrentSeq(idx)}
                 className={`px-3 py-2 cursor-pointer text-white ${idx === currentSeq ? 'bg-gray-800' : 'hover:bg-gray-700'}`}
               >
-                {name || `Sequence ${idx}`}
+                {seq.name || `Sequence ${idx}`}
+                <span className="text-gray-500 text-xs flex items-center gap-1">
+                  {idx} -
+                  Duration: {((seq.interval[1] - seq.interval[0]) / 1000).toFixed(3)} s
+                  {!seq.nonLooping ? ', looping' : ''}
+                </span>
               </li>
               ))
             )}

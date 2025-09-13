@@ -26,10 +26,6 @@ export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
 }
 
 export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone, keepRatio: boolean = true) {
-  if (!this.mdl.globalSequences.length) {
-    this.mdl.globalSequences.push({ id: -1, duration: 1000 });
-  }
-
   this.mdl.attachments.push({
     type: 'AttachmentPoint',
     name: `Item_${itemPath}`,
@@ -40,7 +36,6 @@ export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone,
     attachmentId: 0,
     scaling: {
       interpolation: 'DontInterp',
-      globalSeq: this.mdl.globalSequences[0],
       keyFrames: new Map([[0, keepRatio
         ? [this.mdl.accumScale, this.mdl.accumScale, this.mdl.accumScale]
         : [1, 1, 1]]]),

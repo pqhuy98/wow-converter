@@ -83,6 +83,7 @@ export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpa
 
 function getTypeFromUrl(url: string): ZamType | undefined {
   if (/\/npc[=/]/i.test(url)) return 'npc';
+  if (/\/spell[=/]/i.test(url)) return 'npc';
   if (/\/object[=/]/i.test(url)) return 'object';
   if (/\/item[=/]/i.test(url)) return 'item';
   if (/\/dressing-room(\?.+)?[#]/i.test(url)) return 'dressing-room';

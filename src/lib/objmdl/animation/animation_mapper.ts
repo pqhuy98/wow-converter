@@ -1922,6 +1922,7 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'MountFlightRun': return { wc3Name: 'Walk Alternate', attackTag: '', loop: true };
 
     case 'Land': return { wc3Name: 'Morph Alternate', attackTag: '' };
+    case 'Settle': return { wc3Name: 'Morph Alternate', attackTag: '' };
     case 'MountFlightLand': return { wc3Name: 'Morph Alternate', attackTag: '' };
 
     case 'LiftOff': return { wc3Name: 'Morph', attackTag: '' };
@@ -1949,6 +1950,8 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'MountWide': return { wc3Name: 'Mount MountWide', attackTag: '', loop: true };
     case 'ReclinedMount': return { wc3Name: 'Mount ReclinedMount', attackTag: '', loop: true };
     case 'ReclinedMountPassenger': return { wc3Name: 'Mount ReclinedMountPassenger', attackTag: '', loop: true };
+    case 'MountSpecial': return { wc3Name: 'Stand Victory', attackTag: '', loop: true };
+    case 'FlyMountSpecial': return { wc3Name: 'Stand Alternate Victory', attackTag: '', loop: true };
 
     default:
       return { wc3Name: `Cinematic ${wowAnimName}`, attackTag: '' };

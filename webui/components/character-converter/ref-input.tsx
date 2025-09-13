@@ -24,9 +24,9 @@ export function RefInput({
 }: {
   value: RefSchema
   onChange: (ref: RefSchema) => void
-  label: string
+  label: string | React.ReactNode
   category: RefCategory
-  tooltip: string
+  tooltip?: string | React.ReactNode
 }) {
   const { isSharedHosting } = useServerConfig();
   const [currentValues, setCurrentValues] = useState<Record<RefType, RefSchema>>({
@@ -72,28 +72,30 @@ export function RefInput({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 w-full">
         <Label className="text-sm font-medium">{label}</Label>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <HelpCircle className="h-4 w-4 text-muted-foreground" />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="max-w-xs">{tooltip}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {tooltip && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">{tooltip}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <div className="flex gap-2">
         <Select value={value.type} onValueChange={(type: RefType) => {
           fullValidAndFix({ ...currentValues[type], type });
         }}>
-          <SelectTrigger>
+          <SelectTrigger className="w-fit">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent align="start">
+          <SelectContent align="start" className="w-fit">
             <SelectItem value="wowhead">Wowhead URL</SelectItem>
             {!isSharedHosting ? (
               <SelectItem value="local">Local File</SelectItem>
@@ -102,7 +104,7 @@ export function RefInput({
           </SelectContent>
         </Select>
 
-        <div className="md:col-span-2">
+        <div className="flex-grow">
           <Input
             placeholder={
               value.type === 'local'
@@ -177,13 +179,13 @@ export function RefInput({
 const wowheadPattern = {
   npc: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|item=|object=|dressing-room(\?.+)?#)/,
   item: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?item=/,
-  mount: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|item=)/,
+  mount: /^https:\/\/www\.wowhead\.com\/(?:[a-z-]+\/)?(npc=|spell=|item=)/,
 };
 
 const invalidMessage = {
   npc: 'Invalid Wowhead URL, must contain either: "/npc=", "/item=", "/object=" or "/dressing-room#"',
-  item: 'Invalid Wowhead URL, must contain /item=...',
-  mount: 'Invalid Wowhead URL, must contain /npc= or /item=...',
+  item: 'Invalid Wowhead URL, must contain "/item="',
+  mount: 'Invalid Wowhead URL, must contain "/npc=", "/spell=" or "/item="',
 };
 
 export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean): string | null => {

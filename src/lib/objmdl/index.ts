@@ -294,6 +294,10 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   debug && console.log('optimizeKeyFrames took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   start = performance.now();
+  mdl.modify.computeWalkMovespeed();
+  debug && console.log('computeWalkMovespeed took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+
+  start = performance.now();
   mdl.modify.scale(config.rawModelScaleUp);
   mdl.accumScale = 1;
   debug && console.log('scale took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
@@ -309,10 +313,6 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
   start = performance.now();
   mdl.modify.addWc3AttachmentPoint();
   debug && console.log('addWc3AttachmentPoint took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
-
-  start = performance.now();
-  mdl.modify.computeWalkMovespeed();
-  debug && console.log('computeWalkMovespeed took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   const totalTimeS = (performance.now() - start0) / 1000;
   !config.isBulkExport && console.log(chalk.green('Converted:'), objFilePath, '-', chalk.yellow(totalTimeS.toFixed(2)), 's\n');

@@ -63,7 +63,9 @@ export const CharacterSchema = z.object({
     path: RefSchema,
     scale: z.number().optional(),
     seatOffset: z.number().array().length(3).optional(),
+    animation: z.string().optional(),
   }).optional(),
+  forceSheathed: z.boolean().optional(),
 });
 
 export type Character = z.infer<typeof CharacterSchema>;
@@ -110,7 +112,6 @@ export class CharacterExporter {
     const start = performance.now();
 
     if (char.mount && char.mount.path.value !== '') {
-      console.log('exportCharacterWithMount', char);
       return (await this.exportCharacterWithMount(char, outputFile)).mountMdl;
     }
 
@@ -119,6 +120,7 @@ export class CharacterExporter {
       config: this.config,
       outputFile,
       weaponInventoryTypes: [undefined, undefined],
+      forceSheathed: char.forceSheathed,
     };
 
     const model = await this.exportBaseMdl(ctx, char);
@@ -314,8 +316,9 @@ export class CharacterExporter {
   }
 
   private async exportCharacterWithMount(char: Character, outputFile: string): Promise<{charMdl: MDL, mountMdl: MDL}> {
-    console.log('exportCharacterWithMount', char.mount);
     if (!char.mount) throw new Error('Mount is required');
+
+    const debug = false;
 
     // Export mount model
     const mount = char.mount;
@@ -336,15 +339,23 @@ export class CharacterExporter {
     const mountBone = mountMdl.wowAttachments.find((a) => a.wowAttachmentId === WoWAttachmentID.Shield)?.bone;
     if (!mountBone) throw new Error('Mount model doesn\'t have any attachment for rider');
 
-    // Export character without mount and keep only mount related animations
-    const charMdl = await this.exportCharacter({ ...char, mount: undefined }, outputFile);
-    charMdl.sequences = charMdl.sequences.filter((s) => ['Mount', 'Death'].some((name) => s.name === name));
-    if (!charMdl.sequences.some((s) => s.name.includes('Mount'))) {
-      throw new Error('Character model doesn\'t have any Mount animation');
+    const charMdl = await this.exportCharacter({ ...char, mount: undefined, forceSheathed: true }, outputFile);
+    charMdl.sequences = charMdl.sequences.filter((s) => ['Mount', 'Death'].some((name) => s.name.includes(name)));
+    const mountAnimName = mount.animation ?? 'Mount';
+    debug && console.log('mountAnimName', mountAnimName);
+    debug && console.log('charMdl.sequences', charMdl.sequences.map((s) => s.data.wowName));
+    const mountAnims = charMdl.sequences.filter((s) => s.data.wowName === mountAnimName);
+    if (mountAnims.length === 0) {
+      throw new Error(`Character model doesn't have any ${mountAnimName} animation`);
     }
-    charMdl.sequences.filter((s) => s.name.includes('Mount')).forEach((s) => {
-      s.name = 'Stand';
+    charMdl.sequences.forEach((s) => {
+      if (s.data.wowName === mountAnimName) {
+        s.name = 'Stand';
+      } else if (s.name.includes('Mount')) {
+        s.name = `Mount ${s.data.wowName}`;
+      }
     });
+
     const newOverhead = charMdl.attachments.find((a) => a.data?.wowAttachment.wowAttachmentId === WoWAttachmentID.PlayerNameMounted);
     const oldOverhead = charMdl.attachments.find((a) => a.data?.wowAttachment.wowAttachmentId === WoWAttachmentID.PlayerName);
     if (newOverhead) {
@@ -366,6 +377,21 @@ export class CharacterExporter {
         keyFrames: new Map([[0, V3.scale(mount.seatOffset as Vector3, charMdl.accumScale)]]),
       };
     }
+
+    // Hide rider when mount dies
+    const deathDecaySeqs = mountMdl.sequences.filter((s) => s.name.includes('Death') || s.name.includes('Decay'));
+    deathDecaySeqs.forEach((s) => {
+      if (!atm.scaling) {
+        atm.scaling = {
+          type: 'scaling',
+          globalSeq: mountMdl.globalSequences.at(-1)!,
+          interpolation: 'DontInterp',
+          keyFrames: new Map(),
+        };
+      }
+      atm.scaling?.keyFrames.set(s.interval[0], [0, 0, 0]);
+      atm.scaling?.keyFrames.set(s.interval[1], [0, 0, 0]);
+    });
     return { charMdl, mountMdl };
   }
 

@@ -138,11 +138,10 @@ export function geosetsToString(version: number, geosets: Geoset[], bones: Bone[
       TVertices ${geoset.vertices.length} {
         ${geoset.vertices.map((vertex) => `{ ${fVector(vertex.texPosition)} },`).join('\n')}
       }
-      ${''
-  //   geoset.vertices.some((v) => v.texPosition2) ? `TVertices ${geoset.vertices.length} {
-  //   ${geoset.vertices.map((vertex) => `{ ${fVector(vertex.texPosition2 || vertex.texPosition)} },`).join('\n')}
-  // }` : ''
-}
+      ${geoset.material.layers.some((l) => l.coordId === 1)
+        && geoset.vertices.some((v) => v.texPosition2) ? `TVertices ${geoset.vertices.length} {
+          ${geoset.vertices.map((vertex) => `{ ${fVector(vertex.texPosition2 || vertex.texPosition)} },`).join('\n')}
+        }` : ''}
 
       ${vertexGroupBlock}
       ${skinWeightsBlock}

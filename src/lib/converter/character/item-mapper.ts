@@ -39,7 +39,7 @@ export function guessAttackTag(inventoryTypeR: number, inventoryTypeL: number): 
   if (inventoryTypeR === InventoryType.RANGEDRIGHT) {
     return 'Rifle';
   }
-  if (inventoryTypeR === InventoryType.RANGED) {
+  if (inventoryTypeL === InventoryType.RANGED || inventoryTypeR === InventoryType.RANGEDRIGHT) {
     return 'Bow';
   }
 

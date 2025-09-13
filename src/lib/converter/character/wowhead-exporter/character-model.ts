@@ -249,6 +249,11 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     InventoryType.RELIC,
   ].includes(slot.data.inventoryType);
 
+  const backSheath = ctx.forceSheathed && equipmentSlots.some((s) => [
+    InventoryType.SHIELD,
+    InventoryType.RANGED,
+  ].includes(s.data.inventoryType));
+
   for (const [slotId, attachmentIds] of Object.entries(attachmentList)) {
     const slot = equipmentSlots.find((s) => s.slotId === Number(slotId));
     if (slot) {
@@ -263,6 +268,23 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
         }
         if (Number(slotId) === EquipmentSlot.MainHand && slot.data.inventoryType === InventoryType.RANGED) {
           attachmentId = WoWAttachmentID.HandLeft;
+        }
+        console.log('attachmentId before sheathing', getWoWAttachmentName(attachmentId));
+        console.log('slot.data.inventoryType', slot.data.inventoryType);
+        if (ctx.forceSheathed) {
+          if (slot.data.inventoryType === InventoryType.RANGED
+            || slot.data.inventoryType === InventoryType.SHIELD
+            || attachmentId === WoWAttachmentID.Shield
+          ) {
+            attachmentId = WoWAttachmentID.SheathShield;
+          }
+          if (attachmentId === WoWAttachmentID.HandRight) {
+            attachmentId = backSheath ? WoWAttachmentID.HipWeaponLeft : WoWAttachmentID.SheathMainHand;
+          }
+          if (attachmentId === WoWAttachmentID.HandLeft) {
+            attachmentId = backSheath ? WoWAttachmentID.HipWeaponRight : WoWAttachmentID.SheathOffHand;
+          }
+          console.log('attachmentId after sheathing', getWoWAttachmentName(attachmentId));
         }
         await attachItemModel(slot, i, attachmentId);
       }

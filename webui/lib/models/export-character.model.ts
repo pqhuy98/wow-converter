@@ -33,6 +33,7 @@ export interface Character {
     path: RefSchema
     scale?: number
     seatOffset?: [number, number, number]
+    animation?: string
   }
 }
 

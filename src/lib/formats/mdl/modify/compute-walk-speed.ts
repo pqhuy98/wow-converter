@@ -5,14 +5,18 @@ import { Node } from '../components/node/node';
 import { iterateNodesAtTimestamp } from '../mdl-traverse';
 import { MDLModify } from '.';
 
-const debug = false;
+const debug = true;
 
-// TODO: this doesn't work with Undead character!!
 export function computeWalkMovespeed(this: MDLModify) {
   this.mdl.sequences.forEach((seq) => {
-    if (seq.moveSpeed === 0 && ([
-      'Walk', 'Run', 'Sprint', 'FlyWalk',
-    ].includes(seq.data.wowName))) {
+    if (seq.moveSpeed === 0 && ['Walk', 'Run', 'Sprint'].includes(seq.data.wowName)) {
+      if (seq.data.wowName === 'Walk') seq.moveSpeed = 2.5;
+      if (seq.data.wowName === 'Run') seq.moveSpeed = 7;
+      if (seq.data.wowName === 'Sprint') seq.moveSpeed = 11.9;
+
+      const compute = false;
+      if (!compute) return;
+
       debug && console.log(this.mdl.model.name, 'calculating missing movespeed for', `"${seq.name}" (${seq.data.wowName})`);
       const SAMPLE_STEPS = 30;
 
@@ -159,11 +163,11 @@ export function computeWalkMovespeed(this: MDLModify) {
         }
 
         const sizeX = globalMax[0] - globalMin[0];
-        if (moveSpeed > 0.5 * sizeX && moveSpeed < sizeX * 2) {
+        if (moveSpeed > 0.1 * sizeX && moveSpeed < sizeX * 2) {
           debug && console.log('setting moveSpeed', seq.name, { moveSpeed, sizeX });
           seq.moveSpeed = moveSpeed;
         } else {
-          debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed to 0');
+          debug && console.log(this.mdl.model.name, seq.name, 'setting moveSpeed to 0 due to invalid speed', { moveSpeed, sizeX });
           seq.moveSpeed = 0;
         }
     }

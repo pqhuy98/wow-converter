@@ -1,4 +1,7 @@
-import { HelpCircle, User } from 'lucide-react';
+import {
+  HelpCircle, Plus, Trash2, User,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -52,6 +55,27 @@ const tooltips = {
   portraitCamera: 'Name of the sequence to use for positioning the character portrait camera. E.g. if later you use Stand Ready as default stand animation, the portrait camera needs to be placed lower since the model will usually hunch a bit.',
   mount: 'The mount model to use, can be a Wowhead URL, local file inside wow.export folder, or Display ID number. The mount model must have attachment point "Shield" - WoW uses it to attach the rider. If mount is provided, the character must have animation "Mount".',
   mountScale: 'Additional scale multiplier of the mount model. Firstly the mount model is scaled equivalently to the character model, then this multiplier is applied. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
+  mountType: <span>
+    The character's mount animation to use. For most cases, you should use "Mount".
+    But some mount models need different animation, e.g. {' '}
+    <Link href="https://www.wowhead.com/item=44554/flying-carpet" target="_blank" className="text-blue-500 hover:underline">
+      Flying Carpet
+    </Link>
+      {' needs "MountCrouch", '}
+    <Link href="https://www.wowhead.com/wotlk/item=50818/sky-golem" target="_blank" className="text-blue-500 hover:underline">
+      Sky Golem
+    </Link>
+      {' needs "ReclinedMount", '}
+    <Link href="https://www.wowhead.com/wotlk/item=50818/amani-bear" target="_blank" className="text-blue-500 hover:underline">
+      Amani Bear
+    </Link>
+      {' needs "MountWide", '}
+
+    <Link href="https://www.wowhead.com/spell=428013/incognitro-the-indecipherable-felcycle" target="_blank" className="text-blue-500 hover:underline">
+      Incognito
+    </Link>
+      {' needs "MountChopper".'}
+  </span>,
   seatOffsetForward: 'The forward (horizontal) offset of the seat. Use this field if you want to adjust the rider\'s seat position. Positive values move the seat forward, negative values move the seat backward.',
   seatOffsetUpward: 'The upward (vertical) offset of the seat. Use this field if you want to adjust the rider\'s seat position. Positive values move the seat upward, negative values move the seat downward.',
 };
@@ -313,10 +337,35 @@ export function CharacterConfig({
               value={character.mount?.path || { type: 'wowhead', value: '' }}
               onChange={(mountRef) => setCharacter((prev) => ({
                 ...prev,
-                mount: { path: mountRef, scale: prev.mount?.scale },
+                mount: {
+                  ...prev.mount, path: mountRef, seatOffset: [0, 0, 0], scale: undefined,
+                },
               }))}
-              label="Mount Model"
-              tooltip={tooltips.mount}
+              label={
+                <div className="flex items-center gap-2 w-full">
+                  <div className="flex items-center gap-2">
+                    <span>Mount Model</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">{tooltips.mount}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCharacter((prev) => ({ ...prev, mount: undefined }))}
+                    className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              }
               category="mount"
             />
           </div>
@@ -363,9 +412,43 @@ export function CharacterConfig({
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <div className="flex items-center space-x-2 col-span-3">
+          <div className="flex items-center space-x-2 col-span-2">
+            <Label htmlFor="mountType" className="flex items-center gap-2 text-sm">
+              Type
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">{tooltips.mountType}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Select
+              value={character.mount?.animation || 'Mount'}
+              onValueChange={(value) => setCharacter((prev) => ({
+                ...prev,
+                mount: { ...prev.mount!, animation: value },
+              }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent align="start">
+                <SelectItem value="Mount">Mount</SelectItem>
+                <SelectItem value="MountCrouch">Crouch</SelectItem>
+                <SelectItem value="MountWide">Wide</SelectItem>
+                <SelectItem value="MountChopper">Chopper</SelectItem>
+                <SelectItem value="ReclinedMount">Reclined</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center space-x-2 col-span-2">
             <Label htmlFor="seatOffsetForward" className="flex items-center gap-2 text-sm">
-              Seat Offset Forward
+              Forward
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
@@ -398,9 +481,9 @@ export function CharacterConfig({
             />
           </div>
 
-          <div className="flex items-center space-x-2 col-span-3">
+          <div className="flex items-center space-x-2 col-span-2">
             <Label htmlFor="seatOffsetUpward" className="flex items-center gap-2 text-sm">
-              Seat Offset Upward
+              Upward
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
@@ -434,6 +517,7 @@ export function CharacterConfig({
           </div>
         </div>
       </div> : <Button variant="outline"
+        className="w-full bg-transparent"
         onClick={() => setCharacter((prev) => ({
           ...prev,
           mount: {
@@ -442,6 +526,7 @@ export function CharacterConfig({
           },
         }))}
         >
+          <Plus className="h-4 w-4 mr-2" />
           Add Mount
         </Button>
       }

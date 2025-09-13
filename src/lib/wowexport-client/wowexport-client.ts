@@ -279,7 +279,6 @@ export class WowExportRestClient {
     const json = await this.postJSON('/rest/exportCharacter', data);
     if (json.id === 'EXPORT_RESULT') {
       const result = json as ExportCharacterResult;
-      console.log('exportCharacter', result);
       await this.prefetchFiles(result.fileManifest, (file) => file.endsWith('.png'));
       result.exportPath = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.exportPath));
       result.fileManifest.forEach((_, i) => {

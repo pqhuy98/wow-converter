@@ -17,6 +17,7 @@ export interface ExportContext {
   config: Config;
   outputFile: string;
   weaponInventoryTypes: [undefined | number, undefined | number];
+  forceSheathed?: boolean;
 }
 
 export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, guessSkin: {
@@ -94,7 +95,12 @@ async function relativeToExport(p: string): Promise<string> {
 }
 
 export async function ensureLocalModelFileExists(filePath: string): Promise<void> {
-  let fullPath = path.join(await wowExportClient.getAssetDir(), filePath);
+  const baseDir = await wowExportClient.getAssetDir();
+  let fullPath = path.resolve(path.join(baseDir, filePath));
+  if (!fullPath.startsWith(baseDir)) {
+    throw new Error(`File ${filePath} is outside of the wow.export assets directory`);
+  }
+
   if (!fullPath.endsWith('.obj')) {
     fullPath += '.obj';
   }

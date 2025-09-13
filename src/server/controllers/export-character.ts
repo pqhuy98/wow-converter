@@ -110,6 +110,11 @@ export async function ControllerExportCharacter(router: express.Router) {
     ce.models.forEach(([mdl]) => {
       if (request.formatVersion === '800') {
         mdl.modify.convertToSd800();
+        mdl.materials.forEach((m) => {
+          m.layers.forEach((l) => {
+            l.unshaded = true;
+          });
+        });
       }
       if (request.optimization?.sortSequences) {
         mdl.modify.sortSequences();
