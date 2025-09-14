@@ -291,7 +291,6 @@ export default function BrowseModelPage() {
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       disabled={isBusy}
-                      onFocus={(e) => e.target.select()}
                       onKeyDown={(e) => {
                         if (e.key === 'Escape') {
                           e.preventDefault();

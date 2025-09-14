@@ -5,18 +5,6 @@
   "author": "Huy Pham",
   "license": "MIT",
   "type": "module",
-  "pkg": {
-    "assets": [
-      "webui/out/**",
-      "node_modules/sharp/build/Release/sharp.node",
-      "node_modules/sharp/vendor/**",
-      "build/**.cjs"
-    ],
-    "targets": [
-      "node18-win-x64"
-    ],
-    "outputPath": "dist"
-  },
   "exports": {
     "./*": "./src/*"
   },
@@ -33,12 +21,10 @@
     "postinstall": "run-p install:webui",
     "build:webui": "cd webui && npm run build",
     "build:rollup": "npm run prisma:generate && rollup -c",
-    "build:pkg": "pkg build/server.bundle.cjs --config package.json --compress Gzip --options max-old-space-size=99999 --output dist/wow-converter",
-    "build:nexe": "cd build && nexe server.bundle.cjs -b -t windows-x64-20.11.1 -o ../dist/wow-converter-nexe.exe",
+    "build:nexe": "cd build && nexe server.bundle.cjs -b -t windows-x64-20.11.1 -o ../dist/wow-converter.exe",
     "build:copy": "shx rm -rf dist/webui dist/bin dist/node_modules && cross-env mkdir dist/webui && shx cp -r webui/out dist/webui && shx cp -r bin dist/bin && shx cp -r build/**.worker.cjs dist && npm i --omit=dev --prefix dist --no-audit --no-fund sharp@0.32.6",
     "build:wow.export": "cd wow.export && npm run build && cd .. && shx cp -r wow.export/bin/win-x64/. dist && shx rm -f dist/update dist/update.json",
     "zip": "powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath wow-converter.zip -Force\"",
-    "build:app:pkg": "run-p build:rollup build:webui build:wow.export && run-s build:pkg build:copy zip",
     "build:app:nexe": "run-p build:rollup build:webui build:wow.export && run-s build:nexe build:copy zip",
     "build:server": "npm run clean && run-p build:webui build:rollup",
     "build": "npm run clean && npm run build:app:nexe"
@@ -80,7 +66,6 @@
     "nexe": "^5.0.0-beta.4",
     "npm": "^11.4.2",
     "npm-run-all": "^4.1.5",
-    "pkg": "^5.8.1",
     "prisma": "^6.11.1",
     "rollup": "^4.45.1",
     "shx": "^0.4.0",
