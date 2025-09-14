@@ -75,8 +75,8 @@ export default function BrowseModelPage() {
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim();
     if (!q) return allFiles;
-    const words = q.split(/ +/).filter(Boolean);
-    return allFiles.filter((f) => words.every((w) => f.fileName.includes(w)));
+    const words = q.split(/ +/).filter(Boolean).map((w) => w.toLowerCase());
+    return allFiles.filter((f) => words.every((w) => f.fileName.toLowerCase().includes(w)));
   }, [allFiles, debouncedQuery, idToFile]);
 
   // words used for highlighting (non-debounced for immediate feedback)
