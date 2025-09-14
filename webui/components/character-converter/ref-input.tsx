@@ -108,15 +108,27 @@ export function RefInput({
               setCurrentValues((prev) => ({ ...prev, [value.type]: newValue }));
               clientValidation(newValue, false);
             }}
-            // detect paste
+            // detect paste with type prediction
             onPaste={(e) => {
-              const newValue = { ...currentValues[value.type], value: e.clipboardData.getData('text').trim() };
+              const pasted = e.clipboardData.getData('text').trim();
               e.preventDefault();
               e.stopPropagation();
+              const predicted = predictRefTypeFromText(pasted, category, isSharedHosting);
+              const targetType: RefType = predicted ?? value.type;
+              const newValue: RefSchema = { type: targetType, value: pasted };
+              setCurrentValues((prev) => ({ ...prev, [targetType]: newValue }));
               fullValidAndFix(newValue);
             }}
             onBlur={() => {
-              fullValidAndFix(currentValues[value.type]);
+              const text = currentValues[value.type].value;
+              const predicted = predictRefTypeFromText(text, category, isSharedHosting);
+              if (predicted && predicted !== value.type) {
+                const newValue: RefSchema = { type: predicted, value: text };
+                setCurrentValues((prev) => ({ ...prev, [predicted]: newValue }));
+                fullValidAndFix(newValue);
+              } else {
+                fullValidAndFix(currentValues[value.type]);
+              }
             }}
             onFocus={(e) => {
               e.target.select();
@@ -175,6 +187,34 @@ const invalidMessage = {
   npc: 'Invalid Wowhead URL, must contain either: "/npc=", "/item=", "/object=" or "/dressing-room#"',
   item: 'Invalid Wowhead URL, must contain "/item="',
   mount: 'Invalid Wowhead URL, must contain "/npc=", "/spell=" or "/item="',
+};
+
+const predictRefTypeFromText = (
+  text: string,
+  category: RefCategory,
+  isSharedHosting: boolean,
+): RefType | null => {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+
+  // Wowhead URL detection (strictly match current validation)
+  if (wowheadPattern[category].test(trimmed)) return 'wowhead';
+
+  // Pure numeric -> Display ID
+  if (/^\d+$/.test(trimmed)) return 'displayID';
+
+  // Local file heuristics
+  const lower = trimmed.toLowerCase();
+  const isUrlLike = lower.startsWith('http://') || lower.startsWith('https://');
+  const hasPathSeparator = trimmed.includes('\\') || trimmed.includes('/');
+  const hasKnownExt = /\.(obj|m2|wmo)$/i.test(trimmed);
+  const isWindowsAbsolute = /^[a-zA-Z]:[\\/]/.test(trimmed) || trimmed.startsWith('\\\\');
+  const isQuoted = trimmed.startsWith('"') || trimmed.endsWith('"');
+  const likelyLocal = !isUrlLike && (hasKnownExt || hasPathSeparator || isWindowsAbsolute || isQuoted);
+
+  if (likelyLocal && !isSharedHosting) return 'local';
+
+  return null;
 };
 
 export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean): string | null => {
