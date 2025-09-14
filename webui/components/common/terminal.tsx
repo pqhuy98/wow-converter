@@ -44,38 +44,38 @@ const ANSI_COLORS = {
 
 // CSS color mapping
 const CSS_COLORS = {
-  black: 'text-gray-900',
+  black: 'text-foreground',
   red: 'text-red-600',
   green: 'text-green-600',
   yellow: 'text-yellow-600',
   blue: 'text-blue-600',
   magenta: 'text-purple-600',
   cyan: 'text-cyan-600',
-  white: 'text-gray-100',
-  brightBlack: 'text-gray-700',
+  white: 'text-foreground',
+  brightBlack: 'text-muted-foreground',
   brightRed: 'text-red-500',
   brightGreen: 'text-green-500',
   brightYellow: 'text-yellow-500',
   brightBlue: 'text-blue-500',
   brightMagenta: 'text-purple-500',
   brightCyan: 'text-cyan-500',
-  brightWhite: 'text-white',
-  bgBlack: 'bg-gray-900',
+  brightWhite: 'text-foreground',
+  bgBlack: 'bg-secondary',
   bgRed: 'bg-red-600',
   bgGreen: 'bg-green-600',
   bgYellow: 'bg-yellow-600',
   bgBlue: 'bg-blue-600',
   bgMagenta: 'bg-purple-600',
   bgCyan: 'bg-cyan-600',
-  bgWhite: 'bg-gray-100',
-  bgBrightBlack: 'bg-gray-700',
+  bgWhite: 'bg-card',
+  bgBrightBlack: 'bg-secondary',
   bgBrightRed: 'bg-red-500',
   bgBrightGreen: 'bg-green-500',
   bgBrightYellow: 'bg-yellow-500',
   bgBrightBlue: 'bg-blue-500',
   bgBrightMagenta: 'bg-purple-500',
   bgBrightCyan: 'bg-cyan-500',
-  bgBrightWhite: 'bg-white',
+  bgBrightWhite: 'bg-card',
 } as const;
 
 interface ParsedSegment {
@@ -170,7 +170,7 @@ interface TerminalProps {
 
 export function Terminal({ logs, className = '' }: TerminalProps) {
   return (
-    <div className={`bg-gray-900 text-white font-mono text-sm p-4 rounded-lg border border-gray-700 max-h-40 overflow-y-auto ${className}`}>
+    <div className={`bg-secondary text-foreground font-mono text-sm p-4 rounded-lg border border-border max-h-40 overflow-y-auto ${className}`}>
       <div className="space-y-1">
         {logs.map((log, index) => {
           const segments = parseAnsiString(log);
@@ -178,7 +178,7 @@ export function Terminal({ logs, className = '' }: TerminalProps) {
             <div key={index} className="flex overflow-hidden whitespace-nowrap">
               {segments.map((segment, segIndex) => {
                 const classes = [
-                  segment.color || 'text-white',
+                  segment.color || 'text-foreground',
                   segment.backgroundColor,
                   segment.bold && 'font-bold',
                   segment.dim && 'opacity-50',

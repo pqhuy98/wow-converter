@@ -121,7 +121,7 @@ export function AttachItems({
                             scale: Number.parseFloat(e.target.value) || undefined,
                           })
                           }
-                          className="border-2 border-gray-300 bg-white focus:border-blue-500"
+                          className=""
                         />
                       </div>
                     </div>

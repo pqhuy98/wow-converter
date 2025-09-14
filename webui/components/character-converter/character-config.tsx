@@ -131,7 +131,7 @@ export function CharacterConfig({
               placeholder="1.0"
               value={character.mount?.scale || ''}
               disabled={character.mount?.path.value === ''}
-              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              className="flex-1"
               onChange={(e) => setCharacter((prev) => {
                 if (!prev.mount) {
                   return prev;
@@ -187,7 +187,7 @@ export function CharacterConfig({
               type="number"
               step="0.1"
               placeholder="0"
-              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              className="flex-1"
               value={character.mount?.seatOffset?.at(0) || ''}
               onChange={(e) => setCharacter((prev) => ({
                 ...prev,
@@ -213,7 +213,7 @@ export function CharacterConfig({
               type="number"
               step="0.1"
               placeholder="0"
-              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              className="flex-1"
               value={character.mount?.seatOffset?.at(2) || ''}
               onChange={(e) => setCharacter((prev) => ({
                 ...prev,

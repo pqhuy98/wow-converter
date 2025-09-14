@@ -269,7 +269,7 @@ export function CharacterConverter() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-[calc(100vh-57px)] p-4">
       <div className="max-w-6xl mx-auto space-y-4">
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -397,7 +397,7 @@ export function CharacterConverter() {
                 <div>
                   <h4 className="font-semibold mb-2">
                   Exported files:
-                  <span className="text-gray-400 font-normal ml-4">{
+                  <span className="text-muted-foreground font-normal ml-4">{
                     (() => {
                       const modelsSize = jobStatus.result.exportedModels?.reduce((acc, { size }) => acc + size, 0) || 0;
                       const texturesSize = jobStatus.result.exportedTextures?.reduce((acc, { size }) => acc + size, 0) || 0;
@@ -414,13 +414,13 @@ export function CharacterConverter() {
                           {jobStatus.result!.versionId ? path.replace(`__${jobStatus.result!.versionId}`, '') : path}
                         </span></b>
                         <span className="select-none ml-4"></span>
-                        <span className="text-gray-400">{formatFileSize(size)}</span>                      </li>
+                        <span className="text-muted-foreground">{formatFileSize(size)}</span>                      </li>
                     ))}
                     {jobStatus.result.exportedTextures?.map(({ path, size }, index: number) => (
                       <li key={index} className="text-sm break-all">
                         <span> {path}</span>
                         <span className="select-none ml-4"></span>
-                        <span className="text-gray-400">{formatFileSize(size)}</span>
+                        <span className="text-muted-foreground">{formatFileSize(size)}</span>
                       </li>
                     ))}
                   </ul>
@@ -430,12 +430,12 @@ export function CharacterConverter() {
           </CardContent>
         </Card>
       </div>
-      <div className="text-lg text-center text-gray-600 mt-4">
-        Created by <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">wc3-sandbox</a>
+      <div className="text-lg text-center text-muted-foreground mt-4">
+        Created by <a href="https://github.com/pqhuy98" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">wc3-sandbox</a>
         {' | '}
-        <a href="https://github.com/pqhuy98/wow-converter" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Source code</a>
+        <a href="https://github.com/pqhuy98/wow-converter" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Source code</a>
         {' | '}
-        <a href="https://www.youtube.com/@wc3-sandbox" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">YouTube</a>
+        <a href="https://www.youtube.com/@wc3-sandbox" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">YouTube</a>
       </div>
     </div>
   );

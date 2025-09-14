@@ -24,7 +24,7 @@ function Viewer() {
   if (!['export', 'browse'].includes(source)) {
     return (
       <div className="h-screen w-screen bg-black flex items-center justify-center">
-        <div className="text-white text-center">
+        <div className="text-foreground text-center">
           <h1 className="text-2xl mb-4">Invalid source</h1>
         </div>
       </div>
@@ -34,12 +34,12 @@ function Viewer() {
   if (!modelPath) {
     return (
       <div className="h-screen w-screen bg-black flex items-center justify-center">
-        <div className="text-white text-center">
+        <div className="text-foreground text-center">
           <h1 className="text-2xl mb-4">No model specified</h1>
           <Button
             variant="secondary"
             onClick={() => router.back()}
-            className="bg-white/10 text-white border-white/20 hover:bg-white/20"
+            className="bg-accent text-accent-foreground hover:bg-accent/80"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Go Back
@@ -56,7 +56,7 @@ function Viewer() {
           variant="secondary"
           size="sm"
           onClick={() => router.back()}
-          className="bg-black/50 text-white border-white/20 hover:bg-black/70"
+          className="bg-secondary text-foreground hover:bg-accent"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
