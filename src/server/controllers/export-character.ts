@@ -307,7 +307,10 @@ export async function ControllerExportCharacter(router: express.Router) {
     : express.static(dir));
   router.use('/browse-assets', exportStatic(outputDirBrowse));
   router.use('/assets', exportStatic(outputDir));
-  fsExtra.emptyDirSync(outputDirBrowse);
+
+  if (!isSharedHosting) {
+    fsExtra.emptyDirSync(outputDirBrowse);
+  }
 
   let jobs: ExportCharacterJob[] = [];
   if (isSharedHosting) {
