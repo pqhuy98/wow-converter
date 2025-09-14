@@ -387,7 +387,7 @@ export default function BrowseModelPage() {
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
                         <p className="text-lg">{job.status === 'processing' ? 'Exporting...' : `Queue position: ${job.position}`}</p>
                       </div>
-                        <div className="mt-4 mx-auto w-full sm:w-3/4 lg:w-1/2 sm:min-w-[75%] sm:max-w-[75%] lg:min-w-[50%] lg:max-w-[50%]">
+                        <div className="mt-4 mx-auto w-full sm:w-3/4 lg:w-1/2 sm:min-w-[75%] sm:max-w-[75%] lg:min-w-[75%] lg:max-w-[75%]">
                           <Terminal logs={job.logs || []} className="w-full" />
                         </div>
                       </>
