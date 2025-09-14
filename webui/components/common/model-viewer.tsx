@@ -23,7 +23,7 @@ import { TooltipHelp } from './tooltip-help';
 interface ModelViewerProps {
   modelPath?: string
   alwaysFullscreen?: boolean
-  assetsBase?: string
+  source?: 'export' | 'browse'
 }
 
 // Normalises backslashes to forward slashes for safe URL usage
@@ -31,7 +31,7 @@ const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 
 const MAX_DISTANCE = 2000000;
 
-export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase }: ModelViewerProps) {
+export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: ModelViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [currentSeq, setCurrentSeq] = useState<number>(0);
@@ -55,8 +55,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
   const loadedFilesRef = useRef<Set<string>>(new Set());
   const [loadedCount, setLoadedCount] = useState<number>(0);
   useEffect(() => {
-    baseUrlRef.current = assetsBase || '/api/assets';
-  }, [assetsBase]);
+    baseUrlRef.current = source === 'browse' ? '/api/browse-assets' : '/api/assets';
+  }, [source]);
   useEffect(() => {
     if (!canvasRef.current) return undefined;
     const viewer = new ModelViewer(canvasRef.current);
@@ -165,7 +165,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
         }
       }
       // Path solver so the viewer fetches every dependant file via our assets route
-      const base = assetsBase || '/api/assets';
+      const base = baseUrlRef.current;
       const pathSolver = (src: unknown) => `${base}/${normalizePath(src as string)}`;
 
       // Load the model (assumed to be in MDX|MDL format)
@@ -514,7 +514,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
   };
 
   const handleCopyLink = async () => {
-    const viewerUrl = `${window.location.origin}/viewer?model=${encodeURIComponent(modelPath || '')}`;
+    const viewerUrl = `${window.location.origin}/viewer?${source === 'browse' ? 'source=browse&' : ''}model=${encodeURIComponent(modelPath || '')}`;
     try {
       await navigator.clipboard.writeText(viewerUrl);
       setCopied(true);

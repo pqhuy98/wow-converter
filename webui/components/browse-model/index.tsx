@@ -375,7 +375,7 @@ export default function BrowseModelPage() {
           <div className="lg:w-2/3 w-full h-full overflow-hidden min-w-0">
             <div className="p-0 h-full relative overflow-hidden min-w-0">
               {modelPath && (
-                <ModelViewerUi modelPath={modelPath} assetsBase="/api/browse-assets" />
+                <ModelViewerUi modelPath={modelPath} source="browse" />
               )}
               {job?.status !== 'done' && (
                 <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">

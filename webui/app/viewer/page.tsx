@@ -20,6 +20,16 @@ function Viewer() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const modelPath = searchParams.get('model');
+  const source = searchParams.get('source') ?? 'export';
+  if (!['export', 'browse'].includes(source)) {
+    return (
+      <div className="h-screen w-screen bg-black flex items-center justify-center">
+        <div className="text-white text-center">
+          <h1 className="text-2xl mb-4">Invalid source</h1>
+        </div>
+      </div>
+    );
+  }
 
   if (!modelPath) {
     return (
@@ -52,7 +62,7 @@ function Viewer() {
           Back
         </Button>
       </div>
-      <ModelViewerUi modelPath={decodeURIComponent(modelPath)} alwaysFullscreen={true} />
+      <ModelViewerUi modelPath={decodeURIComponent(modelPath)} alwaysFullscreen={true} source={source as 'export' | 'browse'} />
     </div>
   );
 }
