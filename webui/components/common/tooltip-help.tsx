@@ -19,9 +19,11 @@ export function TooltipHelp({
   const [isHovering, setIsHovering] = React.useState(false);
   const reopenTimeoutRef = React.useRef<number | null>(null);
 
-  // When tooltip content changes while hovering, close then reopen to refresh content without requiring re-hover
+  // When tooltip content (string) changes while hovering, close then reopen to refresh content without requiring re-hover.
+  // Guard to strings only to avoid ReactNode identity changes (e.g. <MouseTooltip />) causing flicker.
   React.useEffect(() => {
     if (!isHovering) return;
+    if (typeof tooltips !== 'string') return;
     if (reopenTimeoutRef.current) window.clearTimeout(reopenTimeoutRef.current);
     setOpen(false);
     reopenTimeoutRef.current = window.setTimeout(() => setOpen(true), 0);

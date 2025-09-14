@@ -768,3 +768,13 @@ async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, 
 
   return instances;
 }
+
+function MouseTooltip() {
+  return (
+    <div className="text-sm leading-5">
+      <div><span className="font-semibold">Left click</span>: orientation (rotate)</div>
+      <div><span className="font-semibold">Right click</span>: forward/backward/left/right</div>
+      <div><span className="font-semibold">Middle click</span>: up/down/left/right</div>
+    </div>
+  );
+}
