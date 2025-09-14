@@ -2,6 +2,7 @@ import './globals.css';
 
 import type { Metadata } from 'next';
 
+import SiteHeader from '@/components/common/site-header';
 import { ServerConfigProvider } from '@/components/server-config';
 
 export const metadata: Metadata = {
@@ -19,8 +20,9 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.jpg" />
       </head>
-      <body>
+      <body style={{ height: 'calc(100vh - 57px)' }}>
         <ServerConfigProvider>
+          <SiteHeader />
           {children}
         </ServerConfigProvider>
       </body>

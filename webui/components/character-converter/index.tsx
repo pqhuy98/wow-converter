@@ -1,10 +1,7 @@
 'use client';
 
 import _ from 'lodash';
-import {
-  Download, History,
-} from 'lucide-react';
-import Link from 'next/link';
+import { Download } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { AttachItems } from '@/components/character-converter/attach-items';
@@ -302,22 +299,6 @@ export function CharacterConverter() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-6xl mx-auto space-y-4">
-        {/* Navigation Header */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="text-center flex-1">
-            <h1 className="text-4xl font-bold text-gray-900">Huy's WOW-CONVERTER</h1>
-            <p className="text-lg text-gray-600">Easily export WoW NPC models into Warcraft 3 MDL/MDX</p>
-          </div>
-          <Link href="/recents" target="_blank">
-          <Button
-            variant="outline"
-            className="flex items-center gap-2 border-gray-500"
-          >
-            <History className="h-4 w-4" />
-            Recent Exports
-          </Button>
-            </Link>
-        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <CharacterConfig

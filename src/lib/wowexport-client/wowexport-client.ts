@@ -31,7 +31,7 @@ interface CASCBuild {
   VersionsName: string;
 }
 
-interface FileEntry {
+export interface FileEntry {
   fileDataID: number;
   fileName: string;
 }
@@ -116,12 +116,14 @@ export class WowExportRestClient {
       httpAgent,
       httpsAgent,
     });
-    const debug = false;
+    const debug = true;
     this.http.interceptors.request.use((config) => {
+      if (config.url?.includes('/getCascInfo') || config.url?.includes('/searchFiles')) return config;
       debug && console.log('request', config.method, config.url, config.data);
       return config;
     });
     this.http.interceptors.response.use((response) => {
+      if (response.config.url?.includes('/getCascInfo') || response.config.url?.includes('/searchFiles')) return response;
       debug && console.log('response', response.status, response.data);
       return response;
     });

@@ -1,8 +1,6 @@
 'use client';
 
-import {
-  ArrowLeft, Download, ExternalLink,
-} from 'lucide-react';
+import { Download, ExternalLink } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -173,32 +171,16 @@ export default function RecentsPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         <div className="mx-auto">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Recent Exports</h1>
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-          </div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex flex-col overflow-x-hidden">
+    <div className="h-full bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex flex-col overflow-x-hidden">
       <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex-1 text-center px-4">
-            <h1 className="text-4xl font-bold text-gray-900">Recent Exports</h1>
-            <p className="text-lg text-gray-600 mt-2">View recent character exports</p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => window.location.href = '/'}
-            className="hidden sm:flex items-center gap-2 flex-shrink-0"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Exporter
-          </Button>
-        </div>
+        <div className="mb-4" />
 
         <div className="flex flex-col lg:flex-row gap-6 h-full min-w-0" style={{ height: 'calc(100vh - 125px)' }}>
           {/* Left Column - Job List */}

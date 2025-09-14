@@ -9,6 +9,7 @@ import path from 'path';
 
 import { printLogo } from '../lib/logo';
 import { isDev, isSharedHosting } from './config';
+import { ControllerBrowse } from './controllers/browse';
 import { ControllerDownload } from './controllers/download';
 import { ControllerExportCharacter } from './controllers/export-character';
 import { ControllerGetConfig } from './controllers/get-config';
@@ -45,6 +46,7 @@ async function main() {
   await ControllerExportCharacter(router);
   ControllerDownload(router);
   ControllerGetConfig(router);
+  ControllerBrowse(router);
 
   // serve the static UI
   const uiDir = path.join('webui', 'out');

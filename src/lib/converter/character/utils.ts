@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import {
-  copyFileSync, existsSync, statSync, unlinkSync,
+  copyFileSync, existsSync, mkdirSync, statSync, unlinkSync,
 } from 'fs';
 import path from 'path';
 
@@ -94,7 +94,7 @@ async function relativeToExport(p: string): Promise<string> {
   return path.relative(baseDir, p);
 }
 
-export async function ensureLocalModelFileExists(filePath: string): Promise<void> {
+export async function ensureLocalModelFileExists(filePath: string): Promise<string> {
   const baseDir = await wowExportClient.getAssetDir();
   let fullPath = path.resolve(path.join(baseDir, filePath));
   if (!fullPath.startsWith(baseDir)) {
@@ -104,7 +104,7 @@ export async function ensureLocalModelFileExists(filePath: string): Promise<void
   if (!fullPath.endsWith('.obj')) {
     fullPath += '.obj';
   }
-  if (existsSync(fullPath)) return;
+  if (existsSync(fullPath)) return path.relative(baseDir, fullPath);
 
   console.log('File', fullPath, 'does not exist, try to export it...');
 
@@ -122,23 +122,32 @@ export async function ensureLocalModelFileExists(filePath: string): Promise<void
   const models = await wowExportClient.exportModels([
     { fileDataID: file.fileDataID, skinName: skin?.id }]);
 
+  if (models.length === 0) {
+    console.log(chalk.red(`File ${file.fileDataID} ${file.fileName} not found after wow.export assets`), models);
+    throw new Error(`Model ${fullPath} not found after wow.export assets`);
+  }
+
   // Find the exported model
   const model = models[0].files.find((f) => f.fileDataID === file.fileDataID && f.type === 'OBJ');
   if (!model) {
     throw new Error(`Model ${fullPath} not found after wow.export assets`);
   }
   await waitUntil(() => existsSync(model.file));
-  if (fullPath !== model.file) {
-    await moveFile(model.file, fullPath);
-    await moveFile(model.file.replace(/\.obj$/, '.mtl'), fullPath.replace(/\.obj$/, '.mtl'));
-    await moveFile(model.file.replace(/\.obj$/, '.json'), fullPath.replace(/\.obj$/, '.json'));
-    await moveFile(model.file.replace(/\.obj$/, '_bones.json'), fullPath.replace(/\.obj$/, '_bones.json'));
-  }
-  console.log('File', fullPath, 'exported');
+  // if (fullPath !== model.file) {
+  //   await moveFile(model.file, fullPath);
+  //   await moveFile(model.file.replace(/\.obj$/, '.mtl'), fullPath.replace(/\.obj$/, '.mtl'));
+  //   await moveFile(model.file.replace(/\.obj$/, '.json'), fullPath.replace(/\.obj$/, '.json'));
+  //   if (!fullPath.endsWith('wmo.obj')) {
+  //     await moveFile(model.file.replace(/\.obj$/, '_bones.json'), fullPath.replace(/\.obj$/, '_bones.json'));
+  //   }
+  // }
+  console.log('File', model.file, 'exported');
+  return path.relative(baseDir, model.file);
 }
 
 async function searchModelWithSkin(fileWithSkin: string) {
-  for (let i = fileWithSkin.length; i >= 0; i--) {
+  const dirName = path.dirname(fileWithSkin);
+  for (let i = fileWithSkin.length; i > dirName.length; i--) {
     const searchPhrase = fileWithSkin.slice(0, i);
     const files = await wowExportClient.searchFiles(searchPhrase);
     const file = files.find((f) => f.fileName.replace(/\.m2$/, '').replace(/\.wmo$/, '') === searchPhrase);
@@ -151,6 +160,7 @@ async function searchModelWithSkin(fileWithSkin: string) {
 
 async function moveFile(src: string, dest: string) {
   if (src === dest) return;
+  mkdirSync(path.dirname(dest), { recursive: true });
   await waitUntil(() => existsSync(src));
   copyFileSync(src, dest);
   unlinkSync(src);

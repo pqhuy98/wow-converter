@@ -27,6 +27,8 @@ interface ModelViewerProps {
 // Normalises backslashes to forward slashes for safe URL usage
 const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 
+const MAX_DISTANCE = 2000000;
+
 export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [sequences, setSequences] = useState<Sequence[]>([]);
@@ -44,6 +46,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
   const sphereModelRef = useRef<MdxModel | undefined>(undefined);
   const primsReadyRef = useRef<Promise<void> | undefined>(undefined);
   const loadRequestIdRef = useRef(0);
+  const [gridVisible, setGridVisible] = useState(true);
+  const gridInstancesRef = useRef<MdxModelInstance[]>([]);
   useEffect(() => {
     if (!canvasRef.current) return undefined;
     const viewer = new ModelViewer(canvasRef.current);
@@ -54,7 +58,10 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     const scene = viewer.addScene();
     setScene(scene);
     scene.color.fill(0.15);
-    void createGridModel(viewer, scene, 10, 128);
+    void (async () => {
+      const gridInsts = await createGridModel(viewer, scene, 50, 128);
+      gridInstancesRef.current = gridInsts;
+    })();
 
     const camera = scene.camera;
     setCamera(camera);
@@ -115,7 +122,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     let cancelled = false;
     let onMouseDown: ((e: MouseEvent) => void) | null = null;
     let onMouseMove: ((e: MouseEvent) => void) | null = null;
-    let endDrag: (() => void) | null = null;
+    let onMouseUp: ((e: MouseEvent) => void) | null = null;
     let onWheel: ((e: WheelEvent) => void) | null = null;
     let resizeCanvas: (() => void) | null = null;
     let onTouchStart: ((e: TouchEvent) => void) | null = null;
@@ -198,9 +205,10 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       let lastDistance = 0;
       let horizontalAngle = 0;
       let verticalAngle = Math.PI / 6;
-      let distance = 500;
+      let distance = Math.max(200, Math.min(1000, modelInstance.getBounds().r * 5));
       const target = vec3.fromValues(0, 0, 0);
-      target[2] = modelInstance.getBounds().z;
+      target[0] = modelInstance.getBounds().x;
+      target[1] = modelInstance.getBounds().y;
 
       const updateCamera = () => {
         const x = distance * Math.cos(verticalAngle) * Math.cos(horizontalAngle);
@@ -224,24 +232,26 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
             camera.fov,
             width / height,
             camera.nearClipPlane,
-            camera.farClipPlane,
+            9999999,
           );
         }
       };
       resizeCanvas();
 
       // Mouse & wheel controls
-      let button = 0;
       let isTouch = false;
+      let leftDown = false;
+      let middleDown = false;
+      let rightDown = false;
 
       onMouseDown = (e: MouseEvent) => {
         e.preventDefault();
-        button = e.button;
-        if (e.button === 0 || e.button === 2) {
-          isDragging = true;
-          lastX = e.clientX;
-          lastY = e.clientY;
-        }
+        if (e.button === 0) leftDown = true;
+        if (e.button === 1) middleDown = true;
+        if (e.button === 2) rightDown = true;
+        isDragging = leftDown || middleDown || rightDown;
+        lastX = e.clientX;
+        lastY = e.clientY;
       };
 
       onTouchStart = (e: TouchEvent) => {
@@ -249,7 +259,6 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         if (e.touches.length === 1) {
           isTouch = true;
           isDragging = true;
-          button = 0; // treat as left click
           lastX = e.touches[0].clientX;
           lastY = e.touches[0].clientY;
         } else if (e.touches.length === 2) {
@@ -264,7 +273,36 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
       onMouseMove = (e: MouseEvent) => {
         if (!isDragging || isTouch) return;
-        if (button === 0) { // left click to rotate
+        if (middleDown || (leftDown && rightDown)) { // pan with middle or L+R
+          const dx = e.clientX - lastX;
+          const dy = e.clientY - lastY;
+          lastX = e.clientX;
+          lastY = e.clientY;
+          if (!canvas) return;
+          const w = canvas.width;
+          const h2 = canvas.height;
+          const sw = -dx / w * distance;
+          const sh = dy / h2 * distance;
+          // Move target along camera right (directionX) and up (directionY)
+          vec3.add(
+            target,
+            target,
+            vec3.scale(
+              vecHeap,
+              vec3.normalize(vecHeap, vec3.set(vecHeap, camera.directionX[0], camera.directionX[1], camera.directionX[2])),
+              sw,
+            ),
+          );
+          vec3.add(
+            target,
+            target,
+            vec3.scale(
+              vecHeap,
+              vec3.normalize(vecHeap, vec3.set(vecHeap, camera.directionY[0], camera.directionY[1], camera.directionY[2])),
+              sh,
+            ),
+          );
+        } else if (leftDown) { // left click to rotate
           const dx = e.clientX - lastX;
           const dy = e.clientY - lastY;
           lastX = e.clientX;
@@ -273,7 +311,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
           horizontalAngle -= dx * ROT_SPEED;
           verticalAngle += dy * ROT_SPEED;
           verticalAngle = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, verticalAngle));
-        } else if (button === 2) { // right click to move target
+        } else if (rightDown) { // right click to move target along ground plane
           const dx = e.clientX - lastX;
           const dy = e.clientY - lastY;
           lastX = e.clientX;
@@ -300,6 +338,13 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         updateCamera();
       };
 
+      onMouseUp = (e: MouseEvent) => {
+        if (e.button === 0) leftDown = false;
+        if (e.button === 1) middleDown = false;
+        if (e.button === 2) rightDown = false;
+        isDragging = leftDown || middleDown || rightDown;
+      };
+
       onTouchMove = (e: TouchEvent) => {
         if (!isDragging || !isTouch) return;
         e.preventDefault();
@@ -323,7 +368,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
             const scale = currentDistance / lastDistance;
             const ZOOM_SPEED = -1;
             distance *= 1 + (scale - 1) * ZOOM_SPEED;
-            distance = Math.max(1, Math.min(20000, distance));
+            distance = Math.max(1, Math.min(MAX_DISTANCE, distance));
             updateCamera();
           }
 
@@ -338,9 +383,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         lastDistance = 0; // Reset distance for next gesture
       };
 
-      endDrag = () => {
-        isDragging = false;
-      };
+      // endDrag replaced by onMouseUp per-button tracking
 
       onWheel = (e: WheelEvent) => {
         e.preventDefault();
@@ -348,7 +391,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
         const ZOOM_SPEED = 0.1;
         // adjust distance exponentially for smooth zoom
         distance *= 1 + (delta > 0 ? ZOOM_SPEED : -ZOOM_SPEED);
-        distance = Math.max(1, Math.min(20000, distance));
+        distance = Math.max(1, Math.min(MAX_DISTANCE, distance));
         updateCamera();
       };
 
@@ -362,19 +405,19 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
 
       window.addEventListener('resize', resizeCanvas);
       window.addEventListener('mousemove', onMouseMove!);
-      window.addEventListener('mouseup', endDrag!);
+      window.addEventListener('mouseup', onMouseUp!);
     })();
 
     return () => {
       cancelled = true;
-      if (canvas && onMouseDown && onWheel && onMouseMove && endDrag && resizeCanvas && onTouchStart && onTouchMove && onTouchEnd) {
+      if (canvas && onMouseDown && onWheel && onMouseMove && onMouseUp && resizeCanvas && onTouchStart && onTouchMove && onTouchEnd) {
         canvas.removeEventListener('mousedown', onMouseDown);
         canvas.removeEventListener('wheel', onWheel);
         canvas.removeEventListener('touchstart', onTouchStart);
         canvas.removeEventListener('touchmove', onTouchMove);
         canvas.removeEventListener('touchend', onTouchEnd);
         window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', endDrag!);
+        window.removeEventListener('mouseup', onMouseUp!);
         window.removeEventListener('resize', resizeCanvas!);
       }
       if (modelInstance) {
@@ -429,6 +472,19 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     const next = !collisionsVisible;
     setCollisionsVisible(next);
     for (const inst of collisionInstancesRef.current) {
+      try {
+        if (next) inst.show?.();
+        else inst.hide?.();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleToggleGrid = () => {
+    const next = !gridVisible;
+    setGridVisible(next);
+    for (const inst of gridInstancesRef.current) {
       try {
         if (next) inst.show?.();
         else inst.hide?.();
@@ -513,6 +569,23 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
               </TooltipProvider>
             </Button>
             <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleToggleGrid}
+              className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
+            >
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>{gridVisible ? '⌗' : '⎕'}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {gridVisible ? 'Hide grid' : 'Show grid'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Button>
+            <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => void handleCopyLink()}
@@ -559,7 +632,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
               >
                 {seq.name || `Sequence ${idx}`}
                 <span className="text-gray-500 text-xs flex items-center gap-1">
-                  {idx} -
+                  {idx}.
                   Duration: {((seq.interval[1] - seq.interval[0]) / 1000).toFixed(3)} s
                   {!seq.nonLooping ? ', looping' : ''}
                 </span>
@@ -572,7 +645,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
   );
 }
 
-async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, step: number) {
+async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, step: number): Promise<MdxModelInstance[]> {
   const thickness = 1;
   const lineWidth = mdlx.primitives.createCube(size * step, thickness, thickness / 2);
   const lineHeight = mdlx.primitives.createCube(thickness, size * step, thickness / 2);
@@ -583,6 +656,7 @@ async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, 
 
   const whiteLineWidthMdx = (await mdlx.createPrimitive(viewer, lineWidth, { color: new Float32Array(colorDefault) }))!;
   const whiteLineHeightMdx = (await mdlx.createPrimitive(viewer, lineHeight, { color: new Float32Array(colorDefault) }))!;
+  const instances: MdxModelInstance[] = [];
   // White lines at the grid steps
   for (let i = -size * step; i <= size * step; i += step) {
     const widthLine = whiteLineWidthMdx.addInstance();
@@ -591,14 +665,19 @@ async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, 
     scene.addInstance(heightLine);
     widthLine.setLocation([0, i, 0]);
     heightLine.setLocation([i, 0, 0]);
+    instances.push(widthLine, heightLine);
   }
 
   // Red and green lines at the origin
   const redLineMdx = (await mdlx.createPrimitive(viewer, lineWidth, { color: new Float32Array(colorRed) }))!;
   const redLine = redLineMdx.addInstance();
   scene.addInstance(redLine);
+  instances.push(redLine);
 
   const greenLineMdx = (await mdlx.createPrimitive(viewer, lineHeight, { color: new Float32Array(colorGreen) }))!;
   const greenLine = greenLineMdx.addInstance();
   scene.addInstance(greenLine);
+  instances.push(greenLine);
+
+  return instances;
 }

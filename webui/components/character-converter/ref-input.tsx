@@ -208,7 +208,7 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
         ref.value = ref.value.slice(serverConfig.wowExportAssetDir.length);
       }
       if (ref.value.startsWith('/') || ref.value.startsWith('\\')) ref.value = ref.value.slice(1);
-      if (/\[[0-9]+\]/.test(ref.value)) ref.value = ref.value.replace(/\[[0-9]+\]/, '');
+      if (/( )?\[[0-9]+\]/.test(ref.value)) ref.value = ref.value.replace(/( )?\[[0-9]+\]/, '');
       if (ref.value.endsWith('.m2')) ref.value = ref.value.replace('.m2', '.obj');
       if (ref.value.endsWith('.wmo')) ref.value = ref.value.replace('.wmo', '.obj');
       if (!ref.value.endsWith('.obj')) ref.value += '.obj';

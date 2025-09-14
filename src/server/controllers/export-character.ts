@@ -271,7 +271,15 @@ export async function ControllerExportCharacter(router: express.Router) {
   });
 
   router.post('/export/character/clean', (req, res) => {
+    if (outputDir !== 'exported-assets') {
+      return res.status(500).json({ error: 'Cannot clean exported assets because output directory is not "exported-assets"' });
+    }
+    if (isSharedHosting) {
+      return res.status(400).json({ error: 'Cannot clean exported assets because server is in shared hosting mode' });
+    }
+
     fsExtra.removeSync('./recent-exports.json');
+    jobQueue.recentCompletedJobs = [];
     console.log(`Removed ${path.resolve('./recent-exports.json')}`);
     fsExtra.emptyDirSync(outputDir);
     console.log(`Cleared ${path.resolve(outputDir)}`);

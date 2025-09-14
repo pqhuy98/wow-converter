@@ -255,8 +255,8 @@ export class CharacterExporter {
 
   private async exportBaseMdl(ctx: ExportContext, char: Character): Promise<MDL> {
     if (char.base.type === 'local') {
-      await ensureLocalModelFileExists(char.base.value);
-      return this.assetManager.parse(char.base.value, true).mdl;
+      const fullPath = await ensureLocalModelFileExists(char.base.value);
+      return this.assetManager.parse(fullPath, true).mdl;
     }
     if (char.base.type === 'wowhead' || char.base.type === 'displayID') {
       const baseZam: ZamUrl = char.base.type === 'wowhead'
@@ -321,8 +321,8 @@ export class CharacterExporter {
 
   private async exportItem(ctx: ExportContext, ref: Ref): Promise<{model: Model, inventoryType?: InventoryType}> {
     if (ref.type === 'local') {
-      await ensureLocalModelFileExists(ref.value);
-      return { model: this.assetManager.parse(ref.value, true) };
+      const path = await ensureLocalModelFileExists(ref.value);
+      return { model: this.assetManager.parse(path, true) };
     }
     if (ref.type === 'wowhead' || ref.type === 'displayID') {
       const zam: ZamUrl = ref.type === 'wowhead'
