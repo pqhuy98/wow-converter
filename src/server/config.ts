@@ -9,3 +9,5 @@ export const serverDeployTime = Date.now().toString();
 
 export const outputDir = 'exported-assets';
 fsExtra.ensureDirSync(outputDir);
+export const outputDirBrowse = 'exported-assets-browse';
+fsExtra.ensureDirSync(outputDirBrowse);

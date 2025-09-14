@@ -22,6 +22,7 @@ import {
 interface ModelViewerProps {
   modelPath?: string
   alwaysFullscreen?: boolean
+  assetsBase?: string
 }
 
 // Normalises backslashes to forward slashes for safe URL usage
@@ -29,7 +30,7 @@ const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 
 const MAX_DISTANCE = 2000000;
 
-export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelViewerProps) {
+export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase }: ModelViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [currentSeq, setCurrentSeq] = useState<number>(0);
@@ -138,8 +139,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
           // ignore
         }
       }
-      // Path solver so the viewer fetches every dependant file via our /asset route
-      const pathSolver = (src: unknown) => `/api/assets/${normalizePath(src as string)}`;
+      // Path solver so the viewer fetches every dependant file via our assets route
+      const base = assetsBase || '/api/assets';
+      const pathSolver = (src: unknown) => `${base}/${normalizePath(src as string)}`;
 
       // Load the model (assumed to be in MDX|MDL format)
       const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver);
@@ -441,7 +443,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
     const inst = instanceRef.current;
     if (inst) {
       inst.setSequence(currentSeq);
-      inst.sequenceLoopMode = 2;
+      inst.sequenceLoopMode = 0;
     }
   }, [currentSeq]);
 

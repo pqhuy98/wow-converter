@@ -116,7 +116,7 @@ export class WowExportRestClient {
       httpAgent,
       httpsAgent,
     });
-    const debug = true;
+    const debug = false;
     this.http.interceptors.request.use((config) => {
       if (config.url?.includes('/getCascInfo') || config.url?.includes('/searchFiles')) return config;
       debug && console.log('request', config.method, config.url, config.data);

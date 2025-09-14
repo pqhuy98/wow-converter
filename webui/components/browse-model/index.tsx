@@ -165,6 +165,7 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
       optimization,
       format,
       formatVersion,
+      isBrowse: true,
     };
 
     setIsExporting(true);
@@ -236,7 +237,7 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
                         return <div
                           key={f.fileDataID + f.fileName}
                           style={{ height: ROW_HEIGHT }}
-                          className={`px-2 flex items-center text-sm min-w-full w-max whitespace-nowrap ${isBusy ? 'cursor-not-allowed opacity-60' : ''} ${isSelected ? 'bg-blue-300' : 'hover:bg-gray-300 cursor-pointer'}`}
+                          className={`px-2 flex items-center text-sm min-w-full w-max whitespace-nowrap ${isBusy ? 'cursor-not-allowed opacity-60' : ''} ${isSelected ? 'bg-blue-300' : isExporting ? '' : 'hover:bg-gray-300 cursor-pointer'}`}
                           onClick={() => { if (!isBusy && !isSelected) void triggerExport(f); }}
                         >
                           <span className="text-gray-500 w-16 shrink-0">{startIndex + i + 1}.</span>
@@ -245,7 +246,7 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
                             [<span className="text-yellow-600">{f.fileDataID}</span>]
                           </span>
                           {isSelected && (
-                            <div className="text-gray-500 shrink-0 cursor-pointer ml-6 hover:border-gray-100 rounded-md p-1 hover:bg-gray-100"
+                            <div className="text-gray-500 shrink-0 cursor-pointer ml-6 hover:border-gray-100 rounded-md p-1"
                               onClick={() => {
                                 void navigator.clipboard.writeText(f.fileName);
                                 setHasCopied(true);
@@ -267,7 +268,7 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
           <div className="lg:w-2/3 w-full h-full overflow-hidden min-w-0">
             <div className="p-0 h-full relative overflow-hidden min-w-0">
               {modelPath && (
-                <ModelViewerUi modelPath={modelPath} />
+                <ModelViewerUi modelPath={modelPath} assetsBase="/api/browse-assets" />
               )}
               {job?.status !== 'done' && (
                 <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">

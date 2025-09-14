@@ -53,6 +53,7 @@ export interface ExportRequest {
   optimization: Optimization
   format?: ModelFormat
   formatVersion?: ModelFormatVersion
+  isBrowse?: boolean
 }
 
 export interface ExportCharacterResponse {
