@@ -145,6 +145,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen }: ModelView
       modelInstance.setSequence(0);
       modelInstance.sequenceLoopMode = 2; // always loop
       setSequences(model.sequences);
+      setCurrentSeq(0);
 
       // Add scene and basic camera, grid setup
       scene.addInstance(modelInstance);

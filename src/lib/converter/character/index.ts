@@ -14,7 +14,7 @@ import { V3 } from '@/lib/math/vector';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { decodeDressingRoom } from '@/lib/wowhead-client/dressing-room';
-import { CharacterData, fetchNpcMeta, fetchObjectMeta } from '@/lib/wowhead-client/npc-object';
+import { CharacterData, fetchNpcMeta, fetchObjectMeta } from '@/lib/wowhead-client/objects';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
@@ -184,10 +184,18 @@ export class CharacterExporter {
       const standSeq = model.sequences.find((seq) => seq.name === 'Stand') ?? model.sequences[0];
       if (standSeq) {
         const maxStandZ = model.modify.getMaxZAtTimestamp(standSeq, 0);
-        debug && console.log(model.model.name, { wantedZ, maxStandZ });
-        model.modify.scale((char.scale ?? 1) * wantedZ / maxStandZ);
+        if (maxStandZ > 0) {
+          debug && console.log(model.model.name, { wantedZ, maxStandZ });
+          model.modify.scale((char.scale ?? 1) * wantedZ / maxStandZ);
+        } else {
+          console.log(chalk.red(`Cannot scale model ${model.model.name} because the model is not above the ground:`), { maxStandZ });
+        }
       } else {
-        model.modify.scale((char.scale ?? 1) * wantedZ / model.model.maximumExtent[2]);
+        if (model.model.maximumExtent[2] > 0) {
+          model.modify.scale((char.scale ?? 1) * wantedZ / model.model.maximumExtent[2]);
+        } else {
+          console.log(chalk.red(`Cannot scale model ${model.model.name} because it has non-positive maximum extent Z:`, model.model.maximumExtent));
+        }
       }
     } else if (char.scale) {
       model.modify.scale(char.scale);
@@ -258,6 +266,19 @@ export class CharacterExporter {
       let npcMeta: CharacterData;
       switch (baseZam.type) {
         case 'item':
+          try {
+            npcMeta = await fetchNpcMeta({
+              ...baseZam,
+              type: 'npc',
+              expansion: wowExportClient.isClassic()
+                ? baseZam.expansion
+                : 'latest-available', // in latest wow installation, classic models are not available
+            });
+            break;
+          } catch (e) {
+            console.log(chalk.red('Failed to fetch npc meta, trying item meta'));
+            return (await this.exportItem(ctx, char.base)).model.mdl;
+          }
         case 'npc':
           npcMeta = await fetchNpcMeta({
             ...baseZam,

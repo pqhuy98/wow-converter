@@ -333,51 +333,53 @@ export class MDL {
       }
     });
 
-    // If no material is defined, create a default one
-    if (this.materials.length === 0) {
-      this.textures = [
-        {
-          id: 0,
-          image: '',
-          wrapWidth: false,
-          wrapHeight: false,
-          wowData: {
-            type: 0,
-            pngPath: '',
-          },
-        },
-      ];
-      this.materials = [
-        {
-          id: 0,
-          twoSided: false,
-          layers: [
-            {
-              filterMode: 'None',
-              texture: this.textures[0],
-              unshaded: false,
-              sphereEnvMap: false,
-              twoSided: false,
-              unfogged: false,
-              unlit: false,
-              noDepthTest: false,
-              noDepthSet: false,
-              alpha: {
-                static: true,
-                value: 1,
-              },
+    // Make sure all geosets have a material
+    if (this.geosets.some((geoset) => !geoset.material)) {
+      if (this.materials.length === 0) {
+        this.textures.push(
+          {
+            id: 0,
+            image: '',
+            wrapWidth: false,
+            wrapHeight: false,
+            wowData: {
+              type: 0,
+              pngPath: '',
             },
-          ],
-          constantColor: false,
-        },
-      ];
-    }
-
-    this.geosets.forEach((geoset) => {
-      if (!geoset.material) {
-        geoset.material = this.materials[0];
+          },
+        );
+        this.materials = [
+          {
+            id: 0,
+            twoSided: false,
+            layers: [
+              {
+                filterMode: 'None',
+                texture: this.textures[0],
+                unshaded: false,
+                sphereEnvMap: false,
+                twoSided: false,
+                unfogged: false,
+                unlit: false,
+                noDepthTest: false,
+                noDepthSet: false,
+                alpha: {
+                  static: true,
+                  value: 1,
+                },
+              },
+            ],
+            constantColor: false,
+          },
+        ];
       }
-    });
+
+      this.geosets.forEach((geoset) => {
+        if (!geoset.material) {
+          geoset.material = this.materials[0];
+        }
+      });
+    }
   }
 
   syncExtents() {

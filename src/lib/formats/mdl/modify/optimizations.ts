@@ -60,6 +60,10 @@ export function removeUnusedNodes(this: MDLModify) {
     // ...this.mdl.particleEmitters,
     ...this.mdl.particleEmitter2s,
     // ...this.mdl.particleEmitterPopcorns,
+    ...this.mdl.lights,
+    ...this.mdl.ribbonEmitters,
+    ...this.mdl.particleEmitter2s,
+    ...this.mdl.helpers,
     ...this.mdl.eventObjects,
     ...this.mdl.collisionShapes,
   ]);

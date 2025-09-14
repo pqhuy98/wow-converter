@@ -693,6 +693,9 @@ export class M2MetadataFile {
       };
 
       const speed = this.m2trackToAnimationOrStatic(p.emissionSpeed, 'others')!;
+      const baseEmissionRate = this.m2trackToAnimationOrStatic(p.emissionRate, 'others')!;
+
+      const { emissionRate, lifeSpan, tailLength } = correctEmissionRateTailLengthLifeSpan(p, baseEmissionRate);
 
       const node: ParticleEmitter2 = {
         objectId: -1,
@@ -707,11 +710,11 @@ export class M2MetadataFile {
         length: this.m2trackToAnimationOrStatic(p.emissionAreaLength, 'others')!,
         speed,
         variation: this.m2trackToAnimationOrStatic(p.speedVariation, 'others')!,
-        emissionRate: this.m2trackToAnimationOrStatic(p.emissionRate, 'others')!,
+        emissionRate,
         latitude: this.m2trackToAnimationOrStatic(p.verticalRange, 'others', degrees)!,
         visibility: this.m2trackToAnimation(p.enabledIn, 'others')!,
         texture: textures[textureId],
-        tailLength: p.tailLength,
+        tailLength,
         columns: Math.max(1, p.textureCols),
         rows: Math.max(1, p.textureRows),
         headOrTail: hasHead && hasTail ? WC3HeadOrTail.Both : hasTail ? WC3HeadOrTail.Tail : WC3HeadOrTail.Head,
@@ -720,7 +723,7 @@ export class M2MetadataFile {
         gravity: this.m2trackToAnimationOrStatic(p.gravity, 'others', decompressGravity)!,
         timeMiddle: timeMid / timeEnd,
         squirt: (p.flags & 0x40) > 0,
-        lifeSpan: Math.max(...p.lifespan.values.flat()),
+        lifeSpan,
 
         segmentColors: (() => {
           const track = p.colorTrack;
@@ -933,10 +936,10 @@ export class M2MetadataFile {
         lightType: wc3Type,
         attenuationStart: this.m2trackToAnimationOrStatic(l.attenuation_start, 'others', (v) => 1.5 * v)!,
         attenuationEnd: this.m2trackToAnimationOrStatic(l.attenuation_end, 'others', (v) => 1.5 * v)!,
-        intensity: this.m2trackToAnimationOrStatic(l.diffuse_intensity, 'others')!,
+        intensity: this.m2trackToAnimationOrStatic(l.diffuse_intensity, 'others', (v) => 1.5 * v)!,
         // this color stays the same unlike color in geosetAnims
         color: this.m2trackToAnimationOrStatic(l.diffuse_color, 'others')!,
-        ambientIntensity: this.m2trackToAnimationOrStatic(l.ambient_intensity, 'others')!,
+        ambientIntensity: this.m2trackToAnimationOrStatic(l.ambient_intensity, 'others', (v) => 1.5 * v)!,
         // this color stays the same unlike color in geosetAnims
         ambientColor: this.m2trackToAnimationOrStatic(l.ambient_color, 'others')!,
         visibility: this.m2trackToAnimation(l.visibility, 'others'),
@@ -1110,4 +1113,90 @@ function calculateEquivalentVelocityNoDrag(
     return initialVelocity;
   }
   return result;
+}
+
+function correctEmissionRateTailLengthLifeSpan(
+  p: Data.ParticleEmitter,
+  baseEmissionRate: AnimationOrStatic<number>,
+) {
+  // WoW clamps trail time by particle age when flag 0x400 is set (see WebWowViewerCpp buildVertex2)
+  // WC3 has only a static TailLength. To approximate WoW visuals generically:
+  // 1) Clamp to lifespan so it never exceeds the maximum possible tail time in WoW
+  // 2) Use the expected tail time E[min(age, tailLength)] for continuously emitted particles
+  //    with approximately uniform age distribution in [0, lifespan]:
+  //    - If tailLength <= lifespan:  E = tailLength - tailLength^2 / (2 * lifespan)
+  //    - If tailLength >  lifespan:  E = lifespan / 2
+  // This matches the fact that in WoW new particles start with a near‑zero trail
+  // and the trail grows with age, while WC3 draws a constant tail immediately.
+  const lifeSpan = Math.max(...p.lifespan.values.flat());
+  const wowClampsTailToAge = (p.flags & 0x400) > 0;
+  const tailLengthWowMax = Math.min(p.tailLength, lifeSpan);
+  // First-pass expected trail time under WoW's clamp
+  const tailLengthExpected = (() => {
+    if (!wowClampsTailToAge) return tailLengthWowMax;
+    if (tailLengthWowMax < lifeSpan) {
+      return tailLengthWowMax - (tailLengthWowMax * tailLengthWowMax) / (2 * lifeSpan);
+    }
+    return lifeSpan * 0.5;
+  })();
+
+  // Alpha-weighted correction: if the particle is mostly transparent for a large
+  // portion of its age (common 0->peak->0 tracks), the visually perceived tail
+  // starts closer to the emitter than the geometric trail. Reduce the effective
+  // tail time proportionally to the average alpha over life (normalized 0..1).
+  // This keeps fully opaque tails unchanged, and shrinks low-alpha tails.
+  const alphaWeightFactor = (() => {
+    const stamps = p.alphaTrack.timestamps;
+    const values = p.alphaTrack.values;
+    if (Array.isArray(stamps) && stamps.length > 0 && Array.isArray(values) && values.length > 0) {
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < values.length; i++) {
+        const a = values[i][0] ?? values[i];
+        sum += Math.max(0, Math.min(1, (a as number) / 32767));
+        count++;
+      }
+      const avg = count > 0 ? (sum / count) : 1;
+      return avg;
+    }
+    return 1; // no alpha animation → keep as is
+  })();
+  const tailLengthVisible = tailLengthExpected * alphaWeightFactor;
+
+  // Ensure adjacent tails visually meet in WC3: the viewer uses 0.5 * (speed * tailTime)
+  // for the line segment length, while new particles spawn every (1 / emissionRate) sec.
+  // Require: 0.5 * speed * tailTime >= speed / emissionRate  => tailTime >= 2 / emissionRate.
+  const emissionRateMax = Math.max(...p.emissionRate.values.flat());
+  const coverageMinTime = emissionRateMax > 0 ? (1.0 / emissionRateMax) : 0; // looser: overlap at half‑segment
+  const tailLengthFinal = Math.min(tailLengthWowMax, Math.max(tailLengthVisible, coverageMinTime));
+  // console.log('tailLengthExpected', tailLengthExpected);
+
+  // Only adjust emission rate when it is actually needed to avoid visible gaps,
+  // and only for cases that diverge from WoW (flag 0x400 or we shortened the tail).
+  const coverageMinRate = tailLengthFinal > 0 ? (1.0 / tailLengthFinal) : 0;
+  const shortenedTail = tailLengthFinal + 1e-6 < p.tailLength;
+  const needsRateFloor = (wowClampsTailToAge || shortenedTail) && (emissionRateMax + 1e-6) < coverageMinRate;
+  const alphaEmissionBoost = needsRateFloor && alphaWeightFactor < 0.7
+    ? (1.0 / Math.max(0.5, alphaWeightFactor))
+    : 1.0;
+  const emissionRateAdjusted = (() => {
+    if (!needsRateFloor) return baseEmissionRate;
+    if ('static' in baseEmissionRate && baseEmissionRate.static) {
+      baseEmissionRate.value = Math.max(baseEmissionRate.value, coverageMinRate) * alphaEmissionBoost;
+      return baseEmissionRate;
+    }
+    if ('keyFrames' in baseEmissionRate && baseEmissionRate.keyFrames) {
+      baseEmissionRate.keyFrames.forEach((val: number, t: number) => {
+        baseEmissionRate.keyFrames.set(t, Math.max(val, coverageMinRate) * alphaEmissionBoost);
+      });
+      return baseEmissionRate;
+    }
+    return baseEmissionRate;
+  })();
+
+  return {
+    emissionRate: emissionRateAdjusted,
+    lifeSpan,
+    tailLength: tailLengthFinal,
+  };
 }

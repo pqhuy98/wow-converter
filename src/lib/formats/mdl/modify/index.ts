@@ -6,7 +6,9 @@ import { MDL } from '../mdl';
 import {
   iterateVerticesAtTimestamp,
 } from '../mdl-traverse';
-import { addItemPathToBone, addMdlCollectionItemToModel, addMdlItemToBone } from './add-item-to-model';
+import {
+  addItemPathToBone, addMdlCollectionItemToModel, addMdlItemToBone,
+} from './add-item-to-model';
 import { addPortraitCamera } from './add-portrait-camera';
 import { addWc3AttachmentPoint } from './attachments';
 import { addCollisionShapes } from './compute-collision-shapes';

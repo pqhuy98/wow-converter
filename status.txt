@@ -10,7 +10,7 @@ TODO (not in any priority order):
 - Auto-updater for wow-converter to keep users up-to-date.
 - Collect anonymous analytics to understand common usage patterns.
 - Handle adhoc requests with post-processing script and AI prompt to help generate script.
-- Option to export textures as PNG/DDS
+- Option to export textures as DDS
 
 BLOCKED:
 - Some later models have advanced materials e.g. firehawk that requires UV2 layer that Wc3 doesn't have.

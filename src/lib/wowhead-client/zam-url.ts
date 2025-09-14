@@ -1,7 +1,7 @@
 import { LRUCache } from 'lru-cache';
 
 export type ZamExpansion = 'classic' | 'tbc' | 'wrath' | 'cata' | 'mists' | 'live' | 'ptr' | 'ptr2' | 'latest-available';
-export type ZamType = 'npc' | 'object' | 'item' | 'dressing-room' | 'character-customization';
+export type ZamType = 'npc' | 'object' | 'item' | 'dressing-room' | 'character-customization' | 'itemvisual';
 
 export type BaseZamUrl = {
   expansion: ZamExpansion;
@@ -12,7 +12,8 @@ export type ObjectZamUrl = BaseZamUrl & { type: 'object', displayId: number };
 export type DressingRoomZamUrl = BaseZamUrl & { type: 'dressing-room', hash: string };
 export type ItemZamUrl = BaseZamUrl & { type: 'item', displayId: number, slotId: number | null };
 export type CharacterCustomizationZamUrl = BaseZamUrl & { type: 'character-customization', chrModelId: number };
-export type ZamUrl = NpcZamUrl | ObjectZamUrl | ItemZamUrl | DressingRoomZamUrl | CharacterCustomizationZamUrl;
+export type ItemVisualZamUrl = BaseZamUrl & { type: 'itemvisual', visualId: number };
+export type ZamUrl = NpcZamUrl | ObjectZamUrl | ItemZamUrl | DressingRoomZamUrl | CharacterCustomizationZamUrl | ItemVisualZamUrl;
 
 export function getZamBaseUrl(expansion: ZamExpansion): string {
   return `https://wow.zamimg.com/modelviewer/${expansion}`;
@@ -34,10 +35,13 @@ const expansions = [...Object.entries(expansionMap)];
 const expansionsReverse = [...expansions].reverse();
 
 export async function getZamUrlFromWowheadUrl(url: string): Promise<ZamUrl> {
-  const type = getTypeFromUrl(url);
+  const type = getTypeFromWowheadUrl(url);
   if (!type) throw new Error(`Cannot infer type from wowhead url: ${url}`);
   if (type === 'character-customization') {
     throw new Error('Cannot get character customization from wowhead url');
+  }
+  if (type === 'itemvisual') {
+    throw new Error('Cannot get item visual from wowhead url');
   }
 
   const expansion = getExpansionFromUrl(url) || 'live';
@@ -78,10 +82,10 @@ export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpa
       // continue
     }
   }
-  throw new Error('Invalid Wowhead URL');
+  throw new Error(`Invalid Wowhead URL ${path}`);
 }
 
-function getTypeFromUrl(url: string): ZamType | undefined {
+function getTypeFromWowheadUrl(url: string): ZamType | undefined {
   if (/\/npc[=/]/i.test(url)) return 'npc';
   if (/\/spell[=/]/i.test(url)) return 'npc';
   if (/\/object[=/]/i.test(url)) return 'object';

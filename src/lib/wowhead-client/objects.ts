@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 
 import {
-  fetchWithCache, getLatestExpansionHavingUrl, getZamBaseUrl, NpcZamUrl,
+  fetchWithCache, getLatestExpansionHavingUrl, getZamBaseUrl, ItemVisualZamUrl, NpcZamUrl,
   ObjectZamUrl,
 } from './zam-url';
 
@@ -36,6 +36,10 @@ export interface EquipmentMap {
   [slotId: string]: number;
 }
 
+export interface ItemVisualMap {
+  [slotId: string]: number;
+}
+
 export interface TextureFilesMap {
   [textureId: string]: FileEntry[];
 }
@@ -51,7 +55,15 @@ export interface CharacterData {
   Creature?: CreatureMeta;
   Equipment?: EquipmentMap;
   TextureFiles?: TextureFilesMap;
+  ItemEffects?: {
+    Slot: number
+    SubClass: number
+    Model: number
+    Scale: number
+  }[]
 }
+// For some reason, item visual effects have the same structure as npc/object meta
+export interface ItemVisualData extends CharacterData {}
 
 const debug = false;
 
@@ -109,4 +121,14 @@ export async function fetchObjectMeta(zam: ObjectZamUrl): Promise<CharacterData>
     const res2 = await fetchWithCache(url2);
     return JSON.parse(res2) as unknown as CharacterData;
   }
+}
+
+export async function fetchItemVisualMeta(zam: ItemVisualZamUrl): Promise<ItemVisualData> {
+  if (zam.type !== 'itemvisual') throw new Error('fetchItemVisualMeta expects a ZamUrl of type itemvisual');
+  const path = `meta/itemvisual/${zam.visualId}.json`;
+  const base = getZamBaseUrl(zam.expansion);
+  const url = `${base}/${path}`;
+  debug && console.log('Get item visual meta from', chalk.blue(url));
+  const res = await fetchWithCache(url);
+  return JSON.parse(res) as unknown as ItemVisualData;
 }

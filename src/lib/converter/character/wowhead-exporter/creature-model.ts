@@ -1,5 +1,5 @@
 import { MDL } from '@/lib/formats/mdl/mdl';
-import { CharacterData } from '@/lib/wowhead-client/npc-object';
+import { CharacterData } from '@/lib/wowhead-client/objects';
 
 import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '../utils';
 

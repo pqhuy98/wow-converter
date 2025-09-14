@@ -1,7 +1,10 @@
 import { gatherItems } from './gatherer';
 import { EquipmentSlot } from './item-armor';
-import { CharacterData, EquipmentMap } from './npc-object';
-import { raceGenderMap } from './snipped-data/dressing-room-transmog-data';
+import {
+  CharacterData, EquipmentMap, fetchItemVisualMeta, ItemVisualMap,
+} from './objects';
+import { itemEnchants } from './snipped-data/dressing-room/item-enchants';
+import { raceGenderMap } from './snipped-data/dressing-room/transmog-data';
 import { ZamExpansion } from './zam-url';
 
 const PAPERDOLL_SLOTS = {
@@ -44,7 +47,7 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
     custChoices: {
       [key: string]: { optionId: number, choiceId: number };
     }
-    equipment: Record<string, { itemId: number; itemBonus: number }>;
+    equipment: Record<string, { itemId: number; itemBonus: number, enchant: number }>;
   };
   data.equipment ||= {};
   data.custChoices ||= {};
@@ -69,6 +72,11 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
     return [slotId, items.find((v) => v.itemId === item.itemId)?.displayId];
   }).filter(([k, v]) => k !== undefined && v !== undefined));
 
+  const itemVisuals: ItemVisualMap = Object.fromEntries(Object.entries(data.equipment).map(([dollSlotId, item]) => {
+    const slotId = PAPERDOLL_SLOTS[dollSlotId];
+    return [slotId, itemEnchants[item.enchant]?.visual];
+  }).filter(([k, v]) => k !== undefined && v !== undefined));
+
   return {
     Character: {
       Race: data.settings.race,
@@ -84,6 +92,16 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
       CreatureGeosetData: [],
     },
     Equipment: equipments,
+    ItemEffects: (await Promise.all(Object.entries(itemVisuals).map(async ([slotId, visualId]) => {
+      const itemVisual = await fetchItemVisualMeta({ expansion, type: 'itemvisual', visualId });
+      const model = itemVisual.Model || itemVisual.ItemEffects?.[0].Model;
+      return {
+        Slot: Number(slotId),
+        SubClass: 0,
+        Model: model,
+        Scale: 1,
+      };
+    }))).filter((v) => (v.Model ?? 0) > 0) as CharacterData['ItemEffects'],
   };
 }
 

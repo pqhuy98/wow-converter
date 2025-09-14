@@ -112,5 +112,9 @@ function mergeItemObjects(main: MDL, item: MDL) {
   // main.attachments.push(...item.attachments);
   main.eventObjects.push(...item.eventObjects);
   // main.collisionShapes.push(...item.collisionShapes);
+  main.lights.push(...item.lights);
+  main.ribbonEmitters.push(...item.ribbonEmitters);
   main.particleEmitter2s.push(...item.particleEmitter2s);
+  main.helpers.push(...item.helpers);
+  main.cameras.push(...item.cameras);
 }

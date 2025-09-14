@@ -1,5 +1,3 @@
-// https://nether.wowhead.com/data/dressing-room
-
 // https://wow.zamimg.com/js/global.js?62842bb10d
 // Look for Race in the url above
 
@@ -25,7 +23,7 @@ export function getTransmogRaceId(raceId: number): number {
   }
 }
 
-// Look for WH.setPageData('wow.dressingRoom.modelGenders' in the url above
+// Look for WH.setPageData('wow.dressingRoom.modelGenders' in https://nether.wowhead.com/data/dressing-room
 export const modelGenders = {
   1: {
     0: 0,
@@ -247,9 +245,9 @@ export const modelGenders = {
     0: 3,
     1: 3,
   },
-};
+} as const;
 
-// Look for WH.setPageData('wow.dressingRoom.raceGenderMap' in the url above
+// Look for WH.setPageData('wow.dressingRoom.raceGenderMap' in https://nether.wowhead.com/data/dressing-room
 export const raceGenderMap = {
   1: {
     0: 1,
@@ -471,4 +469,4 @@ export const raceGenderMap = {
     0: 207,
     1: 207,
   },
-};
+} as const;

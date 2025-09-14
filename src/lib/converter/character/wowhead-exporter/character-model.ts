@@ -14,7 +14,7 @@ import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bo
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchCharacterCustomization } from '@/lib/wowhead-client/character-customization';
 import { EquipmentSlot } from '@/lib/wowhead-client/item-armor';
-import { CharacterData } from '@/lib/wowhead-client/npc-object';
+import { CharacterData } from '@/lib/wowhead-client/objects';
 import { ZamExpansion } from '@/lib/wowhead-client/zam-url';
 
 import { Model } from '../../common/models';
@@ -62,7 +62,7 @@ export async function exportCharacterAsMdl({
   await applyCloakTexture(ctx, charMdl, prep.equipmentSlots);
 
   // Attach items with models
-  await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots);
+  await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots, metaData);
   await applyCustomzationCollections(ctx, charMdl, metaData, prep, expansion);
 
   // If the item has trousers, remove the tabard geoset
@@ -209,7 +209,7 @@ async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, me
   }));
 }
 
-async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[]) {
+async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[], metadata: CharacterData) {
   const collections = new Map<number, Model>();
   const attachmentResults: {
     attachmentId: WoWAttachmentID | undefined,
@@ -284,6 +284,16 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
       if (shouldFlipY) {
         itemMdl.modify.flipY();
       }
+    }
+
+    // Apply item visual
+    if (metadata.ItemEffects && metadata.ItemEffects.some((v) => v.Slot === slotData.slotId)) {
+      const modelFileId = metadata.ItemEffects.find((v) => v.Slot === slotData.slotId)!.Model;
+      console.log('Apply item visual', modelFileId);
+      const visualMdl = await exportModelFileIdAsMdl(ctx, modelFileId, {});
+      itemMdl.wowAttachments.forEach((a) => {
+        itemMdl.modify.addMdlItemToBone(_.cloneDeep(visualMdl.mdl), a.bone);
+      });
     }
 
     charMdl.modify.addMdlItemToBone(itemMdl, attachment.bone);
