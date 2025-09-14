@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, HelpCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { Input } from '@/components/ui/input';
@@ -6,11 +6,9 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { RefSchema, RefType } from '@/lib/models/export-character.model';
 
+import { TooltipHelp } from '../common/tooltip-help';
 import { getServerConfig, useServerConfig } from '../server-config';
 
 export type RefCategory = 'npc' | 'item' | 'mount'
@@ -75,16 +73,7 @@ export function RefInput({
       <div className="flex items-center gap-2 w-full">
         <Label className="text-sm font-medium">{label}</Label>
         {tooltip && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">{tooltip}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <TooltipHelp tooltips={tooltip}/>
         )}
       </div>
 

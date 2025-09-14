@@ -6,28 +6,38 @@ import z from 'zod';
 
 import { LocalRefValueSchema } from '@/lib/converter/character';
 
-import { outputDir } from '../config';
+import { outputDir, outputDirBrowse } from '../config';
 
 const DownloadRequestSchema = z.object({
   files: z.array(LocalRefValueSchema).min(1),
+  source: z.enum(['export', 'browse']).optional(),
 });
 
 export function ControllerDownload(router: express.Router) {
   router.post('/download', (req, res) => {
     try {
-      const { files } = DownloadRequestSchema.parse(req.body);
+      const { files, source } = DownloadRequestSchema.parse(req.body);
+      const baseDir = source === 'browse' ? outputDirBrowse : outputDir;
+
+      // Determine ZIP filename from the first available .mdx/.mdl, stripping version suffix
+      const modelPath = files.find((p) => /\.(mdx|mdl)$/i.test(p));
+      let zipName = 'assets.zip';
+      if (modelPath) {
+        const base = path.basename(modelPath).replace(/__([0-9a-fA-F]{32})(?=\.(?:mdx|mdl)$)/, '');
+        zipName = `${base.replace(/\.(mdx|mdl)$/i, '')}.zip`;
+      }
 
       // Attach headers so browsers treat the response as a downloadable file
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', 'attachment; filename="assets.zip"');
+      res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
 
       const archive = archiver('zip', { zlib: { level: 9 } });
       archive.pipe(res);
 
       for (const relativePath of files) {
-        const diskPath = path.resolve(outputDir, relativePath);
+        const diskPath = path.resolve(baseDir, relativePath);
         // Prevent directory-traversal attacks
-        if (!diskPath.startsWith(path.resolve(outputDir))) {
+        if (!diskPath.startsWith(path.resolve(baseDir))) {
           throw new Error('Invalid path');
         }
 

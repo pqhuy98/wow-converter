@@ -1,6 +1,6 @@
 import {
   Check,
-  Download, HelpCircle, Loader2, Trash,
+  Download, Loader2, Trash,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
@@ -21,6 +21,7 @@ import {
   JobStatus, ModelFormat, ModelFormatVersion, Optimization,
 } from '@/lib/models/export-character.model';
 
+import { TooltipHelp } from '../common/tooltip-help';
 import { useServerConfig } from '../server-config';
 import { OptimizationOptions } from './optimization-options';
 
@@ -93,17 +94,8 @@ export function ExportSection({
           <div className="space-y-2 md:col-span-1">
             <Label className="text-sm flex items-center gap-2">
               Export Format
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">{tooltips.format}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              </Label>
+              <TooltipHelp tooltips={tooltips.format}/>
+            </Label>
             <Select value={format} onValueChange={(value: ModelFormat) => setFormat(value)}>
               <SelectTrigger>
                 <SelectValue />
@@ -118,16 +110,7 @@ export function ExportSection({
           <div className="space-y-2 md:col-span-1">
             <Label className="text-sm flex items-center gap-2">
               Model Version
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">{tooltips.formatVersion}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <TooltipHelp tooltips={tooltips.formatVersion}/>
             </Label>
             <Select value={formatVersion} onValueChange={(value: ModelFormatVersion) => setFormatVersion(value)}>
               <SelectTrigger>

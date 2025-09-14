@@ -47,6 +47,11 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Scrollbar tokens */
+    --scrollbar-track: 0 0% 96%;
+    --scrollbar-thumb: 0 0% 70%;
+    --scrollbar-thumb-hover: 0 0% 55%;
+    --scrollbar-border: 0 0% 92%;
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -81,6 +86,11 @@ body {
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Scrollbar tokens */
+    --scrollbar-track: 0 0% 12%;
+    --scrollbar-thumb: 0 0% 26%;
+    --scrollbar-thumb-hover: 0 0% 32%;
+    --scrollbar-border: 0 0% 18%;
   }
 }
 
@@ -90,5 +100,35 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Themed scrollbars - consistent with light/dark design tokens */
+@layer base {
+  html {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--scrollbar-thumb)) transparent;
+  }
+
+  /* Chrome, Edge, Safari */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--scrollbar-thumb));
+    border-radius: 9999px;
+    border: 2px solid transparent; /* padding for the pill */
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--scrollbar-thumb-hover));
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }

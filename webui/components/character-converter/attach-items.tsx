@@ -1,6 +1,4 @@
-import {
-  HelpCircle, Plus, Sword, Trash2,
-} from 'lucide-react';
+import { Plus, Sword, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,18 +9,17 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
   allAttachments,
   AttachItem, Character,
 } from '@/lib/models/export-character.model';
 
+import { TooltipHelp } from '../common/tooltip-help';
 import { AttachmentSelector } from './attachment-selector';
 import { RefInput } from './ref-input';
 
 const tooltips = {
   itemReference: 'The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.',
+  itemRemove: 'Remove the item',
   attachmentPoint: 'Where on the character model this item will be attached',
   itemScale: 'Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.',
 };
@@ -69,7 +66,7 @@ export function AttachItems({
                     onClick={() => removeAttachItem(attachmentId)}
                     className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <TooltipHelp trigger={<Trash2 className="h-3 w-3" />} tooltips={tooltips.itemRemove}/>
                   </Button>
                 </div>
 
@@ -88,16 +85,7 @@ export function AttachItems({
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Label className="text-sm">Attachment Point</Label>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">{tooltips.attachmentPoint}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        <TooltipHelp tooltips={tooltips.attachmentPoint} />
                       </div>
                       <AttachmentSelector
                         value={attachmentId}
@@ -120,16 +108,7 @@ export function AttachItems({
                           <Label htmlFor={`scale-${id}`} className="text-sm">
                             Scale
                           </Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">{tooltips.itemScale}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <TooltipHelp tooltips={tooltips.itemScale} />
                         </div>
                         <Input
                           id={`scale-${id}`}

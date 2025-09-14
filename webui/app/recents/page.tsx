@@ -1,5 +1,6 @@
 'use client';
 
+import { downloadAssetsZip } from '@api/download';
 import { Download, ExternalLink } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -130,41 +131,11 @@ export default function RecentsPage() {
 
   const handleDownloadZip = async (job: FullJobStatus) => {
     if (!job.result) return;
-
     const files = [
       ...(job.result.exportedModels || []),
       ...(job.result.exportedTextures || []),
     ];
-
-    if (files.length === 0) {
-      alert('Nothing to download – exported files list is empty');
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: files.map(({ path }) => path) }),
-      });
-
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${job.request.outputFileName}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Download ZIP error:', e);
-      alert(e instanceof Error ? e.message : String(e));
-    }
+    await downloadAssetsZip({ files: files.map(({ path }) => path), source: 'export' });
   };
 
   if (loading) {

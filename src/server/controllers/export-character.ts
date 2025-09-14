@@ -244,6 +244,8 @@ export async function ControllerExportCharacter(router: express.Router) {
         request: parsedRequest,
         status: 'pending',
         submittedAt: Date.now(),
+        addToRecent: !parsedRequest.isBrowse,
+        noTimeout: false,
       };
 
       jobQueue.addJob(job);
@@ -315,7 +317,8 @@ export async function ControllerExportCharacter(router: express.Router) {
         request,
         status: 'pending',
         submittedAt: Date.now(),
-        isDemo: true,
+        addToRecent: false,
+        noTimeout: true,
       };
       jobQueue.addJob(job);
       return job;

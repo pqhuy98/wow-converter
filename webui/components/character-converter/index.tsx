@@ -1,5 +1,6 @@
 'use client';
 
+import { downloadAssetsZip } from '@api/download';
 import _ from 'lodash';
 import { Download } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -264,40 +265,11 @@ export function CharacterConverter() {
       ...(jobStatus.result.exportedTextures || []),
     ];
 
-    if (files.length === 0) {
-      // eslint-disable-next-line no-alert
-      alert('Nothing to download – exported files list is empty');
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: files.map(({ path }) => path) }),
-      });
-
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${outputFileName || 'export'}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e: unknown) {
-      console.error('Download ZIP error:', e);
-      alert(e instanceof Error ? e.message : String(e));
-    }
+    await downloadAssetsZip({ files: files.map(({ path }) => path), source: 'export' });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-[calc(100vh-57px)] bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-6xl mx-auto space-y-4">
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -331,12 +303,12 @@ export function CharacterConverter() {
         <Card className="pt-6">
           {jobStatus && jobStatus.status !== 'done' && (
             <CardContent className="mb-2">
-              {jobStatus.status === 'pending' && (
-                <p className="text-center">Your request is queued. {jobStatus.position ? `Position: ${jobStatus.position}` : ''}</p>
-              )}
-              {jobStatus.status === 'processing' && (
+              {(jobStatus.status === 'processing' || jobStatus.status === 'pending') && (
                 <>
-                  <p className="text-center m-0 p-0">Your request is being processed...</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
+                    <p className="text-lg">{jobStatus.status === 'processing' ? 'Exporting...' : `Queue position: ${jobStatus.position}`}</p>
+                  </div>
                   <Terminal className='mt-4' logs={jobStatus.logs || []} />
                 </>
               )}

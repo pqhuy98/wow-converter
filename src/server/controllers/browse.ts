@@ -37,7 +37,7 @@ export function ControllerBrowse(router: express.Router) {
 
       const result = q === 'model' ? modelFiles : [];
 
-      return res.header('Cache-Control', 'public, max-age=600').json(result);
+      return res.header('Cache-Control', 'public, max-age=60').json(result);
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

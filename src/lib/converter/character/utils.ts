@@ -106,7 +106,7 @@ export async function ensureLocalModelFileExists(filePath: string): Promise<stri
   }
   if (existsSync(fullPath)) return path.relative(baseDir, fullPath);
 
-  console.log('File', fullPath, 'does not exist, try to export it...');
+  console.log('Try exporting local file', fullPath, 'from wow.export');
 
   // Get model file
   const fileName = filePath.replace(/\\/g, '/').replace(/\.obj$/, '');

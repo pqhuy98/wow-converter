@@ -6,7 +6,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils/css';
 
 const TooltipProvider = React.forwardRef<React.ElementRef<typeof TooltipPrimitive.Provider>, React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider>>(({ children, ...props }, _ref) => (
-  <TooltipPrimitive.Provider delayDuration={100} {...props}>
+  <TooltipPrimitive.Provider delayDuration={0} {...props}>
     {children}
   </TooltipPrimitive.Provider>
 ));

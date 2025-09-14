@@ -1,5 +1,6 @@
 'use client';
 
+import { downloadAssetsZip } from '@api/download';
 import mdlx from '@pqhuy98/mdx-m3-viewer/dist/cjs/utils/mdlx';
 import Camera from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/camera';
 import blpHandler from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/blp/handler';
@@ -10,14 +11,14 @@ import Sequence from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/sequen
 import Scene from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/scene';
 import ModelViewer from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/viewer';
 import { vec3 } from 'gl-matrix';
+import { Download, Mouse } from 'lucide-react';
 import {
   useEffect, useRef, useState,
 } from 'react';
 
 import { Button } from '@/components/ui/button';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
+
+import { TooltipHelp } from './tooltip-help';
 
 interface ModelViewerProps {
   modelPath?: string
@@ -49,6 +50,13 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
   const loadRequestIdRef = useRef(0);
   const [gridVisible, setGridVisible] = useState(true);
   const gridInstancesRef = useRef<MdxModelInstance[]>([]);
+  // Track loaded asset files for download
+  const baseUrlRef = useRef<string>('/api/assets');
+  const loadedFilesRef = useRef<Set<string>>(new Set());
+  const [loadedCount, setLoadedCount] = useState<number>(0);
+  useEffect(() => {
+    baseUrlRef.current = assetsBase || '/api/assets';
+  }, [assetsBase]);
   useEffect(() => {
     if (!canvasRef.current) return undefined;
     const viewer = new ModelViewer(canvasRef.current);
@@ -81,7 +89,21 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
     })();
 
     viewer.on('loadstart', (e) => {
-      console.log(`[Viewer] Loading ${e.fetchUrl}`);
+      const fetchUrl = String(e.fetchUrl ?? '');
+      console.log(`[Viewer] Loading ${fetchUrl}`);
+      // Record files that are fetched from our assets endpoints
+      const bases = ['/api/assets', '/api/browse-assets', baseUrlRef.current].filter(Boolean);
+      for (const b of bases) {
+        const base = String(b);
+        if (fetchUrl.startsWith(`${base}/`)) {
+          const rel = fetchUrl.slice((`${base}/`).length).replace(/^\/+/, '');
+          if (rel) {
+            loadedFilesRef.current.add(rel);
+            setLoadedCount(loadedFilesRef.current.size);
+          }
+          break;
+        }
+      }
     });
 
     viewer.on('loadend', (e) => {
@@ -119,6 +141,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
 
     // references for cleanup
     const canvas = canvasRef.current;
+    // reset loaded asset tracker on new load
+    loadedFilesRef.current = new Set();
+    setLoadedCount(0);
     const requestId = ++loadRequestIdRef.current;
     let cancelled = false;
     let onMouseDown: ((e: MouseEvent) => void) | null = null;
@@ -438,14 +463,43 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
     };
   }, [modelPath, canvasRef.current, viewer, scene]);
 
+  const [progress, setProgress] = useState(0);
+
   // Apply sequence when currentSeq updates
   useEffect(() => {
     const inst = instanceRef.current;
     if (inst) {
       inst.setSequence(currentSeq);
+      // 0 = loop based on model, 1 = never loop, 2 = always loop (see mdx impl)
       inst.sequenceLoopMode = 0;
+      setProgress(0);
     }
   }, [currentSeq]);
+
+  // Keep a live progress percentage for the active sequence
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const inst = instanceRef.current;
+      const seq = sequences[currentSeq];
+      if (inst && seq) {
+        const start = seq.interval[0];
+        const end = seq.interval[1];
+        const length = Math.max(1, end - start);
+        const local = Math.max(0, inst.frame - start);
+        const modelLoops = seq.nonLooping === 0;
+        const effectiveLoops = inst.sequenceLoopMode === 2 ? true : inst.sequenceLoopMode === 1 ? false : modelLoops;
+        if (effectiveLoops) {
+          setProgress((local % length) / length);
+        } else {
+          setProgress(Math.min(1, local / length));
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [sequences, currentSeq]);
 
   const [isFullscreen, setIsFullscreen] = useState(alwaysFullscreen ?? false);
   const scrollPositionRef = useRef<{ x: number; y: number } | null>(null);
@@ -470,16 +524,23 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
     }
   };
 
+  const handleDownloadAssets = async () => {
+    try {
+      const files = Array.from(loadedFilesRef.current);
+      if (files.length === 0) return;
+      const source = baseUrlRef.current.includes('/api/browse-assets') ? 'browse' : 'export';
+      await downloadAssetsZip({ files, source });
+    } catch (e) {
+      console.error('Failed to download assets', e);
+    }
+  };
+
   const handleToggleCollisions = () => {
     const next = !collisionsVisible;
     setCollisionsVisible(next);
     for (const inst of collisionInstancesRef.current) {
-      try {
-        if (next) inst.show?.();
-        else inst.hide?.();
-      } catch {
-        // ignore
-      }
+      if (next) inst.show?.();
+      else inst.hide?.();
     }
   };
 
@@ -490,9 +551,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
       try {
         if (next) inst.show?.();
         else inst.hide?.();
-      } catch {
-        // ignore
-      }
+      } catch { /* noop */ }
     }
   };
 
@@ -531,81 +590,102 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, alwaysFullscreen]);
 
+  const handleSelectSequence = (idx: number) => {
+    const inst = instanceRef.current;
+    if (inst && idx === currentSeq) {
+      try {
+        inst.sequenceEnded = false;
+        inst.frame = 0;
+        inst.counter = 0;
+        inst.setSequence(idx);
+        inst.sequenceLoopMode = 0;
+        setProgress(0);
+      } catch {
+        // ignore
+      }
+    } else {
+      setCurrentSeq(idx);
+    }
+  };
+
   return (
     <div className={`flex flex-col lg:flex-row w-full h-full ${alwaysFullscreen ? 'fixed inset-0 z-50' : isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
       <div className={`relative flex-1 min-h-0 ${alwaysFullscreen || isFullscreen ? 'h-full' : 'h-full'}`}>
-        {!alwaysFullscreen && (
-          <div className="absolute top-2 left-2 z-10 flex gap-2">
+        <div className="absolute top-2 left-2 z-10 flex gap-2">
+          {!alwaysFullscreen && (
             <Button
               variant="secondary"
               size="sm"
               onClick={handleFullscreenToggle}
               className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl"
             >
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>{isFullscreen ? '✕' : '⛶'}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <TooltipHelp
+                trigger={<span>{isFullscreen ? '✕' : '⛶'}</span>}
+                tooltips={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} asChild
+              />
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleToggleCollisions}
-              className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
-            >
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>{collisionsVisible ? '•' : '◱'}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {collisionsVisible ? 'Hide collision shapes' : 'Show collision shapes'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleToggleGrid}
-              className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
-            >
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>{gridVisible ? '⌗' : '⎕'}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {gridVisible ? 'Hide grid' : 'Show grid'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Button>
-            <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void handleCopyLink()}
-                className={'bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 w-10 h-10 text-2xl'}
-              >
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>{copied ? '✔' : '🔗'}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Copy viewer link
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Button>
-          </div>
-        )}
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleToggleCollisions}
+            className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
+          >
+            <TooltipHelp
+              trigger={<span>{collisionsVisible ? '•' : '◱'}</span>}
+              tooltips={collisionsVisible ? 'Hide collision shapes' : 'Show collision shapes'} asChild
+            />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleToggleGrid}
+            className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
+          >
+            <TooltipHelp
+              trigger={<span>{gridVisible ? '⌗' : '⎕'}</span>}
+              tooltips={gridVisible ? 'Hide grid' : 'Show grid'} asChild
+            />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleCopyLink()}
+            className={'bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 w-10 h-10 text-2xl'}
+          >
+            <TooltipHelp
+              trigger={<span>{copied ? '✔' : '🔗'}</span>}
+              tooltips={copied ? 'Copy viewer link' : 'Copy viewer link'} asChild
+            />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleDownloadAssets()}
+            disabled={loadedCount === 0}
+            className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-max h-10 text-xl"
+          >
+            <TooltipHelp
+              trigger={<span className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
+              </span>}
+              tooltips={loadedCount === 0 ? 'No model loaded' : 'Download model'} asChild
+            />
+          </Button>
+        </div>
+        <div className="absolute bottom-2 left-2 z-10 flex items-end gap-3">
+          <TooltipHelp
+            trigger={<span className="inline-flex"><Mouse className="w-6 h-6 text-white/90 drop-shadow" /></span>}
+            tooltips={(
+              <div className="text-sm leading-5">
+                <div><span className="font-semibold">Left click</span>: orientation (rotate)</div>
+                <div><span className="font-semibold">Right click</span>: forward/backward/left/right</div>
+                <div><span className="font-semibold">Middle click</span>: up/down/left/right</div>
+              </div>
+            )}
+            asChild
+          />
+        </div>
         <canvas
           ref={canvasRef}
           width={1}
@@ -618,30 +698,35 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, assetsBase 
           }}
         />
       </div>
-      <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] overflow-y-auto bg-gray-800/90 lg:border-l lg:border-t-0 border-t border-gray-600 flex-shrink-0 relative z-10'}>
-          <div className="sticky top-0 z-10 bg-gray-900 px-3 py-2 text-white font-semibold border-b border-black">
+      <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] bg-gray-800/90 lg:border-l lg:border-t-0 border-t border-gray-600 flex-shrink-0 relative z-10 flex flex-col'}>
+          <div className="bg-gray-900 px-3 py-2 text-white font-semibold border-b border-black shrink-0">
             Animations ({sequences.length})
           </div>
-          <ul className="divide-y divide-gray-600">
-            {sequences.length === 0 ? (
-              <div className="p-3 text-gray-400">Loading animations...</div>
-            ) : (
-              sequences.map((seq, idx) => (
-              <li
-                key={idx}
-                onClick={() => setCurrentSeq(idx)}
-                className={`px-3 py-2 cursor-pointer text-white ${idx === currentSeq ? 'bg-gray-800' : 'hover:bg-gray-700'}`}
-              >
-                {seq.name || `Sequence ${idx}`}
-                <span className="text-gray-500 text-xs flex items-center gap-1">
-                  {idx}.
-                  Duration: {((seq.interval[1] - seq.interval[0]) / 1000).toFixed(3)} s
-                  {!seq.nonLooping ? ', looping' : ''}
-                </span>
-              </li>
-              ))
-            )}
-          </ul>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <ul className="divide-y divide-gray-600">
+              {sequences.length === 0 ? (
+                <div className="p-3 text-gray-400">Loading animations...</div>
+              ) : (
+                sequences.map((seq, idx) => (
+                <li
+                  key={idx}
+                  onClick={() => handleSelectSequence(idx)}
+                  className={`px-3 py-2 cursor-pointer text-white relative ${idx === currentSeq ? 'bg-gray-800' : 'hover:bg-gray-700'}`}
+                >
+                  {seq.name || `Sequence ${idx}`}
+                  <span className="text-gray-500 text-xs flex items-center gap-1">
+                    ({idx})
+                    Duration: {((seq.interval[1] - seq.interval[0]) / 1000).toFixed(3)} s
+                    {!seq.nonLooping ? ', looping' : ''}
+                  </span>
+                  {idx === currentSeq ? (
+                    <div className="absolute left-0 bottom-0 h-[2px] bg-blue-600" style={{ width: `${Math.round(progress * 100)}%` }} />
+                  ) : null}
+                </li>
+                ))
+              )}
+            </ul>
+          </div>
         </div>
     </div>
   );

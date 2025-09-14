@@ -1,12 +1,8 @@
-import { HelpCircle } from 'lucide-react';
-
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { Optimization } from '@/lib/models/export-character.model';
 
+import { TooltipHelp } from '../common/tooltip-help';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../ui/select';
@@ -37,16 +33,7 @@ export function OptimizationOptions({ optimization, setOptimization }: {
           />
           <Label htmlFor="sortSequences" className="text-sm flex items-center gap-2">
             Sort Sequences
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.sortSequences}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TooltipHelp tooltips={tooltips.sortSequences}/>
           </Label>
         </div>
 
@@ -59,16 +46,7 @@ export function OptimizationOptions({ optimization, setOptimization }: {
           />
           <Label htmlFor="removeUnusedVertices" className="text-sm flex items-center gap-2">
             Remove Unused Vertices
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.removeUnusedVertices}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TooltipHelp tooltips={tooltips.removeUnusedVertices}/>
           </Label>
         </div>
 
@@ -81,16 +59,7 @@ export function OptimizationOptions({ optimization, setOptimization }: {
           />
           <Label htmlFor="removeUnusedNodes" className="text-sm flex items-center gap-2">
             Remove Unused Nodes
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.removeUnusedNodes}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TooltipHelp tooltips={tooltips.removeUnusedNodes}/>
           </Label>
         </div>
 
@@ -103,16 +72,7 @@ export function OptimizationOptions({ optimization, setOptimization }: {
           />
           <Label htmlFor="removeUnusedMaterials" className="text-sm flex items-center gap-2">
             Optimize Materials
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.removeUnusedMaterials}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TooltipHelp tooltips={tooltips.removeUnusedMaterials}/>
           </Label>
         </div>
 
@@ -124,16 +84,7 @@ export function OptimizationOptions({ optimization, setOptimization }: {
           />
           <Label htmlFor="optimizeKeyFrames" className="text-sm flex items-center gap-2">
             Optimize Key Frames
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.optimizeKeyFrames}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TooltipHelp tooltips={tooltips.optimizeKeyFrames}/>
           </Label>
         </div>
       </div>
@@ -141,16 +92,7 @@ export function OptimizationOptions({ optimization, setOptimization }: {
       <div className="flex items-center space-x-2 gap-2">
         <Label htmlFor="maxTextureSize" className="text-sm flex items-center gap-2">
           Max Texture Size
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">{tooltips.maxTextureSize}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <TooltipHelp tooltips={tooltips.maxTextureSize}/>
         </Label>
         <Select
           value={optimization.maxTextureSize || 'none'}

@@ -1,6 +1,5 @@
 'use client';
 
-import { HelpCircle } from 'lucide-react';
 import { useState } from 'react';
 
 import { Checkbox } from '@/components/ui/checkbox';
@@ -9,10 +8,9 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { AttackTag, Character, ModelSize } from '@/lib/models/export-character.model';
+
+import { TooltipHelp } from './tooltip-help';
 
 const attackTagOptions: { value: AttackTag | 'all', label: string, description: string }[] = [
   { value: 'Auto', label: 'Auto', description: 'Detect attack tag from weapons' },
@@ -60,16 +58,7 @@ export function BasicCharacterConfig({
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Label className="text-sm">Attack Animation</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.attackAnimation}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TooltipHelp tooltips={tooltips.attackAnimation}/>
           </div>
           <Select
             value={character.attackTag || 'all'}
@@ -98,16 +87,7 @@ export function BasicCharacterConfig({
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Label className="text-sm">Character Size</Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">{tooltips.characterSize}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TooltipHelp tooltips={tooltips.characterSize}/>
           </div>
           <Select
             value={character.size || 'none'}
@@ -139,16 +119,7 @@ export function BasicCharacterConfig({
           <Label htmlFor="movespeed" className="text-sm min-w-fit">
             Animation Walk Speed
           </Label>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">{tooltips.movementSpeed}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <TooltipHelp tooltips={tooltips.movementSpeed}/>
           <Input
             id="movespeed"
             type="number"
@@ -161,19 +132,10 @@ export function BasicCharacterConfig({
         </div>
 
         <div className="flex items-center gap-3">
-          <Label htmlFor="scale" className="text-sm min-w-fit">
+          <Label htmlFor="scale" className="flex items-center gap-2 text-sm min-w-fit">
             Scale Multiplier
+            <TooltipHelp tooltips={tooltips.scaleMultiplier}/>
           </Label>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">{tooltips.scaleMultiplier}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
           <Input
             id="scale"
             type="number"
@@ -197,16 +159,7 @@ export function BasicCharacterConfig({
             />
             <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
               Keep Cinematic Animations
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">{tooltips.keepCinematic}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <TooltipHelp tooltips={tooltips.keepCinematic}/>
             </Label>
           </div>
         </div>
@@ -215,16 +168,7 @@ export function BasicCharacterConfig({
           <div className="flex items-center space-x-2">
             <Label htmlFor="noParticles" className="flex items-center gap-2 text-sm">
               Particle Density
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">{tooltips.particleDensity}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <TooltipHelp tooltips={tooltips.particleDensity}/>
             </Label>
             <Input
               id="particlesDensity"

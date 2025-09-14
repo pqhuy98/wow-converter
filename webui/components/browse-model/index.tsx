@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckIcon, CopyIcon } from 'lucide-react';
+import { CheckIcon, CopyIcon, SearchIcon } from 'lucide-react';
 import {
   useEffect, useMemo, useRef, useState,
 } from 'react';
@@ -20,6 +20,8 @@ import {
   Optimization,
 } from '@/lib/models/export-character.model';
 
+import { TooltipHelp } from '../common/tooltip-help';
+
 type FileEntry = { fileDataID: number; fileName: string };
 
 const defaultCharacter: Character = {
@@ -29,13 +31,35 @@ const defaultCharacter: Character = {
   noDecay: true,
 };
 
-export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
+export default function BrowseModelPage() {
+  const [allFiles, setAllFiles] = useState<FileEntry[]>([]);
+
+  async function fetchAllFiles() {
+    if (!allFiles.length) {
+      const res = await fetch('/api/browse?q=model');
+      if (!res.ok) {
+        throw new Error('Failed to fetch m2 list files');
+      }
+      const files = await res.json();
+      if (!files.length) {
+        throw new Error('No m2 list files found');
+      }
+      setAllFiles(files);
+    }
+  }
+
+  useEffect(() => {
+    void fetchAllFiles();
+  }, []);
+
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [job, setJob] = useState<JobStatus | undefined>(undefined);
   const [modelPath, setModelPath] = useState<string | undefined>(undefined);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const copyBtnRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [viewportHeight, setViewportHeight] = useState(400);
   const [scrollTop, setScrollTop] = useState(0);
 
@@ -88,6 +112,14 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
     return () => clearTimeout(t);
   }, [query]);
 
+  // whenever the debounced query changes (and filtered list will update), scroll back to top
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    setScrollTop(0);
+  }, [debouncedQuery]);
+
   // track viewport height for virtualization
   useEffect(() => {
     const el = listRef.current;
@@ -103,6 +135,30 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const endIndex = Math.min(total - 1, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN);
   const visibleItems = filtered.slice(startIndex, endIndex + 1);
+
+  // Ensure the copy icon on the selected row is visible if it is clipped
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return undefined;
+    // Wait a frame so the copy icon (which appears only when selected) is mounted
+    const id = requestAnimationFrame(() => {
+      const copyEl = copyBtnRef.current;
+      if (!copyEl) return;
+      const containerRect = el.getBoundingClientRect();
+      const copyRect = copyEl.getBoundingClientRect();
+      const padding = 32;
+      if (copyRect.right > containerRect.right - padding) {
+        const delta = copyRect.right - (containerRect.right - padding);
+        el.scrollTo({ left: el.scrollLeft + delta, behavior: 'smooth' });
+        return;
+      }
+      if (copyRect.left < containerRect.left + padding) {
+        const delta = (containerRect.left + padding) - copyRect.left;
+        el.scrollTo({ left: Math.max(0, el.scrollLeft - delta), behavior: 'smooth' });
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [selected]);
 
   // poll job status
   useEffect(() => {
@@ -181,6 +237,24 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
 
   const [hasCopied, setHasCopied] = useState(false);
 
+  const suggestions = ['creature/', 'spells/', 'wmo/'] as const;
+  const applySuggestion = (s: typeof suggestions[number]) => {
+    const v = `${s} `;
+    setQuery(v);
+    // update results immediately for a snappier UX
+    setDebouncedQuery(v);
+    const el = inputRef.current;
+    if (el) {
+      el.focus();
+      // onFocus selects all; place caret at end on next tick
+      setTimeout(() => el.setSelectionRange(v.length, v.length), 0);
+    }
+  };
+
+  if (!allFiles) {
+    return <div>Loading...</div>;
+  }
+
   return (
     <div className="h-full bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex flex-col overflow-x-hidden">
       <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
@@ -189,10 +263,13 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
           {/* Left: list */}
           <div className="lg:w-1/3 w-full lg:h-full h-[40vh] overflow-hidden min-w-0">
             <Card className="h-full flex flex-col min-w-0">
-              <CardHeader className="flex flex-row justify-between items-center border-b border-gray-200 py-2">
-                <CardTitle className="text-lg">Browse Model Files (.m2/.wmo)</CardTitle>
+              <CardHeader className="flex flex-row justify-between items-center py-2 px-3 pb-0 pt-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <SearchIcon className="w-4 h-4" />
+                  Browse Model Files
+                </CardTitle>
                 <SettingsDialogButton
-                  className="ml-auto mt-0"
+                  className="ml-auto !mt-0"
                   character={character}
                   setCharacter={setCharacter}
                   outputFileName={outputFileName}
@@ -207,14 +284,39 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
                 />
               </CardHeader>
               <CardContent className="space-y-2 flex-1 overflow-hidden p-3 min-w-0">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Search model by keywords separated by spaces, e.g. 'spell fire'..."
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    disabled={isBusy}
-                    onFocus={(e) => e.target.select()}
-                  />
+                <div className="flex items-center w-full">
+                  <div className="relative w-full">
+                    <Input
+                      placeholder="Search model, e.g. 'spell fire'..."
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      disabled={isBusy}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setQuery('');
+                          setDebouncedQuery('');
+                        }
+                      }}
+                      ref={inputRef}
+                      className="w-full sm:pr-[170px]"
+                    />
+                    <div className="absolute inset-y-0 right-2 hidden sm:flex items-center gap-2 pointer-events-none z-20">
+                      {suggestions.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-gray-200 hover:bg-gray-300 border border-gray-300 pointer-events-auto"
+                          onClick={() => applySuggestion(s)}
+                          disabled={isBusy}
+                          title={`Search for ${s}`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 <div
                   ref={listRef}
@@ -246,13 +348,19 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
                             [<span className="text-yellow-600">{f.fileDataID}</span>]
                           </span>
                           {isSelected && (
-                            <div className="text-gray-500 shrink-0 cursor-pointer ml-6 hover:border-gray-100 rounded-md p-1"
+                            <div ref={copyBtnRef} className="text-gray-500 shrink-0 cursor-pointer ml-6 hover:border-gray-100 rounded-md p-1"
+                              onMouseLeave={() => {
+                                setTimeout(() => setHasCopied(false), 1000);
+                              }}
                               onClick={() => {
                                 void navigator.clipboard.writeText(f.fileName);
                                 setHasCopied(true);
-                                setTimeout(() => setHasCopied(false), 1000);
                               }}>
-                                {hasCopied ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                                <TooltipHelp
+                                trigger={hasCopied
+                                  ? <CheckIcon className="w-4 h-4" />
+                                  : <CopyIcon className="w-4 h-4" />}
+                                tooltips={hasCopied ? 'Copied, you can now paste it in local file input field in Character Export' : 'Copy path for local file export'} />
                             </div>
                           )}
                         </div>;
@@ -275,8 +383,10 @@ export default function BrowseModelPage({ allFiles }: {allFiles: FileEntry[]}) {
                   <div className="text-center text-gray-500 w-full px-4">
                     {job?.status === 'processing' || job?.status === 'pending' ? (
                       <>
-                        <p className="text-lg mb-2">Exporting...</p>
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto" />
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
+                        <p className="text-lg">{job.status === 'processing' ? 'Exporting...' : `Queue position: ${job.position}`}</p>
+                      </div>
                         <div className="mt-4 mx-auto w-full sm:w-3/4 lg:w-1/2 sm:min-w-[75%] sm:max-w-[75%] lg:min-w-[50%] lg:max-w-[50%]">
                           <Terminal logs={job.logs || []} className="w-full" />
                         </div>
