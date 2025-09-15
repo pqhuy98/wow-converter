@@ -2,7 +2,6 @@
 
 import { downloadAssetsZip } from '@api/download';
 import mdlx from '@pqhuy98/mdx-m3-viewer/dist/cjs/utils/mdlx';
-import Camera from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/camera';
 import blpHandler from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/blp/handler';
 import mdxHandler from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/handler';
 import MdxModel from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/model';
@@ -18,6 +17,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 
+import { useServerConfig } from '../server-config';
 import { TooltipHelp } from './tooltip-help';
 
 interface ModelViewerProps {
@@ -32,6 +32,7 @@ const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 const MAX_DISTANCE = 2000000;
 
 export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: ModelViewerProps) {
+  const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [currentSeq, setCurrentSeq] = useState<number>(0);
@@ -39,8 +40,6 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
   const vecHeap = vec3.create();
 
   const [viewer, setViewer] = useState<ModelViewer | null>(null);
-  const [scene, setScene] = useState<Scene | null>(null);
-  const [camera, setCamera] = useState<Camera | null>(null);
   // Collision toggling and primitive refs
   const [collisionsVisible, setCollisionsVisible] = useState(false);
   const collisionInstancesRef = useRef<MdxModelInstance[]>([]);
@@ -64,16 +63,6 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
     viewer.addHandler(blpHandler);
     setViewer(viewer);
 
-    const scene = viewer.addScene();
-    setScene(scene);
-    scene.color.fill(0.15);
-    void (async () => {
-      const gridInsts = await createGridModel(viewer, scene, 50, 128);
-      gridInstancesRef.current = gridInsts;
-    })();
-
-    const camera = scene.camera;
-    setCamera(camera);
     // Prepare primitive models for collision visualization
     primsReadyRef.current = (async () => {
       try {
@@ -99,7 +88,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           const rel = fetchUrl.slice((`${base}/`).length).replace(/^\/+/, '');
           if (rel) {
             loadedFilesRef.current.add(rel);
-            setLoadedCount(loadedFilesRef.current.size);
+            setLoadedCount((prev) => prev + 1);
           }
           break;
         }
@@ -134,16 +123,25 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
     };
   }, [canvasRef.current]);
 
-  console.log('Model path:', modelPath);
-
   useEffect(() => {
-    if (!modelPath || !canvasRef.current || !viewer || !scene || !camera) return undefined;
+    if (!modelPath || !canvasRef.current || !viewer) return undefined;
 
     // references for cleanup
     const canvas = canvasRef.current;
     // reset loaded asset tracker on new load
     loadedFilesRef.current = new Set();
+
+    viewer.clear();
+    const scene = viewer.addScene();
+    scene.color.fill(0.15);
+    const camera = scene.camera;
+
     setLoadedCount(0);
+    void (async () => {
+      const gridInsts = await createGridModel(viewer, scene, 50, 128);
+      gridInstancesRef.current = gridInsts;
+    })();
+
     const requestId = ++loadRequestIdRef.current;
     let cancelled = false;
     let onMouseDown: ((e: MouseEvent) => void) | null = null;
@@ -447,21 +445,14 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         window.removeEventListener('mouseup', onMouseUp!);
         window.removeEventListener('resize', resizeCanvas!);
       }
-      if (modelInstance) {
-        scene.removeInstance(modelInstance);
-      }
-      // Clean up collision visuals
-      for (const inst of collisionInstancesRef.current) {
-        try { inst.hide?.(); } catch {
-          // ignore
-        }
-      }
+      viewer.resources.forEach((resource) => viewer.unload(resource));
+
       collisionInstancesRef.current = [];
       if (instanceRef.current === modelInstance) {
         instanceRef.current = null;
       }
     };
-  }, [modelPath, canvasRef.current, viewer, scene]);
+  }, [modelPath, canvasRef.current, viewer]);
 
   const [progress, setProgress] = useState(0);
 
@@ -629,7 +620,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             variant="secondary"
             size="sm"
             onClick={handleToggleCollisions}
-            className="w-10 h-10 text-2xl font-mono bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
+            className="w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
           >
             <TooltipHelp
               trigger={<span>{collisionsVisible ? '•' : '◱'}</span>}
@@ -640,7 +631,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             variant="secondary"
             size="sm"
             onClick={handleToggleGrid}
-            className="w-10 h-10 text-2xl font-mono bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
+            className="w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
           >
             <TooltipHelp
               trigger={<span>{gridVisible ? '⌗' : '⎕'}</span>}
@@ -651,27 +642,25 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             variant="secondary"
             size="sm"
             onClick={() => void handleCopyLink()}
-            className={'w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))]'}
+            className={'w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none'}
           >
             <TooltipHelp
               trigger={<span>{copied ? '✔' : '🔗'}</span>}
               tooltips={copied ? 'Copy viewer link' : 'Copy viewer link'} asChild
             />
           </Button>
-          <Button
+          {serverConfig.isSharedHosting && <Button
             variant="secondary"
             size="sm"
             onClick={() => void handleDownloadAssets()}
             disabled={loadedCount === 0}
-            className="w-max h-10 text-xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
+            className="w-10 h-10 text-xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none p-0"
           >
             <TooltipHelp
-              trigger={<span className="flex items-center gap-2">
-                <Download className="h-4 w-4" />
-              </span>}
+              trigger={<Download className="h-full w-full" />}
               tooltips={loadedCount === 0 ? 'No model loaded' : 'Download model'} asChild
             />
-          </Button>
+          </Button>}
         </div>
         <div className="absolute bottom-2 left-2 z-10 flex items-end gap-3">
           <TooltipHelp
@@ -740,7 +729,7 @@ async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, 
   const lineWidth2 = mdlx.primitives.createCube(size * step, thickness2, thickness2);
   const lineHeight2 = mdlx.primitives.createCube(thickness2, size * step, thickness2);
 
-  const colorDefault = [0.25, 0.25, 0.25];
+  const colorDefault = [0.5, 0.5, 0.5];
   const colorRed = [1, 0, 0];
   const colorGreen = [0, 1, 0];
 

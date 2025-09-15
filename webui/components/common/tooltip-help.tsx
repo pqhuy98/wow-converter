@@ -1,7 +1,9 @@
 'use client';
 
 import { HelpCircle } from 'lucide-react';
-import * as React from 'react';
+import {
+  ReactNode, useEffect, useRef, useState,
+} from 'react';
 
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -10,18 +12,19 @@ import {
 export function TooltipHelp({
   tooltips,
   trigger,
+  asChild,
 }: {
-  trigger?: React.ReactNode
+  trigger?: ReactNode
   tooltips: string | React.ReactNode
   asChild?: boolean
 }) {
-  const [open, setOpen] = React.useState(false);
-  const [isHovering, setIsHovering] = React.useState(false);
-  const reopenTimeoutRef = React.useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const reopenTimeoutRef = useRef<number | null>(null);
 
   // When tooltip content (string) changes while hovering, close then reopen to refresh content without requiring re-hover.
   // Guard to strings only to avoid ReactNode identity changes (e.g. <MouseTooltip />) causing flicker.
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isHovering) return;
     if (typeof tooltips !== 'string') return;
     if (reopenTimeoutRef.current) window.clearTimeout(reopenTimeoutRef.current);
@@ -29,7 +32,7 @@ export function TooltipHelp({
     reopenTimeoutRef.current = window.setTimeout(() => setOpen(true), 0);
   }, [tooltips, isHovering]);
 
-  React.useEffect(() => () => {
+  useEffect(() => () => {
     if (reopenTimeoutRef.current) window.clearTimeout(reopenTimeoutRef.current);
   }, []);
 
@@ -45,19 +48,29 @@ export function TooltipHelp({
 
   const triggerNode = trigger || <HelpCircle className="h-4 w-4 text-muted-foreground" />;
 
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+    setOpen(false);
+  };
+
+  const handleMouseEnter = () => {
+    setIsHovering(true);
+    setOpen(true);
+  };
+
   return (
     <TooltipProvider>
       <Tooltip open={open} onOpenChange={handleOpenChange}>
-        <TooltipTrigger asChild>
+        <TooltipTrigger asChild={asChild}>
           <span
             className="inline-flex align-middle"
-            onMouseEnter={() => { setIsHovering(true); setOpen(true); }}
-            onMouseLeave={() => { setIsHovering(false); setOpen(false); }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
           >
             {triggerNode}
           </span>
         </TooltipTrigger>
-        <TooltipContent className="p-4">
+        <TooltipContent className="p-4 z-100" onMouseLeave={handleMouseLeave} onMouseEnter={handleMouseEnter}>
           {typeof tooltips === 'string' ? <p className="max-w-xs">{tooltips}</p> : tooltips}
         </TooltipContent>
       </Tooltip>

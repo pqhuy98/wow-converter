@@ -66,7 +66,7 @@ export function AttachItems({
                     onClick={() => removeAttachItem(attachmentId)}
                     className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
                   >
-                    <TooltipHelp trigger={<Trash2 className="h-3 w-3" />} tooltips={tooltips.itemRemove}/>
+                    <TooltipHelp trigger={<Trash2 className="h-3 w-3" />} tooltips={tooltips.itemRemove} asChild/>
                   </Button>
                 </div>
 

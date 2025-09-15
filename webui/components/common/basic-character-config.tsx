@@ -58,7 +58,7 @@ export function BasicCharacterConfig({
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Label className="text-sm">Attack Animation</Label>
-            <TooltipHelp tooltips={tooltips.attackAnimation}/>
+            <TooltipHelp tooltips={tooltips.attackAnimation} asChild/>
           </div>
           <Select
             value={character.attackTag || 'all'}

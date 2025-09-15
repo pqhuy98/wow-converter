@@ -109,7 +109,7 @@ export function CharacterConfig({
                     variant="ghost"
                     size="sm"
                     onClick={() => setCharacter((prev) => ({ ...prev, mount: undefined }))}
-                    className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
+                    className="text-destructive hover:text-destructive/80 h-6 w-6 p-0"
                   >
                     <TooltipHelp trigger={<Trash2 className="h-3 w-3" />} tooltips={tooltips.mountRemove}/>
                   </Button>

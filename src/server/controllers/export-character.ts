@@ -297,14 +297,12 @@ export async function ControllerExportCharacter(router: express.Router) {
   });
 
   // Serve exported assets. When running on shared hosting enable HTTP caching to reduce bandwidth
-  const exportStatic = (dir: string) => (isSharedHosting
-    ? express.static(dir, {
-      maxAge: '1h',
-      setHeaders: (res) => {
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-      },
-    })
-    : express.static(dir));
+  const exportStatic = (dir: string) => express.static(dir, {
+    maxAge: isSharedHosting ? '1h' : '5s',
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', isSharedHosting ? 'public, max-age=3600' : 'public, max-age=5');
+    },
+  });
   router.use('/browse-assets', exportStatic(outputDirBrowse));
   router.use('/assets', exportStatic(outputDir));
 

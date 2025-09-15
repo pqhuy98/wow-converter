@@ -13,16 +13,9 @@ export default function SiteHeader() {
   const activeTab = pathname.startsWith('/browse') ? 'browse' : pathname.startsWith('/recents') ? 'recents' : 'export';
 
   return (
-    <div className="sticky top-0 z-50 bg-background/80 backdrop-blur border-b border-border">
+    <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-border">
       <div className="max-w-6xl mx-auto px-2 py-2">
-        {/* <div className="text-center">
-          <Link href="/" className="block">
-            <h1 className="text-4xl font-bold">Huy's WOW-CONVERTER</h1>
-          </Link>
-          <p className="text-lg text-muted-foreground">Easily export WoW NPC models into Warcraft 3 MDL/MDX</p>
-        </div> */}
-
-        <div className="flex gap-4 items-center justify-between">
+        <div className="flex gap-4 items-center justify-center">
           <Tabs value={activeTab}>
             <TabsList className="">
               <TabsTrigger value="export" asChild>
@@ -36,7 +29,7 @@ export default function SiteHeader() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="shrink-0">
+          <div className="shrink-0 absolute right-1">
             <ThemeToggle />
           </div>
         </div>

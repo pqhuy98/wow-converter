@@ -138,16 +138,6 @@ export default function RecentsPage() {
     await downloadAssetsZip({ files: files.map(({ path }) => path), source: 'export' });
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen p-4">
-        <div className="mx-auto">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
       <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
@@ -161,19 +151,25 @@ export default function RecentsPage() {
                 <CardTitle className="text-lg">Export History</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 flex-1 overflow-y-auto p-3 min-w-0">
-                {jobs.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-8">
-                    No recent exports found
-                  </div>
-                ) : (
-                  jobs.map((job) => {
-                    const isExpanded = expandedJobs.has(job.id);
-                    const isSelected = selectedJobId === job.id;
-                    const character = job.request.character;
+                {loading
+                  ? <div className="text-center text-muted-foreground py-8">
+                      <div className="mx-auto">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"/>
+                      </div>
+                    </div>
+                  : jobs.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      No recent exports found
+                    </div>
+                  ) : (
+                    jobs.map((job) => {
+                      const isExpanded = expandedJobs.has(job.id);
+                      const isSelected = selectedJobId === job.id;
+                      const character = job.request.character;
 
-                    if (!character) return null;
+                      if (!character) return null;
 
-                    return (
+                      return (
                       <div
                         key={job.id}
                         className={`border rounded-lg p-2 cursor-pointer transition-all duration-200 ${
@@ -213,13 +209,13 @@ export default function RecentsPage() {
                             <div className="text-xs text-muted-foreground space-y-1">
                               <div className="flex items-start gap-1 min-w-0">
                                 <span className="font-medium whitespace-nowrap">Base:</span>
-                                <div className="min-w-0 flex-1">
+                                <div className="min-w-0">
                                   {character.base.type === 'wowhead' ? (
                                     <a
                                       href={character.base.value}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="text-primary hover:underline flex items-center gap-1 font-bold break-all"
+                                      className="text-blue-600 hover:underline flex items-center gap-1 font-bold break-all"
                                       onClick={(e) => e.stopPropagation()}
                                     >
                                       {getSimplifiedRef(character.base)}
@@ -278,75 +274,74 @@ export default function RecentsPage() {
 
                         {/* Expanded Details */}
                         <div
-                          className={`mt-3 pt-3 border-t border-border text-xs text-muted-foreground space-y-2 overflow-hidden transition-all duration-300 ease-in-out ${
-                            isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-                          }`}
-                        >
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div className="flex items-center gap-1 min-w-0">
-                                <span className="font-medium whitespace-nowrap">Walk Speed:</span> <span className="font-bold">{character.inGameMovespeed}</span>
-                              </div>
-                              <div className="flex items-center gap-1 min-w-0">
-                                <span className="font-medium whitespace-nowrap">Scale:</span> <span className="font-bold">{character.scale || '1.0'}</span>
-                              </div>
-                              <div className="flex items-center gap-1 min-w-0">
-                                <span className="font-medium whitespace-nowrap">Format:</span> <span className="font-bold">{job.request.format}</span>
-                              </div>
-                              <div className="flex items-center gap-1 min-w-0">
-                                <span className="font-medium whitespace-nowrap">Model Version:</span> <span className="font-bold">{job.request.formatVersion || '1000'}</span>
-                              </div>
-                              <div className="flex items-center gap-1 min-w-0">
-                                <span className="font-medium whitespace-nowrap">Keep Cinematic:</span> <span className="font-bold">{character.keepCinematic ? 'Yes' : 'No'}</span>
-                              </div>
-                              <div className="flex items-center gap-1 min-w-0">
-                                <span className="font-medium whitespace-nowrap">No Decay:</span> <span className="font-bold">{character.noDecay ? 'Yes' : 'No'}</span>
-                              </div>
-                              <div className="flex items-start gap-1 min-w-0 sm:col-span-2">
-                                <span className="font-medium whitespace-nowrap">Portrait Camera:</span>
-                                <span className="font-bold break-words flex-1">{character.portraitCameraSequenceName || 'None'}</span>
+                          className={`border-t border-border text-xs text-muted-foreground space-y-2 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                          }`}>
+                          <div className="my-4"/>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-medium whitespace-nowrap">Walk Speed:</span> <span className="font-bold">{character.inGameMovespeed}</span>
+                            </div>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-medium whitespace-nowrap">Scale:</span> <span className="font-bold">{character.scale || '1.0'}</span>
+                            </div>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-medium whitespace-nowrap">Format:</span> <span className="font-bold">{job.request.format}</span>
+                            </div>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-medium whitespace-nowrap">Model Version:</span> <span className="font-bold">{job.request.formatVersion || '1000'}</span>
+                            </div>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-medium whitespace-nowrap">Keep Cinematic:</span> <span className="font-bold">{character.keepCinematic ? 'Yes' : 'No'}</span>
+                            </div>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-medium whitespace-nowrap">No Decay:</span> <span className="font-bold">{character.noDecay ? 'Yes' : 'No'}</span>
+                            </div>
+                            <div className="flex items-start gap-1 min-w-0 sm:col-span-2">
+                              <span className="font-medium whitespace-nowrap">Portrait Camera:</span>
+                              <span className="font-bold break-words flex-1">{character.portraitCameraSequenceName || 'None'}</span>
+                            </div>
+                          </div>
+
+                          {job.request.optimization && (
+                            <div className="min-w-0">
+                              <span className="font-medium">Optimizations:</span>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {job.request.optimization.sortSequences && <Badge variant="secondary" className="text-xs">Sort Sequences</Badge>}
+                                {job.request.optimization.removeUnusedVertices && <Badge variant="secondary" className="text-xs">Remove Vertices</Badge>}
+                                {job.request.optimization.removeUnusedNodes && <Badge variant="secondary" className="text-xs">Remove Nodes</Badge>}
+                                {job.request.optimization.removeUnusedMaterialsTextures && <Badge variant="secondary" className="text-xs">Optimize Materials</Badge>}
                               </div>
                             </div>
+                          )}
 
-                            {job.request.optimization && (
-                              <div className="min-w-0">
-                                <span className="font-medium">Optimizations:</span>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {job.request.optimization.sortSequences && <Badge variant="secondary" className="text-xs">Sort Sequences</Badge>}
-                                  {job.request.optimization.removeUnusedVertices && <Badge variant="secondary" className="text-xs">Remove Vertices</Badge>}
-                                  {job.request.optimization.removeUnusedNodes && <Badge variant="secondary" className="text-xs">Remove Nodes</Badge>}
-                                  {job.request.optimization.removeUnusedMaterialsTextures && <Badge variant="secondary" className="text-xs">Optimize Materials</Badge>}
-                                </div>
-                              </div>
-                            )}
+                          {job.status === 'done' && job.result && (
+                            <div className="flex items-center gap-2">
+                                                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleDownloadZip(job);
+                                  }}
+                                >
+                                  <Download className="h-3 w-3 mr-1" />
+                                  Download
+                                </Button>
+                              <span className="text-green-600 font-medium">✓ Complete</span>
+                            </div>
+                          )}
 
-                            {job.status === 'done' && job.result && (
-                              <div className="flex items-center gap-2">
-                                                                 <Button
-                                   variant="outline"
-                                   size="sm"
-                                   className="text-xs"
-                                   onClick={(e) => {
-                                     e.stopPropagation();
-                                     void handleDownloadZip(job);
-                                   }}
-                                 >
-                                   <Download className="h-3 w-3 mr-1" />
-                                   Download
-                                 </Button>
-                                <span className="text-green-600 font-medium">✓ Complete</span>
-                              </div>
-                            )}
-
-                            {job.status === 'failed' && (
-                              <div className="text-destructive font-medium">
-                                ✗ Failed: {job.error}
-                              </div>
-                            )}
-                          </div>
+                          {job.status === 'failed' && (
+                            <div className="text-destructive font-medium">
+                              ✗ Failed: {job.error}
+                            </div>
+                          )}
                         </div>
-                    );
-                  })
-                )}
+                      </div>
+                      );
+                    })
+                  )}
               </CardContent>
             </Card>
           </div>
