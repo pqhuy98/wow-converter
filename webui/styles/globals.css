@@ -49,38 +49,38 @@ body {
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --background: 220 14% 12%;
+    --foreground: 0 0% 94%;
+    --card: 220 14% 14%;
+    --card-foreground: 0 0% 94%;
+    --popover: 220 14% 14%;
+    --popover-foreground: 0 0% 94%;
+    --primary: 210 100% 66%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 220 10% 18%;
+    --secondary-foreground: 0 0% 92%;
+    --muted: 220 10% 18%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 220 12% 22%;
+    --accent-foreground: 0 0% 92%;
+    --destructive: 0 62% 46%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
+    --border: 220 10% 22%;
+    --input: 220 10% 22%;
+    --ring: 210 100% 66%;
+    --chart-1: 210 90% 60%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 220 14% 12%;
+    --sidebar-foreground: 0 0% 94%;
+    --sidebar-primary: 210 100% 66%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 220 12% 22%;
+    --sidebar-accent-foreground: 0 0% 92%;
+    --sidebar-border: 220 10% 22%;
+    --sidebar-ring: 210 100% 66%;
   }
 }
 

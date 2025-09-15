@@ -127,7 +127,7 @@ export function BasicCharacterConfig({
             value={character.inGameMovespeed || ''}
             onChange={(e) => setCharacter((prev) => ({ ...prev, inGameMovespeed: Number.parseInt(e.target.value, 10) || 0 }))
             }
-            className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+            className="flex-1"
           />
         </div>
 
@@ -144,7 +144,7 @@ export function BasicCharacterConfig({
             value={character.scale || ''}
             onChange={(e) => setCharacter((prev) => ({ ...prev, scale: Number.parseFloat(e.target.value) || undefined }))
             }
-            className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+            className="flex-1"
           />
         </div>
       </div>
@@ -182,7 +182,7 @@ export function BasicCharacterConfig({
                 setParticlesDensity(value);
                 setCharacter((prev) => ({ ...prev, particlesDensity: isNaN(value) ? 1 : value }));
               }}
-              className="flex-1 border-2 border-gray-300 bg-white focus:border-blue-500"
+              className="flex-1"
             />
           </div>
         </div>

@@ -133,7 +133,7 @@ export function RefInput({
             onFocus={(e) => {
               e.target.select();
             }}
-            className={`border-2 bg-white text-left ${clientValidationResult && !clientValidationResult.ok ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'}`}
+            className={`text-left ${clientValidationResult && !clientValidationResult.ok ? 'ring-2 ring-destructive' : ''}`}
           />
           {clientValidationResult && clientValidationResult.error && (
             <div className="flex items-center gap-1 mt-1 text-sm text-red-600">

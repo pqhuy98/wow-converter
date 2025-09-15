@@ -1,5 +1,4 @@
 TODO (not in any priority order):
-- Character customization collection e.g. mechagnome, earthen,... is not exported.
 - NPCs don't close hand when holding items
 - Multi-step workflow in web to tune the model:
   - First export for full model with all data
@@ -25,36 +24,7 @@ https://www.wowhead.com/npc=196636/scalecommander-azurathel - no armor, dragon r
 https://www.wowhead.com/npc=224592/colossal-arathi-amalgam - missing outer texture
 https://www.wowhead.com/npc=56173/deathwing - missing particles
 https://www.wowhead.com/classic/npc=14988/ohgan - 2nd layer reflect texture incorrectly included
+Dracthyr race has broken attachments and doesn't load in WC3.
 
 
 DONE:
-
-
-7/9/2025
-- Fix missing geosets in some character races like Undead' arm/face or Dwarf's beard.
-- Add attack options Bow, Gun, Thrown
-- Now the tool can automatically detect suitable attack options based on given weapons.
-- UI improvements
-- Texture PNG->BLP conversion is now significantly faster by utilizing all CPU cores.
-- Improved in-game Portrait by cloning Stand anims into "Portrait" anims.
-- Improved keyframe optimization to give smaller model size and fix a very rare bug.
-- Add a UI button to clean up everything inside export-assets folder.
-
-
-Before 7/9/2025
-- Fix bug when char customization uses more than 1 geoset
-- Some creatures using textures not in DB skin list cannot be exported because skin not found.
-- Feet and trouser geoset wrong in some cases
-- Bug: inputting new URLs into base/itme input box doesn't update React state.
-- Collision box right now too big. Try to choose best that fit the Stand anim.
-- Some users want matrix model version 800
-- Basic particles
-- Bug: doesn't work for some user with existing wow.export settings from the official.
-  e.g. when they have exportModelFormat: "RAW" while wow-converter fails to change wow.export config during startup. (why? it should!).
-- Export classic models.
-- Item collections are exported.
-- Models now have ears 
-- All attachments work correctly
-- Blood elf model's attachment not working
-- https://www.wowhead.com/npc=16867/shattered-hand-grunt this orc has wrong eye textures
-  Reason: cannot find texture file ID in wowhead data, even after searching in network requests in Chrome network inspection.

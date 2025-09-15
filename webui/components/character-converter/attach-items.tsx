@@ -55,7 +55,7 @@ export function AttachItems({
               || 'Unknown';
 
             return (
-              <Card key={id} className="p-3 bg-blue-50 border-blue-200">
+              <Card key={id} className="p-3 bg-card border-border">
                 <div className="flex items-start justify-between mb-3">
                   <Badge variant="secondary" className="text-xs">
                     {attachmentName} ({attachmentId})
@@ -121,7 +121,7 @@ export function AttachItems({
                             scale: Number.parseFloat(e.target.value) || undefined,
                           })
                           }
-                          className="border-2 border-gray-300 bg-white focus:border-blue-500"
+                          className=""
                         />
                       </div>
                     </div>

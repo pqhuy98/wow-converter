@@ -256,7 +256,7 @@ export default function BrowseModelPage() {
   }
 
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex flex-col overflow-x-hidden">
+    <div className="h-full p-4 flex flex-col overflow-x-hidden">
       <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
         <div className="mb-4" />
         <div className="flex flex-col lg:flex-row gap-6 h-full min-w-0" style={{ height: 'calc(100vh - 125px)' }}>
@@ -306,7 +306,7 @@ export default function BrowseModelPage() {
                         <button
                           key={s}
                           type="button"
-                          className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-gray-200 hover:bg-gray-300 border border-gray-300 pointer-events-auto"
+                          className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
                           onClick={() => applySuggestion(s)}
                           disabled={isBusy}
                           title={`Search for ${s}`}
@@ -319,7 +319,7 @@ export default function BrowseModelPage() {
                 </div>
                 <div
                   ref={listRef}
-                  className="mt-2 overflow-y-scroll overflow-x-auto border rounded-md bg-white h-[calc(100vh-260px)]"
+                  className="mt-2 overflow-y-scroll overflow-x-auto border rounded-md bg-background h-[calc(100vh-260px)]"
                   onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
                 >
                   <div style={{
@@ -338,16 +338,16 @@ export default function BrowseModelPage() {
                         return <div
                           key={f.fileDataID + f.fileName}
                           style={{ height: ROW_HEIGHT }}
-                          className={`px-2 flex items-center text-sm min-w-full w-max whitespace-nowrap ${isBusy ? 'cursor-not-allowed opacity-60' : ''} ${isSelected ? 'bg-blue-300' : isExporting ? '' : 'hover:bg-gray-300 cursor-pointer'}`}
+                          className={`px-2 flex items-center text-sm min-w-full w-max whitespace-nowrap ${isBusy ? 'cursor-not-allowed opacity-60' : ''} ${isSelected ? 'bg-primary/20' : isExporting ? '' : 'hover:bg-accent cursor-pointer'}`}
                           onClick={() => { if (!isBusy && !isSelected) void triggerExport(f); }}
                         >
-                          <span className="text-gray-500 w-16 shrink-0">{startIndex + i + 1}.</span>
-                          <span className="font-mono" title={f.fileName}>
+                          <span className="text-muted-foreground w-16 shrink-0">{startIndex + i + 1}.</span>
+                          <span className="font-mono text-foreground/70" title={f.fileName}>
                             {renderHighlightedName(f.fileName)}{' '}
                             [<span className="text-yellow-600">{f.fileDataID}</span>]
                           </span>
                           {isSelected && (
-                            <div ref={copyBtnRef} className="text-gray-500 shrink-0 cursor-pointer ml-6 hover:border-gray-100 rounded-md p-1"
+                            <div ref={copyBtnRef} className="text-muted-foreground shrink-0 cursor-pointer ml-6 rounded-md p-1"
                               onMouseLeave={() => {
                                 setTimeout(() => setHasCopied(false), 1000);
                               }}
@@ -378,12 +378,12 @@ export default function BrowseModelPage() {
                 <ModelViewerUi modelPath={modelPath} source="browse" />
               )}
               {job?.status !== 'done' && (
-                <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
-                  <div className="text-center text-gray-500 w-full px-4">
+                <div className="absolute inset-0 bg-secondary flex items-center justify-center z-10">
+                  <div className="text-center text-muted-foreground w-full px-4">
                     {job?.status === 'processing' || job?.status === 'pending' ? (
                       <>
                       <div className="flex items-center justify-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
                         <p className="text-lg">{job.status === 'processing' ? 'Exporting...' : `Queue position: ${job.position}`}</p>
                       </div>
                         <div className="mt-4 mx-auto w-full sm:w-3/4 lg:w-1/2 sm:min-w-[75%] sm:max-w-[75%] lg:min-w-[75%] lg:max-w-[75%]">
@@ -392,9 +392,9 @@ export default function BrowseModelPage() {
                       </>
                     ) : job?.status === 'failed' ? (
                       <>
-                        <p className="text-lg mb-2 text-red-600">Export failed</p>
+                        <p className="text-lg mb-2 text-destructive">Export failed</p>
                         {job?.error && (
-                          <pre className="text-left text-sm text-red-700 whitespace-pre-wrap bg-red-50 border border-red-200 rounded p-2 max-w-[90%] mx-auto overflow-x-auto">
+                          <pre className="text-left text-sm text-destructive whitespace-pre-wrap bg-card border border-border rounded p-2 max-w-[90%] mx-auto overflow-x-auto">
                             {job.error}
                           </pre>
                         )}

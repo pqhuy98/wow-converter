@@ -617,7 +617,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
               variant="secondary"
               size="sm"
               onClick={handleFullscreenToggle}
-              className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl"
+              className="w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
             >
               <TooltipHelp
                 trigger={<span>{isFullscreen ? '✕' : '⛶'}</span>}
@@ -629,7 +629,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             variant="secondary"
             size="sm"
             onClick={handleToggleCollisions}
-            className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
+            className="w-10 h-10 text-2xl font-mono bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
           >
             <TooltipHelp
               trigger={<span>{collisionsVisible ? '•' : '◱'}</span>}
@@ -640,7 +640,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             variant="secondary"
             size="sm"
             onClick={handleToggleGrid}
-            className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-10 h-10 text-2xl font-mono"
+            className="w-10 h-10 text-2xl font-mono bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
           >
             <TooltipHelp
               trigger={<span>{gridVisible ? '⌗' : '⎕'}</span>}
@@ -651,7 +651,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             variant="secondary"
             size="sm"
             onClick={() => void handleCopyLink()}
-            className={'bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 w-10 h-10 text-2xl'}
+            className={'w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))]'}
           >
             <TooltipHelp
               trigger={<span>{copied ? '✔' : '🔗'}</span>}
@@ -663,7 +663,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             size="sm"
             onClick={() => void handleDownloadAssets()}
             disabled={loadedCount === 0}
-            className="bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 focus:outline-none focus:border-gray-600 active:border-gray-600 w-max h-10 text-xl"
+            className="w-max h-10 text-xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
           >
             <TooltipHelp
               trigger={<span className="flex items-center gap-2">
@@ -675,7 +675,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         </div>
         <div className="absolute bottom-2 left-2 z-10 flex items-end gap-3">
           <TooltipHelp
-            trigger={<span className="inline-flex"><Mouse className="w-6 h-6 text-white/90 drop-shadow" /></span>}
+            trigger={<span className="inline-flex"><Mouse className="w-6 h-6 text-[hsl(var(--viewer-sidebar-fg))]/90 drop-shadow" /></span>}
             tooltips={(
               <div className="text-sm leading-5">
                 <div><span className="font-semibold">Left click</span>: orientation (rotate)</div>
@@ -690,7 +690,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           ref={canvasRef}
           width={1}
           height={1}
-          className="bg-gray-800 shadow-inner w-full h-full min-h-0"
+          className="w-full h-full min-h-0 bg-secondary shadow-inner"
           onClick={(e) => {
             if (e.detail === 2) { // double click to enter fullscreen
               handleFullscreenToggle();
@@ -698,29 +698,29 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           }}
         />
       </div>
-      <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] bg-gray-800/90 lg:border-l lg:border-t-0 border-t border-gray-600 flex-shrink-0 relative z-10 flex flex-col'}>
-          <div className="bg-gray-900 px-3 py-2 text-white font-semibold border-b border-black shrink-0">
+      <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))] lg:border-l lg:border-t-0 border-t border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 flex flex-col'}>
+          <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] shrink-0">
             Animations ({sequences.length})
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <ul className="divide-y divide-gray-600">
+          <div className="flex-1 min-h-0 overflow-y-auto viewer-scroll">
+            <ul className="divide-y divide-[hsl(var(--viewer-divider))]">
               {sequences.length === 0 ? (
-                <div className="p-3 text-gray-400">Loading animations...</div>
+                <div className="p-3 text-muted-foreground">Loading animations...</div>
               ) : (
                 sequences.map((seq, idx) => (
                 <li
                   key={idx}
                   onClick={() => handleSelectSequence(idx)}
-                  className={`px-3 py-2 cursor-pointer text-white relative ${idx === currentSeq ? 'bg-gray-800' : 'hover:bg-gray-700'}`}
+                  className={`px-3 py-2 cursor-pointer relative ${idx === currentSeq ? 'bg-[hsl(var(--viewer-item-active))]' : 'hover:bg-[hsl(var(--viewer-item-hover))]'}`}
                 >
                   {seq.name || `Sequence ${idx}`}
-                  <span className="text-gray-500 text-xs flex items-center gap-1">
+                  <span className="text-[hsl(var(--viewer-muted))] text-xs flex items-center gap-1">
                     ({idx})
                     Duration: {((seq.interval[1] - seq.interval[0]) / 1000).toFixed(3)} s
                     {!seq.nonLooping ? ', looping' : ''}
                   </span>
                   {idx === currentSeq ? (
-                    <div className="absolute left-0 bottom-0 h-[2px] bg-blue-600" style={{ width: `${Math.round(progress * 100)}%` }} />
+                    <div className="absolute left-0 bottom-0 h-[2px] bg-[hsl(var(--animation-progress))]" style={{ width: `${Math.round(progress * 100)}%` }} />
                   ) : null}
                 </li>
                 ))
@@ -733,9 +733,12 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
 }
 
 async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, step: number): Promise<MdxModelInstance[]> {
-  const thickness = 1;
-  const lineWidth = mdlx.primitives.createCube(size * step, thickness, thickness / 2);
-  const lineHeight = mdlx.primitives.createCube(thickness, size * step, thickness / 2);
+  const thickness1 = 0.2;
+  const lineWidth = mdlx.primitives.createCube(size * step, thickness1, thickness1);
+  const lineHeight = mdlx.primitives.createCube(thickness1, size * step, thickness1);
+  const thickness2 = 1;
+  const lineWidth2 = mdlx.primitives.createCube(size * step, thickness2, thickness2);
+  const lineHeight2 = mdlx.primitives.createCube(thickness2, size * step, thickness2);
 
   const colorDefault = [0.25, 0.25, 0.25];
   const colorRed = [1, 0, 0];
@@ -756,12 +759,12 @@ async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, 
   }
 
   // Red and green lines at the origin
-  const redLineMdx = (await mdlx.createPrimitive(viewer, lineWidth, { color: new Float32Array(colorRed) }))!;
+  const redLineMdx = (await mdlx.createPrimitive(viewer, lineWidth2, { color: new Float32Array(colorRed) }))!;
   const redLine = redLineMdx.addInstance();
   scene.addInstance(redLine);
   instances.push(redLine);
 
-  const greenLineMdx = (await mdlx.createPrimitive(viewer, lineHeight, { color: new Float32Array(colorGreen) }))!;
+  const greenLineMdx = (await mdlx.createPrimitive(viewer, lineHeight2, { color: new Float32Array(colorGreen) }))!;
   const greenLine = greenLineMdx.addInstance();
   scene.addInstance(greenLine);
   instances.push(greenLine);

@@ -57,7 +57,7 @@ export function TooltipHelp({
             {triggerNode}
           </span>
         </TooltipTrigger>
-        <TooltipContent>
+        <TooltipContent className="p-4">
           {typeof tooltips === 'string' ? <p className="max-w-xs">{tooltips}</p> : tooltips}
         </TooltipContent>
       </Tooltip>

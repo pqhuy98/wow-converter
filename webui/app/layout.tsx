@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 
 import SiteHeader from '@/components/common/site-header';
 import { ServerConfigProvider } from '@/components/server-config';
+import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
   title: 'Huy\'s wow-converter',
@@ -16,15 +17,17 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.jpg" />
       </head>
-      <body style={{ height: 'calc(100vh - 57px)' }}>
-        <ServerConfigProvider>
-          <SiteHeader />
-          {children}
-        </ServerConfigProvider>
+      <body className="min-h-screen bg-[radial-gradient(80%_80%_at_50%_50%,hsl(var(--background))_0%,hsl(var(--background-alt))_45%,hsl(var(--background))_100%)]">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <ServerConfigProvider>
+            <SiteHeader />
+            {children}
+          </ServerConfigProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

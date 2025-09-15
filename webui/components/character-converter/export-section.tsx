@@ -87,7 +87,7 @@ export function ExportSection({
               placeholder="my-character"
               value={outputFileName}
               onChange={(e) => setOutputFileName(e.target.value)}
-              className={`border-2 bg-white ${!outputFileName.trim() ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'}`}
+              className={`${!outputFileName.trim() ? 'ring-2 ring-destructive' : ''}`}
             />
           </div>
 
@@ -127,7 +127,7 @@ export function ExportSection({
             <Button onClick={() => void handleExport()} disabled={isWaiting} className="flex-1" size="lg">
               {isWaiting ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
                   Exporting...
                 </>
               ) : (
