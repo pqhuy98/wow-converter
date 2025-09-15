@@ -237,7 +237,7 @@ export default function BrowseModelPage() {
 
   const [hasCopied, setHasCopied] = useState(false);
 
-  const suggestions = ['creature/', 'spells/', 'wmo/'] as const;
+  const suggestions = ['creature/', 'spells/', 'doodads/', 'wmo/'] as const;
   const applySuggestion = (s: typeof suggestions[number]) => {
     const v = `${s} `;
     setQuery(v);
