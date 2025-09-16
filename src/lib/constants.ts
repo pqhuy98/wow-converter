@@ -1,11 +1,11 @@
 // Map generation configs
-export const defaultLayer = 15;
+export const defaultLayer = 7;
 // max height after override UI/MiscData.txt
 // export const dataHeightMin = 0;
 // export const dataHeightMax = 8192 * 2 - 1;
 // max height for default UI/MiscData.txt
-export const dataHeightMin = 128;
-export const dataHeightMax = 8192 * 2 - 128;
+export const dataHeightMin = 512;
+export const dataHeightMax = 8192 * 2 - 512;
 // console.log(dataHeightMin, dataHeightMax);
 
 export const maxGameHeightDiff = (dataHeightMax - dataHeightMin) / 4;

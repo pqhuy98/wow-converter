@@ -39,7 +39,7 @@ export class TerrainTranslator implements Translator<Terrain> {
          * Header
          */
     outBufferToWar.addChars('W3E!'); // file id
-    outBufferToWar.addInt(11); // file version
+    outBufferToWar.addInt(12); // file version
     outBufferToWar.addChar(terrainJson.tileset); // base tileset
     outBufferToWar.addInt(+terrainJson.customTileset); // 1 = using custom tileset, 0 = not
 
@@ -109,7 +109,7 @@ export class TerrainTranslator implements Translator<Terrain> {
 
         outBufferToWar.addShort(groundHeight);
         outBufferToWar.addShort(waterHeight | hasBoundaryFlag);
-        outBufferToWar.addByte(flags | groundTexture);
+        outBufferToWar.addShort(flags | groundTexture);
         outBufferToWar.addByte(groundVariation | cliffVariation);
         outBufferToWar.addByte(cliffTexture | layerHeight);
       }
@@ -152,7 +152,7 @@ export class TerrainTranslator implements Translator<Terrain> {
          * Header
          */
     const _w3eHeader = outBufferToJSON.readChars(4); // W3E!
-    const _version = outBufferToJSON.readInt(); // 0B 00 00 00
+    const version = outBufferToJSON.readInt(); // 0B 00 00 00
     const tileset = outBufferToJSON.readChars(1); // tileset
     const customTileset = (outBufferToJSON.readInt() === 1);
 
@@ -209,15 +209,15 @@ export class TerrainTranslator implements Translator<Terrain> {
     while (!outBufferToJSON.isExhausted()) {
       const groundHeight = outBufferToJSON.readShort();
       const waterHeightAndBoundary = outBufferToJSON.readShort();
-      const flagsAndGroundTexture = outBufferToJSON.readByte();
+      const flagsAndGroundTexture = version >= 12 ? outBufferToJSON.readShort() : outBufferToJSON.readByte();
       const groundAndCliffVariation = outBufferToJSON.readByte();
       const cliffTextureAndLayerHeight = outBufferToJSON.readByte();
 
       // parse out different bits (based on documentation from https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain)
       const waterHeight = waterHeightAndBoundary & 32767;
       const boundaryFlag = (waterHeightAndBoundary & 0x4000) === 0x4000;
-      const flags = flagsAndGroundTexture & 240;
-      const groundTexture = flagsAndGroundTexture & 15;
+      const flags = flagsAndGroundTexture & (version >= 12 ? 0xffc0 : 240);
+      const groundTexture = flagsAndGroundTexture & (version >= 12 ? 0x3f : 15);
       const groundVariation = groundAndCliffVariation & 248;
       const cliffVariation = groundAndCliffVariation & 7;
       const cliffTexture = cliffTextureAndLayerHeight & 240;

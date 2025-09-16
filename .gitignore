@@ -11,9 +11,9 @@ dist
 *.zip
 maps/*
 !maps/template-empty.w3x/
-!maps/test-regression*.w3x/
-maps/test-regression*.w3x/*.mdx
-maps/test-regression*.w3x/wow/**/*.blp
+!maps/test-*.w3x/
+maps/test-*.w3x/*.mdx
+maps/test-*.w3x/wow/**/*.blp
 # Logs
 logs
 *.log

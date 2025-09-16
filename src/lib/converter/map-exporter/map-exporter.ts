@@ -221,7 +221,7 @@ export class MapExporter {
         wowExportMapId,
         [tileX, tileY],
         {
-          phaseMask: 1,
+          // phaseMask: 1,
         },
       ));
 

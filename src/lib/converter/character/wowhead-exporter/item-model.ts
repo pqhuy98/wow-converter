@@ -156,11 +156,6 @@ export function getGeosetIdsFromEquipments(equipments: EquipmentSlotData[], chos
   const hasGeoset = (equiment: EquipmentSlotData | undefined, i: number) => (equiment?.data.zamGeosetGroup?.[i] ?? 0) > 0;
   const addGeoset = (equiment: EquipmentSlotData | undefined, group: number, i: number) => {
     if (equiment?.data.zamGeosetGroup?.[i] != null) {
-      if (group === 8) {
-        console.log({
-          hands, equiment, group, i,
-        });
-      }
       removeGroup(group, false);
       geosetIds.push(computeZamMeshId(group, equiment?.data.zamGeosetGroup?.[i]));
     }

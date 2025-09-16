@@ -15,16 +15,19 @@ const WowMap = {
   Azeroth: { id: 0, folder: 'azeroth' },
   Northrend: { id: 571, folder: 'northrend' },
   Outland: { id: 530, folder: 'outland' },
+  DeathKnightStart: { id: 609, folder: 'deathknightstart' },
   IcecrownCitadel: { id: 631, folder: 'icecrowncitadel' },
   TheMaw: { id: 2456, folder: '2456' },
 };
 
-const maps: [WowMap, [number, number], [number, number], string][] = [
+const maps: [WowMap, [number, number], [number, number], string, number, number, number][] = [
   // [WowMap.Northrend, [28, 29], [22, 23], 'wrathgate.w3x'],
-  // [WowMap.Northrend, [29, 30], [18, 19], 'icecrown.w3x'],
-  [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
+  // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
+  // [WowMap.Northrend, [32, 21], [33, 22], 'icecrown.w3x', 0, 0.4, 0],
+  [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0.55, 0.77, 0],
+  // [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
   // [WowMap.IcecrownCitadel, [25, 28], [21, 24], 'icc-floor34.w3x'],
-  // [WowMap.IcecrownCitadel, [35, 36], [30, 31], 'frozen-throne.w3x'],
+  // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.9, 1, 180],
   // [WowMap.Azeroth, [32, 32], [48, 48], 'northshire-abbey.w3x'],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
   // [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
@@ -34,7 +37,7 @@ const maps: [WowMap, [number, number], [number, number], string][] = [
 ];
 
 const chosenMap = maps[0];
-const mapAngleDeg = 0;
+const mapAngleDeg = chosenMap[6];
 
 const config: Config = {
   ...await getDefaultConfig(),
@@ -55,8 +58,8 @@ const mapExportConfig: MapExportConfig = {
   mapAngleDeg,
   terrain: {
     clampPercent: {
-      lower: 0,
-      upper: 1,
+      lower: chosenMap[4],
+      upper: chosenMap[5],
       // lower: gameZToPercent(1400),
       // upper: gameZToPercent(2600),
     },

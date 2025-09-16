@@ -29,7 +29,7 @@ export class Wc3Converter {
   }
 
   generateTerrainWithHeight(terrainObjs: WowObject[]): Terrain {
-    console.log('Generating terrain from', terrainObjs.length, ' files');
+    console.log('Generating terrain from', terrainObjs.length, 'files');
 
     const { heightMap, height, width } = this.computeTerrainHeightMap(terrainObjs);
 

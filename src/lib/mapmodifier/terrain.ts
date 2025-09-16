@@ -31,7 +31,7 @@ export function getInitialTerrain(
     // boundaryFlag: 0: not boundary, 1: boundary. Can be all 0
     boundaryFlag: fill(false),
 
-    // flags: 32: blight, 64: water, 128: boundary
+    // flags: 64: blight, 128: water, 256: boundary - TODO: check if this is correct
     flags: fill(0),
 
     // groundTexture: texture ID Can be all 0

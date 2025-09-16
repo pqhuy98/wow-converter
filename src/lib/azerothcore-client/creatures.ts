@@ -124,7 +124,7 @@ export async function exportCreatureModels(
     return true;
   });
 
-  const batchSize = 5;
+  const batchSize = 1;
   for (let i = 0; i < creatures.length; i += batchSize) {
     const batch = creatures.slice(i, i + batchSize);
     await Promise.all(batch.map(async (c) => {

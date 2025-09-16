@@ -247,10 +247,10 @@ export class WowExportRestClient {
 
   public async exportModels(models: { fileDataID: number; skinName?: string }[]): Promise<ExportResult[]> {
     if (models.length === 0) return [];
-    const json = await this.postJSON('/rest/exportModels', { models });
-    if (json.id === 'EXPORT_RESULT') {
+    const { status, data: json } = await this.postJSONAllowError('/rest/exportModels', { models });
+    if (status === 200 && json.id === 'EXPORT_RESULT') {
       const results = json.succeeded as ExportResult[];
-      await Promise.all(results.map(async (result) => {
+      await Promise.all(results.map(async (result: ExportResult) => {
         await this.prefetchFiles(result.files, (file) => file.endsWith('.png'));
         result.files.forEach((_, i) => {
           result.files[i].file = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.files[i].file));
@@ -258,14 +258,17 @@ export class WowExportRestClient {
       }));
       return results;
     }
-    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
-    throw new Error('Failed to start model export');
+    if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    if (status === 400) throw new Error('Invalid parameters for model export');
+    if (status === 422) throw new Error('Model export failed for all files');
+    if (status >= 500) throw new Error(`Server error during model export: ${json?.message ?? 'unknown'}`);
+    throw new Error('Unexpected response for model export');
   }
 
   public async exportTextures(fileDataIDs: number[]): Promise<ExportFile[]> {
     if (fileDataIDs.length === 0) return [];
-    const json = await this.postJSON('/rest/exportTextures', { fileDataID: fileDataIDs });
-    if (json.id === 'EXPORT_RESULT') {
+    const { status, data: json } = await this.postJSONAllowError('/rest/exportTextures', { fileDataID: fileDataIDs });
+    if (status === 200 && json.id === 'EXPORT_RESULT') {
       const results = json.succeeded as ExportFile[];
       await this.prefetchFiles(results);
       results.forEach((_, i) => {
@@ -273,13 +276,16 @@ export class WowExportRestClient {
       });
       return results;
     }
-    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
-    throw new Error('Failed to start texture export');
+    if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    if (status === 400) throw new Error('Invalid parameters for texture export');
+    if (status === 422) throw new Error('Texture export failed for all files');
+    if (status >= 500) throw new Error(`Server error during texture export: ${json?.message ?? 'unknown'}`);
+    throw new Error('Unexpected response for texture export');
   }
 
   public async exportCharacter(data: ExportCharacterParams): Promise<ExportCharacterResult> {
-    const json = await this.postJSON('/rest/exportCharacter', data);
-    if (json.id === 'EXPORT_RESULT') {
+    const { status, data: json } = await this.postJSONAllowError('/rest/exportCharacter', data);
+    if (status === 200 && json.id === 'EXPORT_RESULT') {
       const result = json as ExportCharacterResult;
       await this.prefetchFiles(result.fileManifest, (file) => file.endsWith('.png'));
       result.exportPath = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.exportPath));
@@ -288,8 +294,10 @@ export class WowExportRestClient {
       });
       return result;
     }
-    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
-    throw new Error('Failed to start character export');
+    if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    if (status === 400) throw new Error('Invalid parameters for character export');
+    if (status >= 500) throw new Error(`Server error during character export: ${json?.message ?? 'unknown'}`);
+    throw new Error('Unexpected response for character export');
   }
 
   public async resetConnection(): Promise<void> {
@@ -433,6 +441,17 @@ export class WowExportRestClient {
   private async postJSON(path: string, body?: unknown): Promise<any> {
     const res = await this.http.request({ method: 'POST', url: path, data: body ?? {} });
     return res.data;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async postJSONAllowError(path: string, body?: unknown): Promise<{ status: number; data: any }> {
+    const res = await this.http.request({
+      method: 'POST',
+      url: path,
+      data: body ?? {},
+      validateStatus: () => true,
+    });
+    return { status: res.status, data: res.data };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

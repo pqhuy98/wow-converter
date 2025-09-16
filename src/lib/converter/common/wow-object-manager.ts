@@ -57,6 +57,8 @@ export class WowObjectManager {
     }).map((f) => f.replaceAll(path.sep, '/'));
     console.log('Parsing root files', files);
 
+    const rootSet = new Set<WowObject>();
+
     for (const file of files) {
       const type = file.includes('adt') ? 'adt' : 'wmo';
       if (filter && !filter(file, type)) continue;
@@ -71,12 +73,19 @@ export class WowObjectManager {
         type,
       };
       this.roots.push(root);
+      rootSet.add(root);
       await this.parseRecursive(fileName, root, filter);
       if (isEmptyModel(root)) {
+        console.log('Empty root model:', root.id);
         // Add children as roots, and make root as leaf
         const children = root.children;
         root.children = [];
         children.forEach((child) => {
+          if (rootSet.has(child)) {
+            return;
+          }
+          console.log('Adding child as root', child.id);
+          rootSet.add(child);
           this.roots.push(child);
           child.position = V3.sum(V3.rotate(child.position, root.rotation), root.position);
           child.rotation = calculateChildAbsoluteEulerRotation(root.rotation, child.rotation);
@@ -288,5 +297,10 @@ function convertRowPositionRotation(row: PlacementInfoRow): {
 }
 
 function isEmptyModel(obj: WowObject) {
-  return obj.model!.mdl.geosets.every((geoset) => geoset.vertices.length === 0);
+  const model = obj.model?.mdl;
+  if (!model) {
+    return true;
+  }
+  return model.geosets.every((geoset) => geoset.vertices.length === 0)
+    || V3.sub(model.model.maximumExtent, model.model.minimumExtent).some((v) => v === 0);
 }
