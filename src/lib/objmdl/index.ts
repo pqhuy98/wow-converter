@@ -221,12 +221,13 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
         const objV = obj.models[0].vertices[v.vertexIndex - 1];
         if (!vMap.has(v.vertexIndex)) {
           const objN = obj.models[0].vertexNormals[v.vertexNormalIndex - 1];
-          const objT = obj.models[0].textureCoords[v.textureCoordsIndex - 1];
+          let objT = obj.models[0].textureCoords[v.textureCoordsIndex - 1];
           const objT2 = obj.models[0].textureCoords2 ? obj.models[0].textureCoords2[v.textureCoordsIndex - 1] : undefined;
           if (!objT) {
-            console.error('No texture coords found for vertex', v.vertexIndex, 'in', objFilePath);
-            console.error('obj.models[0].textureCoords.length', obj.models[0].textureCoords.length);
-            console.error('obj.models[0].textureCoords - 1', v.textureCoordsIndex - 1);
+            // console.error('No texture coords found for vertex', v.vertexIndex, 'in', objFilePath);
+            // console.error('obj.models[0].textureCoords.length', obj.models[0].textureCoords.length);
+            // console.error('obj.models[0].textureCoords - 1', v.textureCoordsIndex - 1);
+            objT = { u: 0, v: 0, w: 0 };
           }
 
           let skinWeights: SkinWeight[] | undefined;

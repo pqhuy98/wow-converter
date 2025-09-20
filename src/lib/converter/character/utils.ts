@@ -18,6 +18,7 @@ export interface ExportContext {
   outputFile: string;
   weaponInventoryTypes: [undefined | number, undefined | number];
   forceSheathed?: boolean;
+  withCollision?: boolean;
 }
 
 export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, guessSkin: {

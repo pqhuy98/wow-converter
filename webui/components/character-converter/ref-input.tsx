@@ -253,13 +253,14 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
   return null;
 };
 
-const localRefPattern = /^[a-zA-Z0-9_\-/\\,]+(\.obj)?$/;
+const localRefPattern = /^[a-zA-Z0-9_\-/\\,.]+(\.obj)?$/;
 
 export function isLocalRef(val: string) {
   if (!localRefPattern.test(val)) return false;
   // Must not be absolute path
   // Must not contain ".." as a path segment
   if (val.split('/').some((seg) => seg === '..')) return false;
+  if (val.split('\\').some((seg) => seg === '..')) return false;
   // Must not start with "/" or "\"
   if (val.startsWith('/') || val.startsWith('\\')) return false;
   // Must not contain null bytes or suspicious chars

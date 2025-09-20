@@ -541,6 +541,7 @@ const desiredConfig = {
   modelsExportTextures: true,
   modelsExportAlpha: true,
   modelsExportAnimations: true,
+  modelsExportCollision: true,
 };
 
 // backoff helper removed; no request-level retries used.

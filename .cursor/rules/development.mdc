@@ -1,6 +1,6 @@
 ---
-description: AI agent development rules 
-alwaysApply: true
+description: AI agent development rules for wow-converter
+alwaysApply: false
 ---
 - Avoid using `any` or `as` casting in TypeScript unless absolutely necessary. Avoid unncessary `instanceof` when developing in TypeScript, trust TypeScript static type.
 - Follow code best practices like DRY, YAGNI, SOLID, Clean Code. Avoid unnecessary complexity and overengineering.

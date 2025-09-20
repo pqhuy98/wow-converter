@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import { ensureDirSync } from 'fs-extra';
 import path, { dirname, join } from 'path';
 import { z } from 'zod';
@@ -67,6 +67,7 @@ export const CharacterSchema = z.object({
     animation: z.string().optional(),
   }).optional(),
   forceSheathed: z.boolean().optional(),
+  withCollision: z.boolean().optional(),
 });
 
 export type Character = z.infer<typeof CharacterSchema>;
@@ -122,6 +123,7 @@ export class CharacterExporter {
       outputFile,
       weaponInventoryTypes: [undefined, undefined],
       forceSheathed: char.forceSheathed,
+      withCollision: char.withCollision,
     };
 
     const model = await this.exportBaseMdl(ctx, char);
@@ -256,7 +258,20 @@ export class CharacterExporter {
   private async exportBaseMdl(ctx: ExportContext, char: Character): Promise<MDL> {
     if (char.base.type === 'local') {
       const fullPath = await ensureLocalModelFileExists(char.base.value);
-      return this.assetManager.parse(fullPath, true).mdl;
+      const base = this.assetManager.parse(fullPath, true).mdl;
+      if (ctx.withCollision) {
+        const collisionRelativePath = `${fullPath.replace(/\.obj$/, '')}.phys.obj`;
+        const collisionFullPath = path.join(this.config.wowExportAssetDir, collisionRelativePath);
+        console.log('collisionPath', collisionFullPath);
+        if (existsSync(collisionFullPath)) {
+          const collision = this.assetManager.parse(collisionRelativePath, true).mdl;
+          base.geosets.push(...collision.geosets);
+          base.textures.push(...collision.textures);
+          base.materials.push(...collision.materials);
+          base.bones.push(...collision.bones);
+        }
+      }
+      return base;
     }
     if (char.base.type === 'wowhead' || char.base.type === 'displayID') {
       const baseZam: ZamUrl = char.base.type === 'wowhead'
