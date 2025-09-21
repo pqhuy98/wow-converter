@@ -1,6 +1,9 @@
+import { isWowUnit } from '@/lib/converter/common/models';
 import {
   defaultMapExportConfig, gameZToPercent, MapExportConfig, MapExporter,
 } from '@/lib/converter/map-exporter/map-exporter';
+import { computeRecommendedTerrainClampPercent } from '@/lib/converter/map-exporter/wc3-converter';
+import { Vector3 } from '@/lib/math/common';
 
 import { Config, getDefaultConfig } from '../src/lib/global-config';
 
@@ -20,21 +23,30 @@ const WowMap = {
   TheMaw: { id: 2456, folder: '2456' },
 };
 
-const maps: [WowMap, [number, number], [number, number], string, number, number, number][] = [
+const maps: [WowMap,
+  [number, number], // low x, low y
+  [number, number], // high x, high y
+  string, // output map file name
+  number, // lower percent
+  number, // upper percent
+  number, // map angle degrees
+][] = [
   // [WowMap.Northrend, [28, 29], [22, 23], 'wrathgate.w3x'],
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
   // [WowMap.Northrend, [32, 21], [33, 22], 'icecrown.w3x', 0, 0.4, 0],
-  [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0.55, 0.77, 0],
+  // [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0.55, 0.77, 0],
   // [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
   // [WowMap.IcecrownCitadel, [25, 28], [21, 24], 'icc-floor34.w3x'],
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.9, 1, 180],
-  // [WowMap.Azeroth, [32, 32], [48, 48], 'northshire-abbey.w3x'],
+  [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
   // [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
   // [WowMap.TheMaw, [17, 19], [22, 23], 'themaw2.w3x'],
   // [WowMap.TheMaw, [19, 21], [22, 25], 'themaw3.w3x'],
   // [WowMap.TheMaw, [17, 21], [22, 25], 'themaw4.w3x'],
 ];
+
+const autoChoseClampPercent = true;
 
 const chosenMap = maps[0];
 const mapAngleDeg = chosenMap[6];
@@ -46,7 +58,7 @@ const config: Config = {
   mdx: true,
 };
 
-const creatureScaleUp = 2;
+const creatureScaleUp = 1;
 const mapOutputDir = `maps/${chosenMap[3]}`;
 
 const mapExportConfig: MapExportConfig = {
@@ -74,7 +86,42 @@ const mapExportConfig: MapExportConfig = {
 (async function main() {
   const mapConverter = new MapExporter(config, mapExportConfig);
 
-  await mapConverter.exportDoodadsAssets(mapOutputDir);
+  await mapConverter.parseObjects();
+
+  if (autoChoseClampPercent) {
+    const unitPos: Vector3[] = [];
+    mapConverter.wowObjectManager.iterateObjects((obj, abs) => {
+      if (!isWowUnit(obj)) return;
+      unitPos.push(abs.position);
+    });
+    unitPos.sort((a, b) => a[2] - b[2]);
+    const { ratio, min, max } = computeRecommendedTerrainClampPercent(mapConverter.wowObjectManager.roots);
+    const clampDiff = ratio / creatureScaleUp;
+    const unitPosRatio = unitPos.map((pos) => (pos[2] - min[2]) / (max[2] - min[2]));
+
+    // find [lower percent, upper percent = lower percent + ratio) so that maximize the number of unitPosRatio that are within the range
+    let bestLowerPercent = 0;
+    let bestUpperPercent = ratio;
+    let maxCount = 0;
+    for (let lowerPercent = 0; lowerPercent <= 1; lowerPercent += 0.01) {
+      const upperPercent = lowerPercent + clampDiff;
+      const count = unitPosRatio.filter((ratio) => ratio >= lowerPercent && ratio <= upperPercent).length;
+      if (count > maxCount) {
+        maxCount = count;
+        bestLowerPercent = lowerPercent;
+        bestUpperPercent = upperPercent;
+      }
+    }
+    mapExportConfig.terrain.clampPercent.lower = bestLowerPercent;
+    mapExportConfig.terrain.clampPercent.upper = bestUpperPercent;
+    const leftOutBelow = unitPosRatio.filter((ratio) => ratio < bestLowerPercent).length;
+    const leftOutAbove = unitPosRatio.filter((ratio) => ratio > bestUpperPercent).length;
+    const leftOut = leftOutBelow + leftOutAbove;
+    console.log(`Chosen clamp percent: ${bestLowerPercent} - ${bestUpperPercent}`);
+    console.log(`Left out units: ${leftOut} (${leftOutBelow} below, ${leftOutAbove} above)`);
+  }
+
+  await mapConverter.exportTerrainsDoodads(mapOutputDir);
   await mapConverter.exportCreatures(mapOutputDir);
   mapConverter.saveWar3mapFiles(mapOutputDir);
 }())

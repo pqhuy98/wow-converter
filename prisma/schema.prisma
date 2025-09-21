@@ -967,6 +967,7 @@ model creature_model_info {
   CombatReach            Float @default(0) @db.Float
   Gender                 Int   @default(2) @db.UnsignedTinyInt
   DisplayID_Other_Gender Int   @default(0) @db.UnsignedInt
+  VerifiedBuild          Int?  @db.MediumInt
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -2267,7 +2268,6 @@ model item_template {
   maxcount                  Int    @default(0)
   stackable                 Int?   @default(1)
   ContainerSlots            Int    @default(0) @db.UnsignedTinyInt
-  StatsCount                Int    @default(0) @db.UnsignedTinyInt
   stat_type1                Int    @default(0) @db.UnsignedTinyInt
   stat_value1               Int    @default(0)
   stat_type2                Int    @default(0) @db.UnsignedTinyInt

@@ -5,14 +5,18 @@ import {
 import { glob } from 'glob';
 import path from 'path';
 
+import { getCreaturesInTile } from '@/lib/azerothcore-client/creatures';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import { Config } from '../../global-config';
-import { Vector3 } from '../../math/common';
+import { EulerRotation, Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../../math/rotation';
 import { V3 } from '../../math/vector';
 import { AssetManager, computeAbsoluteMinMaxExtents } from './asset-manager';
-import { isWowObjectType, WowObject, WowObjectType } from './models';
+import {
+  isWowAdt, isWowObjectType, WowAdt, WowObject, WowObjectType,
+  WowUnit,
+} from './models';
 
 interface PlacementInfoRow {
   ModelFile: string
@@ -37,7 +41,7 @@ export class WowObjectManager {
 
   objects = new Map<string, WowObject>();
 
-  terrains: WowObject[] = [];
+  terrains: WowAdt[] = [];
 
   doodads: WowObject[] = [];
 
@@ -47,7 +51,7 @@ export class WowObjectManager {
     this.assetManager = new AssetManager(config);
   }
 
-  async parse(patterns: string[], filter?: (fileName: string, type: WowObjectType) => boolean) {
+  async readTerrainsDoodads(patterns: string[], filter?: (fileName: string, type: WowObjectType) => boolean) {
     await wowExportClient.waitUntilReady();
 
     const globPatterns = patterns.map((p) => path.join(this.config.wowExportAssetDir, p).replaceAll(path.sep, '/'));
@@ -72,6 +76,10 @@ export class WowObjectManager {
         children: [],
         type,
       };
+      if (isWowAdt(root)) {
+        root.tileX = parseInt(fileName.split('_')[1], 10);
+        root.tileY = parseInt(fileName.split('_')[2], 10);
+      }
       this.roots.push(root);
       rootSet.add(root);
       await this.parseRecursive(fileName, root, filter);
@@ -94,6 +102,57 @@ export class WowObjectManager {
     }
   }
 
+  async readCreatures(mapId: number) {
+    for (const adt of this.terrains) {
+      console.log('Reading creatures in tile', adt.tileX, adt.tileY);
+      const creatures = await getCreaturesInTile(
+        mapId,
+        [adt.tileX, adt.tileY],
+        // { phaseMask: 1 },
+      );
+      console.log('Found', creatures.length, 'creatures in tile', adt.tileX, adt.tileY);
+      for (const creature of creatures) {
+        const unit: WowUnit = {
+          id: `unit-${creature.creature.guid}-${creature.model.CreatureDisplayID}`,
+          type: 'unit',
+          creature,
+          position: V3.rotate(V3.sub(V3.scale([
+            -creature.creature.position_x,
+            -creature.creature.position_y,
+            creature.creature.position_z,
+          ], this.config.rawModelScaleUp), adt.position), V3.negative(adt.rotation)),
+          rotation: V3.sum([0, 0, creature.creature.orientation], adt.rotation),
+          scaleFactor: creature.model.DisplayScale,
+          children: [],
+        };
+
+        adt.children.push(unit);
+        this.objects.set(unit.id, unit);
+      }
+    }
+  }
+
+  iterateObjects(callback: (obj: WowObject, absolute: {
+    position: Vector3,
+    rotation: EulerRotation,
+    scaleFactor: number,
+  }) => void) {
+    const iterateRecursive = (obj: WowObject, parentAbsolute: WowObject | null) => {
+      const objAbsolute = { ...obj };
+      if (parentAbsolute) {
+        const relativePos = V3.rotate(obj.position, parentAbsolute.rotation);
+        objAbsolute.position = V3.sum(parentAbsolute.position, relativePos);
+        objAbsolute.rotation = calculateChildAbsoluteEulerRotation(parentAbsolute.rotation, objAbsolute.rotation);
+        objAbsolute.scaleFactor *= parentAbsolute.scaleFactor;
+      }
+
+      callback(obj, objAbsolute);
+      obj.children.forEach((child) => iterateRecursive(child, objAbsolute));
+    };
+
+    this.roots.forEach((p) => iterateRecursive(p, null));
+  }
+
   private relative(fullPath: string) {
     return path.relative(this.config.wowExportAssetDir, fullPath);
   }
@@ -109,7 +168,7 @@ export class WowObjectManager {
     this.objects.set(current.id, current);
     current.model = this.assetManager.parse(objectPath, false);
 
-    if (current.id.includes('adt_')) {
+    if (isWowAdt(current)) {
       this.terrains.push(current);
       // Center the terrain model and update its position
       const { min, max } = computeAbsoluteMinMaxExtents([current]);
@@ -140,7 +199,7 @@ export class WowObjectManager {
         const id = `${row.FileDataID}:${row.ModelFile}:${row.PositionX}:${row.PositionY}:${row.PositionZ}`;
         const fileName = row.ModelFile.replaceAll('.obj', '');
 
-        row.Type ??= 'null';
+        row.Type ??= 'm2';
         if (!isWowObjectType(row.Type)) {
           console.warn('Invalid object type', row.Type, 'with id:', id);
           return;

@@ -3,6 +3,7 @@ import {
 } from '@prisma/client';
 import chalk from 'chalk';
 import { existsSync } from 'fs';
+import _ from 'lodash';
 import { join } from 'path';
 
 import {
@@ -10,7 +11,7 @@ import {
 } from '../converter/character';
 import { guessAttackTag, inventoryTypeToEquipmentSlot } from '../converter/character/item-mapper';
 import { Config } from '../global-config';
-import { toMap } from '../utils';
+import { toMap, workerPool } from '../utils';
 
 const prismaClient = new PrismaClient();
 
@@ -74,6 +75,24 @@ export async function getCreaturesInTile(
     },
   }), 'CreatureID');
 
+  // Visibility filter based on server logic
+  const CREATURE_FLAG_EXTRA_TRIGGER = 0x00000080;
+  const CREATURE_FLAG_EXTRA_GHOST_VISIBILITY = 0x00000400;
+  const INVISIBLE_DISPLAY_ID = 11686; // CreatureModel::DefaultInvisibleModel
+
+  const visibleEntryIds = new Set(Array.from(templateIds).filter((entry) => {
+    const t = templatesMap.get(entry);
+    const m = modelsMap.get(entry);
+    if (!t || !m) return false;
+    const flagsExtra = t.flags_extra ?? 0;
+    if ((flagsExtra & CREATURE_FLAG_EXTRA_TRIGGER) !== 0) return false;
+    if ((flagsExtra & CREATURE_FLAG_EXTRA_GHOST_VISIBILITY) !== 0) return false;
+    if (m.CreatureDisplayID === INVISIBLE_DISPLAY_ID) return false;
+    return true;
+  }));
+
+  const visibleCreatures = creatures.filter((c) => visibleEntryIds.has(c.id1));
+
   const itemsMap = toMap(await prismaClient.item_template.findMany({
     where: {
       entry: {
@@ -86,7 +105,7 @@ export async function getCreaturesInTile(
     },
   }), 'entry');
 
-  return creatures.map((c) => {
+  return visibleCreatures.map((c) => {
     const template = templatesMap.get(c.id1)!;
     const model = modelsMap.get(template.entry)!;
     const equipment = equipmentsMap.get(template.entry);
@@ -112,7 +131,7 @@ export async function exportCreatureModels(
 
   // Filter out creatures with the same display id
   const displayIds = new Set<number>();
-  const creatures = allCreatures.filter((c) => {
+  const creatures = _.shuffle(allCreatures.filter((c) => {
     const displayId = c.model.CreatureDisplayID;
     if (!displayId) {
       throw new Error(`No display id found for creature template ${c.template.entry}`);
@@ -122,12 +141,12 @@ export async function exportCreatureModels(
     }
     displayIds.add(displayId);
     return true;
-  });
+  }));
 
-  const batchSize = 1;
-  for (let i = 0; i < creatures.length; i += batchSize) {
-    const batch = creatures.slice(i, i + batchSize);
-    await Promise.all(batch.map(async (c) => {
+  const batchSize = 5;
+  await workerPool(
+    batchSize,
+    creatures.map((c) => async () => {
       cnt++;
       const displayId = c.model.CreatureDisplayID;
       if (!displayId) {
@@ -176,7 +195,6 @@ export async function exportCreatureModels(
         attachItems,
         attackTag,
       }, `creature-${displayId}`);
-      console.log('initial export character took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       start = performance.now();
       ex.optimizeModelsTextures();
@@ -189,6 +207,6 @@ export async function exportCreatureModels(
 
       const end = performance.now();
       console.log(chalk.green(`=> Exported creature ${c.template.name} in ${chalk.yellow(((end - start0) / 1000).toFixed(2))}s`));
-    }));
-  }
+    }),
+  );
 }

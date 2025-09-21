@@ -45,3 +45,18 @@ export function stableStringify(value: unknown): string {
   };
   return JSON.stringify(sorter(value));
 }
+
+export async function workerPool<T>(workerCount: number, tasks: (() => Promise<T>)[]) {
+  const results: T[] = [];
+  const worker = async () => {
+    while (tasks.length > 0) {
+      const task = tasks.shift();
+      if (task) {
+        results.push(await task());
+      }
+    }
+  };
+  const workers = Array.from({ length: workerCount }, worker);
+  await Promise.all(workers);
+  return results;
+}

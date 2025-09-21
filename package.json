@@ -15,6 +15,7 @@
     "dev:webui": "cd webui && npm run dev",
     "start": "set NODE_ENV=production && node build/server.bundle.cjs",
     "test": "tsx tests/index.ts",
+    "prisma:pull": "prisma db pull",
     "prisma:generate": "prisma generate",
     "clean": "shx rm -rf build dist wow-converter.zip && shx mkdir -p build dist",
     "install:webui": "cd webui && npm install",

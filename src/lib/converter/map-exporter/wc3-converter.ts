@@ -4,14 +4,15 @@ import {
   dataHeightMax, dataHeightMin, dataHeightToGameZ, distancePerTile, maxGameHeightDiff,
 } from '@/lib/constants';
 import { ModificationType, Terrain } from '@/vendors/wc3maptranslator/data';
-import { IDoodadType, MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
+import { IDoodadType, IUnitType, MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 
 import { getInitialTerrain } from '../../mapmodifier/terrain';
 import { Vector3 } from '../../math/common';
-import { calculateChildAbsoluteEulerRotation, degrees } from '../../math/rotation';
+import { degrees } from '../../math/rotation';
 import { V3 } from '../../math/vector';
 import { computeAbsoluteMinMaxExtents } from '../common/asset-manager';
-import { WowObject } from '../common/models';
+import { isWowUnit, WowObject, WowUnit } from '../common/models';
+import { WowObjectManager } from '../common/wow-object-manager';
 import { MapExportConfig } from './map-exporter';
 
 enum TerrainFlag {
@@ -28,10 +29,11 @@ export class Wc3Converter {
   constructor(private config: MapExportConfig) {
   }
 
-  generateTerrainWithHeight(terrainObjs: WowObject[]): Terrain {
-    console.log('Generating terrain from', terrainObjs.length, 'files');
+  generateTerrainWithHeight(wowObjectManager: WowObjectManager): Terrain {
+    const roots = wowObjectManager.roots;
+    console.log('Generating terrain from', roots.length, 'objects');
 
-    const { heightMap, height, width } = this.computeTerrainHeightMap(terrainObjs);
+    const { heightMap, height, width } = computeTerrainHeightMap(roots, this.config);
 
     console.log('Map size', { height, width });
 
@@ -75,9 +77,11 @@ export class Wc3Converter {
     return terrain;
   }
 
-  placeDoodads(map: MapManager, roots: WowObject[], filter: (obj: WowObject) => boolean) {
+  placeDoodads(map: MapManager, wowObjectManager: WowObjectManager, filter: (obj: WowObject) => boolean) {
     const terrain = map.terrain;
     console.log('Placing doodads');
+
+    const roots = wowObjectManager.roots;
 
     const { min, max } = computeAbsoluteMinMaxExtents(roots);
     const mapMin: Vector3 = [
@@ -109,19 +113,8 @@ export class Wc3Converter {
     const modelPathToDoodadType = new Map<string, IDoodadType>();
 
     let doodadTypesWithPitchRoll = 0;
-    const placeDoodadsRecursive = (obj: WowObject, parentAbsolute: WowObject | null) => {
+    wowObjectManager.iterateObjects((obj, objAbsolute) => {
       // console.log('================================');
-      const objAbsolute = { ...obj };
-      if (parentAbsolute) {
-        const relativePos = V3.rotate(obj.position, parentAbsolute.rotation);
-        objAbsolute.position = V3.sum(parentAbsolute.position, relativePos);
-        objAbsolute.rotation = calculateChildAbsoluteEulerRotation(parentAbsolute.rotation, objAbsolute.rotation);
-        objAbsolute.scaleFactor *= parentAbsolute.scaleFactor;
-        // console.log('Translating', obj.id, 'based on parent', parentAbsolute.id);
-        // console.log({ childOldPos: obj.position, parentAbsRot: parentAbsolute.rotation });
-        // console.log({ relativePos, parentAbsPos: parentAbsolute.position, childAbsPos: objAbsolute.position });
-      }
-
       if (filter(obj)) {
         // WC3 pitch and roll must be negative, required by World Editor
         const wc3Roll = ((-objAbsolute.rotation[0]) % (Math.PI * 2) - Math.PI * 2) % (Math.PI * 2);
@@ -130,7 +123,11 @@ export class Wc3Converter {
         const hasRollPitch = Math.abs(wc3Roll) > this.config.doodads.pitchRollThresholdRadians
           && Math.abs(wc3Pitch) > this.config.doodads.pitchRollThresholdRadians;
 
-        const fileName = obj.model!.relativePath;
+        if (!obj.model) {
+          console.error('Doodad has no model', obj);
+          throw new Error('Doodad has no model');
+        }
+        const fileName = obj.model.relativePath;
         const hashKey = hasRollPitch
           ? [fileName, objAbsolute.rotation[0].toFixed(2), objAbsolute.rotation[1].toFixed(2)].join(';')
           : fileName;
@@ -224,95 +221,158 @@ export class Wc3Converter {
           droppedItemSets: [],
         });
       }
+    });
 
-      objAbsolute.children.forEach((child) => placeDoodadsRecursive(child, objAbsolute));
-    };
-
-    roots.forEach((p) => placeDoodadsRecursive(p, null));
     return { doodadTypesWithPitchRoll };
   }
 
-  private computeTerrainHeightMap(terrains: WowObject[]) {
-    if (terrains.length === 0) {
-      const heightMap = Array.from({ length: 64 + 1 }, () => Array<number>(64 + 1).fill(-1));
-      return { heightMap, height: 64, width: 64 };
-    }
+  placeUnits(mapManager: MapManager, wowObjectManager: WowObjectManager) {
+    const debug = false;
+    const mapConfig = this.config;
+    const terrain = mapManager.terrain;
+    const roots = wowObjectManager.roots;
 
-    console.log('Computing terrain height map...');
-    const { min, max } = computeAbsoluteMinMaxExtents(terrains);
-    console.log({ min, max });
+    const units: WowUnit[] = [];
 
-    const terrainSize = V3.sub(max, min);
-    console.log({ terrainSize });
-    console.log(
-      'Recommended terrain clamp percent difference',
-      (dataHeightToGameZ(dataHeightMax) - dataHeightToGameZ(dataHeightMin)) / terrainSize[2],
-    );
+    // Global map params
+    const mapMin: Vector3 = [
+      terrain.map.offset.x,
+      terrain.map.offset.y,
+      dataHeightToGameZ(dataHeightMin),
+    ];
+    const mapMax: Vector3 = [
+      terrain.map.offset.x + terrain.map.width * distancePerTile,
+      terrain.map.offset.y + terrain.map.height * distancePerTile,
+      dataHeightToGameZ(dataHeightMax),
+    ];
+    const mapSize = V3.sub(mapMax, mapMin);
 
-    const terrainClampPercentDiff = this.config.terrain.clampPercent.upper - this.config.terrain.clampPercent.lower;
+    const { min, max } = computeAbsoluteMinMaxExtents(roots);
+    const modelSize = V3.sub(max, min);
+    const scale = mapSize[0] / modelSize[0];
 
-    const ratioZ = maxGameHeightDiff / (terrainSize[2] * terrainClampPercentDiff);
-    const ratioXY = ratioZ;
-    const width = Math.ceil(terrainSize[0] / distancePerTile * ratioXY / 4) * 4;
-    const height = Math.ceil(terrainSize[1] / distancePerTile * ratioXY / 4) * 4;
+    const templateIdToUnitType = new Map<number, IUnitType>();
+    const templateIdToDoodadType = new Map<number, IDoodadType>();
 
-    console.log({ ratio: ratioZ, height, width });
+    // Iterate each root to position its creatures
+    wowObjectManager.iterateObjects((obj, objAbsolute) => {
+      if (!isWowUnit(obj)) return;
+      units.push(obj);
+      const c = obj.creature;
 
-    const heightMap = Array.from({ length: height + 1 }, () => Array<number>(width + 1).fill(-1));
-    terrains.forEach((terrain) => {
-      terrain.model!.mdl.geosets
-        .forEach((geoset) => geoset.vertices.forEach((v) => {
-          const rotatedV = V3.rotate(v.position, terrain.rotation);
-          const position = V3.sum(terrain.position, rotatedV);
+      const absPosition = objAbsolute.position;
 
-          // console.log({ position, min, max });
+      if (absPosition[0] < min[0] - 1 || absPosition[0] > max[0] + 1
+          || absPosition[1] < min[1] - 1 || absPosition[1] > max[1] + 1) {
+        console.error('Creature', c.template.name, 'is out of bounds', absPosition);
+        console.log({ min, max });
+        return;
+      }
 
-          const percent = [
-            (position[0] - min[0]) / terrainSize[0],
-            (position[1] - min[1]) / terrainSize[1],
-            (position[2] - (min[2] + terrainSize[2] * this.config.terrain.clampPercent.lower))
-              / (terrainSize[2] * terrainClampPercentDiff),
-          ];
+      const percent = [
+        (absPosition[0] - min[0]) / modelSize[0],
+        (absPosition[1] - min[1]) / modelSize[1],
+        (absPosition[2] - min[2]) / modelSize[2],
+      ];
 
-          if (percent[0] < 0 || percent[0] > 1 || percent[1] < 0 || percent[1] > 1) {
-            console.error('Out of bounds', { percent, position });
-            throw new Error('Out of bounds');
-          }
-          const iX = Math.round(percent[0] * width);
-          const iY = Math.round(percent[1] * height);
-          // [Y is height][X is width]
-          heightMap[iY][iX] = Math.max(heightMap[iY][iX], Math.max(0, Math.min(1, percent[2])));
-        }));
+      const inGameX = mapMin[0] + percent[0] * mapSize[0];
+      const inGameY = mapMin[1] + percent[1] * mapSize[1];
+
+      const inGameZ = dataHeightToGameZ(dataHeightMin
+          + (dataHeightMax - dataHeightMin)
+          / (mapConfig.terrain.clampPercent.upper - mapConfig.terrain.clampPercent.lower)
+          * (percent[2] - mapConfig.terrain.clampPercent.lower));
+
+      const terrainZ = dataHeightToGameZ(getTerrainHeight(terrain, percent[0], percent[1]));
+
+      const creatureModel = `creature-${c.model.CreatureDisplayID}.mdx`;
+      const creatureName = c.template.name || c.template.subname;
+      const creatureScale = scale * c.model.DisplayScale * mapConfig.creatures.scaleUp;
+      const creatureFacingRadians = objAbsolute.rotation[2];
+      const position: Vector3 = [inGameX, inGameY, inGameZ];
+
+      const withinPlayableZone = percent[2] >= mapConfig.terrain.clampPercent.lower
+          && percent[2] <= mapConfig.terrain.clampPercent.upper;
+      const notOnGround = inGameZ < terrainZ - 100 || inGameZ > terrainZ + 100;
+
+      if (mapConfig.creatures.allAreDoodads || !withinPlayableZone || notOnGround) {
+        // Creature is out of playable map zone or not on ground, add it as doodad
+        debug && console.log('Add', c.template.name, 'as destructible because of', mapConfig.creatures.allAreDoodads ? 'overridden' : 'outside of allowed zone');
+
+        if (!templateIdToDoodadType.has(c.template.entry)) {
+          templateIdToDoodadType.set(c.template.entry, mapManager.addDoodadType([
+            { id: 'bnam', type: ModificationType.string, value: `~U ${creatureName}` },
+            { id: 'bfil', type: ModificationType.string, value: creatureModel },
+            { id: 'bmas', type: ModificationType.unreal, value: creatureScale * 1.5 },
+            { id: 'bmis', type: ModificationType.unreal, value: creatureScale / 1.5 },
+          ], true));
+        }
+        const doodadType = templateIdToDoodadType.get(c.template.entry)!;
+
+        mapManager.addDoodad(doodadType, {
+          id: 0,
+          variation: 0,
+          position,
+          angle: degrees(creatureFacingRadians),
+          scale: [creatureScale, creatureScale, creatureScale],
+          skinId: doodadType.code,
+          flags: {
+            visible: true,
+            solid: true,
+            customHeight: true,
+          },
+          life: 100,
+          randomItemSetPtr: -1,
+          droppedItemSets: [],
+        });
+      } else {
+        // Creature is inside playable map zone, add it as unit
+
+        if (!templateIdToUnitType.has(c.template.entry)) {
+          templateIdToUnitType.set(c.template.entry, mapManager.addUnitType('unit', 'hfoo', [
+            { id: 'unam', type: ModificationType.string, value: creatureName },
+            // { id: 'upro', type: ModificationType.string, value: c.template.name || c.template.subname },
+            { id: 'unsf', type: ModificationType.string, value: `guid=${c.creature.guid} template.entry=${c.template.entry} displayId=${c.model.CreatureDisplayID} phaseMask=${c.creature.phaseMask}` },
+            { id: 'umdl', type: ModificationType.string, value: creatureModel },
+            { id: 'uabi', type: ModificationType.string, value: '' },
+            { id: 'usca', type: ModificationType.real, value: creatureScale },
+            { id: 'uhpm', type: ModificationType.int, value: c.creature.curhealth },
+            { id: 'umpm', type: ModificationType.int, value: c.creature.curmana },
+            { id: 'umpi', type: ModificationType.int, value: c.creature.curmana },
+            { id: 'ulev', type: ModificationType.int, value: c.template.maxlevel },
+          ]));
+        }
+        const unitType = templateIdToUnitType.get(c.template.entry)!;
+
+        mapManager.addUnit(unitType, {
+          variation: 0,
+          position,
+          rotation: creatureFacingRadians,
+          scale: [1, 1, 1],
+          skin: unitType.code,
+          player: 0,
+          hitpoints: 100,
+          mana: 0,
+          randomItemSetPtr: -1,
+          droppedItemSets: [],
+          gold: 0,
+          targetAcquisition: -1,
+          hero: {
+            level: c.template.maxlevel ?? 1, str: 0, agi: 0, int: 0,
+          },
+          inventory: [],
+          abilities: [],
+          random: {
+            type: 0, level: 0, itemClass: 0, groupIndex: 0, columnIndex: 0, unitSet: [],
+          },
+          color: 23,
+          waygate: -1,
+          id: 0,
+        });
+      }
     });
 
-    // Fill the remaining -1 cells using its neighbors
-    const floodBrushSize = 3;
-    for (let k = (floodBrushSize * 2 + 1) ** 2; k >= 1; k--) {
-      for (let i = 0; i < heightMap.length; i++) {
-        for (let j = 0; j < heightMap[i].length; j++) {
-          if (heightMap[i][j] === -1) {
-            let sum = 0;
-            let cnt = 0;
-            for (let i2 = Math.max(0, i - floodBrushSize); i2 <= Math.min(heightMap.length - 1, i + floodBrushSize); i2++) {
-              for (let j2 = Math.max(0, j - floodBrushSize); j2 < Math.min(heightMap[i].length - 1, j + floodBrushSize); j2++) {
-                if (heightMap[i2][j2] > 0) {
-                  sum += heightMap[i2][j2];
-                  cnt++;
-                }
-              }
-            }
-            if (cnt >= k) {
-              const dataHeight = sum / cnt;
-              heightMap[i][j] = dataHeight;
-            }
-          }
-        }
-      }
-    }
-
-    return {
-      heightMap, height, width,
-    };
+    return units;
   }
 }
 
@@ -346,4 +406,97 @@ export function getTerrainHeight(terrain: Terrain, percentX: number, percentY: n
   const height = h00 * wx0 * wy0 + h10 * wx1 * wy0 + h01 * wx0 * wy1 + h11 * wx1 * wy1;
 
   return height;
+}
+
+function computeTerrainHeightMap(roots: WowObject[], config: MapExportConfig) {
+  if (roots.length === 0) {
+    const heightMap = Array.from({ length: 64 + 1 }, () => Array<number>(64 + 1).fill(-1));
+    return { heightMap, height: 64, width: 64 };
+  }
+
+  console.log('Computing terrain height map...');
+  const { min, max } = computeAbsoluteMinMaxExtents(roots);
+  console.log({ min, max });
+
+  const terrainSize = V3.sub(max, min);
+  console.log({ terrainSize });
+  console.log(
+    'Recommended terrain clamp percent difference',
+    (dataHeightToGameZ(dataHeightMax) - dataHeightToGameZ(dataHeightMin)) / terrainSize[2],
+  );
+
+  const terrainClampPercentDiff = config.terrain.clampPercent.upper - config.terrain.clampPercent.lower;
+
+  const ratioZ = maxGameHeightDiff / (terrainSize[2] * terrainClampPercentDiff);
+  const ratioXY = ratioZ;
+  const width = Math.ceil(terrainSize[0] / distancePerTile * ratioXY / 4) * 4;
+  const height = Math.ceil(terrainSize[1] / distancePerTile * ratioXY / 4) * 4;
+
+  console.log({ ratio: ratioZ, height, width });
+
+  const heightMap = Array.from({ length: height + 1 }, () => Array<number>(width + 1).fill(-1));
+  roots.forEach((root) => {
+    root.model!.mdl.geosets
+      .forEach((geoset) => geoset.vertices.forEach((v) => {
+        const rotatedV = V3.rotate(v.position, root.rotation);
+        const position = V3.sum(root.position, rotatedV);
+
+        // console.log({ position, min, max });
+
+        const percent = [
+          (position[0] - min[0]) / terrainSize[0],
+          (position[1] - min[1]) / terrainSize[1],
+          (position[2] - (min[2] + terrainSize[2] * config.terrain.clampPercent.lower))
+            / (terrainSize[2] * terrainClampPercentDiff),
+        ];
+
+        if (percent[0] < 0 || percent[0] > 1 || percent[1] < 0 || percent[1] > 1) {
+          console.error('Out of bounds', { percent, position });
+          throw new Error('Out of bounds');
+        }
+        const iX = Math.round(percent[0] * width);
+        const iY = Math.round(percent[1] * height);
+        // [Y is height][X is width]
+        heightMap[iY][iX] = Math.max(heightMap[iY][iX], Math.max(0, Math.min(1, percent[2])));
+      }));
+  });
+
+  // Fill the remaining -1 cells using its neighbors
+  const floodBrushSize = 3;
+  for (let k = (floodBrushSize * 2 + 1) ** 2; k >= 1; k--) {
+    for (let i = 0; i < heightMap.length; i++) {
+      for (let j = 0; j < heightMap[i].length; j++) {
+        if (heightMap[i][j] === -1) {
+          let sum = 0;
+          let cnt = 0;
+          for (let i2 = Math.max(0, i - floodBrushSize); i2 <= Math.min(heightMap.length - 1, i + floodBrushSize); i2++) {
+            for (let j2 = Math.max(0, j - floodBrushSize); j2 < Math.min(heightMap[i].length - 1, j + floodBrushSize); j2++) {
+              if (heightMap[i2][j2] > 0) {
+                sum += heightMap[i2][j2];
+                cnt++;
+              }
+            }
+          }
+          if (cnt >= k) {
+            const dataHeight = sum / cnt;
+            heightMap[i][j] = dataHeight;
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    heightMap, height, width,
+  };
+}
+
+export function computeRecommendedTerrainClampPercent(roots: WowObject[]) {
+  const { min, max } = computeAbsoluteMinMaxExtents(roots);
+  const terrainSize = V3.sub(max, min);
+  return {
+    ratio: (dataHeightToGameZ(dataHeightMax) - dataHeightToGameZ(dataHeightMin)) / terrainSize[2],
+    min,
+    max,
+  };
 }
