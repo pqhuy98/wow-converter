@@ -37,6 +37,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [currentSeq, setCurrentSeq] = useState<number>(0);
   const instanceRef = useRef<MdxModelInstance | null>(null);
+  const modelRef = useRef<MdxModel | null>(null);
+  const sceneRef = useRef<Scene | null>(null);
   const vecHeap = vec3.create();
 
   const [viewer, setViewer] = useState<ModelViewer | null>(null);
@@ -49,6 +51,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
   const loadRequestIdRef = useRef(0);
   const [gridVisible, setGridVisible] = useState(true);
   const gridInstancesRef = useRef<MdxModelInstance[]>([]);
+  const [hasCameras, setHasCameras] = useState<boolean>(false);
   // Track loaded asset files for download
   const baseUrlRef = useRef<string>('/api/assets');
   const loadedFilesRef = useRef<Set<string>>(new Set());
@@ -135,6 +138,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
     const scene = viewer.addScene();
     scene.color.fill(0.15);
     const camera = scene.camera;
+    sceneRef.current = scene;
 
     setLoadedCount(0);
     void (async () => {
@@ -171,6 +175,12 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       if (cancelled || loadRequestIdRef.current !== requestId) return;
       if (!(model instanceof MdxModel)) return;
       modelInstance = model.addInstance();
+      modelRef.current = model;
+      try {
+        setHasCameras(Array.isArray((model as unknown as { cameras?: unknown[] }).cameras) && ((model as unknown as { cameras?: unknown[] }).cameras?.length ?? 0) > 0);
+      } catch {
+        setHasCameras(false);
+      }
 
       if (cancelled || loadRequestIdRef.current !== requestId) return;
       instanceRef.current = modelInstance;
@@ -451,6 +461,10 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       if (instanceRef.current === modelInstance) {
         instanceRef.current = null;
       }
+      if (modelRef.current === (modelInstance?.model as (MdxModel | undefined))) {
+        modelRef.current = null;
+        setHasCameras(false);
+      }
     };
   }, [modelPath, canvasRef.current, viewer]);
 
@@ -512,6 +526,33 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy link:', err);
+    }
+  };
+
+  const handleAlignToFirstCamera = () => {
+    const scene = sceneRef.current;
+    const model = modelRef.current;
+    const canvas = canvasRef.current;
+    if (!scene || !model || !canvas) return;
+    const cams = model.cameras || [];
+    if (cams.length === 0) return;
+    const cam = cams[0];
+    const width = canvas.width || canvas.clientWidth || 1;
+    const height = canvas.height || canvas.clientHeight || 1;
+    const aspect = width / Math.max(1, height);
+    try {
+      scene.camera.perspective(
+        cam.fieldOfView,
+        aspect,
+        cam.nearClippingPlane,
+        cam.farClippingPlane,
+      );
+      const from = vec3.fromValues(cam.position[0], cam.position[1], cam.position[2]);
+      const to = vec3.fromValues(cam.targetPosition[0], cam.targetPosition[1], cam.targetPosition[2]);
+      scene.camera.moveToAndFace(from, to, [0, 0, 1]);
+    } catch (e) {
+      // Ignore alignment errors; keep current camera
+      console.error('Failed to align to first camera', e);
     }
   };
 
@@ -636,6 +677,18 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             <TooltipHelp
               trigger={<span>{gridVisible ? '⌗' : '⎕'}</span>}
               tooltips={gridVisible ? 'Hide grid' : 'Show grid'} asChild
+            />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleAlignToFirstCamera}
+            disabled={!hasCameras}
+            className="w-10 h-10 text-xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
+          >
+            <TooltipHelp
+              trigger={<span>📽</span>}
+              tooltips={hasCameras ? 'Align to Camera' : 'No model cameras detected'} asChild
             />
           </Button>
           <Button
