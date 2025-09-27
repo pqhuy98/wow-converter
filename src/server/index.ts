@@ -13,6 +13,7 @@ import { ControllerBrowse } from './controllers/browse';
 import { ControllerDownload } from './controllers/download';
 import { ControllerExportCharacter } from './controllers/export-character';
 import { ControllerGetConfig } from './controllers/get-config';
+import { ControllerMaps } from './controllers/maps';
 import { attachDevWebsocketProxy, ControllerWebUi } from './controllers/webui';
 
 printLogo();
@@ -44,6 +45,7 @@ const uiRouter = express.Router();
 
 async function main() {
   await ControllerExportCharacter(router);
+  ControllerMaps(router);
   ControllerDownload(router);
   ControllerGetConfig(router);
   ControllerBrowse(router);

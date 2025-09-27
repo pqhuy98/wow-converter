@@ -10,7 +10,13 @@ import { ThemeToggle } from './theme-toggle';
 export default function SiteHeader() {
   const pathname = usePathname();
 
-  const activeTab = pathname.startsWith('/browse') ? 'browse' : pathname.startsWith('/recents') ? 'recents' : 'export';
+  const activeTab = pathname.startsWith('/browse')
+    ? 'browse'
+    : pathname.startsWith('/recents')
+      ? 'recents'
+      : pathname.startsWith('/maps')
+        ? 'maps'
+        : 'export';
 
   return (
     <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-border">
@@ -26,6 +32,9 @@ export default function SiteHeader() {
               </TabsTrigger>
               <TabsTrigger value="browse" asChild>
                 <Link href="/browse">Browse Models</Link>
+              </TabsTrigger>
+              <TabsTrigger value="maps" asChild>
+                <Link href="/maps">Maps</Link>
               </TabsTrigger>
             </TabsList>
           </Tabs>

@@ -81,6 +81,13 @@ export type ExportCharacterResult = {
   fileManifest: ExportFile[];
 }
 
+export interface MapListItem {
+  id: number;
+  name: string;
+  dir: string;
+  expansionID: number;
+}
+
 export class WowExportRestClient {
   private readonly http: AxiosInstance;
 
@@ -170,6 +177,13 @@ export class WowExportRestClient {
     if (json.id === 'CONFIG_SINGLE') return { [json.key]: json.value };
     if (json.id === 'CONFIG_FULL') return json.config;
     throw new Error('Unexpected response to getConfig');
+  }
+
+  public async getMapList(): Promise<MapListItem[]> {
+    const json = await this.getJSON('/rest/getMapList');
+    if (json.id === 'MAP_LIST' && Array.isArray(json.maps)) return json.maps as MapListItem[];
+    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    throw new Error('Failed to get map list');
   }
 
   public async setConfig(key: string, value: unknown): Promise<ConfigResponse> {

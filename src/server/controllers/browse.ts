@@ -1,6 +1,8 @@
 import express from 'express';
 
-import { FileEntry, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { FileEntry } from '@/lib/wowexport-client/wowexport-client';
+
+import { getListFiles } from './shared';
 
 let allFiles: FileEntry[] | null = null;
 let modelFiles: FileEntry[] | null = null;
@@ -10,8 +12,7 @@ const badWmoRegex = /_([0-9]{3}|lod\d)\.wmo$/;
 
 export function ControllerBrowse(router: express.Router) {
   async function fetchAllFiles() {
-    await wowExportClient.waitUntilReady();
-    allFiles = await wowExportClient.searchFiles('');
+    allFiles = await getListFiles();
     allFiles = allFiles.filter((f) => !badWmoRegex.test(f.fileName));
 
     modelFiles = allFiles.filter((f) => m2WmoRegex.test(f.fileName))
