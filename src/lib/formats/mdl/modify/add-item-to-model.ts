@@ -109,7 +109,10 @@ function mergeItemObjects(main: MDL, item: MDL) {
   main.geosetAnims.push(...item.geosetAnims);
 
   main.bones.push(...item.bones);
-  // main.attachments.push(...item.attachments);
+  main.attachments.push(...item.attachments);
+  item.attachments.forEach((a) => {
+    a.name = `item_Wow:${a.data?.wowAttachment.wowAttachmentId}`;
+  });
   main.eventObjects.push(...item.eventObjects);
   // main.collisionShapes.push(...item.collisionShapes);
   main.lights.push(...item.lights);

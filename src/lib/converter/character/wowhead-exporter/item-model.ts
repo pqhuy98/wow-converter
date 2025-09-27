@@ -293,7 +293,10 @@ function resolveHideGeosetIds(itemData: ItemData, targetRace: number, targetGend
   (hideGeosets ?? []).forEach((value) => {
     if (value.RaceId === targetRace) {
       const band = value.GeosetGroup;
-      for (let i = 1; i < 100; i++) result.add(band * 100 + i);
+      let start = 1;
+      if ([1, 2, 3].includes(band)) start = 2;
+      for (let i = start; i < 100; i++) result.add(band * 100 + i);
+      console.log('hideGeosets', { band });
     }
   });
   return Array.from(result).sort((a, b) => a - b);
