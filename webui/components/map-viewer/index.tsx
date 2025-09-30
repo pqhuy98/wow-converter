@@ -14,19 +14,18 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
-import MinimapCanvas, { MinimapCanvasProps } from './minimap-canvas';
+import MinimapViewer, { MapInfo } from './minimap-viewer';
 
-interface MapInfo { id: number | string; name: string; dir: string }
+interface MapResponse { id: number | string; name: string; dir: string }
 
 type TextureResolution = '512' | '1024' | '2048' | '4096'
 
 export default function MapViewer() {
-  const [maps, setMaps] = useState<MapInfo[]>([]);
+  const [maps, setMaps] = useState<MapResponse[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [selectedMapDir, setSelectedMapDir] = useState<string | null>(null);
-  const [mask, setMask] = useState<boolean[][] | null>(null);
-  const [textureMask, setTextureMask] = useState<boolean[][] | null>(null);
-  const [hover, setHover] = useState<{ tile: { x: number; y: number } | null; world: { x: number; y: number } | null }>({ tile: null, world: null });
+  const [mapInfo, setMapInfo] = useState<MapInfo | null>(null);
+  const [hover, setHover] = useState<{ tile: { x: number; y: number } | null }>({ tile: null });
   const [selectedTiles, setSelectedTiles] = useState<{ x: number; y: number }[]>([]);
   const [texSize, setTexSize] = useState<TextureResolution>('512');
 
@@ -96,13 +95,10 @@ export default function MapViewer() {
 
   useEffect(() => {
     if (!selectedMapDir) return;
-    setMask(null);
-    setTextureMask(null);
     void (async () => {
       const res = await fetch(`/api/maps/${encodeURIComponent(selectedMapDir)}/wdt-mask`, { cache: 'no-store' });
       if (!res.ok) {
-        setMask(null);
-        setTextureMask(null);
+        setMapInfo(null);
         return;
       }
       const data = await res.json();
@@ -116,30 +112,23 @@ export default function MapViewer() {
           }
         }
       }
-      setMask(maskMatrix);
-      setTextureMask(textureMatrix);
+      setMapInfo({
+        mapId: selectedMapDir,
+        mask: maskMatrix,
+        textureMask: textureMatrix,
+      });
       setSelectedTiles([]);
     })();
   }, [selectedMapDir]);
 
   // When selecting a new map, clear hover and force a quick redraw by toggling state minimaly
   useEffect(() => {
-    setHover({ tile: null, world: null });
-  }, [selectedMapDir]);
-
-  const onHoverChange = useCallback<NonNullable<MinimapCanvasProps['onHoverChange']>>((tile, world) => {
-    setHover({ tile, world });
-  }, []);
-
-  const onSelectionChange = useCallback<NonNullable<MinimapCanvasProps['onSelectionChange']>>((tiles) => {
-    setSelectedTiles(tiles);
-  }, []);
+    setHover({ tile: null });
+  }, [mapInfo]);
 
   const onViewTerrain = useCallback(() => {
-    console.log('View Terrain clicked', { map: selectedMapDir, tiles: selectedTiles, texSize });
-  }, [selectedMapDir, selectedTiles, texSize]);
-
-  const emptyMask = useMemo(() => Array.from({ length: 64 }, () => Array.from({ length: 64 }, () => false)), []);
+    console.log('View Terrain clicked', { map: mapInfo?.mapId, tiles: selectedTiles, texSize });
+  }, [mapInfo?.mapId, selectedTiles, texSize]);
 
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
@@ -174,7 +163,7 @@ export default function MapViewer() {
                         width: 'max-content',
                       }}>
                         {visibleItems.map((m) => {
-                          const isSelected = selectedMapDir === m.dir;
+                          const isSelected = mapInfo?.mapId === m.dir;
                           return (
                             <div
                               key={String(m.id)}
@@ -203,7 +192,7 @@ export default function MapViewer() {
                     <option value="2048">2048</option>
                     <option value="4096">4096</option>
                   </select>
-                  <Button className="ml-auto" onClick={onViewTerrain} disabled={!mask || selectedTiles.length === 0}>
+                  <Button className="ml-auto" onClick={onViewTerrain} disabled={!mapInfo || selectedTiles.length === 0}>
                     View Terrain ({selectedTiles.length})
                   </Button>
                 </div>
@@ -213,36 +202,33 @@ export default function MapViewer() {
 
           {/* Right: minimap */}
           <div className="lg:w-3/4 w-full h-full overflow-hidden min-w-0">
-            <div className="p-0 h-full relative overflow-hidden min-w-0 rounded-md border bg-background">
-              {selectedMapDir && (
-                <MinimapCanvas
-                  mapId={selectedMapDir}
-                  mask={mask ?? emptyMask}
-                  textureMask={textureMask ?? emptyMask}
-                  tileSize={64}
-                  className="w-full h-full block"
-                  onHoverChange={onHoverChange}
-                  onSelectionChange={onSelectionChange}
-                />
-              )}
-              {!selectedMapDir && (
-                <div className="absolute inset-0 flex items-center justify-center text-foreground/60 text-2xl">
-                  {!mapsError ? 'Select a map to view minimap' : mapsError}
-                </div>
-              )}
-              {selectedMapDir && !mask && (
-                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm pointer-events-none">
-                  Loading mask…
-                </div>
-              )}
-              <div className="absolute bottom-2 left-2 text-xs text-muted-foreground bg-background/80 rounded px-2 py-1">
-                {hover.tile ? (
-                  <span>Tile {hover.tile.x},{hover.tile.y} • World {hover.world?.x.toFixed(1)},{hover.world?.y.toFixed(1)}</span>
-                ) : (
-                  <span>Hover tiles to see coordinates</span>
+              <div className="p-0 h-full relative overflow-hidden min-w-0 rounded-md border bg-background">
+                {mapInfo && (
+                  <MinimapViewer
+                    mapInfo={mapInfo}
+                    className="w-full h-full block"
+                    onHoverChange={(tile) => setHover({ tile })}
+                    onSelectionChange={(tiles) => setSelectedTiles(tiles)}
+                  />
                 )}
+                {!mapInfo && (
+                  <div className="absolute inset-0 flex items-center justify-center text-foreground/60 text-2xl">
+                    {!mapsError ? 'Select a map to view minimap' : mapsError}
+                  </div>
+                )}
+                {selectedMapDir && !mapInfo && (
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm pointer-events-none">
+                    Loading...
+                  </div>
+                )}
+                <div className="absolute bottom-2 left-2 text-xs text-muted-foreground bg-background/80 rounded px-2 py-1">
+                  {hover.tile ? (
+                    <span>Tile {hover.tile.x},{hover.tile.y}</span>
+                  ) : (
+                    <span>Hover tiles to see coordinates</span>
+                  )}
+                </div>
               </div>
-            </div>
           </div>
         </div>
       </div>

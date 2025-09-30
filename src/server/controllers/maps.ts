@@ -147,6 +147,11 @@ export function ControllerMaps(router: express.Router) {
 
       await wowExportClient.waitUntilReady();
 
+      // Normalize directory and coordinates to match Blizzard naming
+      const mapDir = String(map).toLowerCase();
+      const xs = x.toString().padStart(2, '0');
+      const ys = y.toString().padStart(2, '0');
+
       const buildKey = wowExportClient.cascInfo?.buildKey || '';
       const etagSeed = `${buildKey}|${map}|${x}|${y}`;
       const etag = crypto.createHash('md5').update(etagSeed).digest('hex');
@@ -157,7 +162,7 @@ export function ControllerMaps(router: express.Router) {
 
       // If PNG already exists in the wow.export asset directory, serve it directly.
       const assetDir = await wowExportClient.getAssetDir();
-      const preexistingPng = path.join(assetDir, 'world', 'minimaps', map, `map${x}_${y}.png`);
+      const preexistingPng = path.join(assetDir, 'world', 'minimaps', mapDir, `map${xs}_${ys}.png`);
       if (fsExtra.existsSync(preexistingPng)) {
         res.setHeader('Content-Type', 'image/png');
         if (!isDev) res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -166,7 +171,8 @@ export function ControllerMaps(router: express.Router) {
       }
 
       // Resolve the BLP using the prebuilt hash table
-      const file = fileNameToEntry.get(`world/minimaps/${map}/map${x}_${y}.blp`);
+      const blpPath = `world/minimaps/${mapDir}/map${xs}_${ys}.blp`;
+      const file = fileNameToEntry.get(blpPath);
       if (!file?.fileDataID) {
         return res.status(404).json({ error: 'Minimap tile not found' });
       }
