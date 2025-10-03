@@ -28,6 +28,14 @@ export default function MapViewer() {
   const [hover, setHover] = useState<{ tile: { x: number; y: number } | null }>({ tile: null });
   const [selectedTiles, setSelectedTiles] = useState<{ x: number; y: number }[]>([]);
   const [texSize, setTexSize] = useState<TextureResolution>('512');
+  const [includeWMO, setIncludeWMO] = useState(true);
+  const [includeM2, setIncludeM2] = useState(true);
+  const [includeWMOSets, setIncludeWMOSets] = useState(true);
+  const [includeGameObjects, setIncludeGameObjects] = useState(true);
+  const [includeLiquid, setIncludeLiquid] = useState(true);
+  const [includeFoliage, setIncludeFoliage] = useState(true);
+  const [includeHoles, setIncludeHoles] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Virtualized list state (borrowed from browse page)
   const [query, setQuery] = useState('');
@@ -126,9 +134,38 @@ export default function MapViewer() {
     setHover({ tile: null });
   }, [mapInfo]);
 
-  const onViewTerrain = useCallback(() => {
-    console.log('View Terrain clicked', { map: mapInfo?.mapId, tiles: selectedTiles, texSize });
-  }, [mapInfo?.mapId, selectedTiles, texSize]);
+  const onExportTerrain = useCallback(async () => {
+    if (!mapInfo || selectedTiles.length === 0) return;
+    setIsExporting(true);
+    try {
+      const body = {
+        tiles: selectedTiles,
+        quality: parseInt(texSize, 10),
+        includeM2,
+        includeWMO,
+        includeWMOSets,
+        includeGameObjects,
+        includeLiquid,
+        includeFoliage,
+        includeHoles,
+      };
+      const res = await fetch(`/api/maps/${encodeURIComponent(String(mapInfo.mapId))}/export-adt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        console.error('Export failed', await res.text());
+      } else {
+        const data = await res.json();
+        console.log('Export finished', data);
+      }
+    } catch (e) {
+      console.error('Export error', e);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [mapInfo, selectedTiles, texSize, includeM2, includeWMO, includeWMOSets, includeGameObjects, includeLiquid, includeFoliage, includeHoles]);
 
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
@@ -149,7 +186,7 @@ export default function MapViewer() {
                 />
                 <div
                   ref={listRef}
-                  className="mt-2 overflow-y-scroll border rounded-md bg-background h-[calc(100vh-296px)]"
+                  className="mt-2 overflow-y-scroll border rounded-md bg-background h-[calc(100vh-364px)]"
                   onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
                 >
                   {!mapsError ? (
@@ -184,16 +221,46 @@ export default function MapViewer() {
                     <div className="text-destructive text-sm p-2">{mapsError}</div>
                   )}
                 </div>
+                <div className="flex flex-wrap gap-3 pt-2 text-sm">
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={includeWMO} onChange={(e) => setIncludeWMO(e.target.checked)} />
+                    WMO
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={includeWMOSets} onChange={(e) => setIncludeWMOSets(e.target.checked)} />
+                    WMO sets
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={includeM2} onChange={(e) => setIncludeM2(e.target.checked)} />
+                    M2
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={includeGameObjects} onChange={(e) => setIncludeGameObjects(e.target.checked)} />
+                    Gameobjects
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={includeLiquid} onChange={(e) => setIncludeLiquid(e.target.checked)} />
+                    Liquid
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={includeFoliage} onChange={(e) => setIncludeFoliage(e.target.checked)} />
+                    Foliage
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={includeHoles} onChange={(e) => setIncludeHoles(e.target.checked)} />
+                    Holes
+                  </label>
+                </div>
                 <div className="flex items-center gap-2 pt-2">
                   <label className="text-sm text-muted-foreground">Texture size</label>
                   <select className="border rounded px-2 py-1 bg-background" value={texSize} onChange={(e) => setTexSize(e.target.value as TextureResolution)}>
                     <option value="512">512</option>
                     <option value="1024">1024</option>
-                    <option value="2048">2048</option>
                     <option value="4096">4096</option>
+                    <option value="8192">8192</option>
                   </select>
-                  <Button className="ml-auto" onClick={onViewTerrain} disabled={!mapInfo || selectedTiles.length === 0}>
-                    View Terrain ({selectedTiles.length})
+                  <Button className="ml-auto" onClick={() => void onExportTerrain()} disabled={!mapInfo || selectedTiles.length === 0 || isExporting}>
+                    {isExporting ? 'Exporting…' : `Export Terrain (${selectedTiles.length})`}
                   </Button>
                 </div>
               </CardContent>

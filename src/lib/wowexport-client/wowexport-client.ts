@@ -88,6 +88,37 @@ export interface MapListItem {
   expansionID: number;
 }
 
+export interface ExportADTParams {
+  mapID: number;
+  mapDir: string;
+  tileX: number;
+  tileY: number;
+  quality?: number;
+  exportRaw?: boolean;
+  includeM2?: boolean;
+  includeWMO?: boolean;
+  includeWMOSets?: boolean;
+  includeGameObjects?: boolean;
+  includeLiquid?: boolean;
+  includeFoliage?: boolean;
+  includeHoles?: boolean;
+  splitAlphaMaps?: boolean;
+  splitLargeTerrainBakes?: boolean;
+  gameObjects?: unknown[];
+}
+
+export interface ExportADTResult {
+  exportID: number;
+  mapID: number;
+  mapDir: string;
+  tileX: number;
+  tileY: number;
+  tileIndex: number;
+  exportPath: string;
+  exportType: string;
+  mainFile: string | null;
+}
+
 export class WowExportRestClient {
   private readonly http: AxiosInstance;
 
@@ -312,6 +343,28 @@ export class WowExportRestClient {
     if (status === 400) throw new Error('Invalid parameters for character export');
     if (status >= 500) throw new Error(`Server error during character export: ${json?.message ?? 'unknown'}`);
     throw new Error('Unexpected response for character export');
+  }
+
+  public async exportADT(params: ExportADTParams): Promise<ExportADTResult> {
+    const { status, data: json } = await this.postJSONAllowError('/rest/exportADT', params);
+    if (status === 200 && json.id === 'EXPORT_RESULT') {
+      const result: ExportADTResult = {
+        exportID: json.exportID,
+        mapID: json.mapID,
+        mapDir: json.mapDir,
+        tileX: json.tileX,
+        tileY: json.tileY,
+        tileIndex: json.tileIndex,
+        exportPath: path.join(this.assetDir, path.relative(this.remoteAssetDir, json.exportPath)),
+        exportType: json.exportType,
+        mainFile: json.mainFile,
+      };
+      return result;
+    }
+    if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    if (status === 400) throw new Error(`Invalid parameters for ADT export: ${json?.message ?? 'unknown'}`);
+    if (status >= 500) throw new Error(`Server error during ADT export: ${json?.message ?? 'unknown'}`);
+    throw new Error('Unexpected response for ADT export');
   }
 
   public async resetConnection(): Promise<void> {

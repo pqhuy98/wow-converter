@@ -3,6 +3,7 @@ import express from 'express';
 import fsExtra from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
+import { z } from 'zod';
 
 import { FileEntry, MapListItem, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
@@ -18,6 +19,28 @@ const tileAdtRegex = /^world\/maps\/([^/]+)\/\1_(\d{2})_(\d{2})\.adt$/i;
 let mapsWithTiles: MapWithTiles[] = [];
 const mapsByDir = new Map<string, MapWithTiles>(); // dir(lowercased) -> map with tiles
 const fileNameToEntry = new Map<string, FileEntry>(); // normalized lowercased path -> entry
+
+const tileSchema = z.object({
+  x: z.number().int().min(0).max(63),
+  y: z.number().int().min(0).max(63),
+});
+
+const exportAdtBodySchema = z.object({
+  tiles: z.array(tileSchema).min(1),
+  quality: z.union([
+    z.literal(512),
+    z.literal(1024),
+    z.literal(2048),
+    z.literal(4096),
+  ]),
+  includeM2: z.boolean(),
+  includeWMO: z.boolean(),
+  includeWMOSets: z.boolean(),
+  includeGameObjects: z.boolean(),
+  includeLiquid: z.boolean(),
+  includeFoliage: z.boolean(),
+  includeHoles: z.boolean(),
+}).strict();
 
 async function buildMapsIndex(): Promise<void> {
   await wowExportClient.waitUntilReady();
@@ -186,6 +209,73 @@ export function ControllerMaps(router: express.Router) {
       res.setHeader('Cache-Control', 'public, max-age=86400');
       res.setHeader('ETag', etag);
       return res.sendFile(pngPath);
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // POST /api/maps/:map/export-adt -> sequentially export selected tiles
+  router.post('/maps/:map/export-adt', async (req, res) => {
+    try {
+      const key = String(req.params.map).toLowerCase();
+      const entry = mapsByDir.get(key);
+      if (!entry) return res.status(404).json({ error: 'Unknown map' });
+
+      const parsed = exportAdtBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid request body', issues: z.treeifyError(parsed.error) });
+      }
+      const data = parsed.data;
+
+      // De-duplicate and order tiles
+      const unique = new Map<string, { x: number; y: number }>();
+      for (const t of data.tiles) unique.set(`${t.x},${t.y}`, t);
+      const orderedTiles = Array.from(unique.values()).sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+      await wowExportClient.waitUntilReady();
+
+      const succeeded: Array<{
+        tileX: number;
+        tileY: number;
+        result: unknown;
+      }> = [];
+      const failed: Array<{
+        tileX: number;
+        tileY: number;
+        error: string;
+      }> = [];
+
+      for (const { x: tileX, y: tileY } of orderedTiles) {
+        try {
+          const result = await wowExportClient.exportADT({
+            mapID: entry.id,
+            mapDir: entry.dir,
+            tileX,
+            tileY,
+            quality: data.quality,
+            includeM2: data.includeM2,
+            includeWMO: data.includeWMO,
+            includeWMOSets: data.includeWMOSets,
+            includeGameObjects: data.includeGameObjects,
+            includeLiquid: data.includeLiquid,
+            includeFoliage: data.includeFoliage,
+            includeHoles: data.includeHoles,
+          });
+          succeeded.push({ tileX, tileY, result });
+        } catch (e) {
+          failed.push({ tileX, tileY, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+
+      return res.json({
+        id: 'ADT_EXPORT_SUMMARY',
+        map: entry.dir,
+        mapID: entry.id,
+        quality: data.quality,
+        total: orderedTiles.length,
+        succeeded,
+        failed,
+      });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
