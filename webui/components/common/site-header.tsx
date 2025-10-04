@@ -5,16 +5,18 @@ import { usePathname } from 'next/navigation';
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+import { useServerConfig } from '../server-config';
 import { ThemeToggle } from './theme-toggle';
 
 export default function SiteHeader() {
   const pathname = usePathname();
+  const { isSharedHosting } = useServerConfig();
 
   const activeTab = pathname.startsWith('/browse')
     ? 'browse'
     : pathname.startsWith('/recents')
       ? 'recents'
-      : pathname.startsWith('/maps')
+      : pathname.startsWith('/maps') && !isSharedHosting
         ? 'maps'
         : 'export';
 
@@ -33,9 +35,9 @@ export default function SiteHeader() {
               <TabsTrigger value="browse" asChild>
                 <Link href="/browse">Browse Models</Link>
               </TabsTrigger>
-              <TabsTrigger value="maps" asChild>
+              {!isSharedHosting && <TabsTrigger value="maps" asChild>
                 <Link href="/maps">Maps</Link>
-              </TabsTrigger>
+              </TabsTrigger>}
             </TabsList>
           </Tabs>
           <div className="shrink-0 absolute right-1">
