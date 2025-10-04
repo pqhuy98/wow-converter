@@ -10,7 +10,7 @@ export function getInitialTerrain(
   width: number,
   defaultHeight: number = (dataHeightMin + dataHeightMax) >> 1,
 ): Terrain {
-  const fill = <T>(v: T): T[][] => nArray(height, width, v);
+  const fill = <T>(v: T): T[][] => nArray(height + 1, width + 1, v);
 
   return {
     tileset: 'L',

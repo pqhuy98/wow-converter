@@ -12,7 +12,7 @@
     "lint": "eslint src/**/*.ts --fix",
     "dev": "run-p dev:server dev:webui",
     "dev:server": "bun --watch src/server/index.ts",
-    "dev:webui": "cd webui && npm run dev",
+    "dev:webui": "cd webui && bun run dev",
     "start": "set NODE_ENV=production && bun src/server/index.ts",
     "test": "bun tests/index.ts",
     "prisma:pull": "prisma db pull",

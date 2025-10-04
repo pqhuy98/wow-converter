@@ -77,8 +77,8 @@ export async function main() {
   await argentCommanders();
 
   ce.optimizeModelsTextures();
-  ce.writeAllModels(outputDir, 'mdx');
   await ce.writeAllTextures(outputDir);
+  ce.writeAllModels(outputDir, 'mdx');
 }
 
 if (esMain(import.meta)) {

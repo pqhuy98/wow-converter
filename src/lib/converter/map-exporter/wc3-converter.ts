@@ -43,6 +43,9 @@ export class Wc3Converter {
 
     // Ground height
     const terrain = getInitialTerrain(height, width);
+
+    console.log('heightMap', heightMap.length, heightMap[0].length);
+    console.log('terrain', terrain.groundHeight.length, terrain.groundHeight[0].length);
     for (let i = 0; i < heightMap.length; i++) {
       for (let j = 0; j < heightMap[i].length; j++) {
         if (heightMap[i][j] === -1) {
@@ -454,15 +457,15 @@ function computeTerrainHeightMap(roots: WowObject[], config: MapExportConfig) {
           console.error('Out of bounds', { percent, position });
           throw new Error('Out of bounds');
         }
-        const iX = Math.round(percent[0] * width);
-        const iY = Math.round(percent[1] * height);
+        const iX = (Math.random() > 0.5 ? Math.round : Math.floor)(percent[0] * width);
+        const iY = (Math.random() > 0.5 ? Math.round : Math.floor)(percent[1] * height);
         // [Y is height][X is width]
         heightMap[iY][iX] = Math.max(heightMap[iY][iX], Math.max(0, Math.min(1, percent[2])));
       }));
   });
 
   // Fill the remaining -1 cells using its neighbors
-  const floodBrushSize = 3;
+  const floodBrushSize = 5;
   for (let k = (floodBrushSize * 2 + 1) ** 2; k >= 1; k--) {
     for (let i = 0; i < heightMap.length; i++) {
       for (let j = 0; j < heightMap[i].length; j++) {
@@ -471,7 +474,7 @@ function computeTerrainHeightMap(roots: WowObject[], config: MapExportConfig) {
           let cnt = 0;
           for (let i2 = Math.max(0, i - floodBrushSize); i2 <= Math.min(heightMap.length - 1, i + floodBrushSize); i2++) {
             for (let j2 = Math.max(0, j - floodBrushSize); j2 < Math.min(heightMap[i].length - 1, j + floodBrushSize); j2++) {
-              if (heightMap[i2][j2] > 0) {
+              if (heightMap[i2][j2] >= 0) {
                 sum += heightMap[i2][j2];
                 cnt++;
               }

@@ -1,9 +1,11 @@
+import { distancePerTile, maxGameHeightDiff } from '@/lib/constants';
 import { isWowUnit } from '@/lib/converter/common/models';
 import {
   defaultMapExportConfig, gameZToPercent, MapExportConfig, MapExporter,
 } from '@/lib/converter/map-exporter/map-exporter';
 import { computeRecommendedTerrainClampPercent } from '@/lib/converter/map-exporter/wc3-converter';
 import { Vector3 } from '@/lib/math/common';
+import { V3 } from '@/lib/math/vector';
 
 import { Config, getDefaultConfig } from '../src/lib/global-config';
 
@@ -16,6 +18,7 @@ type WowMap = {
 
 const WowMap = {
   Azeroth: { id: 0, folder: 'azeroth' },
+  Kalimdor: { id: 1, folder: 'kalimdor' },
   Northrend: { id: 571, folder: 'northrend' },
   Outland: { id: 530, folder: 'outland' },
   DeathKnightStart: { id: 609, folder: 'deathknightstart' },
@@ -34,12 +37,15 @@ const maps: [WowMap,
   // [WowMap.Northrend, [28, 29], [22, 23], 'wrathgate.w3x'],
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
   // [WowMap.Northrend, [32, 21], [33, 22], 'icecrown.w3x', 0, 0.4, 0],
+  // [WowMap.Northrend, [18, 24], [19, 25], 'nexus.w3x', 0, 1, 0],
   // [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0.55, 0.77, 0],
   // [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
   // [WowMap.IcecrownCitadel, [25, 28], [21, 24], 'icc-floor34.w3x'],
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.9, 1, 180],
-  [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
+  // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
+  // [WowMap.Kalimdor, [28, 33], [29, 34], 'kalimdor-forest.w3x', 0, 1, 0],
+  [WowMap.Kalimdor, [31, 33], [33, 36], 'taurent-city.w3x', 0, 1, 0],
   // [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
   // [WowMap.TheMaw, [17, 19], [22, 23], 'themaw2.w3x'],
   // [WowMap.TheMaw, [19, 21], [22, 25], 'themaw3.w3x'],
@@ -96,7 +102,15 @@ const mapExportConfig: MapExportConfig = {
     });
     unitPos.sort((a, b) => a[2] - b[2]);
     const { ratio, min, max } = computeRecommendedTerrainClampPercent(mapConverter.wowObjectManager.roots);
-    const clampDiff = ratio / creatureScaleUp;
+    let clampDiff = ratio / creatureScaleUp;
+
+    const size = V3.sub(max, min);
+    const ratioZ = maxGameHeightDiff / (size[2] * clampDiff);
+    const width = size[0] * ratioZ / distancePerTile;
+    const height = size[1] * ratioZ / distancePerTile;
+
+    clampDiff *= Math.max(1, width / 480, height / 480);
+
     const unitPosRatio = unitPos.map((pos) => (pos[2] - min[2]) / (max[2] - min[2]));
 
     // find [lower percent, upper percent = lower percent + ratio) so that maximize the number of unitPosRatio that are within the range
@@ -117,7 +131,8 @@ const mapExportConfig: MapExportConfig = {
     const leftOutBelow = unitPosRatio.filter((ratio) => ratio < bestLowerPercent).length;
     const leftOutAbove = unitPosRatio.filter((ratio) => ratio > bestUpperPercent).length;
     const leftOut = leftOutBelow + leftOutAbove;
-    console.log(`Chosen clamp percent: ${bestLowerPercent} - ${bestUpperPercent}`);
+    const remaining = unitPosRatio.length - leftOut;
+    console.log(`Chosen clamp percent: ${bestLowerPercent} - ${bestUpperPercent} (${remaining} units remaining)`);
     console.log(`Left out units: ${leftOut} (${leftOutBelow} below, ${leftOutAbove} above)`);
   }
 

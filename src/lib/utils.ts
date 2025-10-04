@@ -1,4 +1,4 @@
-export const nArray = <T>(height: number, width: number, v: T): T[][] => Array.from({ length: (height + 1) }, () => Array<T>(width + 1).fill(v));
+export const nArray = <T>(height: number, width: number, v: T): T[][] => Array.from({ length: (height) }, () => Array<T>(width).fill(v));
 
 export function reverseFourCC(code: number): string {
   // Extract each character from the 32-bit integer

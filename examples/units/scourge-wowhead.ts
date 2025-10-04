@@ -1,9 +1,9 @@
 import esMain from 'es-main';
 
 import { wowhead } from '@/lib/converter/character';
+import { MDL } from '@/lib/formats/mdl/mdl';
 import { Vector3 } from '@/lib/math/common';
 import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
-import { MDL } from '@/lib/formats/mdl/mdl';
 import { outputDir } from '@/server/config';
 
 import { ce } from './common';
@@ -114,8 +114,8 @@ export async function main() {
   // await ancientSkeletalSoldier();
 
   ce.optimizeModelsTextures();
-  ce.writeAllModels(outputDir, 'mdx');
   await ce.writeAllTextures(outputDir);
+  ce.writeAllModels(outputDir, 'mdx');
   process.exit(0);
 }
 

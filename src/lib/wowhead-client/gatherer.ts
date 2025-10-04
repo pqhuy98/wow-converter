@@ -33,6 +33,9 @@ export async function gatherItems(expansion: ZamExpansion, items: {itemId: numbe
   console.log(url);
   const res = await fetch(url, { method: 'GET' });
   const body = await res.text();
+  if (!body) {
+    return [];
+  }
 
   const payload = extractAddDataPayload(body);
   const data = parseGathererPayload(payload);

@@ -227,6 +227,8 @@ export function ControllerMaps(router: express.Router) {
       }
       const data = parsed.data;
 
+      console.log('export-adt', key, data);
+
       // De-duplicate and order tiles
       const unique = new Map<string, { x: number; y: number }>();
       for (const t of data.tiles) unique.set(`${t.x},${t.y}`, t);

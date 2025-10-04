@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { statfsSync } from 'fs-extra';
 import path from 'path';
 import sharp from 'sharp';
 
@@ -96,6 +97,7 @@ export class AssetManager {
         height = meta.height ?? 0;
       } catch (err) {
         console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
+        console.log(statfsSync(fromPath));
       }
 
       // Compute target size for current limit; if limit increased, target grows accordingly

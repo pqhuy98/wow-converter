@@ -223,8 +223,8 @@ export async function main() {
   await frostWyrm();
 
   ce.models.forEach(([model]) => model.modify.optimizeAll());
-  ce.writeAllModels(outputDir, 'mdx');
   await ce.writeAllTextures(outputDir);
+  ce.writeAllModels(outputDir, 'mdx');
 }
 
 if (esMain(import.meta)) {

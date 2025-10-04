@@ -1,6 +1,5 @@
 import fs from 'fs';
 import { cpus } from 'os';
-import path from 'path';
 import { Worker } from 'worker_threads';
 
 // Get CPU core count cross-platform
@@ -74,7 +73,7 @@ async function pngToBlpAsync(png: string | Buffer, blpPath: string): Promise<voi
   // const { entry, options } = resolveWorkerEntry(import.meta.url, './blp.worker');
   return new Promise((resolve, reject) => {
     const pngBuffer = typeof png === 'string' ? fs.readFileSync(png) : png;
-    const worker = new Worker(path.join(__dirname, './blp.worker.ts'), {
+    const worker = new Worker(new URL('./blp.worker.ts', import.meta.url), {
       workerData: { pngBuffer, blpPath },
       // ...options,
     });

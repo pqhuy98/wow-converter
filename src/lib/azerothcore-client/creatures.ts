@@ -159,7 +159,7 @@ export async function exportCreatureModels(
       }
 
       console.log('\n');
-      console.log(`==== Exporting creature ${chalk.blue(c.template.name)} (${cnt}/${allCreatures.length}, guid=${c.creature.guid}, displayId=${displayId})`);
+      console.log(`==== Exporting creature ${chalk.blue(c.template.name)} (${cnt}/${creatures.length}, guid=${c.creature.guid}, displayId=${displayId})`);
 
       const start0 = performance.now();
       let start = performance.now();
@@ -198,12 +198,12 @@ export async function exportCreatureModels(
 
       start = performance.now();
       ex.optimizeModelsTextures();
-      ex.writeAllModels(outputPath, config.mdx ? 'mdx' : 'mdl');
-      console.log('optimize and write took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+      console.log('optimize models and textures took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       start = performance.now();
       await ex.writeAllTextures(outputPath);
-      console.log('export materials took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+      ex.writeAllModels(outputPath, config.mdx ? 'mdx' : 'mdl');
+      console.log('write models and textures took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       const end = performance.now();
       console.log(chalk.green(`=> Exported creature ${c.template.name} in ${chalk.yellow(((end - start0) / 1000).toFixed(2))}s`));

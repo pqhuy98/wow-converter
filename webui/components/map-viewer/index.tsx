@@ -18,7 +18,7 @@ import MinimapViewer, { MapInfo } from './minimap-viewer';
 
 interface MapResponse { id: number | string; name: string; dir: string }
 
-type TextureResolution = '512' | '1024' | '2048' | '4096'
+type TextureResolution = '512' | '1024' | '4096' | '8192' | '16384'
 
 export default function MapViewer() {
   const [maps, setMaps] = useState<MapResponse[]>([]);
@@ -27,7 +27,7 @@ export default function MapViewer() {
   const [mapInfo, setMapInfo] = useState<MapInfo | null>(null);
   const [hover, setHover] = useState<{ tile: { x: number; y: number } | null }>({ tile: null });
   const [selectedTiles, setSelectedTiles] = useState<{ x: number; y: number }[]>([]);
-  const [texSize, setTexSize] = useState<TextureResolution>('512');
+  const [texSize, setTexSize] = useState<TextureResolution>('4096');
   const [includeWMO, setIncludeWMO] = useState(true);
   const [includeM2, setIncludeM2] = useState(true);
   const [includeWMOSets, setIncludeWMOSets] = useState(true);
@@ -178,7 +178,7 @@ export default function MapViewer() {
               <CardHeader className="flex flex-row justify-between items-center py-2 px-3 pb-0 pt-3">
                 <CardTitle className="text-lg">Maps</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 flex-1 overflow-hidden p-3 min-w-0">
+              <CardContent className="space-y-2 flex flex-col min-h-0 flex-1 overflow-hidden p-3 min-w-0">
                 <Input
                   placeholder="Search maps..."
                   value={query}
@@ -186,7 +186,7 @@ export default function MapViewer() {
                 />
                 <div
                   ref={listRef}
-                  className="mt-2 overflow-y-scroll border rounded-md bg-background h-[calc(100vh-364px)]"
+                  className="mt-2 flex-1 min-h-0 overflow-y-auto border rounded-md bg-background"
                   onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
                 >
                   {!mapsError ? (
@@ -251,13 +251,14 @@ export default function MapViewer() {
                     Holes
                   </label>
                 </div>
-                <div className="flex items-center gap-2 pt-2">
+                <div className="flex items-center gap-2 pt-2 mt-auto">
                   <label className="text-sm text-muted-foreground">Texture size</label>
                   <select className="border rounded px-2 py-1 bg-background" value={texSize} onChange={(e) => setTexSize(e.target.value as TextureResolution)}>
                     <option value="512">512</option>
                     <option value="1024">1024</option>
                     <option value="4096">4096</option>
                     <option value="8192">8192</option>
+                    <option value="16384">16384</option>
                   </select>
                   <Button className="ml-auto" onClick={() => void onExportTerrain()} disabled={!mapInfo || selectedTiles.length === 0 || isExporting}>
                     {isExporting ? 'Exporting…' : `Export Terrain (${selectedTiles.length})`}

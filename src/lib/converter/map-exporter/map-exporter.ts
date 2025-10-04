@@ -89,7 +89,9 @@ export class MapExporter {
       this.filterDoodads,
     );
 
-    await this.wowObjectManager.readCreatures(mapId);
+    if (this.mapExportConfig.creatures.enable) {
+      await this.wowObjectManager.readCreatures(mapId);
+    }
 
     console.log('Total objects:', this.wowObjectManager.objects.size);
     const typeCountMap = _([...this.wowObjectManager.objects.values()])
@@ -123,8 +125,8 @@ export class MapExporter {
     }
 
     // Export doodad assets
-    this.wowObjectManager.assetManager.exportModels(outputDir);
     await this.wowObjectManager.assetManager.exportTextures(outputDir);
+    this.wowObjectManager.assetManager.exportModels(outputDir);
   }
 
   public async exportCreatures(outputDir: string) {

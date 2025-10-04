@@ -58,8 +58,8 @@ export async function main() {
   await muradin2();
 
   ce.optimizeModelsTextures();
-  ce.writeAllModels(outputDir, 'mdx');
   await ce.writeAllTextures(outputDir);
+  ce.writeAllModels(outputDir, 'mdx');
   console.log('Alliance done');
 }
 

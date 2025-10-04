@@ -144,8 +144,8 @@ export async function ControllerExportCharacter(router: express.Router) {
     });
 
     const targetDir = request.isBrowse ? outputDirBrowse : outputDir;
-    const modelPaths = ce.writeAllModels(targetDir, request.format);
     const texturePaths = await ce.writeAllTextures(targetDir);
+    const modelPaths = ce.writeAllModels(targetDir, request.format);
 
     const exportedModels = modelPaths.map((modelPath) => ({
       path: path.relative(targetDir, `${modelPath}.${request.format}`),
