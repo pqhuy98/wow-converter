@@ -13,7 +13,7 @@
     "dev": "run-p dev:server dev:webui",
     "dev:server": "bun --watch src/server/index.ts",
     "dev:webui": "cd webui && npm run dev",
-    "start": "set NODE_ENV=production && node build/server.bundle.cjs",
+    "start": "set NODE_ENV=production && bun src/server/index.ts",
     "test": "tsx tests/index.ts",
     "prisma:pull": "prisma db pull",
     "prisma:generate": "prisma generate",
