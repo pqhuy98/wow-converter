@@ -1,11 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import fs from 'fs';
 import { cpus } from 'os';
+import path from 'path';
 import { Worker } from 'worker_threads';
-
-import { resolveWorkerEntry } from '@/lib/worker-thread/worker-thread';
 
 // Get CPU core count cross-platform
 const maxConcurrency = (() => {
@@ -75,12 +71,12 @@ export async function pngsToBlps(
 }
 
 async function pngToBlpAsync(png: string | Buffer, blpPath: string): Promise<void> {
-  const { entry, options } = resolveWorkerEntry(import.meta.url, './blp.worker');
+  // const { entry, options } = resolveWorkerEntry(import.meta.url, './blp.worker');
   return new Promise((resolve, reject) => {
     const pngBuffer = typeof png === 'string' ? fs.readFileSync(png) : png;
-    const worker = new Worker(entry, {
+    const worker = new Worker(path.join(__dirname, './blp.worker.ts'), {
       workerData: { pngBuffer, blpPath },
-      ...options,
+      // ...options,
     });
 
     worker.on('message', (result) => {

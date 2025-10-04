@@ -1,7 +1,5 @@
 import chalk from 'chalk';
-import {
-  copyFileSync, existsSync, mkdirSync, statSync, unlinkSync,
-} from 'fs';
+import { existsSync, statSync } from 'fs';
 import path from 'path';
 
 import { MDL } from '@/lib/formats/mdl/mdl';
@@ -157,14 +155,6 @@ async function searchModelWithSkin(fileWithSkin: string) {
     }
   }
   return undefined;
-}
-
-async function moveFile(src: string, dest: string) {
-  if (src === dest) return;
-  mkdirSync(path.dirname(dest), { recursive: true });
-  await waitUntil(() => existsSync(src));
-  copyFileSync(src, dest);
-  unlinkSync(src);
 }
 
 const debug = false;
