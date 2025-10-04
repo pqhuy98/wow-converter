@@ -18,7 +18,7 @@
     "prisma:pull": "prisma db pull",
     "prisma:generate": "prisma generate",
     "clean": "shx rm -rf build dist wow-converter.zip && shx mkdir -p build dist",
-    "install:webui": "cd webui && bun install",
+    "install:webui": "cd webui && npm install",
     "postinstall": "run-p install:webui",
     "build:webui": "cd webui && bun run build",
     "build:bun": "bun build --compile src/server/index.ts --outfile ./dist/wow-converter.exe --external sharp --windows-title \"wow-converter\" --windows-publisher \"Huy\" --env=disable",
