@@ -1,3 +1,5 @@
+import { cpus } from 'os';
+
 // Map generation configs
 export const defaultLayer = 7;
 // max height after override UI/MiscData.txt
@@ -30,3 +32,13 @@ export function gameZToWaterHeight(waterZ: number): number {
 export function waterHeightToGameZ(waterHeight: number): number {
   return (waterHeight - 8192) / 4 - 89.6;
 }
+
+// Get CPU core count cross-platform
+export const maxConcurrency = (() => {
+  try {
+    const cpuCount = cpus().length;
+    return Math.max(1, cpuCount - 1);
+  } catch {
+    return 4;
+  }
+})();

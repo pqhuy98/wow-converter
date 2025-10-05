@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { createHash } from 'crypto';
-import { writeFileSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import _ from 'lodash';
 import path from 'path';
 
@@ -54,7 +54,7 @@ export async function exportCharacterAsMdl({
 
   const baseDir = await wowExportClient.getAssetDir();
   const relative = path.relative(baseDir, result.exportPath);
-  const charMdl = ctx.assetManager.parse(relative, true).mdl;
+  const charMdl = (await ctx.assetManager.parse(relative, true)).mdl;
 
   // Replace the base texture with the prebaked texture
   await applyPrebakedTextrure(ctx, charMdl, prep);
@@ -543,7 +543,7 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
   newPngName = `${ctx.outputFile}-${newPngName}`;
 
   const newPngPath = path.join(ctx.config.wowExportAssetDir, `${newPngName}.png`);
-  writeFileSync(newPngPath, newPng);
+  await writeFile(newPngPath, newPng);
   const newBlpPath = path.join(ctx.config.assetPrefix, path.relative(ctx.config.wowExportAssetDir, newPngPath))
     .replace('.png', '.blp');
 

@@ -2,7 +2,7 @@ import {
   creature, creature_template, creature_template_model, item_template, Prisma, PrismaClient,
 } from '@prisma/client';
 import chalk from 'chalk';
-import { existsSync } from 'fs';
+import { exists } from 'fs-extra';
 import _ from 'lodash';
 import { join } from 'path';
 
@@ -153,7 +153,7 @@ export async function exportCreatureModels(
         throw new Error(`No display id found for creature template ${c.template.entry}`);
       }
 
-      if (existsSync(join(outputPath, `creature-${displayId}.mdx`)) && !config.overrideModels) {
+      if (await exists(join(outputPath, `creature-${displayId}.mdx`)) && !config.overrideModels) {
         debug && console.log('Skipping file already exists', chalk.yellow(`creature-${displayId}.mdx`));
         return;
       }
@@ -202,7 +202,7 @@ export async function exportCreatureModels(
 
       start = performance.now();
       await ex.writeAllTextures(outputPath);
-      ex.writeAllModels(outputPath, config.mdx ? 'mdx' : 'mdl');
+      await ex.writeAllModels(outputPath, config.mdx ? 'mdx' : 'mdl');
       console.log('write models and textures took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       const end = performance.now();

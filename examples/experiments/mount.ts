@@ -67,7 +67,7 @@ export async function main() {
   // await ce.writeAllTextures(outputDir);
   await ce.writeAllTextures(outputDir2);
   // ce.writeAllModels(outputDir, 'mdx');
-  ce.writeAllModels(outputDir2, 'mdx');
+  await ce.writeAllModels(outputDir2, 'mdx');
 }
 
 if (esMain(import.meta)) {

@@ -143,7 +143,7 @@ async function exportTestCases() {
 
     ce.optimizeModelsTextures();
     await ce.writeAllTextures(mapDir);
-    ce.writeAllModels(mapDir, 'mdx');
+    await ce.writeAllModels(mapDir, 'mdx');
   }
 
   return result;

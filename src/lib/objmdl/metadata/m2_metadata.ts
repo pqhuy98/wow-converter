@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import _ from 'lodash';
 import {
   dirname, join, normalize, relative,
@@ -362,9 +362,12 @@ export class M2MetadataFile {
   globalSequenceMap: Map<number, GlobalSequence>;
 
   constructor(private filePath: string, private config: Config, private animFile: AnimationFile, private mdl: MDL) {
+  }
+
+  async parse(): Promise<this> {
     try {
-      !config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
-      Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
+      !this.config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
+      Object.assign(this, JSON.parse(await readFile(this.filePath, 'utf-8')));
       if (this.fileType === 'm2') {
       // ADT files (terrain) won't have metadata JSON.
       // WMO files (world object)'s metadata file is not yet supported because it has different format.
@@ -378,11 +381,12 @@ export class M2MetadataFile {
     } catch (e) {
       if (e.code === 'ENOENT') {
         // file not exist, do not throw.
-        return;
+        return this;
       }
       throw e;
     }
     this.globalSequenceMap = new Map<number, GlobalSequence>(this.mdl.globalSequences.map((gs) => [gs.id, gs]));
+    return this;
   }
 
   subMeshGeosetMap: Map<Data.Skin['subMeshes'][number], Geoset> = new Map();
@@ -967,7 +971,7 @@ export class M2MetadataFile {
 
     this.mdl.lights = lights;
     // !this.config.isBulkExport &&
-    lights.length > 0 && console.log(
+    !this.config.isBulkExport && lights.length > 0 && console.log(
       chalk.yellow('Lights:'),
       this.mdl.model.name,
       this.mdl.lights.length,
@@ -1063,9 +1067,7 @@ export class M2MetadataFile {
       ribbons.push(node);
     });
 
-    if (ribbons.length > 0) {
-      console.log(chalk.yellow('Ribbon emitters:'), ribbons.length);
-    }
+    !this.config.isBulkExport && ribbons.length > 0 && console.log(chalk.yellow('Ribbon emitters:'), ribbons.length);
 
     this.mdl.ribbonEmitters = ribbons;
     this.mdl.textures.push(...ribbons.map((e) => this.mdl.materials[e.materialId].layers[0].texture));
@@ -1128,7 +1130,7 @@ export class M2MetadataFile {
     });
 
     this.mdl.cameras = cameras;
-    cameras.length > 0 && console.log('Cameras:', cameras.length);
+    !this.config.isBulkExport && cameras.length > 0 && console.log('Cameras:', cameras.length);
   }
 
   objToSubmesh = new Map<number, number>();

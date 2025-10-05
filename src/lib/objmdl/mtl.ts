@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 
 import { Config } from '../global-config';
 
@@ -18,14 +18,16 @@ export interface ObjMaterial {
 export class MTLFile {
   materials: ObjMaterial[] = [];
 
-  constructor(filePath: string, config: Config) {
+  constructor(private filePath: string, private config: Config) {}
+
+  async parse(): Promise<this> {
     let mtlContent: string;
     try {
-      !config.isBulkExport && console.log('Loading:', chalk.gray(filePath));
-      mtlContent = readFileSync(filePath, 'utf-8');
+      !this.config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
+      mtlContent = await readFile(this.filePath, 'utf-8');
     } catch (e) {
-      console.error('Cannot read mtl file', filePath, ' - skip it');
-      return;
+      console.error('Cannot read mtl file', this.filePath, ' - skip it');
+      return this;
     }
 
     const lines = mtlContent.split('\n');
@@ -77,5 +79,6 @@ export class MTLFile {
     if (currentMaterial) {
       this.materials.push(currentMaterial);
     }
+    return this;
   }
 }

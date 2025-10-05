@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { createHash, randomUUID } from 'crypto';
 import express from 'express';
+import { readFile, writeFile } from 'fs/promises';
 import fsExtra from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
@@ -145,16 +146,16 @@ export async function ControllerExportCharacter(router: express.Router) {
 
     const targetDir = request.isBrowse ? outputDirBrowse : outputDir;
     const texturePaths = await ce.writeAllTextures(targetDir);
-    const modelPaths = ce.writeAllModels(targetDir, request.format);
+    const modelPaths = await ce.writeAllModels(targetDir, request.format);
 
-    const exportedModels = modelPaths.map((modelPath) => ({
+    const exportedModels = await Promise.all(modelPaths.map(async (modelPath) => ({
       path: path.relative(targetDir, `${modelPath}.${request.format}`),
-      size: fsExtra.statSync(`${modelPath}.${request.format}`).size,
-    }));
-    const exportedTextures = texturePaths.map((texturePath) => ({
+      size: (await fsExtra.stat(`${modelPath}.${request.format}`)).size,
+    })));
+    const exportedTextures = await Promise.all(texturePaths.map(async (texturePath) => ({
       path: path.relative(targetDir, texturePath),
-      size: fsExtra.statSync(texturePath).size,
-    }));
+      size: (await fsExtra.stat(texturePath)).size,
+    })));
     exportedTextures.sort((a, b) => a.path.localeCompare(b.path));
 
     // Return the list of exported assets to the caller – zipping happens on-demand via the download API
@@ -199,7 +200,7 @@ export async function ControllerExportCharacter(router: express.Router) {
     {
       ...queueConfig,
       jobCompletedCallback: () => {
-        fsExtra.writeFileSync('recent-exports.json', JSON.stringify(jobQueue.recentCompletedJobs, null, 2));
+        void writeFile('recent-exports.json', JSON.stringify(jobQueue.recentCompletedJobs, null, 2));
       },
     },
     (job) => handleExport(job),
@@ -207,7 +208,7 @@ export async function ControllerExportCharacter(router: express.Router) {
 
   // Load recent exports from file so that it survives server restart
   try {
-    const recentExports = JSON.parse(fsExtra.readFileSync('recent-exports.json', 'utf8')) as ExportCharacterJob[];
+    const recentExports = JSON.parse(await readFile('recent-exports.json', 'utf8')) as ExportCharacterJob[];
     jobQueue.recentCompletedJobs = recentExports;
   } catch (err) {
     // Ignore
@@ -276,7 +277,7 @@ export async function ControllerExportCharacter(router: express.Router) {
     });
   });
 
-  router.post('/export/character/clean', (req, res) => {
+  router.post('/export/character/clean', async (req, res) => {
     if (outputDir !== 'exported-assets') {
       return res.status(500).json({ error: 'Cannot clean exported assets because output directory is not "exported-assets"' });
     }
@@ -284,12 +285,12 @@ export async function ControllerExportCharacter(router: express.Router) {
       return res.status(400).json({ error: 'Cannot clean exported assets because server is in shared hosting mode' });
     }
 
-    fsExtra.removeSync('./recent-exports.json');
+    await fsExtra.remove('./recent-exports.json');
     jobQueue.recentCompletedJobs = [];
     console.log(`Removed ${path.resolve('./recent-exports.json')}`);
-    fsExtra.emptyDirSync(outputDir);
+    await fsExtra.emptyDir(outputDir);
     console.log(`Cleared ${path.resolve(outputDir)}`);
-    fsExtra.emptyDirSync(outputDirBrowse);
+    await fsExtra.emptyDir(outputDirBrowse);
     console.log(`Cleared ${path.resolve(outputDirBrowse)}`);
     wowExportClient.clearCacheFiles();
     console.log(`Cleared ${path.resolve('.cache')}`);
@@ -307,7 +308,7 @@ export async function ControllerExportCharacter(router: express.Router) {
   router.use('/assets', exportStatic(outputDir));
 
   if (!isSharedHosting) {
-    fsExtra.emptyDirSync(outputDirBrowse);
+    await fsExtra.emptyDir(outputDirBrowse);
   }
 
   let jobs: ExportCharacterJob[] = [];
@@ -330,7 +331,7 @@ export async function ControllerExportCharacter(router: express.Router) {
     res.json(jobs.map((job) => jobQueue.getJob(job.id)).filter((job) => job?.status === 'done'));
   });
 
-  router.get('/export/character/check-local-file', (req, res) => {
+  router.get('/export/character/check-local-file', async (req, res) => {
     try {
       const { localPath } = req.query as { localPath: string };
       const parsed = LocalRefSchema.safeParse({ type: 'local', value: localPath });
@@ -354,19 +355,19 @@ export async function ControllerExportCharacter(router: express.Router) {
       }
       const searchPrefix = baseModelPath.replace('.obj', '');
       const dirName = path.dirname(baseModelPath);
-      if (!fsExtra.existsSync(dirName)) {
+      if (!await fsExtra.exists(dirName)) {
         return res.json({
           ok: false,
           similarFiles: [],
         });
       }
-      const allFiles = fsExtra.readdirSync(dirName).map((file) => path.join(dirName, file));
+      const allFiles = (await fsExtra.readdir(dirName)).map((file) => path.join(dirName, file));
       const similarFiles = allFiles
         .filter((file) => file.startsWith(searchPrefix) && file.endsWith('.obj') && !file.endsWith('.phys.obj'))
         .map((file) => path.relative(ceConfig.wowExportAssetDir, file));
 
       return res.json({
-        ok: fsExtra.existsSync(baseModelPath),
+        ok: await fsExtra.exists(baseModelPath),
         similarFiles,
       });
     } catch (err) {

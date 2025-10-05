@@ -1,21 +1,17 @@
 import { rmSync } from 'fs';
-import fsExtra from 'fs-extra';
+import { ensureDir } from 'fs-extra';
 
 import { CharacterExporter } from '@/lib/converter/character';
 import { getDefaultConfig } from '@/lib/global-config';
 
 export const ceOutputPath = 'exported-assets';
 export const ceConfig = await getDefaultConfig();
-fsExtra.ensureDirSync(ceOutputPath);
+await ensureDir(ceOutputPath);
 
 export const ce = new CharacterExporter(ceConfig);
 
-export function clearOutput() {
-  rmSync(ceOutputPath, { recursive: true });
-  fsExtra.ensureDirSync(ceOutputPath);
-}
-
 const clear = false;
 if (clear) {
-  clearOutput();
+  rmSync(ceOutputPath, { recursive: true });
+  await ensureDir(ceOutputPath);
 }

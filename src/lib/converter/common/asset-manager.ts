@@ -1,11 +1,13 @@
 import chalk from 'chalk';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
-import { statfsSync } from 'fs-extra';
+import { mkdir, statfs, writeFile } from 'fs/promises';
+import { exists } from 'fs-extra';
 import path from 'path';
 import sharp from 'sharp';
 
+import { maxConcurrency } from '@/lib/constants';
 import { pngsToBlps, readBlpSizeSync } from '@/lib/formats/blp/blp';
 import { resizePng } from '@/lib/formats/png';
+import { workerPool } from '@/lib/utils';
 
 import { Config } from '../../global-config';
 import { EulerRotation, Vector3 } from '../../math/common';
@@ -24,14 +26,14 @@ export class AssetManager {
   constructor(private config: Config) {
   }
 
-  parse(objectPath: string, noCache: boolean): Model {
+  async parse(objectPath: string, noCache: boolean): Promise<Model> {
     if (this.models.has(objectPath) && !noCache) {
       return this.models.get(objectPath)!;
     }
 
     const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
     const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
-    const { mdl, texturePaths } = convertWowExportModel(objFullPath, this.config);
+    const { mdl, texturePaths } = await convertWowExportModel(objFullPath, this.config);
     const model: Model = {
       relativePath: mdl.model.name,
       mdl,
@@ -43,25 +45,33 @@ export class AssetManager {
     return model;
   }
 
-  exportModels(assetPath: string) {
-    console.log('Exporting models to', assetPath);
-    mkdirSync(assetPath, { recursive: true });
-    for (const [relativePath, model] of this.models.entries()) {
+  async exportModels(assetPath: string) {
+    console.log('Exporting models to', assetPath, '...');
+    const start = performance.now();
+    await mkdir(assetPath, { recursive: true });
+    let writeCount = 0;
+    await workerPool(maxConcurrency, Array.from(this.models.entries()).map(([relativePath, model]) => async () => {
       const fullPath = `${path.join(assetPath, this.config.assetPrefix, relativePath)}.${this.config.mdx ? 'mdx' : 'mdl'}`;
 
-      if (!this.config.overrideModels && existsSync(fullPath)) {
+      if (!this.config.overrideModels && await exists(fullPath)) {
         // console.log('Skipping model already exists', fullPath);
-        continue;
+        return;
       }
 
       const mdl = model.mdl;
       if (mdl.model.boundsRadius > this.config.infiniteExtentBoundRadiusThreshold) {
         mdl.modify.setLargeBounds();
       }
-      mkdirSync(path.dirname(fullPath), { recursive: true });
+      await mkdir(path.dirname(fullPath), { recursive: true });
       const data = this.config.mdx ? model.mdl.toMdx() : model.mdl.toMdl();
-      writeFileSync(fullPath, data);
-    }
+      await writeFile(fullPath, data);
+      writeCount++;
+    }));
+    const durationS = (performance.now() - start) / 1000;
+    console.log(
+      `Models export took ${chalk.yellow(durationS.toFixed(2))} s`,
+      `(${chalk.gray((writeCount / durationS).toFixed(2))} models/s)`,
+    );
   }
 
   addPngTexture(texturePath: string, overwrite = false) {
@@ -72,10 +82,13 @@ export class AssetManager {
   }
 
   async exportTextures(assetPath: string) {
-    const exportedTexturePaths: string[] = [];
     console.log('Exporting textures to', assetPath, '...');
-    mkdirSync(assetPath, { recursive: true });
+    const start = performance.now();
+
+    const exportedTexturePaths: string[] = [];
+    await mkdir(assetPath, { recursive: true });
     let writeCount = 0;
+
     // Collect all textures that need processing
     const texturesToProcess: Array<{
       png: string | Buffer;
@@ -83,7 +96,7 @@ export class AssetManager {
     }> = [];
     for (const texturePath of this.textures) {
       const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
-      if (!existsSync(fromPath)) {
+      if (!await exists(fromPath)) {
         console.warn('Skipping texture not found', fromPath);
         continue;
       }
@@ -98,7 +111,7 @@ export class AssetManager {
         height = meta.height ?? 0;
       } catch (err) {
         console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
-        console.log(statfsSync(fromPath));
+        console.log(await statfs(fromPath));
       }
 
       // Compute target size for current limit; if limit increased, target grows accordingly
@@ -110,7 +123,7 @@ export class AssetManager {
       const debug = false;
       const blpPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
       exportedTexturePaths.push(blpPath);
-      if (existsSync(blpPath) && !this.texturesOverwrite.has(texturePath)) {
+      if (await exists(blpPath) && !this.texturesOverwrite.has(texturePath)) {
         const size = readBlpSizeSync(blpPath);
         if (size && size.width === targetWidth && size.height === targetHeight) {
           debug && console.log('Skipping existing texture', blpPath);
@@ -136,14 +149,15 @@ export class AssetManager {
 
     // Process textures in parallel using the new non-blocking conversion
     if (texturesToProcess.length > 0) {
-      const startTime = Date.now();
       await pngsToBlps(texturesToProcess);
-      const endTime = Date.now();
-      console.log(`Texture BLP conversion took ${chalk.yellow(((endTime - startTime) / 1000).toFixed(2))} s`);
+      const durationS = (performance.now() - start) / 1000;
+      console.log(
+        `Texture BLP conversion took ${chalk.yellow(durationS.toFixed(2))} s`,
+        `(${chalk.gray((texturesToProcess.length / durationS).toFixed(2))} textures/s)`,
+      );
     }
 
-    // const writeCount = texturesToProcess.length;
-    console.log(`Wrote ${writeCount}, skipped ${this.textures.size - writeCount} textures. Total: ${exportedTexturePaths.length}`);
+    console.log(`Wrote ${chalk.yellow(writeCount)}, skipped ${chalk.gray(this.textures.size - writeCount)} textures. Total: ${chalk.yellow(exportedTexturePaths.length)}`);
     return exportedTexturePaths;
   }
 

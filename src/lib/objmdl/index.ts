@@ -19,20 +19,20 @@ import { guessFilterMode } from './utils';
 
 const debug = false;
 
-export function convertWowExportModel(objFilePath: string, config: Config): {mdl: MDL, texturePaths: Set<string>} {
+export async function convertWowExportModel(objFilePath: string, config: Config): Promise<{mdl: MDL, texturePaths: Set<string>}> {
   !config.isBulkExport && console.log('Converting OBJ model:', chalk.blue(objFilePath));
   const start0 = performance.now();
   let start = start0;
-  const obj = new OBJFile(objFilePath, config).parse();
-  const mtl = new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'), config);
+  const obj = await new OBJFile(objFilePath, config).parse();
+  const mtl = await new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'), config).parse();
 
   const mdl = new MDL({
     formatVersion: 1000,
     name: path.join(config.assetPrefix, path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', '')),
   });
 
-  const animation = new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'), config);
-  const metadata = new M2MetadataFile(objFilePath.replace(/\.obj$/, '.json'), config, animation, mdl);
+  const animation = await new AnimationFile(objFilePath.replace(/\.obj$/, '_bones.json'), config).parse();
+  const metadata = await new M2MetadataFile(objFilePath.replace(/\.obj$/, '.json'), config, animation, mdl).parse();
 
   if (obj.models.length === 0) {
     console.error(chalk.red('No models found in', objFilePath));

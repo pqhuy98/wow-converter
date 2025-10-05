@@ -43,7 +43,7 @@ export async function main() {
   await wolf();
   ce.optimizeModelsTextures();
   await ce.writeAllTextures(outputDir);
-  ce.writeAllModels(outputDir, 'mdx');
+  await ce.writeAllModels(outputDir, 'mdx');
 }
 
 if (esMain(import.meta)) {

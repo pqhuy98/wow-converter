@@ -224,7 +224,7 @@ export async function main() {
 
   ce.models.forEach(([model]) => model.modify.optimizeAll());
   await ce.writeAllTextures(outputDir);
-  ce.writeAllModels(outputDir, 'mdx');
+  await ce.writeAllModels(outputDir, 'mdx');
 }
 
 if (esMain(import.meta)) {

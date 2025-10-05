@@ -1,6 +1,6 @@
 import chalk from 'chalk';
-import { existsSync, writeFileSync } from 'fs';
-import { ensureDirSync } from 'fs-extra';
+import { writeFile } from 'fs/promises';
+import { ensureDir, exists } from 'fs-extra';
 import path, { dirname, join } from 'path';
 import { z } from 'zod';
 
@@ -260,13 +260,13 @@ export class CharacterExporter {
   private async exportBaseMdl(ctx: ExportContext, char: Character): Promise<MDL> {
     if (char.base.type === 'local') {
       const fullPath = await ensureLocalModelFileExists(char.base.value);
-      const base = this.assetManager.parse(fullPath, true).mdl;
+      const base = (await this.assetManager.parse(fullPath, true)).mdl;
       if (ctx.withCollision) {
         const collisionRelativePath = `${fullPath.replace(/\.obj$/, '')}.phys.obj`;
         const collisionFullPath = path.join(this.config.wowExportAssetDir, collisionRelativePath);
         console.log('collisionPath', collisionFullPath);
-        if (existsSync(collisionFullPath)) {
-          const collision = this.assetManager.parse(collisionRelativePath, true).mdl;
+        if (await exists(collisionFullPath)) {
+          const collision = (await this.assetManager.parse(collisionRelativePath, true)).mdl;
           base.geosets.push(...collision.geosets);
           base.textures.push(...collision.textures);
           base.materials.push(...collision.materials);
@@ -339,7 +339,7 @@ export class CharacterExporter {
   private async exportItem(ctx: ExportContext, ref: Ref): Promise<{model: Model, inventoryType?: InventoryType}> {
     if (ref.type === 'local') {
       const path = await ensureLocalModelFileExists(ref.value);
-      return { model: this.assetManager.parse(path, true) };
+      return { model: await this.assetManager.parse(path, true) };
     }
     if (ref.type === 'wowhead' || ref.type === 'displayID') {
       const zam: ZamUrl = ref.type === 'wowhead'
@@ -444,16 +444,16 @@ export class CharacterExporter {
     this.assetManager.purgeTextures(this.models.flatMap(([m]) => m.textures.map((t) => t.image)));
   }
 
-  writeAllModels(outputDir: string, format: 'mdx' | 'mdl') {
+  async writeAllModels(outputDir: string, format: 'mdx' | 'mdl') {
     const fullPaths: string[] = [];
     for (const [model, path] of this.models) {
       const fullPath = join(outputDir, path);
       fullPaths.push(fullPath);
-      ensureDirSync(dirname(fullPath));
+      await ensureDir(dirname(fullPath));
       if (format === 'mdx') {
-        writeFileSync(`${fullPath}.mdx`, model.toMdx());
+        await writeFile(`${fullPath}.mdx`, model.toMdx());
       } else {
-        writeFileSync(`${fullPath}.mdl`, model.toMdl());
+        await writeFile(`${fullPath}.mdl`, model.toMdl());
       }
       console.log('Wrote model', chalk.green(`${fullPath}.${format}`));
     }

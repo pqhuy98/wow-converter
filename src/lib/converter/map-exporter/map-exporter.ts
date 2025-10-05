@@ -126,7 +126,7 @@ export class MapExporter {
 
     // Export doodad assets
     await this.wowObjectManager.assetManager.exportTextures(outputDir);
-    this.wowObjectManager.assetManager.exportModels(outputDir);
+    await this.wowObjectManager.assetManager.exportModels(outputDir);
   }
 
   public async exportCreatures(outputDir: string) {

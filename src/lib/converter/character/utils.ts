@@ -1,5 +1,6 @@
 import chalk from 'chalk';
-import { existsSync, statSync } from 'fs';
+import { stat } from 'fs/promises';
+import { exists } from 'fs-extra';
 import path from 'path';
 
 import { MDL } from '@/lib/formats/mdl/mdl';
@@ -67,8 +68,8 @@ export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: nu
   }
 
   // TODO: find out why in some cases, the exported OBJ is empty for awhile even after the export is complete
-  if (!existsSync(obj) || statSync(obj).size === 0) {
-    await waitUntil(() => existsSync(obj) && statSync(obj).size > 0);
+  if (!(await exists(obj)) || (await stat(obj)).size === 0) {
+    await waitUntil(async () => (await exists(obj) && (await stat(obj)).size > 0));
   }
 
   const baseDir = await wowExportClient.getAssetDir();
@@ -103,7 +104,7 @@ export async function ensureLocalModelFileExists(filePath: string): Promise<stri
   if (!fullPath.endsWith('.obj')) {
     fullPath += '.obj';
   }
-  if (existsSync(fullPath)) return path.relative(baseDir, fullPath);
+  if (await exists(fullPath)) return path.relative(baseDir, fullPath);
 
   console.log('Try exporting local file', fullPath, 'from wow.export');
 
@@ -131,7 +132,7 @@ export async function ensureLocalModelFileExists(filePath: string): Promise<stri
   if (!model) {
     throw new Error(`Model ${fullPath} not found after wow.export assets`);
   }
-  await waitUntil(() => existsSync(model.file));
+  await waitUntil(() => exists(model.file));
   // if (fullPath !== model.file) {
   //   await moveFile(model.file, fullPath);
   //   await moveFile(model.file.replace(/\.obj$/, '.mtl'), fullPath.replace(/\.obj$/, '.mtl'));

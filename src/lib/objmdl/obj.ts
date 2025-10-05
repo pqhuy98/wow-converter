@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 
 import { Config } from '../global-config';
 
@@ -23,10 +23,10 @@ export class OBJFile {
 
   constructor(private filePath: string, config: Config) {
     !config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
-    this.fileContents = readFileSync(filePath, 'utf-8');
   }
 
-  public parse(): IResult {
+  public async parse(): Promise<IResult> {
+    this.fileContents = await readFile(this.filePath, 'utf-8');
     const lines = this.fileContents.split('\n');
     for (const line of lines) {
       const strippedline = stripComments(line);

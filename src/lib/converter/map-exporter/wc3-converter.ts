@@ -44,8 +44,6 @@ export class Wc3Converter {
     // Ground height
     const terrain = getInitialTerrain(height, width);
 
-    console.log('heightMap', heightMap.length, heightMap[0].length);
-    console.log('terrain', terrain.groundHeight.length, terrain.groundHeight[0].length);
     for (let i = 0; i < heightMap.length; i++) {
       for (let j = 0; j < heightMap[i].length; j++) {
         if (heightMap[i][j] === -1) {

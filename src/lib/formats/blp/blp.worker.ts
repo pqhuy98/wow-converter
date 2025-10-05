@@ -1,27 +1,39 @@
 /* eslint-disable import/no-dynamic-require */
-import fs from 'fs';
+import { mkdir, writeFile } from 'fs/promises';
 import * as IQ from 'image-q';
 import { createRequire } from 'module';
 import path from 'path';
 import sharp from 'sharp';
-import { parentPort, workerData } from 'worker_threads';
+import { parentPort } from 'worker_threads';
 
-const isWorker = workerData != null;
 const require = createRequire(import.meta.url);
 
-async function run() {
-  if (!isWorker) {
+type MessageTask = {
+  type: 'task',
+  id: number,
+  pngArrayBuffer: ArrayBuffer,
+  byteOffset: number,
+  byteLength: number,
+  blpPath: string,
+};
+type MessageShutdown = {type: 'shutdown'};
+type Message = MessageTask | MessageShutdown;
+
+const isValidMessage = (msg: unknown): msg is Message => {
+  if (!msg || typeof msg !== 'object' || !('type' in msg)) {
+    return false;
+  }
+  return true;
+};
+
+function run() {
+  if (!parentPort) {
     return;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let binding: any;
   try {
-    const { pngBuffer, blpPath } = workerData as {
-      pngBuffer: Buffer;
-      blpPath: string;
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let binding: any;
     const binDir = path.join(process.cwd(), 'bin/blp-preview');
     if (process.platform === 'win32') {
       binding = require(path.join(binDir, 'win32-x64-binding.node'));
@@ -30,32 +42,55 @@ async function run() {
     } else if (process.platform === 'linux' && process.arch === 'x64') {
       binding = require(path.join(binDir, 'linux-x64-binding.node'));
     }
-    const { Image, TYPE_BLP } = binding || {};
-
-    // Use JS fallback if native binding is not available
-    const mustUseJs = false;
-    if (!Image || TYPE_BLP === undefined || mustUseJs) {
-      await png2BlpJs(pngBuffer, blpPath);
-      parentPort!.postMessage({ success: true });
-      return;
-    }
-
-    // Use native binding if available
-    const img = new Image();
-    try {
-      img.loadFromBuffer(pngBuffer, 0, pngBuffer.length);
-    } catch (error: unknown) {
-      // Retry once after 1 second in case the image is still being written
-      await new Promise((resolve) => { setTimeout(resolve, 1000); });
-      img.loadFromBuffer(pngBuffer, 0, pngBuffer.length);
-    }
-    const blpBuffer = img.toBuffer(TYPE_BLP);
-    fs.mkdirSync(path.dirname(blpPath), { recursive: true });
-    fs.writeFileSync(blpPath, blpBuffer);
-    parentPort!.postMessage({ success: true });
-  } catch (error: unknown) {
-    parentPort!.postMessage({ success: false, error: error instanceof Error ? error.message : String(error) });
+  } catch {
+    // ignore, will fallback to JS
+    console.log('Failed to load PNG->BLP\'s C++ native binding, will fallback to slower JavaScript implementation');
   }
+
+  const { Image, TYPE_BLP } = binding || {};
+  const mustUseJs = false;
+
+  parentPort.on('message', (msg: unknown) => {
+    if (!isValidMessage(msg)) return;
+
+    if (msg.type === 'shutdown') {
+      parentPort!.postMessage({ type: 'shutdown-ack' });
+      process.exit(0);
+    }
+
+    if (msg.type !== 'task') return;
+
+    const id: number = msg.id;
+    const pngBuffer = Buffer.from(new Uint8Array(msg.pngArrayBuffer, msg.byteOffset, msg.byteLength));
+    const blpPath: string = msg.blpPath;
+
+    void (async () => {
+      try {
+        if (!Image || TYPE_BLP === undefined || mustUseJs) {
+          await png2BlpJs(pngBuffer, blpPath);
+          parentPort!.postMessage({ type: 'done', id, success: true });
+          return;
+        }
+
+        const img = new Image();
+        try {
+          img.loadFromBuffer(pngBuffer, 0, pngBuffer.length);
+        } catch (error: unknown) {
+          await new Promise((resolve) => { setTimeout(resolve, 1000); });
+          img.loadFromBuffer(pngBuffer, 0, pngBuffer.length);
+        }
+
+        const blpBuffer = img.toBuffer(TYPE_BLP);
+        await mkdir(path.dirname(blpPath), { recursive: true });
+        await writeFile(blpPath, blpBuffer);
+        parentPort!.postMessage({ type: 'done', id, success: true });
+      } catch (error: unknown) {
+        parentPort!.postMessage({
+          type: 'done', id, success: false, error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+  });
 }
 
 void run();
@@ -67,10 +102,9 @@ void run();
  * - Uses faster image-q settings when quantization is necessary
  * - Minimizes intermediate allocations and extra copies
  */
-export async function png2BlpJs(pngInput: string | Buffer, distPath: string) {
+export async function png2BlpJs(pngBuffer: Buffer, distPath: string) {
   // Decode input with sharp to raw RGBA without resizing
-  const inputBuffer = typeof pngInput === 'string' ? fs.readFileSync(pngInput) : pngInput;
-  const { data, info } = await sharp(inputBuffer)
+  const { data, info } = await sharp(pngBuffer)
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -204,6 +238,6 @@ export async function png2BlpJs(pngInput: string | Buffer, distPath: string) {
   // Assemble final file: header + palette + pixelIndices + alpha
   const blpBuffer = Buffer.concat([header, paletteBuffer, indices, alphaBuffer]);
 
-  fs.mkdirSync(path.dirname(distPath), { recursive: true });
-  fs.writeFileSync(distPath, blpBuffer);
+  await mkdir(path.dirname(distPath), { recursive: true });
+  await writeFile(distPath, blpBuffer);
 }

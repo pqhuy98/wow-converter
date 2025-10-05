@@ -1,3 +1,5 @@
+import chalk from 'chalk';
+
 import { distancePerTile, maxGameHeightDiff } from '@/lib/constants';
 import { isWowUnit } from '@/lib/converter/common/models';
 import {
@@ -92,6 +94,7 @@ const mapExportConfig: MapExportConfig = {
 };
 
 (async function main() {
+  const start = performance.now();
   const mapExporter = new MapExporter(config, mapExportConfig);
 
   await mapExporter.parseObjects();
@@ -103,6 +106,7 @@ const mapExportConfig: MapExportConfig = {
   await mapExporter.exportTerrainsDoodads(mapOutputDir);
   await mapExporter.exportCreatures(mapOutputDir);
   mapExporter.saveWar3mapFiles(mapOutputDir);
+  console.log(`Total map export time: ${chalk.yellow(((performance.now() - start) / 1000).toFixed(2))} s`);
 }())
   .then(() => process.exit(0))
   .catch((e) => {

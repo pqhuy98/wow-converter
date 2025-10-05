@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import express from 'express';
 import fsExtra from 'fs-extra';
-import _ from 'lodash';
 import path from 'path';
 import { z } from 'zod';
 
@@ -125,7 +124,7 @@ async function buildMapsIndex(): Promise<void> {
     mapsWithTiles.push(withTiles);
     mapsByDir.set(dir, withTiles);
   }
-  console.log(`Total maps: ${mapsWithTiles.length}, total map tiles: ${_.sumBy(mapsWithTiles, 'tiles.length')}`);
+  // console.log(`Total maps: ${mapsWithTiles.length}, total map tiles: ${_.sumBy(mapsWithTiles, 'tiles.length')}`);
 }
 
 export function ControllerMaps(router: express.Router) {

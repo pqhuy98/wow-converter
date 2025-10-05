@@ -1,7 +1,9 @@
+import chalk from 'chalk';
 import csv from 'csv-parser';
 import {
-  createReadStream, existsSync,
+  createReadStream,
 } from 'fs';
+import { exists } from 'fs-extra';
 import { glob } from 'glob';
 import path from 'path';
 
@@ -54,6 +56,8 @@ export class WowObjectManager {
   async readTerrainsDoodads(patterns: string[], filter?: (fileName: string, type: WowObjectType) => boolean) {
     await wowExportClient.waitUntilReady();
 
+    const start = performance.now();
+
     const globPatterns = patterns.map((p) => path.join(this.config.wowExportAssetDir, p).replaceAll(path.sep, '/'));
     const files = glob.sync(globPatterns, {
       cwd: this.config.wowExportAssetDir,
@@ -63,9 +67,9 @@ export class WowObjectManager {
 
     const rootSet = new Set<WowObject>();
 
-    for (const file of files) {
+    await Promise.all(files.map(async (file) => {
       const type = file.includes('adt') ? 'adt' : 'wmo';
-      if (filter && !filter(file, type)) continue;
+      if (filter && !filter(file, type)) return;
       const fileName = this.relative(file).replaceAll('.obj', '');
       const root: WowObject = {
         id: fileName,
@@ -99,7 +103,10 @@ export class WowObjectManager {
           child.rotation = calculateChildAbsoluteEulerRotation(root.rotation, child.rotation);
         });
       }
-    }
+    }));
+
+    const durationS = (performance.now() - start) / 1000;
+    console.log('Converted all terrains and doodads took', chalk.yellow(durationS.toFixed(2)), 's', `(${chalk.gray((this.objects.size / durationS).toFixed(2))} objects/s)`);
   }
 
   async readCreatures(mapId: number) {
@@ -166,7 +173,7 @@ export class WowObjectManager {
       return;
     }
     this.objects.set(current.id, current);
-    current.model = this.assetManager.parse(objectPath, false);
+    current.model = await this.assetManager.parse(objectPath, false);
 
     if (isWowAdt(current)) {
       this.terrains.push(current);
@@ -193,7 +200,7 @@ export class WowObjectManager {
     }
 
     const childrenCsvPath = this.full(path.join(`${objectPath}_ModelPlacementInformation.csv`));
-    if (existsSync(childrenCsvPath)) {
+    if (await exists(childrenCsvPath)) {
       const rows = await this.parsePlacementCsv(childrenCsvPath);
       await Promise.all(rows.map(async (row) => {
         const id = `${row.FileDataID}:${row.ModelFile}:${row.PositionX}:${row.PositionY}:${row.PositionZ}`;

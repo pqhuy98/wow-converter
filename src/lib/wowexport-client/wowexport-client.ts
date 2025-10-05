@@ -2,8 +2,10 @@ import axios, {
   AxiosInstance,
 } from 'axios';
 import chalk from 'chalk';
-import fs, { existsSync } from 'fs';
-import { emptyDirSync, ensureDirSync } from 'fs-extra';
+import { writeFile } from 'fs/promises';
+import {
+  emptyDirSync, ensureDir, ensureDirSync, exists,
+} from 'fs-extra';
 import { Agent as HttpAgent } from 'http';
 import { Agent as HttpsAgent } from 'https';
 import path from 'path';
@@ -556,10 +558,10 @@ export class WowExportRestClient {
 
     const rel = this.normalizeRelative(relativePath);
     const dest = path.resolve(this.cacheDir, rel);
-    if (allowCache(rel) && existsSync(dest)) return dest;
+    if (allowCache(rel) && await exists(dest)) return dest;
 
     const dir = path.dirname(dest);
-    ensureDirSync(dir);
+    await ensureDir(dir);
 
     console.log('Fetch file from remote wow.export', relativePath, this.isRemote);
     const res = await this.http.request<ArrayBuffer | Buffer>({
@@ -576,7 +578,7 @@ export class WowExportRestClient {
     }
     const buf = Buffer.isBuffer(res.data) ? res.data : Buffer.from(res.data);
 
-    fs.writeFileSync(dest, buf);
+    await writeFile(dest, buf);
     return dest;
   }
 }

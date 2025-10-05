@@ -1,6 +1,6 @@
 import assert from 'assert';
 import chalk from 'chalk';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import _ from 'lodash';
 
 import { SkinWeight } from '@/lib/formats/mdl/components/geoset';
@@ -104,21 +104,24 @@ export class AnimationFile implements AnimationData {
 
   isLoaded = false;
 
-  constructor(public filePath: string, config: Config) {
+  constructor(public filePath: string, private config: Config) {}
+
+  async parse(): Promise<this> {
     try {
       const debug = false;
-      !config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
+      !this.config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
       const start = performance.now();
-      Object.assign(this, JSON.parse(readFileSync(filePath, 'utf-8')));
+      Object.assign(this, JSON.parse(await readFile(this.filePath, 'utf-8')));
       debug && console.log('AnimationFile load took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
       this.isLoaded = true;
     } catch (e) {
       if (e.code === 'ENOENT') {
         // file not exist, do not load.
-        return;
+        return this;
       }
       throw e;
     }
+    return this;
   }
 
   /**
