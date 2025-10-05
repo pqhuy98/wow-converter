@@ -112,6 +112,9 @@ export async function ControllerExportCharacter(router: express.Router) {
     await ce.exportCharacter(request.character, request.outputFileName);
 
     ce.models.forEach(([mdl]) => {
+      if (request.optimization?.sortSequences) {
+        mdl.modify.sortSequences();
+      }
       if (request.formatVersion === '800') {
         mdl.modify.convertToSd800();
         mdl.materials.forEach((m) => {
@@ -119,9 +122,6 @@ export async function ControllerExportCharacter(router: express.Router) {
             l.unshaded = true;
           });
         });
-      }
-      if (request.optimization?.sortSequences) {
-        mdl.modify.sortSequences();
       }
       if (request.optimization?.removeUnusedVertices) {
         mdl.modify.removeUnusedVertices();

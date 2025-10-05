@@ -1,7 +1,12 @@
+import chalk from 'chalk';
+
+import { Vector2 } from '@/lib/math/common';
+
 import {
   Face, Geoset, GeosetVertex, Matrix,
 } from '../components/geoset';
 import { Bone } from '../components/node/node';
+import { Sequence } from '../components/sequence';
 import { MDLModify } from '.';
 
 export function convertToSd800(this: MDLModify) {
@@ -244,7 +249,54 @@ export function convertToSd800(this: MDLModify) {
 
   console.log('Largest matrix size', mdl.geosets.reduce((max, gs) => Math.max(max, ...gs.matrices.map((m) => m.bones.length)), 0));
 
+  this.optimizeKeyFrames();
+  sortKeyframes.call(this);
   mdl.sync();
 
   return this;
+}
+
+function sortKeyframes(this: MDLModify) {
+  const start = performance.now();
+  const animated = this.mdl.getAnimated();
+  const newIntervals = new Map<Sequence, Vector2>();
+  let accum = 1;
+  this.mdl.sequences.forEach((s) => {
+    const newInteval: Vector2 = [accum, accum + s.interval[1] - s.interval[0]];
+    newIntervals.set(s, newInteval);
+    accum = newInteval[1] + 1;
+  });
+
+  const sortedSeq = [...this.mdl.sequences].sort((a, b) => a.interval[0] - b.interval[0]);
+
+  animated.forEach((a) => {
+    if (a.globalSeq) return;
+    let curSeqIdx = 0;
+    const timestamps = [...a.keyFrames.keys()].sort((a, b) => a - b);
+    const entries: [number, number | number[]][] = [];
+    timestamps.forEach((t) => {
+      while (curSeqIdx < sortedSeq.length && sortedSeq[curSeqIdx].interval[1] < t) {
+        curSeqIdx++;
+      }
+      if (curSeqIdx >= sortedSeq.length) {
+        console.log('Return due to seq idx out of bounds');
+        return;
+      }
+      const seq = sortedSeq[curSeqIdx];
+      if (t < seq.interval[0] || seq.interval[1] < t) {
+        console.log('Return due to seq interval out of bounds', t, seq.interval);
+        return;
+      }
+
+      const newTimestamp = newIntervals.get(seq)![0] + t - seq.interval[0];
+      entries.push([newTimestamp, a.keyFrames.get(t)!]);
+    });
+    const sortedEntries = entries.sort((a, b) => a[0] - b[0]);
+    a.keyFrames = new Map(sortedEntries);
+  });
+
+  this.mdl.sequences.forEach((s) => {
+    s.interval = newIntervals.get(s)!;
+  });
+  console.log('Sort keyframes took', chalk.yellow((performance.now() - start) / 1000), 'seconds');
 }
