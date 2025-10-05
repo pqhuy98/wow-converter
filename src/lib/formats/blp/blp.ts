@@ -7,7 +7,7 @@ import { Worker } from 'worker_threads';
 const maxConcurrency = (() => {
   try {
     const cpuCount = cpus().length;
-    return Math.max(1, cpuCount);
+    return Math.max(1, cpuCount - 1);
   } catch {
     return 4;
   }
@@ -71,12 +71,13 @@ export async function pngsToBlps(
 }
 
 async function pngToBlpAsync(png: string | Buffer, blpPath: string): Promise<void> {
-  // const { entry, options } = resolveWorkerEntry(import.meta.url, './blp.worker');
   return new Promise((resolve, reject) => {
     const pngBuffer = typeof png === 'string' ? fs.readFileSync(png) : png;
-    const worker = new Worker(new URL('./blp.worker.ts', import.meta.url), {
+
+    let workerPath = './blp.worker.ts';
+    workerPath = fs.existsSync(workerPath) ? workerPath : new URL(workerPath, import.meta.url).href;
+    const worker = new Worker(workerPath, {
       workerData: { pngBuffer, blpPath },
-      // ...options,
     });
 
     worker.on('message', (result) => {

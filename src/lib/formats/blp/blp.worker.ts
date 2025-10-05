@@ -6,15 +6,20 @@ import path from 'path';
 import sharp from 'sharp';
 import { parentPort, workerData } from 'worker_threads';
 
+const isWorker = workerData != null;
 const require = createRequire(import.meta.url);
 
-const { pngBuffer, blpPath } = workerData as {
-  pngBuffer: Buffer;
-  blpPath: string;
-};
-
 async function run() {
+  if (!isWorker) {
+    return;
+  }
+
   try {
+    const { pngBuffer, blpPath } = workerData as {
+      pngBuffer: Buffer;
+      blpPath: string;
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let binding: any;
     const binDir = path.join(process.cwd(), 'bin/blp-preview');
