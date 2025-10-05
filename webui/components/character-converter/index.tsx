@@ -329,6 +329,11 @@ export function CharacterConverter() {
                   <>
                     <div className="h-5 w-5 rounded-full bg-green-500" />
                     Export Successful
+                    {jobStatus.finishedAt && jobStatus.startedAt && (
+                      <span className="text-muted-foreground ml-1">
+                        ({((jobStatus.finishedAt - jobStatus.startedAt) / 1000).toFixed(2)}s)
+                      </span>
+                    )}
                   </>
                 )}
               </CardTitle>

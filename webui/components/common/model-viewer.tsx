@@ -736,10 +736,11 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         />
       </div>
       <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))] lg:border-l lg:border-t-0 border-t border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 flex flex-col'}>
-          <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] shrink-0">
+        <div className="flex-1 lg:flex lg:flex-col lg:overflow-hidden overflow-y-auto viewer-scroll">
+          <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-0 lg:z-10">
             Cameras ({cameras.length})
           </div>
-          <div className="shrink-0 max-h-48 overflow-y-auto viewer-scroll border-b border-[hsl(var(--viewer-divider))]">
+          <div className="lg:max-h-48 lg:overflow-y-auto lg:border-b border-b border-[hsl(var(--viewer-divider))]">
             <ul className="divide-y divide-[hsl(var(--viewer-divider))]">
               {cameras.length === 0 ? (
                 <div className="p-3 text-muted-foreground">No cameras</div>
@@ -760,10 +761,10 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             </ul>
           </div>
           <div className="h-6" />
-          <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] shrink-0">
+          <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-[60px] lg:z-10">
             Animations ({sequences.length})
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto viewer-scroll">
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
             <ul className="divide-y divide-[hsl(var(--viewer-divider))]">
               {sequences.length === 0 ? (
                 <div className="p-3 text-muted-foreground">Loading animations...</div>
@@ -789,6 +790,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             </ul>
           </div>
         </div>
+      </div>
     </div>
   );
 }

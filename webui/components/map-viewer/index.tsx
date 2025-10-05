@@ -21,6 +21,8 @@ interface MapResponse { id: number | string; name: string; dir: string }
 
 type TextureResolution = '512' | '1024' | '4096' | '8192' | '16384'
 
+const showMapExport = false;
+
 export default function MapViewer() {
   const { isDev } = useServerConfig();
   const [maps, setMaps] = useState<MapResponse[]>([]);
@@ -223,7 +225,7 @@ export default function MapViewer() {
                     <div className="text-destructive text-sm p-2">{mapsError}</div>
                   )}
                 </div>
-                {isDev && <div>
+                {isDev && showMapExport && <div>
                   <div className="flex flex-wrap gap-3 pt-2 text-sm">
                     <label className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={includeWMO} onChange={(e) => setIncludeWMO(e.target.checked)} />

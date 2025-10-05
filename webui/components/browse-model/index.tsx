@@ -283,8 +283,8 @@ export default function BrowseModelPage() {
                   disabled={isBusy}
                 />
               </CardHeader>
-              <CardContent className="space-y-2 flex-1 overflow-hidden p-3 min-w-0">
-                <div className="flex items-center w-full">
+              <CardContent className="flex flex-col flex-1 overflow-hidden p-3 min-w-0">
+                <div className="flex items-center w-full mb-2">
                   <div className="relative w-full">
                     <Input
                       placeholder="Search model, e.g. 'spell fire'..."
@@ -319,7 +319,7 @@ export default function BrowseModelPage() {
                 </div>
                 <div
                   ref={listRef}
-                  className="mt-2 overflow-y-scroll overflow-x-auto border rounded-md bg-background h-[calc(100vh-260px)]"
+                  className="overflow-y-scroll overflow-x-auto border rounded-md bg-background flex-1"
                   onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
                 >
                   <div style={{
