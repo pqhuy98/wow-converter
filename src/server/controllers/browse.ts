@@ -28,7 +28,6 @@ export function ControllerBrowse(router: express.Router) {
         await fetchAllFiles();
       }
       const { q } = req.query as { q?: string };
-      console.log('q', q);
       if (!q) {
         return res.status(400).json({ error: 'q is required' });
       }
