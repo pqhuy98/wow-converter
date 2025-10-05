@@ -82,7 +82,7 @@ bun run build   # outputs the same binaries found in the release ZIP into the `d
 
 ## Credits
 
-- Built by me - *Warcraft Sandbox* (<https://www.youtube.com/@WarcraftSandbox>).<br>
+- Built by me - *Warcraft Sandbox* (<https://www.youtube.com/@wc3-sandbox>).<br>
 - wow.export is forked from the amazing work of **Kruithne**: https://github.com/Kruithne/wow.export
 - Exported assets are from World of Warcraft, Blizzard Entertainment.
 - https://github.com/flowtsohg/mdx-m3-viewer
