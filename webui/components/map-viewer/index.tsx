@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
+import { useServerConfig } from '../server-config';
 import MinimapViewer, { MapInfo } from './minimap-viewer';
 
 interface MapResponse { id: number | string; name: string; dir: string }
@@ -21,6 +22,7 @@ interface MapResponse { id: number | string; name: string; dir: string }
 type TextureResolution = '512' | '1024' | '4096' | '8192' | '16384'
 
 export default function MapViewer() {
+  const { isDev } = useServerConfig();
   const [maps, setMaps] = useState<MapResponse[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [selectedMapDir, setSelectedMapDir] = useState<string | null>(null);
@@ -221,49 +223,51 @@ export default function MapViewer() {
                     <div className="text-destructive text-sm p-2">{mapsError}</div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-3 pt-2 text-sm">
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={includeWMO} onChange={(e) => setIncludeWMO(e.target.checked)} />
-                    WMO
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={includeWMOSets} onChange={(e) => setIncludeWMOSets(e.target.checked)} />
-                    WMO sets
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={includeM2} onChange={(e) => setIncludeM2(e.target.checked)} />
-                    M2
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={includeGameObjects} onChange={(e) => setIncludeGameObjects(e.target.checked)} />
-                    Gameobjects
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={includeLiquid} onChange={(e) => setIncludeLiquid(e.target.checked)} />
-                    Liquid
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={includeFoliage} onChange={(e) => setIncludeFoliage(e.target.checked)} />
-                    Foliage
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={includeHoles} onChange={(e) => setIncludeHoles(e.target.checked)} />
-                    Holes
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 pt-2 mt-auto">
-                  <label className="text-sm text-muted-foreground">Texture size</label>
-                  <select className="border rounded px-2 py-1 bg-background" value={texSize} onChange={(e) => setTexSize(e.target.value as TextureResolution)}>
-                    <option value="512">512</option>
-                    <option value="1024">1024</option>
-                    <option value="4096">4096</option>
-                    <option value="8192">8192</option>
-                    <option value="16384">16384</option>
-                  </select>
-                  <Button className="ml-auto" onClick={() => void onExportTerrain()} disabled={!mapInfo || selectedTiles.length === 0 || isExporting}>
-                    {isExporting ? 'Exporting…' : `Export Terrain (${selectedTiles.length})`}
-                  </Button>
-                </div>
+                {isDev && <div>
+                  <div className="flex flex-wrap gap-3 pt-2 text-sm">
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={includeWMO} onChange={(e) => setIncludeWMO(e.target.checked)} />
+                      WMO
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={includeWMOSets} onChange={(e) => setIncludeWMOSets(e.target.checked)} />
+                      WMO sets
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={includeM2} onChange={(e) => setIncludeM2(e.target.checked)} />
+                      M2
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={includeGameObjects} onChange={(e) => setIncludeGameObjects(e.target.checked)} />
+                      Gameobjects
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={includeLiquid} onChange={(e) => setIncludeLiquid(e.target.checked)} />
+                      Liquid
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={includeFoliage} onChange={(e) => setIncludeFoliage(e.target.checked)} />
+                      Foliage
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={includeHoles} onChange={(e) => setIncludeHoles(e.target.checked)} />
+                      Holes
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 mt-auto">
+                    <label className="text-sm text-muted-foreground">Texture size</label>
+                    <select className="border rounded px-2 py-1 bg-background" value={texSize} onChange={(e) => setTexSize(e.target.value as TextureResolution)}>
+                      <option value="512">512</option>
+                      <option value="1024">1024</option>
+                      <option value="4096">4096</option>
+                      <option value="8192">8192</option>
+                      <option value="16384">16384</option>
+                    </select>
+                    <Button className="ml-auto" onClick={() => void onExportTerrain()} disabled={!mapInfo || selectedTiles.length === 0 || isExporting}>
+                      {isExporting ? 'Exporting…' : `Export Tiles (${selectedTiles.length})`}
+                    </Button>
+                  </div>
+                </div>}
               </CardContent>
             </Card>
           </div>
