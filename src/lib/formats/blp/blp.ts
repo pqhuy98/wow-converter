@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import fs from 'fs';
 import { cpus } from 'os';
 import { Worker } from 'worker_threads';
@@ -6,7 +7,7 @@ import { Worker } from 'worker_threads';
 const maxConcurrency = (() => {
   try {
     const cpuCount = cpus().length;
-    return Math.max(1, cpuCount - 1);
+    return Math.max(1, cpuCount);
   } catch {
     return 4;
   }
@@ -41,7 +42,7 @@ export async function pngsToBlps(
   items: { png: string | Buffer, blpPath: string }[],
 ): Promise<void> {
   const concurrency = Math.min(maxConcurrency, items.length);
-  console.log('pngsToBlps using', concurrency, 'concurrent workers');
+  console.log(`Converting ${chalk.yellow(items.length)} PNG textures to BLPs (${chalk.yellow(concurrency)} concurrent threads)`);
   const semaphore = new Array(concurrency).fill(null);
   const queue = [...items];
   const results: Promise<void>[] = [];

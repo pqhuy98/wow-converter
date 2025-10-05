@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { statfsSync } from 'fs-extra';
 import path from 'path';
@@ -135,11 +136,10 @@ export class AssetManager {
 
     // Process textures in parallel using the new non-blocking conversion
     if (texturesToProcess.length > 0) {
-      console.log(`Processing ${texturesToProcess.length} textures to BLP...`);
       const startTime = Date.now();
       await pngsToBlps(texturesToProcess);
       const endTime = Date.now();
-      console.log(`Texture conversion to BLP completed in ${endTime - startTime}ms`);
+      console.log(`Texture BLP conversion took ${chalk.yellow(((endTime - startTime) / 1000).toFixed(2))} s`);
     }
 
     // const writeCount = texturesToProcess.length;

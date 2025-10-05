@@ -3,6 +3,7 @@
 import { downloadAssetsZip } from '@api/download';
 import mdlx from '@pqhuy98/mdx-m3-viewer/dist/cjs/utils/mdlx';
 import blpHandler from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/blp/handler';
+import Camera from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/camera';
 import mdxHandler from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/handler';
 import MdxModel from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/model';
 import MdxModelInstance from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/modelinstance';
@@ -51,7 +52,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
   const loadRequestIdRef = useRef(0);
   const [gridVisible, setGridVisible] = useState(true);
   const gridInstancesRef = useRef<MdxModelInstance[]>([]);
-  const [hasCameras, setHasCameras] = useState<boolean>(false);
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [currentCamera, setCurrentCamera] = useState<number | null>(null);
   // Track loaded asset files for download
   const baseUrlRef = useRef<string>('/api/assets');
   const loadedFilesRef = useRef<Set<string>>(new Set());
@@ -177,9 +179,12 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       modelInstance = model.addInstance();
       modelRef.current = model;
       try {
-        setHasCameras(Array.isArray((model as unknown as { cameras?: unknown[] }).cameras) && ((model as unknown as { cameras?: unknown[] }).cameras?.length ?? 0) > 0);
+        const cams = model.cameras;
+        setCameras(cams);
+        setCurrentCamera(null);
       } catch {
-        setHasCameras(false);
+        setCameras([]);
+        setCurrentCamera(null);
       }
 
       if (cancelled || loadRequestIdRef.current !== requestId) return;
@@ -251,6 +256,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         const z = distance * Math.sin(verticalAngle);
         const camPos = vec3.fromValues(target[0] + x, target[1] + y, target[2] + z);
         camera.moveToAndFace(camPos, target, [0, 0, 1]);
+        setCurrentCamera(null);
       };
       updateCamera();
 
@@ -463,7 +469,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       }
       if (modelRef.current === (modelInstance?.model as (MdxModel | undefined))) {
         modelRef.current = null;
-        setHasCameras(false);
+        setCameras([]);
+        setCurrentCamera(null);
       }
     };
   }, [modelPath, canvasRef.current, viewer]);
@@ -529,14 +536,14 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
     }
   };
 
-  const handleAlignToFirstCamera = () => {
+  const handleSelectCamera = (idx: number) => {
     const scene = sceneRef.current;
     const model = modelRef.current;
     const canvas = canvasRef.current;
     if (!scene || !model || !canvas) return;
-    const cams = model.cameras || [];
-    if (cams.length === 0) return;
-    const cam = cams[0];
+    const cams = model.cameras;
+    const cam = cams[idx];
+    if (!cam) return;
     const width = canvas.width || canvas.clientWidth || 1;
     const height = canvas.height || canvas.clientHeight || 1;
     const aspect = width / Math.max(1, height);
@@ -550,9 +557,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       const from = vec3.fromValues(cam.position[0], cam.position[1], cam.position[2]);
       const to = vec3.fromValues(cam.targetPosition[0], cam.targetPosition[1], cam.targetPosition[2]);
       scene.camera.moveToAndFace(from, to, [0, 0, 1]);
+      setCurrentCamera(idx);
     } catch (e) {
-      // Ignore alignment errors; keep current camera
-      console.error('Failed to align to first camera', e);
+      console.error('Failed to set camera', e);
     }
   };
 
@@ -682,18 +689,6 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleAlignToFirstCamera}
-            disabled={!hasCameras}
-            className="w-10 h-10 text-xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
-          >
-            <TooltipHelp
-              trigger={<span>📽</span>}
-              tooltips={hasCameras ? 'Align to Camera' : 'No model cameras detected'} asChild
-            />
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
             onClick={() => void handleCopyLink()}
             className={'w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none'}
           >
@@ -741,6 +736,30 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         />
       </div>
       <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))] lg:border-l lg:border-t-0 border-t border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 flex flex-col'}>
+          <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] shrink-0">
+            Cameras ({cameras.length})
+          </div>
+          <div className="shrink-0 max-h-48 overflow-y-auto viewer-scroll border-b border-[hsl(var(--viewer-divider))]">
+            <ul className="divide-y divide-[hsl(var(--viewer-divider))]">
+              {cameras.length === 0 ? (
+                <div className="p-3 text-muted-foreground">No cameras</div>
+              ) : (
+                cameras.map((cam, idx) => (
+                <li
+                  key={idx}
+                  onClick={() => handleSelectCamera(idx)}
+                  className={`px-3 py-2 cursor-pointer ${idx === currentCamera ? 'bg-[hsl(var(--viewer-item-active))]' : 'hover:bg-[hsl(var(--viewer-item-hover))]'}`}
+                >
+                  {cam.name || `Camera ${idx}`}
+                  <span className="text-[hsl(var(--viewer-muted))] text-xs flex items-center gap-1">
+                    FOV: {(((cam?.fieldOfView ?? 0) * 180) / Math.PI).toFixed(1)}°
+                  </span>
+                </li>
+                ))
+              )}
+            </ul>
+          </div>
+          <div className="h-6" />
           <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] shrink-0">
             Animations ({sequences.length})
           </div>

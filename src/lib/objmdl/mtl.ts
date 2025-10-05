@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { readFileSync } from 'fs';
 
 import { Config } from '../global-config';
@@ -20,7 +21,7 @@ export class MTLFile {
   constructor(filePath: string, config: Config) {
     let mtlContent: string;
     try {
-      !config.isBulkExport && console.log('Loading mtl file', filePath);
+      !config.isBulkExport && console.log('Loading:', chalk.gray(filePath));
       mtlContent = readFileSync(filePath, 'utf-8');
     } catch (e) {
       console.error('Cannot read mtl file', filePath, ' - skip it');

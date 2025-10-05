@@ -20,7 +20,7 @@ import { guessFilterMode } from './utils';
 const debug = false;
 
 export function convertWowExportModel(objFilePath: string, config: Config): {mdl: MDL, texturePaths: Set<string>} {
-  !config.isBulkExport && console.log('Converting OBJ model:', objFilePath);
+  !config.isBulkExport && console.log('Converting OBJ model:', chalk.blue(objFilePath));
   const start0 = performance.now();
   let start = start0;
   const obj = new OBJFile(objFilePath, config).parse();
@@ -286,6 +286,7 @@ export function convertWowExportModel(objFilePath: string, config: Config): {mdl
     metadata.extractMDLParticlesEmitters(textures);
     metadata.extractMDLLights();
     metadata.extractMDLRibbonEmitters(textures);
+    metadata.extractMDLCameras();
   }
 
   debug && console.log('basic parse took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');

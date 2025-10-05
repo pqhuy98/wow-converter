@@ -24,6 +24,7 @@ const WowMap = {
   DeathKnightStart: { id: 609, folder: 'deathknightstart' },
   IcecrownCitadel: { id: 631, folder: 'icecrowncitadel' },
   TheMaw: { id: 2456, folder: '2456' },
+  Durnhole: { id: 560, folder: 'HillsbradPast' },
 };
 
 const maps: [WowMap,
@@ -45,7 +46,8 @@ const maps: [WowMap,
   // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
   // [WowMap.Kalimdor, [28, 33], [29, 34], 'kalimdor-forest.w3x', 0, 1, 0],
-  [WowMap.Kalimdor, [31, 33], [33, 36], 'taurent-city.w3x', 0, 1, 0],
+  // [WowMap.Kalimdor, [31, 33], [33, 36], 'taurent-city.w3x', 0, 1, 0],
+  [WowMap.Durnhole, [27, 25], [32, 30], 'durnhole.w3x', 0, 1, 0],
   // [WowMap.TheMaw, [17, 18], [24, 24], 'themaw.w3x'],
   // [WowMap.TheMaw, [17, 19], [22, 23], 'themaw2.w3x'],
   // [WowMap.TheMaw, [19, 21], [22, 25], 'themaw3.w3x'],
@@ -90,58 +92,66 @@ const mapExportConfig: MapExportConfig = {
 };
 
 (async function main() {
-  const mapConverter = new MapExporter(config, mapExportConfig);
+  const mapExporter = new MapExporter(config, mapExportConfig);
 
-  await mapConverter.parseObjects();
+  await mapExporter.parseObjects();
 
   if (autoChoseClampPercent) {
-    const unitPos: Vector3[] = [];
-    mapConverter.wowObjectManager.iterateObjects((obj, abs) => {
-      if (!isWowUnit(obj)) return;
-      unitPos.push(abs.position);
-    });
-    unitPos.sort((a, b) => a[2] - b[2]);
-    const { ratio, min, max } = computeRecommendedTerrainClampPercent(mapConverter.wowObjectManager.roots);
-    let clampDiff = ratio / creatureScaleUp;
-
-    const size = V3.sub(max, min);
-    const ratioZ = maxGameHeightDiff / (size[2] * clampDiff);
-    const width = size[0] * ratioZ / distancePerTile;
-    const height = size[1] * ratioZ / distancePerTile;
-
-    clampDiff *= Math.max(1, width / 480, height / 480);
-
-    const unitPosRatio = unitPos.map((pos) => (pos[2] - min[2]) / (max[2] - min[2]));
-
-    // find [lower percent, upper percent = lower percent + ratio) so that maximize the number of unitPosRatio that are within the range
-    let bestLowerPercent = 0;
-    let bestUpperPercent = ratio;
-    let maxCount = 0;
-    for (let lowerPercent = 0; lowerPercent <= 1; lowerPercent += 0.01) {
-      const upperPercent = lowerPercent + clampDiff;
-      const count = unitPosRatio.filter((ratio) => ratio >= lowerPercent && ratio <= upperPercent).length;
-      if (count > maxCount) {
-        maxCount = count;
-        bestLowerPercent = lowerPercent;
-        bestUpperPercent = upperPercent;
-      }
-    }
-    mapExportConfig.terrain.clampPercent.lower = bestLowerPercent;
-    mapExportConfig.terrain.clampPercent.upper = bestUpperPercent;
-    const leftOutBelow = unitPosRatio.filter((ratio) => ratio < bestLowerPercent).length;
-    const leftOutAbove = unitPosRatio.filter((ratio) => ratio > bestUpperPercent).length;
-    const leftOut = leftOutBelow + leftOutAbove;
-    const remaining = unitPosRatio.length - leftOut;
-    console.log(`Chosen clamp percent: ${bestLowerPercent} - ${bestUpperPercent} (${remaining} units remaining)`);
-    console.log(`Left out units: ${leftOut} (${leftOutBelow} below, ${leftOutAbove} above)`);
+    autoChooseClampPercent(mapExporter, mapExportConfig);
   }
 
-  await mapConverter.exportTerrainsDoodads(mapOutputDir);
-  await mapConverter.exportCreatures(mapOutputDir);
-  mapConverter.saveWar3mapFiles(mapOutputDir);
+  await mapExporter.exportTerrainsDoodads(mapOutputDir);
+  await mapExporter.exportCreatures(mapOutputDir);
+  mapExporter.saveWar3mapFiles(mapOutputDir);
 }())
   .then(() => process.exit(0))
   .catch((e) => {
     console.error(e);
     process.exit(1);
   });
+
+function autoChooseClampPercent(mapConverter: MapExporter, mapExportConfig: MapExportConfig) {
+  const unitPos: Vector3[] = [];
+  mapConverter.wowObjectManager.iterateObjects((obj, abs) => {
+    if (!isWowUnit(obj)) return;
+    unitPos.push(abs.position);
+  });
+  if (unitPos.length === 0) {
+    console.log('No units found, cannot auto choose clamp percent. Defaulting to', mapExportConfig.terrain.clampPercent.lower, mapExportConfig.terrain.clampPercent.upper);
+    return;
+  }
+  unitPos.sort((a, b) => a[2] - b[2]);
+  const { ratio, min, max } = computeRecommendedTerrainClampPercent(mapConverter.wowObjectManager.roots);
+  let clampDiff = ratio / creatureScaleUp;
+
+  const size = V3.sub(max, min);
+  const ratioZ = maxGameHeightDiff / (size[2] * clampDiff);
+  const width = size[0] * ratioZ / distancePerTile;
+  const height = size[1] * ratioZ / distancePerTile;
+
+  clampDiff *= Math.max(1, width / 480, height / 480);
+
+  const unitPosRatio = unitPos.map((pos) => (pos[2] - min[2]) / (max[2] - min[2]));
+
+  // find [lower percent, upper percent = lower percent + ratio) so that maximize the number of unitPosRatio that are within the range
+  let bestLowerPercent = 0;
+  let bestUpperPercent = ratio;
+  let maxCount = 0;
+  for (let lowerPercent = 0; lowerPercent <= 1; lowerPercent += 0.01) {
+    const upperPercent = lowerPercent + clampDiff;
+    const count = unitPosRatio.filter((ratio) => ratio >= lowerPercent && ratio <= upperPercent).length;
+    if (count > maxCount) {
+      maxCount = count;
+      bestLowerPercent = lowerPercent;
+      bestUpperPercent = upperPercent;
+    }
+  }
+  mapExportConfig.terrain.clampPercent.lower = bestLowerPercent;
+  mapExportConfig.terrain.clampPercent.upper = bestUpperPercent;
+  const leftOutBelow = unitPosRatio.filter((ratio) => ratio < bestLowerPercent).length;
+  const leftOutAbove = unitPosRatio.filter((ratio) => ratio > bestUpperPercent).length;
+  const leftOut = leftOutBelow + leftOutAbove;
+  const remaining = unitPosRatio.length - leftOut;
+  console.log(`Chosen clamp percent: ${bestLowerPercent} - ${bestUpperPercent} (${remaining} units remaining)`);
+  console.log(`Left out units: ${leftOut} (${leftOutBelow} below, ${leftOutAbove} above)`);
+}

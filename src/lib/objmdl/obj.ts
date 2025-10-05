@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { readFileSync } from 'fs';
 
 import { Config } from '../global-config';
@@ -21,7 +22,7 @@ export class OBJFile {
   };
 
   constructor(private filePath: string, config: Config) {
-    !config.isBulkExport && console.log('Loading obj file', this.filePath);
+    !config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
     this.fileContents = readFileSync(filePath, 'utf-8');
   }
 

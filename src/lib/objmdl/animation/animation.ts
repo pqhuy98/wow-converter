@@ -107,7 +107,7 @@ export class AnimationFile implements AnimationData {
   constructor(public filePath: string, config: Config) {
     try {
       const debug = false;
-      !config.isBulkExport && console.log('Loading animation file', this.filePath);
+      !config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
       const start = performance.now();
       Object.assign(this, JSON.parse(readFileSync(filePath, 'utf-8')));
       debug && console.log('AnimationFile load took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');

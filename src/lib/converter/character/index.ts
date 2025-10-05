@@ -133,8 +133,10 @@ export class CharacterExporter {
     if (!char.keepCinematic) {
       model.sequences = model.sequences.filter((seq) => !seq.name.includes('Cinematic') || seq.keep);
     }
-    char.portraitCameraSequenceName = 'Stand';
-    model.modify.addPortraitCamera(char.portraitCameraSequenceName);
+
+    if (!model.cameras.length) {
+      model.modify.addPortraitCamera(char.portraitCameraSequenceName);
+    }
 
     if (char.attachItems) {
       for (const [wowAttachmentId, itemPath] of Object.entries(char.attachItems)) {
@@ -177,7 +179,7 @@ export class CharacterExporter {
       if (char.attackTag === 'Auto') {
         char.attackTag = guessAttackTag(ctx.weaponInventoryTypes[0] ?? 0, ctx.weaponInventoryTypes[1] ?? 0);
       }
-      console.log('Chosen attack tag:', char.attackTag);
+      console.log('Chosen attack tag:', char.attackTag || 'All');
       model.sequences = model.sequences.filter((seq) => !char.attackTag || seq.data.attackTag === '' || seq.data.attackTag === char.attackTag);
     }
 
@@ -251,7 +253,7 @@ export class CharacterExporter {
     });
 
     model.modify.optimizeKeyFrames();
-    console.log('CharacterExporter.exportCharacter took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+    console.log('Total character export took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
     return model;
   }
 

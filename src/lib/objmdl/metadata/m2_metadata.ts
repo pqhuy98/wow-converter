@@ -6,6 +6,7 @@ import {
 } from 'path';
 
 import { Animation, AnimationOrStatic, AnimationType } from '@/lib/formats/mdl/components/animation';
+import { Camera } from '@/lib/formats/mdl/components/camera';
 import { Geoset } from '@/lib/formats/mdl/components/geoset';
 import { GlobalSequence } from '@/lib/formats/mdl/components/global-sequence';
 import { Material } from '@/lib/formats/mdl/components/material';
@@ -288,6 +289,18 @@ namespace Data {
     ribbonColorIndex: number
     textureTransformLookupIndex: number
   }
+
+  export interface Camera {
+    type: number
+    far_clip: number
+    near_clip: number
+    positions: M2Track<Vector3>
+    position_base: Vector3
+    target_position: M2Track<Vector3>
+    target_position_base: Vector3
+    roll: M2Track<number>
+    FoV?: M2Track<number> | null
+  }
 }
 
 export class M2MetadataFile {
@@ -333,6 +346,10 @@ export class M2MetadataFile {
 
   ribbonEmitters?: Data.RibbonEmitter[];
 
+  cameras?: Data.Camera[];
+
+  cameraLookup?: number[];
+
   skin: Data.Skin = {
     subMeshes: [],
     textureUnits: [],
@@ -346,7 +363,7 @@ export class M2MetadataFile {
 
   constructor(private filePath: string, private config: Config, private animFile: AnimationFile, private mdl: MDL) {
     try {
-      !config.isBulkExport && console.log('Loading metadata file', this.filePath);
+      !config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
       Object.assign(this, JSON.parse(readFileSync(this.filePath, 'utf-8')));
       if (this.fileType === 'm2') {
       // ADT files (terrain) won't have metadata JSON.
@@ -910,7 +927,7 @@ export class M2MetadataFile {
 
     this.mdl.particleEmitter2s = particleEmitter2s;
     this.mdl.textures.push(...particleEmitter2s.map((e) => e.texture));
-    !this.config.isBulkExport && console.log('Particle emitters:', this.mdl.particleEmitter2s.length);
+    !this.config.isBulkExport && particleEmitter2s.length > 0 && console.log('Particle emitters:', particleEmitter2s.length);
   }
 
   extractMDLLights(): void {
@@ -1052,6 +1069,66 @@ export class M2MetadataFile {
 
     this.mdl.ribbonEmitters = ribbons;
     this.mdl.textures.push(...ribbons.map((e) => this.mdl.materials[e.materialId].layers[0].texture));
+  }
+
+  extractMDLCameras(): void {
+    if (!this.isLoaded || !Array.isArray(this.cameras)) {
+      return;
+    }
+
+    const aspect = 4 / 3; // approximate vertical FOV from WoW diagonal FOV
+
+    const getFirstFloat = (track?: Data.M2Track<number> | null): number | undefined => {
+      if (!track || !Array.isArray(track.values) || track.values.length === 0) return undefined;
+      const first = (track.values[0] ?? [])[0] as unknown;
+      if (typeof first === 'number') return first;
+      if (Array.isArray(first) && first.length > 0 && typeof first[0] === 'number') return first[0] as number;
+      return undefined;
+    };
+
+    const typeName = (t: number, i: number) => {
+      if (t === 0) return 'Portrait_Camera';
+      if (t === 1) return 'CharacterInfo_Camera';
+      if (t === -1) return `Flyby_Camera_${i}`;
+      return `Camera_${i}`;
+    };
+
+    const score = (type: number) => {
+      if (type === 0) return 0;
+      if (type === 1) return 1;
+      if (type === -1) return 2;
+      return 3;
+    };
+    this.cameras.sort((a, b) => score(a.type) - score(b.type));
+
+    const cameras: Camera[] = [];
+    this.cameras.forEach((c, i) => {
+      const posConv = c.position_base; // already converted in wow.export to [x, z, -y]
+      const tgtConv = c.target_position_base; // already converted in wow.export to [x, z, -y]
+
+      const position: Vector3 = [posConv[0], -posConv[2], posConv[1]];
+      const targetPosition: Vector3 = [tgtConv[0], -tgtConv[2], tgtConv[1]];
+
+      const dfov = getFirstFloat(c.FoV);
+      const vfov = dfov != null ? (dfov / Math.sqrt(1 + aspect * aspect)) : 1;
+
+      const wc3Cam: Camera = {
+        name: typeName(c.type, i),
+        fieldOfView: vfov,
+        nearClip: 0.1,
+        farClip: (c.far_clip ?? 100000) * 4,
+        target: { position: targetPosition },
+        position,
+      };
+
+      // Camera distance is x2 to fit Wc3 small portrait frame
+      wc3Cam.position = V3.sum(V3.scale(V3.sub(wc3Cam.position, wc3Cam.target.position), 2), wc3Cam.target.position);
+
+      cameras.push(wc3Cam);
+    });
+
+    this.mdl.cameras = cameras;
+    cameras.length > 0 && console.log('Cameras:', cameras.length);
   }
 
   objToSubmesh = new Map<number, number>();

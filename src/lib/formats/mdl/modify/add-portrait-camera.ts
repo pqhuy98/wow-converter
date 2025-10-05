@@ -5,16 +5,18 @@ import { iterateNodesAtTimestamp } from '../mdl-traverse';
 import { MDLModify } from '.';
 
 export function addPortraitCamera(this: MDLModify, standSequenceName: string = 'Stand') {
+  const cameraName = 'Portrait_Camera_generated';
+
   const cameraBone = this.mdl.bones.find((b) => b.name === 'Head')
     || this.mdl.bones.find((b) => b.name === 'Chest')
     || this.mdl.bones.find((b) => b.name === 'Root');
   if (!cameraBone) {
     // Generate default camera
     this.mdl.cameras.push({
-      name: 'Portrait_Camera',
+      name: cameraName,
       fieldOfView: 1,
       nearClip: 0.1,
-      farClip: 10000,
+      farClip: 100000,
       target: {
         position: V3.mean(this.mdl.model.minimumExtent, this.mdl.model.maximumExtent),
       },
@@ -51,15 +53,15 @@ export function addPortraitCamera(this: MDLModify, standSequenceName: string = '
     0.5 * (Math.random() - 0.5) * this.mdl.model.maximumExtent[1],
     (Math.random() * 0.2 - 0.1) * this.mdl.model.maximumExtent[2],
   ]);
-  // console.log('Add portrait camera looking at bone', cameraBone.name);
+  console.log('Generated portrait camera looking at bone', cameraBone.name);
   // console.log('Target position', nodePos);
   // console.log('Camera position', cameraPosition);
 
   this.mdl.cameras.push({
-    name: 'Portrait_Camera',
+    name: cameraName,
     fieldOfView: 1,
     nearClip: 0.1,
-    farClip: 10000,
+    farClip: 100000,
     target: {
       position: nodePos,
     },

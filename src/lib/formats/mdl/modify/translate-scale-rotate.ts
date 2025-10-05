@@ -34,6 +34,8 @@ export function scale(this: MDLModify, value: number) {
   this.mdl.cameras.forEach((cam) => {
     cam.position = V3.scale(cam.position, value);
     cam.target.position = V3.scale(cam.target.position, value);
+    cam.farClip *= value;
+    cam.nearClip *= value;
   });
   this.mdl.collisionShapes.forEach((shape) => {
     shape.vertices.forEach((v) => {
