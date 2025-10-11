@@ -68,6 +68,7 @@ export interface ModelSkin {
 export interface ExportCharacterParams {
   race: number;
   gender: number;
+  fileDataIdOverride?: number;
   customizations: { [optionId: string]: number };
   geosetIds: number[];
   hideGeosetIds: number[];

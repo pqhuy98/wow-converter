@@ -114,10 +114,13 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
 
   const { geosetIds, hideGeosetIds } = getGeosetIdsFromEquipments(equipmentSlots);
 
+  const fileDataIdOverride = await checkCharacterFileDataIdOverride(metadata, expansion);
+
   // Prepare RPC params for wowexport
   const rpcParams: ExportCharacterParams = {
     race,
     gender,
+    fileDataIdOverride,
     customizations: Object.fromEntries((metadata.Creature?.CreatureCustomizations || []).map((c) => [c.optionId, c.choiceId])),
     format: 'obj',
     include_animations: true,
@@ -135,6 +138,30 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     replaceableTextures: metadata.Textures || {},
     chrModelId: character.ChrModelId,
   };
+}
+
+async function checkCharacterFileDataIdOverride(metadata: CharacterData, expansion: ZamExpansion): Promise<number | undefined> {
+  if (!metadata.Character?.ChrModelId) return undefined;
+
+  const OptionsChoices = new Set<string>(
+    metadata.Creature?.CreatureCustomizations?.map((c) => `${c.optionId}-${c.choiceId}`) ?? [],
+  );
+  const charCus = await fetchCharacterCustomization({
+    expansion,
+    type: 'character-customization',
+    chrModelId: metadata.Character?.ChrModelId,
+  });
+  for (const option of charCus.Options) {
+    for (const choice of option.Choices) {
+      if (!OptionsChoices.has(`${option.Id}-${choice.Id}`)) continue;
+      for (const element of choice.Elements) {
+        if (element.CondModelFileDataId) {
+          return element.CondModelFileDataId;
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, metadata: CharacterData, prep: Prep, expansion: ZamExpansion) {
