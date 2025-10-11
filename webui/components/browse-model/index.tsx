@@ -76,7 +76,11 @@ export default function BrowseModelPage() {
     const q = debouncedQuery.trim();
     if (!q) return allFiles;
     const words = q.split(/ +/).filter(Boolean).map((w) => w.toLowerCase());
-    return allFiles.filter((f) => words.every((w) => f.fileName.toLowerCase().includes(w)));
+    return allFiles.filter((f) => {
+      const nameLc = f.fileName.toLowerCase();
+      const idStr = String(f.fileDataID);
+      return words.every((w) => nameLc.includes(w) || idStr.includes(w));
+    });
   }, [allFiles, debouncedQuery, idToFile]);
 
   // words used for highlighting (non-debounced for immediate feedback)
@@ -96,9 +100,9 @@ export default function BrowseModelPage() {
 
   const lowerWordsSet = useMemo(() => new Set(queryWords.map((w) => w.toLowerCase())), [queryWords]);
 
-  const renderHighlightedName = (name: string) => {
-    if (!highlightRegex) return name;
-    const parts = name.split(highlightRegex);
+  const renderHighlightedText = (text: string) => {
+    if (!highlightRegex) return text;
+    const parts = text.split(highlightRegex);
     return parts.map((part, idx) => (
       lowerWordsSet.has(part.toLowerCase())
         ? <mark key={idx} className="bg-yellow-200 rounded px-0.5">{part}</mark>
@@ -343,8 +347,8 @@ export default function BrowseModelPage() {
                         >
                           <span className="text-muted-foreground w-16 shrink-0">{startIndex + i + 1}.</span>
                           <span className="font-mono text-foreground/70" title={f.fileName}>
-                            {renderHighlightedName(f.fileName)}{' '}
-                            [<span className="text-yellow-600">{f.fileDataID}</span>]
+                            {renderHighlightedText(f.fileName)}{' '}
+                            [<span className="text-yellow-600">{renderHighlightedText(String(f.fileDataID))}</span>]
                           </span>
                           {isSelected && (
                             <div ref={copyBtnRef} className="text-muted-foreground shrink-0 cursor-pointer ml-6 rounded-md p-1"
