@@ -443,7 +443,7 @@ export class WowExportRestClient {
         this.status.connected = false;
       }
     };
-    setInterval(tick, 500);
+    setInterval(tick, 5000);
     tick();
   }
 
@@ -585,7 +585,7 @@ export class WowExportRestClient {
 }
 
 export const wowExportClient = new WowExportRestClient(
-  process.env.WOW_EXPORT_BASE_URL || 'http://127.0.0.1:17752',
+  process.env.WOW_EXPORT_BASE_URL || 'http://127.0.0.1:17753',
 );
 
 const desiredConfig = {
