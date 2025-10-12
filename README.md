@@ -10,7 +10,6 @@ HiveWorkshop thread: https://www.hiveworkshop.com/threads/wow-converter-export-w
 
 ![screenshot 2](https://github.com/pqhuy98/wow-converter/blob/main/docs/screenshots/icecrown.jpg?raw=true)
 
-Note: the tool works well for Wrath of the Lich King models and below. Later expansions will work but do expect some bugs!
 
 ---
 
