@@ -317,7 +317,7 @@ export class AnimationFile implements AnimationData {
     const skinWeights: SkinWeight[][] = [];
     for (let i = 0; i < (this.boneIndicies?.length ?? 0); i += 4) {
       const weights = this.boneWeights.slice(i, i + 4);
-      assert.ok(_.sum(weights) > 0);
+      assert.ok(_.sum(weights) > 0, `${this.filePath} has invalid skin weights`);
       const indices = this.boneIndicies.slice(i, i + 4);
       const skinWeight: SkinWeight[] = [];
       weights.forEach((w, j) => {
