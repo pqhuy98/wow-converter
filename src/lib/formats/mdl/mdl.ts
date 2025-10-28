@@ -126,7 +126,7 @@ export class MDL {
   }
 
   getAnimated(): Animation<number[] | number>[] {
-    return [
+    return Array.from(new Set([
       ...this.getNodes().flatMap((node) => [node.translation, node.rotation, node.scaling]),
       ...this.cameras.flatMap((cam) => [cam.translation, cam.rotation, cam.scaling]),
       ...this.textureAnims.flatMap((texAnim) => [texAnim.translation, texAnim.rotation, texAnim.scaling]),
@@ -167,7 +167,7 @@ export class MDL {
         p.width && 'keyFrames' in p.width ? p.width : null,
         p.length && 'keyFrames' in p.length ? p.length : null,
       ]),
-    ].filter((anim) => anim != null);
+    ].filter((anim) => anim != null)));
   }
 
   updateIds() {
