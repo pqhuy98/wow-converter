@@ -61,11 +61,15 @@ function run() {
     if (msg.type !== 'task') return;
 
     const id: number = msg.id;
-    const pngBuffer = Buffer.from(new Uint8Array(msg.pngArrayBuffer, msg.byteOffset, msg.byteLength));
+    const pngBufferOriginal = Buffer.from(new Uint8Array(msg.pngArrayBuffer, msg.byteOffset, msg.byteLength));
     const blpPath: string = msg.blpPath;
 
     void (async () => {
       try {
+        // Normalize PNG alpha: if the entire alpha channel is 0, force it to 255 (opaque)
+        // This matches WoW/WMO opaque rendering that ignores alpha and avoids black output in WC3.
+        const pngBuffer = await ensureOpaqueIfAllAlphaZero(pngBufferOriginal);
+
         if (!Image || TYPE_BLP === undefined || mustUseJs) {
           await png2BlpJs(pngBuffer, blpPath);
           parentPort!.postMessage({ type: 'done', id, success: true });
@@ -240,4 +244,33 @@ export async function png2BlpJs(pngBuffer: Buffer, distPath: string) {
 
   await mkdir(path.dirname(distPath), { recursive: true });
   await writeFile(distPath, blpBuffer);
+}
+
+/**
+ * If the PNG's alpha channel is entirely zeros, force it to fully opaque (255).
+ * This mirrors WoW's opaque material path (blendMode 0) which ignores alpha,
+ * and prevents WC3 from rendering such textures as fully transparent/black.
+ */
+async function ensureOpaqueIfAllAlphaZero(pngBuffer: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(pngBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const total = info.width * info.height;
+  let anyNonZero = false;
+  for (let i = 0; i < total; i++) {
+    if (data[i * 4 + 3] !== 0) {
+      anyNonZero = true;
+      break;
+    }
+  }
+  if (anyNonZero) return pngBuffer;
+
+  // Force alpha to 255 for all pixels
+  for (let i = 0; i < total; i++) {
+    data[i * 4 + 3] = 255;
+  }
+
+  // Re-encode to PNG for downstream path (native or JS)
+  const fixed = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .png()
+    .toBuffer();
+  return fixed;
 }

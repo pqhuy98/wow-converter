@@ -1,3 +1,5 @@
+import chalk from 'chalk';
+
 import { Interpolation } from '@/lib/formats/mdl/components/animation';
 import { BlendMode } from '@/lib/formats/mdl/components/material';
 import { Texture } from '@/lib/formats/mdl/components/texture';
@@ -81,57 +83,98 @@ export function getLayerFilterMode(blendingMode: number, shaderId: number, layer
   return undefined;
 }
 
-const noneFilterPatterns = [
-  'textures\\walls',
-  'textures\\trim',
-  'textures\\floor',
-];
-const transparentFilterPatterns = [
-  '\\bush',
-  '_bush',
-  '\\branch',
-  '_branch',
-  '\\tree',
-  '_tree',
-  'treetall',
-  '_vfx_fire_',
-  'vines',
-  'treebranch',
-  'floornets',
-  'spells\\',
-  'environment\\doodad\\',
-  '\\gate10.',
-  'interface\\glues',
-  'fence',
-  'haypiles',
-  // 'passivedoodads', -- too wide
-  'plant',
-  'alpha',
-  'ash04',
-  '\\glow',
-  'elwynnmiscrope03',
-  'textures\\decoration',
-  '_glow',
-  'jlo_worc_chainsr',
-  '\\hay\\',
-  '\\sc_brazier',
-  'hangnets',
-  'flare05',
-  'lightbeam',
-  'jlo_worc_grate',
-  'sc_chain',
-];
-const additiveFilterPatterns = [
-  'genericglow',
-  'swordinice',
-  '_fog_',
-  'icecrown_rays',
-  'blueglow',
-  'treeweb01',
-  '_web',
-];
+// Map WMO blend mode (EGxBlendEnum) to WC3 filter mode
+// Source of truth: WebWowViewerCpp EGxBlendEnum and blending factors, mdx-m3-viewer filter modes
+// 0 Opaque, 1 AlphaKey, 2 Alpha, 3 Add, 4 Mod, 5 Mod2x, 6 ModAdd, 7 InvSrcAlphaAdd, 8 InvSrcAlphaOpaque,
+// 9 SrcAlphaOpaque, 10 NoAlphaAdd, 11 ConstantAlpha, 12 Screen, 13 BlendAdd
+export function wmoBlendModeToWc3FilterMode(wmoBlendMode: number): BlendMode {
+  switch (wmoBlendMode) {
+    case 0: // Opaque
+      return 'None';
+    case 1: // AlphaKey (1-bit alpha)
+      return 'Transparent';
+    case 2: // Alpha (srcAlpha, oneMinusSrcAlpha)
+      return 'Blend';
+    case 3: // Add (srcAlpha, one)
+      return 'Additive';
+    case 4: // Mod (dstColor, 0)
+      return 'Modulate';
+    case 5: // Mod2x (dstColor, srcColor)
+      return 'Modulate2x';
+    case 6: // ModAdd (dstColor, one)
+      return 'Additive';
+    case 7: // InvSrcAlphaAdd (1-srcAlpha, one)
+      return 'Additive';
+    case 8: // InvSrcAlphaOpaque (1-srcAlpha, 0)
+      return 'Blend';
+    case 9: // SrcAlphaOpaque (srcAlpha, 0)
+      return 'Blend';
+    case 10: // NoAlphaAdd (one, one)
+      return 'Additive';
+    case 11: // ConstantAlpha
+      return 'Blend';
+    case 12: // Screen (1-dstColor, one)
+      return 'Additive';
+    case 13: // BlendAdd
+      return 'Additive';
+    default:
+      return 'Blend';
+  }
+}
 
 export function guessFilterMode(filePath: string): BlendMode {
+  console.log(chalk.red('Warning: guessFilterMode', filePath));
+
+  const noneFilterPatterns = [
+    'textures\\walls',
+    'textures\\trim',
+    'textures\\floor',
+  ];
+  const transparentFilterPatterns = [
+    '\\bush',
+    '_bush',
+    '\\branch',
+    '_branch',
+    '\\tree',
+    '_tree',
+    'treetall',
+    '_vfx_fire_',
+    'vines',
+    'treebranch',
+    'floornets',
+    'spells\\',
+    'environment\\doodad\\',
+    '\\gate10.',
+    'interface\\glues',
+    'fence',
+    'haypiles',
+    // 'passivedoodads', -- too wide
+    'plant',
+    'alpha',
+    'ash04',
+    '\\glow',
+    'elwynnmiscrope03',
+    'textures\\decoration',
+    '_glow',
+    'jlo_worc_chainsr',
+    '\\hay\\',
+    '\\sc_brazier',
+    'hangnets',
+    'flare05',
+    'lightbeam',
+    'jlo_worc_grate',
+    'sc_chain',
+  ];
+  const additiveFilterPatterns = [
+    'genericglow',
+    'swordinice',
+    '_fog_',
+    'icecrown_rays',
+    'blueglow',
+    'treeweb01',
+    '_web',
+  ];
+
   if (noneFilterPatterns.some((pattern) => filePath.includes(pattern))) {
     return 'None';
   }

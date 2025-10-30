@@ -63,7 +63,9 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
     }
     groups.get(f.group)!.push(f);
   });
-  metadata.mapSubMeshesToMdlGeosets(mdl);
+  if (metadata.fileType === 'm2') {
+    metadata.mapSubMeshesToMdlGeosets(mdl);
+  }
 
   const parentDir = path.dirname(path.normalize(objFilePath.replaceAll('\\', '/')));
 
@@ -95,7 +97,13 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
     textureRelativePath && texturePaths.add(textureRelativePath);
 
     const protoMat = submeshIdToMat.get(submeshId);
-    const mat = _.cloneDeep(protoMat);
+    let mat = _.cloneDeep(protoMat);
+
+    // WMO path: try by MTL name from metadata
+    if (!mat && metadata.fileType === 'wmo') {
+      const wmoMat = metadata.getWmoMaterialByMtlName(matName);
+      if (wmoMat) mat = _.cloneDeep(wmoMat);
+    }
 
     if (mat) {
       // do not clone tvertexAnim
@@ -115,14 +123,15 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
         }
       });
     } else {
-      // metadata does not have this material, fallback to resolve material from mtl file
-
       if (mtlNameMap.has(matName)) {
         return mtlNameMap.get(matName)!;
       }
 
-      debug && console.log('no submeshIdToMat for submeshId', submeshId, 'matName', matName);
-      debug && console.log('Fallback to mtl file');
+      // metadata does not have this material, fallback to resolve material from mtl file
+      // ideally this should not happen after new update that parses WMO materials
+      // keeping this for now to be safe
+      console.log(chalk.red('Warning: no material found for matName:', matName, 'submeshId:', submeshId));
+
       textureRelativePath && texturePaths.add(textureRelativePath);
       const texture: Texture = {
         id: 0,
@@ -197,8 +206,9 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
     });
   }
 
-  const submeshToId = new Map(metadata.skin.subMeshes.map((s, i) => [s, i]));
-  const enabledSubmeshes = metadata.skin.subMeshes.filter((s) => s.enabled);
+  const isM2Meta = metadata.fileType === 'm2' && Array.isArray(metadata.skin?.subMeshes);
+  const submeshToId = isM2Meta ? new Map(metadata.skin.subMeshes.map((s, i) => [s, i])) : undefined;
+  const enabledSubmeshes = isM2Meta ? metadata.skin.subMeshes.filter((s) => s.enabled) : [];
 
   let idx = 0;
   groups.forEach((faces) => {
@@ -206,8 +216,11 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
     idx++;
     const [geoset] = geosetsGroups.find(([_geoset, group]) => group === faces[0].group)!;
 
-    const submesh = enabledSubmeshes[i];
-    const submeshId = submeshToId.get(submesh)!;
+    let submeshId = -1;
+    if (isM2Meta) {
+      const submesh = enabledSubmeshes[i];
+      submeshId = submeshToId!.get(submesh)!;
+    }
 
     geoset.material = resolveGeosetMaterial(submeshId, faces[0].material);
 
@@ -262,7 +275,7 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
 
   // Assign materials to geosets
 
-  if (metadata.isLoaded) {
+  if (metadata.isLoaded && metadata.fileType === 'm2') {
     metadata.extractMDLGeosetAnim();
 
     // Validate submeshes equals to geosets
@@ -282,7 +295,7 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
   }
 
   // New: particles emitters
-  if (metadata.isLoaded) {
+  if (metadata.isLoaded && metadata.fileType === 'm2') {
     metadata.extractMDLParticlesEmitters(textures);
     metadata.extractMDLLights();
     metadata.extractMDLRibbonEmitters(textures);

@@ -25,7 +25,7 @@ import { BlizzardNull } from '../../constants';
 import { Config } from '../../global-config';
 import { QuaternionRotation, Vector3 } from '../../math/common';
 import { AnimationFile } from '../animation/animation';
-import { getLayerFilterMode, wowToWc3Interpolation } from '../utils';
+import { getLayerFilterMode, wmoBlendModeToWc3FilterMode, wowToWc3Interpolation } from '../utils';
 
 namespace Data {
   export interface Texture {
@@ -303,6 +303,25 @@ namespace Data {
   }
 }
 
+// WMO specific metadata structures (from wow.export WMOExporter JSON)
+namespace DataWmo {
+  export interface Material {
+    flags: number
+    shader: number
+    blendMode: number
+    texture1: number
+    color1: number
+    color1b: number
+    texture2: number
+    color2: number
+    groupType: number
+    texture3: number
+    color3: number
+    flags3: number
+    runtimeData: number[]
+  }
+}
+
 export class M2MetadataFile {
   fileType: string;
 
@@ -359,6 +378,11 @@ export class M2MetadataFile {
 
   isLoaded = false;
 
+  // WMO-only metadata
+  wmoMaterials?: DataWmo.Material[];
+
+  wmoMaterialNameToMat?: Map<string, Material>;
+
   globalSequenceMap: Map<number, GlobalSequence>;
 
   constructor(private filePath: string, private config: Config, private animFile: AnimationFile, private mdl: MDL) {
@@ -367,15 +391,20 @@ export class M2MetadataFile {
   async parse(): Promise<this> {
     try {
       !this.config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
-      Object.assign(this, JSON.parse(await readFile(this.filePath, 'utf-8')));
+      const raw = JSON.parse(await readFile(this.filePath, 'utf-8'));
+      this.fileType = raw.fileType;
       if (this.fileType === 'm2') {
-      // ADT files (terrain) won't have metadata JSON.
-      // WMO files (world object)'s metadata file is not yet supported because it has different format.
-      // Therefore fallback to heuristic OBJ textures/materials decoding.
-      // Heuristic OBJ textures/materials uses `guessFilterMode` which is not always correct.
+        Object.assign(this, raw);
+        this.isLoaded = true;
+      } else if (this.fileType === 'wmo') {
+        // Selectively assign fields for WMO JSON
+        this.fileDataID = raw.fileDataID;
+        this.fileName = raw.fileName;
+        this.textures = (raw.textures ?? []) as Data.Texture[];
+        this.wmoMaterials = (raw.materials ?? []) as DataWmo.Material[];
         this.isLoaded = true;
       } else {
-      // Metadata of other files (WMO) are not supported.
+        // ADT or other types: ignore
         this.isLoaded = false;
       }
     } catch (e) {
@@ -503,6 +532,89 @@ export class M2MetadataFile {
       };
     }
 
+    // WMO path: parse textures and build material map keyed by MTL name
+    if (this.fileType === 'wmo') {
+      const dir = dirname(normalize(this.filePath.replaceAll('\\', '/')));
+
+      const textures: Texture[] = (this.textures ?? []).map((tex) => {
+        const pngPath = tex.fileNameExternal
+          ? relative(this.config.wowExportAssetDir, join(dir, tex.fileNameExternal))
+          : '';
+        return {
+          id: 0,
+          image: pngPath ? join(this.config.assetPrefix, pngPath.replace('.png', '.blp')) : '',
+          wrapWidth: true,
+          wrapHeight: true,
+          wowData: {
+            type: 0,
+            pngPath,
+          },
+        };
+      });
+
+      // Map fileDataID -> Texture for quick lookup
+      const fileIdToTexture = new Map<number, Texture>();
+      (this.textures ?? []).forEach((t, i) => {
+        if (typeof t.fileDataID === 'number' && textures[i]) {
+          fileIdToTexture.set(t.fileDataID, textures[i]);
+        }
+      });
+
+      this.wmoMaterialNameToMat = new Map();
+      (this.wmoMaterials ?? []).forEach((mat) => {
+        const twoSided = (mat.flags & 0x4) > 0; // F_UNCULLED
+        const unlit = (mat.flags & 0x1) > 0; // F_UNLIT
+        const unfogged = (mat.flags & 0x2) > 0; // F_UNFOGGED
+        const filterMode = wmoBlendModeToWc3FilterMode(mat.blendMode);
+
+        const createMatForFid = (fid?: number) => {
+          if (!fid) return;
+          const tex = fileIdToTexture.get(fid);
+          if (!tex) return;
+          const texMeta = (this.textures ?? []).find((t) => t.fileDataID === fid);
+          const mtlName: string | undefined = texMeta?.mtlName;
+          if (!mtlName) return;
+          if (this.wmoMaterialNameToMat!.has(mtlName)) return;
+
+          const wc3Mat: Material = {
+            id: 0,
+            constantColor: false,
+            twoSided,
+            layers: [
+              {
+                texture: tex,
+                filterMode,
+                tvertexAnim: undefined,
+                alpha: { static: true, value: 1 },
+                unshaded: false,
+                sphereEnvMap: false,
+                twoSided,
+                unfogged,
+                unlit,
+                noDepthTest: false,
+                noDepthSet: mat.blendMode > 1,
+                coordId: 0,
+              },
+            ],
+          };
+          this.wmoMaterialNameToMat!.set(mtlName, wc3Mat);
+        };
+
+        createMatForFid(mat.texture1);
+        createMatForFid(mat.texture2);
+        createMatForFid(mat.texture3);
+        // Optional secondary slots present on some shaders
+        createMatForFid(mat.color2);
+        createMatForFid(mat.flags3);
+        mat.runtimeData?.forEach((fid) => createMatForFid(fid));
+      });
+
+      return {
+        textures,
+        submeshIdToMat: new Map(),
+      };
+    }
+
     const debug = false;
 
     // Textures
@@ -617,6 +729,11 @@ export class M2MetadataFile {
       textures,
       submeshIdToMat: submeshMaterials,
     };
+  }
+
+  // Lookup for WMO-only path: resolve WC3 material by OBJ/MTL material name
+  getWmoMaterialByMtlName(name: string): Material | undefined {
+    return this.wmoMaterialNameToMat?.get(name);
   }
 
   extractMDLParticlesEmitters(textures: Texture[]) {
