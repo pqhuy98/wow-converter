@@ -197,7 +197,10 @@ export function computeAbsoluteMinMaxExtents(objs: WowObject[]) {
     nodes.forEach((node) => {
       const position = V3.sum(basePosition, V3.rotate(node.position, baseRotation));
       const rotation = calculateChildAbsoluteEulerRotation(baseRotation, node.rotation);
-      node.model!.mdl.geosets.forEach((geoset) => {
+      if (!node.model) {
+        return;
+      }
+      node.model.mdl.geosets.forEach((geoset) => {
         geoset.vertices.forEach((v) => {
           const rotatedV = V3.rotate(v.position, rotation);
           const positionV = V3.sum(position, rotatedV);

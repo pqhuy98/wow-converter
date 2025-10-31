@@ -194,10 +194,10 @@ export class Wc3Converter {
         let outOfBound = false;
         if (inGameX < mapMin[0] || inGameX > mapMax[0] || inGameY < mapMin[1] || inGameY > mapMax[1]) {
           outOfBound = true;
-          // console.warn('Placing', objAbsolute.model?.relativePath, 'outside of map bounds.');
-          // console.log(objAbsolute.id, objAbsolute.position, {
-          //   percent, inGameX, inGameY, inGameZ,
-          // }, { mapMin, mapMax });
+          console.warn('Doodad', obj.model.relativePath, 'is outside of map bounds.');
+          console.log(obj.id, objAbsolute.position, {
+            percent, inGameX, inGameY, inGameZ,
+          }, { mapMin, mapMax });
         }
 
         // Add doodad instance

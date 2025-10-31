@@ -41,9 +41,9 @@ const maps: [WowMap,
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
   // [WowMap.Northrend, [32, 21], [33, 22], 'icecrown.w3x', 0, 0.4, 0],
   // [WowMap.Northrend, [18, 24], [19, 25], 'nexus.w3x', 0, 1, 0],
-  // [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0.55, 0.77, 0],
+  [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0, 1, 0],
   // [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
-  [WowMap.IcecrownCitadel, [26, 23], [28, 24], 'icc-floor34.w3x', 0, 1, 0],
+  // [WowMap.IcecrownCitadel, [26, 23], [28, 24], 'icc-floor34.w3x', 0, 1, 0],
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.9, 1, 180],
   // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
@@ -88,8 +88,8 @@ const mapExportConfig: MapExportConfig = {
     },
   },
   creatures: {
-    enable: false,
-    allAreDoodads: false,
+    enable: true,
+    allAreDoodads: true,
     scaleUp: creatureScaleUp,
   },
 };
@@ -142,7 +142,14 @@ function autoChooseClampPercent(mapConverter: MapExporter, mapExportConfig: MapE
   let bestLowerPercent = 0;
   let bestUpperPercent = ratio;
   let maxCount = 0;
-  for (let lowerPercent = 0; lowerPercent <= 1; lowerPercent += 0.01) {
+  const lower = mapExportConfig.terrain.clampPercent.lower;
+  const upper = mapExportConfig.terrain.clampPercent.upper;
+  if (upper - lower <= clampDiff) {
+    console.log('Map terrain clamp is already within the recommended range, skipping auto choose.');
+    return;
+  }
+
+  for (let lowerPercent = lower; lowerPercent <= upper - clampDiff; lowerPercent += 0.01) {
     const upperPercent = lowerPercent + clampDiff;
     const count = unitPosRatio.filter((ratio) => ratio >= lowerPercent && ratio <= upperPercent).length;
     if (count > maxCount) {

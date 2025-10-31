@@ -128,9 +128,11 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
       }
 
       // metadata does not have this material, fallback to resolve material from mtl file
-      // ideally this should not happen after new update that parses WMO materials
-      // keeping this for now to be safe
-      console.log(chalk.red('Warning: no material found for matName:', matName, 'submeshId:', submeshId));
+      // ideally this should only happen for ADT models
+      const isAdt = objFilePath.includes('adt_');
+      if (!isAdt) {
+        console.log(chalk.red('Warning: no material found for matName:', matName, 'submeshId:', submeshId));
+      }
 
       textureRelativePath && texturePaths.add(textureRelativePath);
       const texture: Texture = {
@@ -150,7 +152,7 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
         layers: [
           {
             texture,
-            filterMode: textureRelativePath ? guessFilterMode(textureRelativePath) : 'None',
+            filterMode: textureRelativePath && !isAdt ? guessFilterMode(textureRelativePath) : 'None',
             unshaded: false,
             sphereEnvMap: false,
             twoSided: false,
