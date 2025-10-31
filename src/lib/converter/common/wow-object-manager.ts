@@ -218,7 +218,7 @@ export class WowObjectManager {
           const child: WowObject = {
             id,
             model: undefined,
-            ...convertRowPositionRotation(row),
+            ...convertRowPositionRotation(row, current.type),
             scaleFactor: parseFloat(row.ScaleFactor),
             children: [],
             type: row.Type,
@@ -286,79 +286,36 @@ export class WowObjectManager {
   }
 }
 
-function convertRowPositionRotation(row: PlacementInfoRow): {
+function convertRowPositionRotation(row: PlacementInfoRow, parentType: WowObjectType): {
   position: [number, number, number],
   rotation: [number, number, number]
 } {
-  const getBlenderPositionRotation = () => {
-    switch (row.Type) {
-      case 'wmo': return {
-        position: [
-          (maxSize - parseFloat(row.PositionX)),
-          -(maxSize - parseFloat(row.PositionZ)),
-          parseFloat(row.PositionY),
-        ],
-        rotation: [
-          radians(parseFloat(row.RotationZ)),
-          radians(parseFloat(row.RotationX)),
-          radians(parseFloat(row.RotationY) + 90),
-        ],
-      };
-      case 'm2': return {
-        position: [
-          (maxSize - parseFloat(row.PositionX)),
-          -(maxSize - parseFloat(row.PositionZ)),
-          parseFloat(row.PositionY),
-        ],
-        rotation: [
-          radians(parseFloat(row.RotationZ)),
-          radians(parseFloat(row.RotationX)),
-          radians(parseFloat(row.RotationY) + 90),
-        ],
-      };
-      case 'gobj': return {
-        position: [
-          parseFloat(row.PositionY),
-          -parseFloat(row.PositionX),
-          parseFloat(row.PositionZ),
-        ],
-        rotation: quaternionToEuler([
-          parseFloat(row.RotationX),
-          parseFloat(row.RotationY),
-          -parseFloat(row.RotationZ),
-          parseFloat(row.RotationW),
-        ]),
-      };
-      default: {
-        const rotation = quaternionToEuler([
-          parseFloat(row.RotationX),
-          parseFloat(row.RotationY),
-          parseFloat(row.RotationZ),
-          parseFloat(row.RotationW),
-        ]);
-        return {
-          position: [
-            parseFloat(row.PositionX),
-            parseFloat(row.PositionY),
-            parseFloat(row.PositionZ),
-          ],
-          rotation,
-        };
-      }
-    }
-  };
-  const blender = getBlenderPositionRotation();
+  if (parentType === 'adt') {
+    return {
+      position: [
+        (maxSize - parseFloat(row.PositionX)),
+        -(maxSize - parseFloat(row.PositionZ)),
+        parseFloat(row.PositionY),
+      ],
+      rotation: [
+        radians(parseFloat(row.RotationZ)),
+        radians(parseFloat(row.RotationX)),
+        radians(parseFloat(row.RotationY) + 90),
+      ],
+    };
+  }
   return {
     position: [
-      blender.position[0],
-      blender.position[1],
-      blender.position[2],
+      parseFloat(row.PositionX),
+      parseFloat(row.PositionY),
+      parseFloat(row.PositionZ),
     ],
-    rotation: [
-      blender.rotation[0],
-      blender.rotation[1],
-      blender.rotation[2],
-    ],
+    rotation: quaternionToEuler([
+      parseFloat(row.RotationX),
+      parseFloat(row.RotationY),
+      parseFloat(row.RotationZ),
+      parseFloat(row.RotationW),
+    ]),
   };
 }
 

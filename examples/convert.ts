@@ -41,10 +41,10 @@ const maps: [WowMap,
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
   // [WowMap.Northrend, [32, 21], [33, 22], 'icecrown.w3x', 0, 0.4, 0],
   // [WowMap.Northrend, [18, 24], [19, 25], 'nexus.w3x', 0, 1, 0],
-  [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0, 1, 0],
+  // [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0, 1, 90],
   // [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
-  // [WowMap.IcecrownCitadel, [26, 23], [28, 24], 'icc-floor34.w3x', 0, 1, 0],
-  // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.9, 1, 180],
+  // [WowMap.IcecrownCitadel, [25, 23], [27, 24], 'icc-floor34.w3x', 0, 1, 0],
+  [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.5, 0.7, 180],
   // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
   // [WowMap.Azeroth, [34, 28], [35, 29], 'andorhal.w3x', 0, 1, 0],
@@ -134,7 +134,9 @@ function autoChooseClampPercent(mapConverter: MapExporter, mapExportConfig: MapE
   const width = size[0] * ratioZ / distancePerTile;
   const height = size[1] * ratioZ / distancePerTile;
 
-  clampDiff *= Math.max(1, width / 480, height / 480);
+  const w4 = Math.ceil(width / 4) * 4;
+  const h4 = Math.ceil(height / 4) * 4;
+  clampDiff *= Math.max(1, w4 / 480, h4 / 480);
 
   const unitPosRatio = unitPos.map((pos) => (pos[2] - min[2]) / (max[2] - min[2]));
 
