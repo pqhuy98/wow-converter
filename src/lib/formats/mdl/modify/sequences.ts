@@ -260,6 +260,49 @@ export function addDecayAnimation(this: MDLModify) {
   return this;
 }
 
+export function addDoodadDeathAnimation(this: MDLModify) {
+  if (this.mdl.sequences.find((seq) => seq.name === 'Death')) return this;
+
+  const maxTimestamp = _.max(this.mdl.sequences.map((s) => s.interval[1] + 1)) ?? 0;
+
+  const deathSequence: Sequence = {
+    name: 'Death',
+    interval: [maxTimestamp, maxTimestamp + 1000],
+    nonLooping: true,
+    moveSpeed: 0,
+    minimumExtent: [0, 0, 0],
+    maximumExtent: [0, 0, 0],
+    boundsRadius: 0,
+    data: {
+      wc3Name: 'Death',
+      wowName: '',
+      wowVariant: 0,
+      attackTag: '',
+      wowFrequency: 1,
+    },
+  };
+
+  this.mdl.sequences.push(deathSequence);
+
+  this.mdl.bones.forEach((bone) => {
+    if (bone.parent) return;
+    if (!bone.scaling) {
+      bone.scaling = {
+        interpolation: 'DontInterp',
+        keyFrames: new Map([
+          ...this.mdl.sequences.map((seq) => [seq.interval[0], [1, 1, 1]] as [number, Vector3]),
+          ...this.mdl.sequences.map((seq) => [seq.interval[1], [1, 1, 1]] as [number, Vector3]),
+        ]),
+        type: 'scaling',
+      };
+    }
+    bone.scaling.keyFrames.set(deathSequence.interval[0], [0, 0, 0]);
+    bone.scaling.keyFrames.set(deathSequence.interval[1], [0, 0, 0]);
+  });
+
+  return this;
+}
+
 export function cloneSequence(this: MDLModify, sequence: Sequence, newWc3Name: string) {
   const maxInterval = _.max(this.mdl.sequences.map((s) => s.interval[1])) ?? 0;
 
