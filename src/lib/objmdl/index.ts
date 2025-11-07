@@ -304,6 +304,9 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
     metadata.extractMDLCameras();
   }
 
+  mdl.modify.addDoodadDeathAnimation();
+  renameEffectWowAnimations(mdl);
+
   debug && console.log('basic parse took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   start = performance.now();
@@ -335,4 +338,15 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
   !config.isBulkExport && console.log(chalk.green('Converted:'), objFilePath, '-', chalk.yellow(totalTimeS.toFixed(2)), 's\n');
 
   return { mdl, texturePaths };
+}
+
+function renameEffectWowAnimations(mdl: MDL) {
+  const hold = mdl.sequences.find((s) => s.data.wowName === 'Hold');
+  const decay = mdl.sequences.find((s) => s.data.wowName === 'Decay');
+  const stand = mdl.sequences.find((s) => s.data.wowName === 'Stand');
+  if (hold && stand && decay) {
+    stand.name = 'Birth';
+    stand.nonLooping = true;
+    decay.nonLooping = true;
+  }
 }

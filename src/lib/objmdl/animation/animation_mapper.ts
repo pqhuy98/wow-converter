@@ -1953,6 +1953,10 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'MountSpecial': return { wc3Name: 'Stand Victory', attackTag: '', loop: true };
     case 'FlyMountSpecial': return { wc3Name: 'Stand Alternate Victory', attackTag: '', loop: true };
 
+    // Effects
+    case 'Hold': return { wc3Name: 'Stand', attackTag: '', loop: true };
+    case 'Decay': return { wc3Name: 'Death', attackTag: '', loop: false };
+
     default:
       return { wc3Name: `Cinematic ${wowAnimName}`, attackTag: '' };
   }
@@ -2013,5 +2017,6 @@ export function isLoopAnimation(wowAnimation: string) {
     'EmoteTalkQuestion',
     'EmoteTalkSubdued',
     'EmoteTalkFrustrated',
+    'Hold',
   ].includes(wowAnimation);
 }

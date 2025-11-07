@@ -45,7 +45,7 @@ export function materialsToString(version: number, materials: Material[]) {
           ${layer.unfogged ? 'Unfogged,' : ''}
           ${layer.noDepthTest ? 'NoDepthTest,' : ''}
           ${layer.noDepthSet ? 'NoDepthSet,' : ''}
-          ${layer.unlit ? 'Unlit,' : ''}
+          ${version > 800 && layer.unlit ? 'Unlit,' : ''}
           ${layer.coordId && layer.coordId !== 0 ? `CoordId ${layer.coordId},` : ''}
           ${layer.tvertexAnim != null ? `TVertexAnimId ${layer.tvertexAnim.id},` : ''}
         }`).join('\n')}
