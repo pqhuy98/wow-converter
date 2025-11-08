@@ -1,4 +1,3 @@
-/* eslint-disable max-len */
 import chalk from 'chalk';
 import esMain from 'es-main';
 import { existsSync, unlinkSync } from 'fs';

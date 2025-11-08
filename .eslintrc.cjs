@@ -73,12 +73,7 @@ module.exports = {
     'class-methods-use-this': 'off',
     'no-nested-ternary': 'off',
     'no-return-assign': 'off',
-    'max-len': [
-      'error',
-      {
-        code: 200,
-      },
-    ],
+    'max-len': "off",
     'no-restricted-globals': 'off',
     'import/no-unresolved': 'off',
     'no-unused-vars': 'off',

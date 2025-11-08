@@ -1,5 +1,3 @@
-/* eslint-disable max-len */
-
 import { TestConfig } from './classic';
 
 const testCases: string[][] = [ // [base, weaponR, weaponL, size][]
