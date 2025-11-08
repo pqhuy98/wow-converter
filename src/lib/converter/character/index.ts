@@ -23,7 +23,7 @@ import { guessAttackTag, InventoryType } from './item-mapper';
 import { ensureLocalModelFileExists, ExportContext } from './utils';
 import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
 import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
-import { exportZamItemAsMdl } from './wowhead-exporter/item-model';
+import { exportZamItemAsMdl, getEquipmentSlotName } from './wowhead-exporter/item-model';
 
 // Local file path must be a relative path and must not contain ".." or start with a slash.
 // This is to prevent path traversal attacks and other security issues.
@@ -281,21 +281,22 @@ export class CharacterExporter {
         : { expansion: 'live', type: 'npc', displayId: Number(char.base.value) };
 
       let npcMeta: CharacterData;
+      !this.config.isBulkExport && console.log('baseZam:', baseZam);
       switch (baseZam.type) {
         case 'item':
-          try {
-            npcMeta = await fetchNpcMeta({
-              ...baseZam,
-              type: 'npc',
-              expansion: wowExportClient.isClassic()
-                ? baseZam.expansion
-                : 'latest-available', // in latest wow installation, classic models are not available
-            });
-            break;
-          } catch (e) {
-            console.log(chalk.red('Failed to fetch npc meta, trying item meta'));
+          if (baseZam.slotId) {
+            console.log('Exporting base model as equipment item:', getEquipmentSlotName(baseZam.slotId));
             return (await this.exportItem(ctx, char.base)).model.mdl;
           }
+          console.log('Exporting base model as creature NPC because slotId=0');
+          npcMeta = await fetchNpcMeta({
+            ...baseZam,
+            type: 'npc',
+            expansion: wowExportClient.isClassic()
+              ? baseZam.expansion
+              : 'latest-available', // in latest wow installation, classic models are not available
+          });
+          break;
         case 'npc':
           npcMeta = await fetchNpcMeta({
             ...baseZam,

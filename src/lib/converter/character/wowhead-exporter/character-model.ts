@@ -344,6 +344,10 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     [EquipmentSlot.Tabard]: [],
     [EquipmentSlot.Wrist]: [],
     [EquipmentSlot.Robe]: [],
+    [EquipmentSlot.Shield]: [WoWAttachmentID.Shield],
+    [EquipmentSlot.Ranged]: [WoWAttachmentID.HandLeft],
+    [EquipmentSlot.Holdable]: [WoWAttachmentID.HandRight],
+    [EquipmentSlot.RangedRight]: [WoWAttachmentID.HandLeft],
   };
 
   const isWeapon = (slot: EquipmentSlotData) => [

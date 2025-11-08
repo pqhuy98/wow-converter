@@ -425,7 +425,10 @@ export async function exportZamItemAsMdl({
   targetGender: number;
 }): Promise<{model: Model, itemData: ItemMetata}> {
   const result = await processItemData(zam, targetRace, targetGender);
-  const modelId = result.modelFiles[0].fileDataId;
+  const modelId = result.modelFiles?.[0]?.fileDataId;
+  if (!modelId) {
+    throw new Error(`Found no model found for item ${zam.displayId}`);
+  }
   const allTextureIds = result.modelTextureFiles[0].map((f) => f.fileDataId);
   const model = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
   await applyReplaceableTextures(ctx, model.mdl, Object.fromEntries(result.modelTextureFiles[0].map((f) => [f.componentId, f.fileDataId])));

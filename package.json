@@ -15,6 +15,7 @@
     "dev:webui": "cd webui && bun run dev",
     "start": "set NODE_ENV=production && bun src/server/index.ts",
     "test": "bun tests/index.ts",
+    "test:fresh": "bun tests/index.ts --fresh",
     "prisma:pull": "prisma db pull",
     "prisma:generate": "prisma generate",
     "clean": "shx rm -rf build dist wow-converter.zip && shx mkdir -p build dist",

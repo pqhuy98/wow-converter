@@ -17,9 +17,13 @@ export enum EquipmentSlot {
   Hands = 10,
   MainHand = 12,
   OffHand = 13,
+  Shield = 14,
+  Ranged = 15,
   Cloak = 16,
   Tabard = 19,
   Robe = 20,
+  Holdable = 23,
+  RangedRight = 26,
 }
 
 interface ItemFile {

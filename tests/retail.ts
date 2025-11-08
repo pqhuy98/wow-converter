@@ -74,6 +74,7 @@ const testCases: string[][] = [ // [base, weaponR, weaponL, size][]
   ['https://www.wowhead.com/dressing-room?orc-warrior#fM80m0zN89c8G8ol8u8oV8I8o28N8kq8A8kI8fo8M1r8rb8MKS8zYh8dAn8Mx4808rr8MPI8fk8M1A8rL8MQg8fV8M1o8fm8M1M8rf8MPj8rw8MPt8ri8MPE8L8kg877oyxZ808yx287cytM87VtVQ808ytz808tmw808yx1808tVb808tMM87MtLs87o'],
   ['https://www.wowhead.com/dressing-room?tauren-druid#fn80k0zN89c8oO8SD8oK8VHu8oP8SZ8TS8VHE8rX8MWJ8TU8VHD8T18VJb8zYO8dpw8MtL808mf8VJQ8mw8SW8TZ8VJk8T28VJf8T38VJG8j08VJC8jM8VJF8jc8VJU8r18MXm8oQ8S58T48VJt8T58VJE876zRZ7MzRZM808zRZm808zRY387VzRZV808zRY5808zRZc808zRZz808zRY4808zbCP8cBO808zbC58cBO87V'],
   ['https://www.wowhead.com/npc=149816/prince-erazmin'],
+  ['https://www.wowhead.com/dressing-room?mechagnome-archer#fB80c0zN89c8od8MCv8ob8MCo8or8zMd8of8zMG8ow8zMn8ks8zMv8dF8MBg8zZ08dTr8MtF808oh8zM38ou8zc08dK8MDk877v22P87VqlJ8zLv87mzVq287c'],
 ];
 
 export const testConfigRetail: TestConfig = {

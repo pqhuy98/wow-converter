@@ -5,12 +5,12 @@ export enum InventoryType {
   WEAPON = 13,
   SHIELD = 14,
   RANGED = 15,
-  RANGEDRIGHT = 26,
   TWO_HANDED_WEAPON = 17,
   WEAPONMAINHAND = 21,
   WEAPONOFFHAND = 22,
   HOLDABLE = 23,
   THROWN = 25,
+  RANGEDRIGHT = 26,
   RELIC = 28,
 }
 
@@ -34,13 +34,13 @@ export function inventoryTypeToEquipmentSlot(inventoryType: number, idx: number)
 }
 
 export function guessAttackTag(inventoryTypeR: number, inventoryTypeL: number): AttackTag {
-  const debug = false;
+  const debug = true;
   debug && console.log('inventoryTypeR', inventoryTypeR);
   debug && console.log('inventoryTypeL', inventoryTypeL);
   if (inventoryTypeR === InventoryType.RANGEDRIGHT) {
     return 'Rifle';
   }
-  if (inventoryTypeL === InventoryType.RANGED || inventoryTypeR === InventoryType.RANGEDRIGHT) {
+  if (inventoryTypeL === InventoryType.RANGED || inventoryTypeR === InventoryType.RANGED) {
     return 'Bow';
   }
 

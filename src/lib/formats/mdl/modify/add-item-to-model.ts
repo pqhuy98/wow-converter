@@ -11,6 +11,10 @@ const debug = true;
 export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
   debug && console.log(`Attaching item "${path.basename(item.model.name)}" to bone "${bone.name}"...`);
 
+  // TODO: add animation blending for bow models with extra "Pull", "Release" animations during attack
+  item.sequences = [item.sequences.find((s) => s.name === 'Stand')!];
+  item.modify.optimizeKeyFrames();
+
   item.getNodes().forEach((b) => {
     if (!b.parent) {
       b.parent = bone;

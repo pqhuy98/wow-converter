@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import esMain from 'es-main';
 import { existsSync, unlinkSync } from 'fs';
+import { glob } from 'glob';
 import path, { join } from 'path';
 
 import { distancePerTile } from '@/lib/constants';
@@ -24,6 +25,15 @@ await wowExportClient.waitUntilReady();
 const testConfig = wowExportClient.isClassic() ? testConfigClassic : testConfigRetail;
 const mapDir = testConfig.map;
 const testCases = testConfig.testCases;
+
+const isFresh = process.argv.includes('--fresh');
+if (isFresh) {
+  const files = await glob('**/*.{mdx,blp}', { cwd: mapDir });
+  for (const file of files) {
+    unlinkSync(join(mapDir, file));
+  }
+  console.log('Deleted', files.length, 'old MDX/BLP files in', mapDir);
+}
 
 console.log('--------------------------------');
 console.log('|Test mode:', chalk.yellow(testConfig.name));
@@ -55,7 +65,7 @@ async function exportTestCases() {
       attachItems[WoWAttachmentID.HandLeft] = { path: wowhead(weaponL), scale: 1 };
     }
 
-    let attackTag: AttackTag = 'Unarmed';
+    let attackTag: AttackTag = 'Auto';
     if (weaponR && !weaponL || !weaponR && weaponL) {
       attackTag = '2H';
     }

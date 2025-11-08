@@ -48,10 +48,10 @@ export async function getZamUrlFromWowheadUrl(url: string): Promise<ZamUrl> {
   if (type === 'dressing-room') return { expansion, type, hash: url.split('#')[1].split('?')[0] };
 
   // npc or item
-  const displayId = await getDisplayIdFromUrl(url);
+  const { displayId, slotId } = await getDisplayIdFromUrl(url);
   if (type === 'item') {
     return {
-      expansion, type, displayId, slotId: null,
+      expansion, type, displayId, slotId,
     };
   }
   return { expansion, type, displayId };
@@ -94,16 +94,17 @@ function getTypeFromWowheadUrl(url: string): ZamType | undefined {
   return undefined;
 }
 
-async function getDisplayIdFromUrl(url: string): Promise<number> {
+async function getDisplayIdFromUrl(url: string): Promise<{ displayId: number, slotId: number | null }> {
   const byJson = url.match(/\/(?:npc|item)\/(\d+)\.json/i)?.[1];
-  if (byJson) return parseInt(byJson, 10);
+  if (byJson) return { displayId: parseInt(byJson, 10), slotId: null };
   // Fallback to parsing embedded data attributes
   const html = await fetchWithCache(url);
   const m = html.match(/data-mv-display-id="(\d+)"/);
   if (!m) {
     throw new Error(`Cannot extract displayId from wowhead url: ${url}`);
   }
-  return parseInt(m[1], 10);
+  const slotM = html.match(/data-mv-slot="(\d+)"/);
+  return { displayId: parseInt(m[1], 10), slotId: slotM ? parseInt(slotM[1], 10) : null };
 }
 
 const respCache = new LRUCache<string, string>({ max: 200 });
