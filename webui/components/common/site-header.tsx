@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Box, Clock, Map, Search,
+  Box, Clock, Image, Map, Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -11,9 +11,12 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useServerConfig } from '../server-config';
 import { ThemeToggle } from './theme-toggle';
 
-type ActiveTab = 'export' | 'browse' | 'recents' | 'maps';
+type ActiveTab = 'export' | 'browse' | 'browse-texture' | 'recents' | 'maps';
 
 function getActiveTab(pathname: string, isSharedHosting: boolean): ActiveTab {
+  if (pathname.startsWith('/browse-texture')) {
+    return 'browse-texture';
+  }
   if (pathname.startsWith('/browse')) {
     return 'browse';
   }
@@ -44,6 +47,9 @@ export default function SiteHeader() {
             <Link href="/browse" className={`p-2 rounded-md ${activeTab === 'browse' ? 'bg-primary/20' : 'hover:bg-accent'}`} title="Browse Models">
               <Search className="w-5 h-5" />
             </Link>
+            <Link href="/browse-texture" className={`p-2 rounded-md ${activeTab === 'browse-texture' ? 'bg-primary/20' : 'hover:bg-accent'}`} title="Browse Textures">
+              <Image className="w-5 h-5" />
+            </Link>
             {!isSharedHosting && (
               <Link href="/maps" className={`p-2 rounded-md ${activeTab === 'maps' ? 'bg-primary/20' : 'hover:bg-accent'}`} title="Maps">
                 <Map className="w-5 h-5" />
@@ -67,6 +73,12 @@ export default function SiteHeader() {
                 <Link href="/browse" className="flex items-center justify-center">
                   <Search className="w-5 h-5" />
                   <span className="ml-2">Browse</span>
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="browse-texture" asChild className="px-3" title="Browse Textures">
+                <Link href="/browse-texture" className="flex items-center justify-center">
+                  <Image className="w-5 h-5" />
+                  <span className="ml-2">Textures</span>
                 </Link>
               </TabsTrigger>
               {!isSharedHosting && <TabsTrigger value="maps" asChild className="px-3" title="Maps">

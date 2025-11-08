@@ -6,9 +6,11 @@ import { getListFiles } from './shared';
 
 let allFiles: FileEntry[] | null = null;
 let modelFiles: FileEntry[] | null = null;
+let textureFiles: FileEntry[] | null = null;
 
 const m2WmoRegex = /\.(m2|wmo)$/i;
 const badWmoRegex = /_([0-9]{3}|lod\d)\.wmo$/;
+const textureRegex = /\.(blp|png|tga|dds)$/i;
 
 export function ControllerBrowse(router: express.Router) {
   async function fetchAllFiles() {
@@ -18,6 +20,11 @@ export function ControllerBrowse(router: express.Router) {
     modelFiles = allFiles.filter((f) => m2WmoRegex.test(f.fileName))
       .sort((a, b) => a.fileName.localeCompare(b.fileName));
     console.log('Total M2/WMO files:', modelFiles.length);
+
+    textureFiles = allFiles.filter((f) => textureRegex.test(f.fileName))
+      .sort((a, b) => a.fileName.localeCompare(b.fileName));
+
+    console.log('Total texture files:', textureFiles.length);
   }
   void fetchAllFiles();
 
@@ -31,11 +38,16 @@ export function ControllerBrowse(router: express.Router) {
       if (!q) {
         return res.status(400).json({ error: 'q is required' });
       }
-      if (!['model'].includes(q)) {
-        return res.status(400).json({ error: 'q must be "model"' });
+      if (!['model', 'texture'].includes(q)) {
+        return res.status(400).json({ error: 'q must be "model" or "texture"' });
       }
 
-      const result = q === 'model' ? modelFiles : [];
+      let result: FileEntry[] = [];
+      if (q === 'model') {
+        result = modelFiles ?? [];
+      } else if (q === 'texture') {
+        result = textureFiles ?? [];
+      }
 
       return res.header('Cache-Control', 'public, max-age=60').json(result);
     } catch (e) {

@@ -12,6 +12,7 @@ import { isDev, isSharedHosting } from './config';
 import { ControllerBrowse } from './controllers/browse';
 import { ControllerDownload } from './controllers/download';
 import { ControllerExportCharacter } from './controllers/export-character';
+import { ControllerExportTexture } from './controllers/export-texture';
 import { ControllerGetConfig } from './controllers/get-config';
 import { ControllerMaps } from './controllers/maps';
 import { attachDevWebsocketProxy, ControllerWebUi } from './controllers/webui';
@@ -45,6 +46,7 @@ const uiRouter = express.Router();
 
 async function main() {
   await ControllerExportCharacter(router);
+  await ControllerExportTexture(router);
   ControllerMaps(router);
   ControllerDownload(router);
   ControllerGetConfig(router);

@@ -1,47 +1,41 @@
 'use client';
 
 import { SearchIcon } from 'lucide-react';
-import React, {
+import {
   useCallback, useDeferredValue, useEffect, useMemo, useRef, useState,
 } from 'react';
 
-import { SettingsDialogButton } from '@/components/browse-model/settings-dialog';
-import { FileRow, VirtualListBox } from '@/components/common/listbox';
-import ModelViewerUi from '@/components/common/model-viewer';
-import { Terminal } from '@/components/common/terminal';
+import {
+  FileRow, FileRowWithThumbnail, VirtualListBox,
+} from '@/components/common/listbox';
+import TextureViewer from '@/components/common/texture-viewer';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Character,
-  JobStatus,
-  ModelFormat,
-  ModelFormatVersion,
-  Optimization,
-} from '@/lib/models/export-character.model';
 
 type FileEntry = { fileDataID: number; fileName: string };
 
-const defaultCharacter: Character = {
-  base: { type: 'local', value: '' },
-  inGameMovespeed: 270,
-  keepCinematic: true,
-  noDecay: true,
-};
+const OVERSCAN = 8;
 
-export default function BrowseModelPage() {
+function isIcon(fileName: string): boolean {
+  return fileName.toLowerCase().startsWith('interface/icons/');
+}
+
+const suggestions = ['interface/icons/', 'loadingscreens/'] as const;
+
+export default function BrowseTexturePage() {
   const [allFiles, setAllFiles] = useState<FileEntry[]>([]);
 
   async function fetchAllFiles() {
     if (!allFiles.length) {
-      const res = await fetch('/api/browse?q=model');
+      const res = await fetch('/api/browse?q=texture');
       if (!res.ok) {
-        throw new Error('Failed to fetch m2 list files');
+        throw new Error('Failed to fetch texture list files');
       }
       const files = await res.json();
       if (!files.length) {
-        throw new Error('No m2 list files found');
+        throw new Error('No texture files found');
       }
       setAllFiles(files);
     }
@@ -54,13 +48,11 @@ export default function BrowseModelPage() {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selected, setSelected] = useState<FileEntry | null>(null);
-  const [job, setJob] = useState<JobStatus | undefined>(undefined);
-  const [modelPath, setModelPath] = useState<string | undefined>(undefined);
+  const [selectedTexturePath, setSelectedTexturePath] = useState<string | undefined>(undefined);
+  const [isImageLoading, setIsImageLoading] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const copyBtnRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  const OVERSCAN = 8;
 
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim();
@@ -92,6 +84,8 @@ export default function BrowseModelPage() {
   }, [queryWords]);
 
   const lowerWordsSet = useMemo(() => new Set(queryWords.map((w) => w.toLowerCase())), [queryWords]);
+
+  const CONTAINER_PADDING = 4; // Top and bottom padding in pixels
 
   // debounce query updates to reduce search frequency
   useEffect(() => {
@@ -133,108 +127,26 @@ export default function BrowseModelPage() {
     return () => cancelAnimationFrame(id);
   }, [selected]);
 
-  // poll job status
-  useEffect(() => {
-    if (!job?.id) return undefined;
-    if (job.status === 'done') {
-      setModelPath(job.result?.exportedModels[0]?.path);
-      return undefined;
-    }
-    const fetchJob = async () => {
-      const r = await fetch(`/api/export/character/status/${job.id}`);
-      if (!r.ok) return;
-      const js = (await r.json()) as JobStatus;
-      setJob(js);
-      if (js.status === 'done' && js.result) {
-        setModelPath(js.result.exportedModels[0]?.path);
-        clearInterval(interval);
-      }
-      if (js.status === 'failed') {
-        clearInterval(interval);
-      }
-    };
-    void fetchJob();
-    const interval = setInterval(() => void fetchJob(), 500);
-    return () => clearInterval(interval);
-  }, [job?.id]);
-
-  const [isExporting, setIsExporting] = useState(false);
-  // Shared export settings state
-  const [character, setCharacter] = useState<Character>(defaultCharacter);
-  const [outputFileName, setOutputFileName] = useState<string>('');
-  const [format, setFormat] = useState<ModelFormat>('mdx');
-  const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>('1000');
-  const [optimization, setOptimization] = useState<Optimization>({
-    sortSequences: true,
-    removeUnusedVertices: true,
-    removeUnusedNodes: true,
-    removeUnusedMaterialsTextures: true,
-  });
-  const isBusy = isExporting || job?.status === 'pending' || job?.status === 'processing';
-
-  const triggerExport = async (file: FileEntry) => {
-    if (isExporting) {
-      console.log('Please wait for the current export to finish.');
-      return;
-    }
+  const handleSelect = useCallback((file: FileEntry) => {
     setSelected(file);
-    // Output file name: m2 path with / and \ replaced by _
-    const guessedName = file.fileName.replace(/[\\/]/g, '_').replace(/\.m2$/i, '');
-    setOutputFileName(guessedName);
-    const localBase = { type: 'local', value: file.fileName.replace(/\.m2$/i, '.obj') } as const;
+    setSelectedTexturePath(file.fileName);
+    setIsImageLoading(true);
+  }, []);
 
-    const exportCharacter: Character = {
-      ...character,
-      base: localBase,
-      attackTag: character.attackTag === undefined ? '' : character.attackTag,
-    };
-    const request = {
-      character: exportCharacter,
-      outputFileName: guessedName,
-      optimization,
-      format,
-      formatVersion,
-      isBrowse: true,
-    };
+  const handleImageLoad = useCallback(() => {
+    setIsImageLoading(false);
+  }, []);
 
-    setIsExporting(true);
-    const res = await fetch('/api/export/character', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-    });
-    setIsExporting(false);
-    const js = (await res.json()) as JobStatus;
-    setJob(js);
-  };
+  const handleImageError = useCallback(() => {
+    setIsImageLoading(false);
+  }, []);
 
-  const renderRow = useCallback((file: FileEntry, index: number, style: React.CSSProperties) => {
-    const isSelected = selected === file;
-    return (
-      <FileRow
-        file={file}
-        index={index}
-        isSelected={isSelected}
-        isBusy={isBusy}
-        highlightRegex={highlightRegex}
-        lowerWordsSet={lowerWordsSet}
-        copyBtnRef={isSelected ? copyBtnRef : undefined}
-        onClick={(f) => { void triggerExport(f); }}
-        style={style}
-        disabledHover={isExporting}
-        copyTooltip={{
-          copied: 'Copied, you can now paste it in local file input field in Character Export',
-          default: 'Copy path for local file export',
-        }}
-      />
-    );
-  }, [selected, isBusy, isExporting, highlightRegex, lowerWordsSet, triggerExport]);
+  const isBusy = isImageLoading;
 
-  const suggestions = ['creature/', 'spells/', 'doodads/', 'wmo/'] as const;
   const applySuggestion = (s: typeof suggestions[number]) => {
     const v = `${s} `;
     setQuery(v);
-    // update results immediately for a snappier UX
+    // Update debouncedQuery immediately for filter suggestions (user intent is clear)
     setDebouncedQuery(v);
     const el = inputRef.current;
     if (el) {
@@ -244,7 +156,7 @@ export default function BrowseModelPage() {
     }
   };
 
-  if (!allFiles) {
+  if (!allFiles.length) {
     return <div>Loading...</div>;
   }
 
@@ -259,28 +171,14 @@ export default function BrowseModelPage() {
               <CardHeader className="flex flex-row justify-between items-center py-2 px-3 pb-0 pt-3">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <SearchIcon className="w-4 h-4" />
-                  Browse Model Files
+                  Browse Texture Files
                 </CardTitle>
-                <SettingsDialogButton
-                  className="ml-auto !mt-0"
-                  character={character}
-                  setCharacter={setCharacter}
-                  outputFileName={outputFileName}
-                  setOutputFileName={setOutputFileName}
-                  format={format}
-                  setFormat={setFormat}
-                  formatVersion={formatVersion}
-                  setFormatVersion={setFormatVersion}
-                  optimization={optimization}
-                  setOptimization={setOptimization}
-                  disabled={isBusy}
-                />
               </CardHeader>
               <CardContent className="flex flex-col flex-1 overflow-hidden p-3 min-w-0">
                 <div className="flex items-center w-full mb-2">
                   <div className="relative w-full">
                     <Input
-                      placeholder="Search model, e.g. 'spell fire'..."
+                      placeholder="Search texture, e.g. 'interface/icons'..."
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       disabled={isBusy}
@@ -310,14 +208,45 @@ export default function BrowseModelPage() {
                     </div>
                   </div>
                 </div>
-                <VirtualListBox
+                <VirtualListBox<FileEntry>
                   items={deferredFiltered}
-                  getRowKey={(file) => file.fileDataID + file.fileName}
-                  renderRow={renderRow}
-                  fixedRowHeight={FileRow.ROW_HEIGHT}
-                  overscan={OVERSCAN}
                   containerRef={listRef}
                   containerClassName="overflow-y-scroll overflow-x-auto border rounded-md bg-background flex-1"
+                  contentPadding={CONTAINER_PADDING}
+                  overscan={OVERSCAN}
+                  getRowKey={(f) => f.fileDataID + f.fileName}
+                  getRowHeight={(f) => (isIcon(f.fileName) ? FileRowWithThumbnail.ROW_HEIGHT : FileRow.ROW_HEIGHT)}
+                  renderRow={(file, index, style) => {
+                    const isSelected = selected === file;
+                    const isIconFile = isIcon(file.fileName);
+                    return isIconFile ? (
+                      <FileRowWithThumbnail
+                        key={file.fileDataID + file.fileName}
+                        file={file}
+                        index={index}
+                        isSelected={isSelected}
+                        isBusy={isBusy}
+                        highlightRegex={highlightRegex}
+                        lowerWordsSet={lowerWordsSet}
+                        copyBtnRef={isSelected ? copyBtnRef : undefined}
+                        onClick={handleSelect}
+                        style={style}
+                      />
+                    ) : (
+                      <FileRow
+                        key={file.fileDataID + file.fileName}
+                        file={file}
+                        index={index}
+                        isSelected={isSelected}
+                        isBusy={isBusy}
+                        highlightRegex={highlightRegex}
+                        lowerWordsSet={lowerWordsSet}
+                        copyBtnRef={isSelected ? copyBtnRef : undefined}
+                        onClick={handleSelect}
+                        style={style}
+                      />
+                    );
+                  }}
                 />
               </CardContent>
             </Card>
@@ -326,36 +255,17 @@ export default function BrowseModelPage() {
           {/* Right: viewer */}
           <div className="lg:w-2/3 w-full h-full overflow-hidden min-w-0">
             <div className="p-0 h-full relative overflow-hidden min-w-0">
-              {modelPath && (
-                <ModelViewerUi modelPath={modelPath} source="browse" />
+              {selectedTexturePath && (
+                <TextureViewer
+                  texturePath={selectedTexturePath}
+                  onLoad={handleImageLoad}
+                  onError={handleImageError}
+                />
               )}
-              {job?.status !== 'done' && (
-                <div className="absolute inset-0 bg-secondary flex items-center justify-center z-10">
+              {!selectedTexturePath && (
+                <div className="absolute inset-0 bg-secondary flex items-center justify-center">
                   <div className="text-center text-muted-foreground w-full px-4">
-                    {job?.status === 'processing' || job?.status === 'pending' ? (
-                      <>
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                        <p className="text-lg">{job.status === 'processing' ? 'Exporting...' : `Queue position: ${job.position}`}</p>
-                      </div>
-                        <div className="mt-4 mx-auto w-full sm:w-3/4 lg:w-1/2 sm:min-w-[75%] sm:max-w-[75%] lg:min-w-[75%] lg:max-w-[75%]">
-                          <Terminal logs={job.logs || []} className="w-full" />
-                        </div>
-                      </>
-                    ) : job?.status === 'failed' ? (
-                      <>
-                        <p className="text-lg mb-2 text-destructive">Export failed</p>
-                        {job?.error && (
-                          <pre className="text-left text-sm text-destructive whitespace-pre-wrap bg-card border border-border rounded p-2 max-w-[90%] mx-auto overflow-x-auto">
-                            {job.error}
-                          </pre>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-lg mb-2">Select a file to export and preview</p>
-                      </>
-                    )}
+                    <p className="text-lg mb-2">Select a texture to view</p>
                   </div>
                 </div>
               )}
