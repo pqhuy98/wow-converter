@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
+import IconExporter from './icon-exporter';
+
 type FileEntry = { fileDataID: number; fileName: string };
 
 const OVERSCAN = 8;
@@ -130,8 +132,16 @@ export default function BrowseTexturePage() {
   const handleSelect = useCallback((file: FileEntry) => {
     setSelected(file);
     setSelectedTexturePath(file.fileName);
-    setIsImageLoading(true);
+    // For icons, we show variant grid (lazy-loaded), so no need to wait for single image
+    // For regular textures, TextureViewer will call onLoad/onError
+    if (isIcon(file.fileName)) {
+      setIsImageLoading(false);
+    } else {
+      setIsImageLoading(true);
+    }
   }, []);
+
+  const selectedIsIcon = selected ? isIcon(selected.fileName) : false;
 
   const handleImageLoad = useCallback(() => {
     setIsImageLoading(false);
@@ -175,37 +185,35 @@ export default function BrowseTexturePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col flex-1 overflow-hidden p-3 min-w-0">
-                <div className="flex items-center w-full mb-2">
-                  <div className="relative w-full">
-                    <Input
-                      placeholder="Search texture, e.g. 'interface/icons'..."
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      disabled={isBusy}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                          e.preventDefault();
-                          setQuery('');
-                          setDebouncedQuery('');
-                        }
-                      }}
-                      ref={inputRef}
-                      className="w-full sm:pr-[170px]"
-                    />
-                    <div className="absolute inset-y-0 right-2 hidden sm:flex items-center gap-2 pointer-events-none z-20">
-                      {suggestions.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
-                          onClick={() => applySuggestion(s)}
-                          disabled={isBusy}
-                          title={`Search for ${s}`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
+                <div className="flex items-center relative w-full mb-2">
+                  <Input
+                    placeholder="Search texture, e.g. 'interface/icons'..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    disabled={isBusy}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setQuery('');
+                        setDebouncedQuery('');
+                      }
+                    }}
+                    ref={inputRef}
+                    className="w-full sm:pr-[170px]"
+                  />
+                  <div className="absolute inset-y-0 right-2 hidden sm:flex items-center gap-2 pointer-events-none z-20">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
+                        onClick={() => applySuggestion(s)}
+                        disabled={isBusy}
+                        title={`Search for ${s}`}
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <VirtualListBox<FileEntry>
@@ -253,23 +261,20 @@ export default function BrowseTexturePage() {
           </div>
 
           {/* Right: viewer */}
-          <div className="lg:w-2/3 w-full h-full overflow-hidden min-w-0">
-            <div className="p-0 h-full relative overflow-hidden min-w-0">
-              {selectedTexturePath && (
-                <TextureViewer
-                  texturePath={selectedTexturePath}
-                  onLoad={handleImageLoad}
-                  onError={handleImageError}
-                />
-              )}
-              {!selectedTexturePath && (
-                <div className="absolute inset-0 bg-secondary flex items-center justify-center">
-                  <div className="text-center text-muted-foreground w-full px-4">
-                    <p className="text-lg mb-2">Select a texture to view</p>
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="lg:w-2/3 w-full h-full overflow-y-auto overflow-x-visible p-0 relative min-w-0">
+            {selectedTexturePath && selectedIsIcon ? (
+              <IconExporter texturePath={selectedTexturePath} />
+            ) : selectedTexturePath ? (
+              <TextureViewer
+                texturePath={selectedTexturePath}
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+              />
+            ) : (
+              <div className="absolute inset-0 bg-secondary flex items-center justify-center text-center text-muted-foreground w-full px-4">
+                <p className="text-lg mb-2">Select a texture to view</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
