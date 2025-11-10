@@ -21,10 +21,10 @@ export type { IconConversionOptions } from '@/lib/converter/icon';
 /**
  * Validate and sanitize a path to prevent path traversal attacks
  * @param inputPath - The path to validate
- * @param allowedPrefix - Required prefix (e.g., 'interface/icons/')
+ * @param allowedPrefix - Optional required prefix (e.g., 'interface/icons/')
  * @returns Normalized path if valid, throws error if invalid
  */
-function validatePath(inputPath: string, allowedPrefix: string): string {
+function validatePath(inputPath: string, allowedPrefix?: string): string {
   // Check for path traversal attempts before decoding/normalization
   if (inputPath.includes('..') || inputPath.includes('../') || inputPath.includes('..\\')) {
     throw new Error('Invalid path: path traversal detected');
@@ -49,11 +49,13 @@ function validatePath(inputPath: string, allowedPrefix: string): string {
 
   // Normalize both paths to forward slashes for comparison (cross-platform)
   const normalizedForComparison = normalized.replace(/\\/g, '/');
-  const normalizedPrefix = allowedPrefix.replace(/\\/g, '/');
 
-  // Ensure path starts with allowed prefix (case-insensitive)
-  if (!normalizedForComparison.toLowerCase().startsWith(normalizedPrefix.toLowerCase())) {
-    throw new Error(`Path must start with ${allowedPrefix}`);
+  // Ensure path starts with allowed prefix if provided (case-insensitive)
+  if (allowedPrefix) {
+    const normalizedPrefix = allowedPrefix.replace(/\\/g, '/');
+    if (!normalizedForComparison.toLowerCase().startsWith(normalizedPrefix.toLowerCase())) {
+      throw new Error(`Path must start with ${allowedPrefix}`);
+    }
   }
 
   // Return path with forward slashes (consistent format)
@@ -136,10 +138,15 @@ export function ControllerExportTexture(router: express.Router) {
         return res.status(400).json({ error: 'Texture path is required' });
       }
 
+      // Check if icon mode is requested
+      const mode = req.query.mode as string | undefined;
+      const isIconMode = mode === 'icon';
+
       // Normalize path (handle URL encoding)
+      // Only enforce interface/icons/ prefix if icon options are provided
       let normalizedPath: string;
       try {
-        normalizedPath = validatePath(match[1], 'interface/icons/');
+        normalizedPath = validatePath(match[1], isIconMode ? 'interface/icons/' : undefined);
       } catch (error) {
         return res.status(400).json({
           error: error instanceof Error ? error.message : 'Invalid path',
@@ -155,9 +162,7 @@ export function ControllerExportTexture(router: express.Router) {
         return res.status(getErrorStatus(err)).json({ error: err.message });
       }
 
-      // Check if icon mode is requested
-      const mode = req.query.mode as string | undefined;
-      if (mode === 'icon') {
+      if (isIconMode) {
         // Only allow icon conversion for files in interface/icons directory
         if (!normalizedPath.toLowerCase().startsWith('interface/icons/')) {
           return res.status(400).json({
@@ -226,8 +231,11 @@ export function ControllerExportTexture(router: express.Router) {
       // Validate all paths before processing
       try {
         for (const item of parsedRequest.items) {
-          // Validate texture path
-          const validatedTexturePath = validatePath(item.texturePath, 'interface/icons/');
+          // Validate texture path - only enforce prefix if icon options are provided
+          const validatedTexturePath = validatePath(
+            item.texturePath,
+            item.options ? 'interface/icons/' : undefined,
+          );
 
           // Validate output path if provided
           let validatedOutputPath: string | undefined;

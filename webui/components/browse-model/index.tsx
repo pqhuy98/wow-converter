@@ -2,7 +2,12 @@
 
 import { SearchIcon } from 'lucide-react';
 import React, {
-  useCallback, useDeferredValue, useEffect, useMemo, useRef, useState,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 
 import { SettingsDialogButton } from '@/components/browse-model/settings-dialog';
@@ -13,6 +18,9 @@ import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
+import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
+import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
 import {
   Character,
   JobStatus,
@@ -56,6 +64,7 @@ export default function BrowseModelPage() {
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [job, setJob] = useState<JobStatus | undefined>(undefined);
   const [modelPath, setModelPath] = useState<string | undefined>(undefined);
+  const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const copyBtnRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -99,15 +108,43 @@ export default function BrowseModelPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // whenever the debounced query changes (and filtered list will update), scroll back to top
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    // Defer scroll reset to avoid blocking the main thread
-    requestAnimationFrame(() => {
-      el.scrollTop = 0;
-    });
-  }, [debouncedQuery]);
+  // URL sync and resets (shared with texture page, but generic)
+  useSearchSelectUrlSync({
+    basePath: '/browse',
+    search: query,
+    setSearch: setQuery,
+    setDebouncedSearch: setDebouncedQuery,
+    selectedPath: selected?.fileName,
+    pendingScrollPath: pendingScrollToPath,
+    setPendingScrollPath: setPendingScrollToPath,
+    resetLocalState: () => {
+      setQuery('');
+      setDebouncedQuery('');
+      setSelected(null);
+      setJob(undefined);
+      setModelPath(undefined);
+      setPendingScrollToPath(null);
+    },
+  });
+
+  // Reset scroll only when debounced search changes and no pending scroll
+  useScrollResetOnSearchChange({
+    containerRef: listRef,
+    search: debouncedQuery,
+    isPending: !!pendingScrollToPath,
+  });
+
+  // Generic pending scroll + export using shared hook
+  usePendingScrollToItem<FileEntry>({
+    items: deferredFiltered,
+    containerRef: listRef,
+    getRowHeight: () => FileRow.ROW_HEIGHT,
+    contentPadding: 0,
+    matchKey: (f) => f.fileName,
+    pendingKey: pendingScrollToPath,
+    setPendingKey: setPendingScrollToPath,
+    onSelect: (file) => { void triggerExport(file); },
+  });
 
   // Ensure the copy icon on the selected row is visible if it is clipped
   useEffect(() => {

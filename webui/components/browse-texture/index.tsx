@@ -2,7 +2,12 @@
 
 import { SearchIcon } from 'lucide-react';
 import {
-  useCallback, useDeferredValue, useEffect, useMemo, useRef, useState,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 
 import {
@@ -14,6 +19,9 @@ import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
+import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
+import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
 import type { IconResizeMode, IconSize, IconStyle } from '@/lib/models/icon-export.model';
 
 import IconExporter from './icon-exporter';
@@ -63,11 +71,12 @@ export default function BrowseTexturePage() {
     const q = debouncedQuery.trim();
     if (!q) return allFiles;
     const words = q.split(/ +/).filter(Boolean).map((w) => w.toLowerCase());
-    return allFiles.filter((f) => {
+    const out = allFiles.filter((f) => {
       const nameLc = f.fileName.toLowerCase();
       const idStr = String(f.fileDataID);
       return words.every((w) => nameLc.includes(w) || idStr.includes(w));
     });
+    return out;
   }, [allFiles, debouncedQuery]);
 
   // Defer expensive calculations to avoid blocking the UI
@@ -98,18 +107,12 @@ export default function BrowseTexturePage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // whenever the debounced query changes (and filtered list will update), scroll back to top
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    // Only reset scroll if we don't have a pending scroll operation
-    if (!pendingScrollToPath) {
-      // Defer scroll reset to avoid blocking the main thread
-      requestAnimationFrame(() => {
-        el.scrollTop = 0;
-      });
-    }
-  }, [debouncedQuery, pendingScrollToPath]);
+  // Reset scroll only when search actually changes and no pending scroll
+  useScrollResetOnSearchChange({
+    containerRef: listRef,
+    search: debouncedQuery,
+    isPending: !!pendingScrollToPath,
+  });
 
   // Ensure the copy icon on the selected row is visible if it is clipped
   useEffect(() => {
@@ -147,40 +150,17 @@ export default function BrowseTexturePage() {
     }
   }, []);
 
-  // Scroll to pending texture path after filtered results update
-  useEffect(() => {
-    if (!pendingScrollToPath) return;
-
-    const foundFile = deferredFiltered.find((f) => f.fileName === pendingScrollToPath);
-    if (foundFile) {
-      const index = deferredFiltered.indexOf(foundFile);
-      const container = listRef.current;
-      if (!container) {
-        setPendingScrollToPath(null);
-        return;
-      }
-
-      // Calculate cumulative height up to this index
-      let scrollTop = CONTAINER_PADDING;
-      for (let i = 0; i < index; i++) {
-        const file = deferredFiltered[i];
-        const h = isIcon(file.fileName) ? FileRowWithThumbnail.ROW_HEIGHT : FileRow.ROW_HEIGHT;
-        scrollTop += h;
-      }
-
-      // Scroll to the item
-      container.scrollTo({
-        top: Math.max(0, scrollTop - 50), // Offset by 50px to show some context above
-        behavior: 'smooth',
-      });
-
-      // Select the item after a short delay to ensure it's visible
-      setTimeout(() => {
-        handleSelect(foundFile);
-        setPendingScrollToPath(null);
-      }, 100);
-    }
-  }, [deferredFiltered, pendingScrollToPath, handleSelect]);
+  // Generic pending scroll + select using shared hook
+  usePendingScrollToItem<FileEntry>({
+    items: deferredFiltered,
+    containerRef: listRef,
+    getRowHeight: (file, _i) => (isIcon(file.fileName) ? FileRowWithThumbnail.ROW_HEIGHT : FileRow.ROW_HEIGHT),
+    contentPadding: CONTAINER_PADDING,
+    matchKey: (f) => f.fileName,
+    pendingKey: pendingScrollToPath,
+    setPendingKey: setPendingScrollToPath,
+    onSelect: handleSelect,
+  });
 
   const selectedIsIcon = selected ? isIcon(selected.fileName) : false;
 
@@ -199,40 +179,27 @@ export default function BrowseTexturePage() {
     // Check if the texture is already in the current filtered results
     const foundFile = deferredFiltered.find((f) => f.fileName === texturePath);
 
-    if (foundFile && debouncedQuery.trim() === `${baseDir} `.trim()) {
-      // Already showing the right directory and texture is visible, scroll to it
-      const index = deferredFiltered.indexOf(foundFile);
-      const container = listRef.current;
-      if (!container) return;
-
-      // Calculate cumulative height up to this index
-      let scrollTop = CONTAINER_PADDING;
-      for (let i = 0; i < index; i++) {
-        const file = deferredFiltered[i];
-        const h = isIcon(file.fileName) ? FileRowWithThumbnail.ROW_HEIGHT : FileRow.ROW_HEIGHT;
-        scrollTop += h;
-      }
-
-      // Scroll to the item
-      container.scrollTo({
-        top: Math.max(0, scrollTop - 50), // Offset by 50px to show some context above
-        behavior: 'smooth',
-      });
-
-      // Select the item after a short delay to ensure it's visible
-      setTimeout(() => {
-        handleSelect(foundFile);
-      }, 100);
-    } else {
+    if (!foundFile) {
       // Need to update search query first, then scroll to texture
       const searchQuery = `${baseDir} `;
       setQuery(searchQuery);
       setDebouncedQuery(searchQuery);
-      setPendingScrollToPath(texturePath);
     }
-  }, [deferredFiltered, debouncedQuery, handleSelect]);
+    // In both cases, let the shared pending-scroll hook do the scroll+select
+    setPendingScrollToPath(texturePath);
+  }, [deferredFiltered]);
 
   const isBusy = isImageLoading;
+
+  // Helper to clear local UI state
+  const resetLocalState = useCallback(() => {
+    setQuery('');
+    setDebouncedQuery('');
+    setSelected(null);
+    setSelectedTexturePath(undefined);
+    setPendingScrollToPath(null);
+    setIsImageLoading(false);
+  }, []);
 
   const applySuggestion = (s: typeof suggestions[number]) => {
     const v = `${s} `;
@@ -246,6 +213,18 @@ export default function BrowseTexturePage() {
       setTimeout(() => el.setSelectionRange(v.length, v.length), 0);
     }
   };
+
+  // Shared URL sync: parse, state->URL, and base-route reset
+  useSearchSelectUrlSync({
+    basePath: '/browse-texture',
+    search: query,
+    setSearch: setQuery,
+    setDebouncedSearch: setDebouncedQuery,
+    selectedPath: selectedTexturePath,
+    pendingScrollPath: pendingScrollToPath,
+    setPendingScrollPath: setPendingScrollToPath,
+    resetLocalState,
+  });
 
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
