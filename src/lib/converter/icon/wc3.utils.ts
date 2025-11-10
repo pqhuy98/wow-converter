@@ -4,7 +4,7 @@ import type { IconFrame } from './schemas';
  * Generate Wc3 output path for an icon based on texture path and frame type
  * @param texturePath - WoW texture path (e.g., "interface/icons/inv_belt_18.blp")
  * @param frame - Icon frame type (e.g., "btn", "pas", "none")
- * @returns Wc3 output path (e.g., "ReplaceableTextures\\CommandButtons\\BTN_inv_belt_18.blp")
+ * @returns Wc3 output path (e.g., "ReplaceableTextures/CommandButtons/BTN_inv_belt_18.blp")
  */
 export function getWc3Path(texturePath: string, frame: IconFrame | string): string {
   const filename = texturePath.split('/').pop() ?? texturePath;
@@ -12,21 +12,21 @@ export function getWc3Path(texturePath: string, frame: IconFrame | string): stri
 
   switch (frame) {
     case 'btn':
-      return `ReplaceableTextures\\CommandButtons\\BTN${baseName}.blp`;
+      return `ReplaceableTextures/CommandButtons/BTN${baseName}.blp`;
     case 'disbtn':
-      return `ReplaceableTextures\\CommandButtonsDisabled\\DISBTN${baseName}.blp`;
+      return `ReplaceableTextures/CommandButtonsDisabled/DISBTN${baseName}.blp`;
     case 'pas':
-      return `ReplaceableTextures\\PassiveButtons\\PAS${baseName}.blp`;
+      return `ReplaceableTextures/PassiveButtons/PAS${baseName}.blp`;
     case 'dispas':
-      return `ReplaceableTextures\\CommandButtonsDisabled\\DISPAS${baseName}.blp`;
+      return `ReplaceableTextures/CommandButtonsDisabled/DISPAS${baseName}.blp`;
     case 'atc':
-      return `ReplaceableTextures\\CommandButtons\\ATC${baseName}.blp`;
+      return `ReplaceableTextures/CommandButtons/ATC${baseName}.blp`;
     case 'disatc':
-      return `ReplaceableTextures\\CommandButtonsDisabled\\DISATC${baseName}.blp`;
+      return `ReplaceableTextures/CommandButtonsDisabled/DISATC${baseName}.blp`;
     case 'upg':
-      return `ReplaceableTextures\\CommandButtons\\UPG${baseName}.blp`;
+      return `ReplaceableTextures/CommandButtons/UPG${baseName}.blp`;
     case 'att':
-      return `ReplaceableTextures\\CommandButtons\\ATT${baseName}.blp`;
+      return `ReplaceableTextures/CommandButtons/ATT${baseName}.blp`;
     case 'ssh':
       return `scorescreen-hero-${baseName}.blp`;
     case 'ssp':
