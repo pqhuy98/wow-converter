@@ -7,25 +7,26 @@ export type {
   IconConversionOptions,
   IconExtras,
   IconFrame,
+  IconResizeMode,
   IconSize,
   IconStyle,
-  RequiredIconConversionOptions,
 } from './schemas';
 export {
   IconConversionOptionsSchema,
   IconExtrasSchema,
   IconFrameSchema,
   IconOptionsSchema,
+  IconResizeModeSchema,
   IconSizeSchema,
   IconStyleSchema,
 } from './schemas';
 
 // Re-export utilities
-export { getCustomFrameData, mergeIconOptions, resolveEffectiveSize } from './utils';
+export { getCustomFrameData, mergeIconOptions } from './utils';
+export { getWc3Path } from './wc3.utils';
 
 // Re-export constants
 export {
-  DEFAULT_ICON_OPTIONS,
   FRAME_FILE_MAP,
   HD_DESATURATION_FRAMES,
   SIZE_MAPPING,

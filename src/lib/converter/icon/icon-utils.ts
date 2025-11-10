@@ -59,27 +59,6 @@ export function resolveFramePath(
 }
 
 /**
- * Resolve path to extra frame (black frame or hero frame)
- */
-export function resolveExtraFramePath(
-  size: Exclude<IconSize, 'original'>,
-  extraType: 'blackFrame' | 'heroFrame',
-): string {
-  const projectRoot = process.cwd();
-  const sizeFolder = size;
-  const fileName = extraType === 'blackFrame' ? 'Blackframe_big' : 'Heroframe';
-
-  return path.join(
-    projectRoot,
-    'resources',
-    'icon-frames',
-    sizeFolder,
-    'Extra',
-    `${fileName}.png`,
-  );
-}
-
-/**
  * Compute the optimal integer margin to crop from a given dimension
  * so that the cropped size is as close as possible to (1 - crop_percent) of the original.
  */

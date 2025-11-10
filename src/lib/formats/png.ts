@@ -2,6 +2,19 @@ import sharp, { OverlayOptions } from 'sharp';
 
 const debug = false;
 
+/**
+ * Get PNG image dimensions
+ * @returns The width and height of the PNG image
+ * @throws Error if image dimensions are invalid
+ */
+export async function getPngDimensions(pngPath: string): Promise<{ width: number; height: number }> {
+  const metadata = await sharp(pngPath).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error('Invalid image dimensions');
+  }
+  return { width: metadata.width, height: metadata.height };
+}
+
 // We need to resize the PNG but RGB and alpha are separate, since wow use alpha as mask
 export async function resizePng(fromPath: string, targetWidth: number, targetHeight: number) {
   const src = sharp(fromPath);

@@ -1,34 +1,17 @@
-import { DEFAULT_ICON_OPTIONS } from './constants';
 import type {
-  IconConversionOptions, IconFrame, IconSize, IconStyle, RequiredIconConversionOptions,
+  IconConversionOptions, IconFrame, IconSize, IconStyle, MergedIconConversionOptions,
 } from './schemas';
+import { IconConversionOptionsSchema } from './schemas';
 
 export function mergeIconOptions(
   userOptions: IconConversionOptions,
-): RequiredIconConversionOptions {
-  return {
-    size: userOptions.size ?? DEFAULT_ICON_OPTIONS.size,
-    style: userOptions.style ?? DEFAULT_ICON_OPTIONS.style,
-    frame: userOptions.frame ?? DEFAULT_ICON_OPTIONS.frame,
-    extras: {
-      ...DEFAULT_ICON_OPTIONS.extras,
-      ...userOptions.extras,
-    },
-  };
-}
-
-export function resolveEffectiveSize(
-  size: IconSize,
-  originalWidth: number,
-  originalHeight: number,
-): Exclude<IconSize, 'original'> {
-  if (size !== 'original') {
-    return size;
-  }
-  const maxDim = Math.max(originalWidth, originalHeight);
-  if (maxDim <= 96) return '64x64';
-  if (maxDim <= 192) return '128x128';
-  return '256x256';
+): MergedIconConversionOptions {
+  // Use Zod to parse and apply defaults
+  // Note: Zod's type inference doesn't understand that .default() makes fields required in output,
+  // but at runtime Zod guarantees size, style, and frame will always be present after parsing.
+  const parsed = IconConversionOptionsSchema.parse(userOptions);
+  // Type assertion is safe because Zod applies defaults at runtime
+  return parsed as MergedIconConversionOptions;
 }
 
 /**
@@ -115,7 +98,7 @@ const CUSTOM_FRAME_DATA: Readonly<Partial<Record<IconFrame, CustomFrameData>>> =
  */
 export function getCustomFrameData(
   frame: IconFrame,
-  size: Exclude<IconSize, 'original'>,
+  size: IconSize,
   style: IconStyle,
 ): { im_pos: readonly [number, number]; im_size: readonly [number, number] } | null {
   const frameData = CUSTOM_FRAME_DATA[frame];

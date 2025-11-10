@@ -11,6 +11,7 @@ import {
   IconOptionsSchema,
 } from '@/lib/converter/icon';
 import { IconExporter } from '@/lib/converter/icon';
+import { getWc3Path } from '@/lib/converter/icon/wc3.utils';
 
 import { isSharedHosting, outputDir } from '../config';
 
@@ -72,7 +73,7 @@ export function ControllerExportTexture(router: express.Router) {
       // Get or export PNG path
       let finalPath: string;
       try {
-        finalPath = await iconExporter.getOrExportPngPath(normalizedPath);
+        finalPath = await iconExporter.exportPngByPath(normalizedPath);
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         return res.status(getErrorStatus(err)).json({ error: err.message });
@@ -81,6 +82,13 @@ export function ControllerExportTexture(router: express.Router) {
       // Check if icon mode is requested
       const mode = req.query.mode as string | undefined;
       if (mode === 'icon') {
+        // Only allow icon conversion for files in interface/icons directory
+        if (!normalizedPath.toLowerCase().startsWith('interface/icons/')) {
+          return res.status(400).json({
+            error: 'Icon conversion is only available for files in interface/icons directory',
+          });
+        }
+
         const iconQueryResult = IconQuerySchema.safeParse(req.query);
         if (!iconQueryResult.success) {
           return res.status(400).json({
@@ -138,7 +146,29 @@ export function ControllerExportTexture(router: express.Router) {
         return res.status(400).json({ error: 'No items provided' });
       }
 
-      const result = await iconExporter.exportToBlp(parsedRequest.items, outputDir);
+      // Only allow icon conversion for files in interface/icons directory
+      for (const item of parsedRequest.items) {
+        if (!item.texturePath.toLowerCase().startsWith('interface/icons/')) {
+          return res.status(400).json({
+            error: 'Icon conversion is only available for files in interface/icons directory',
+          });
+        }
+      }
+
+      // Filter duplicates: only keep first occurrence of each Wc3 output path
+
+      const seenKeys = new Set<string>();
+      const filteredItems = parsedRequest.items.filter((item) => {
+        const frame = item.options?.frame ?? 'none';
+        const wc3Path = getWc3Path(item.texturePath, frame);
+        if (seenKeys.has(wc3Path)) {
+          return false;
+        }
+        seenKeys.add(wc3Path);
+        return true;
+      });
+
+      const result = await iconExporter.exportToBlp(filteredItems, outputDir);
 
       return res.json({
         count: result.count,

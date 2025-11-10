@@ -2,7 +2,6 @@ import type {
   IconFrame,
   IconSize,
   IconStyle,
-  RequiredIconConversionOptions,
 } from './schemas';
 
 export const SIZE_MAPPING: Readonly<Record<Exclude<IconSize, 'original'>, { width: number; height: number }>> = {
@@ -36,15 +35,3 @@ export const HD_DESATURATION_FRAMES: ReadonlySet<IconFrame> = new Set([
   'dispas',
   'disatc',
 ]);
-
-export const DEFAULT_ICON_OPTIONS: RequiredIconConversionOptions = {
-  size: '256x256',
-  style: 'classic-sd',
-  frame: 'btn',
-  extras: {
-    crop: false,
-    blackFrame: false,
-    heroFrame: false,
-    alpha: true,
-  },
-} as const;

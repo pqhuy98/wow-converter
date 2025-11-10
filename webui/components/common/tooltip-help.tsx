@@ -70,8 +70,8 @@ export function TooltipHelp({
             {triggerNode}
           </span>
         </TooltipTrigger>
-        <TooltipContent className="p-4 z-100 max-w-none" onMouseLeave={handleMouseLeave} onMouseEnter={handleMouseEnter}>
-          {typeof tooltips === 'string' ? <p className="max-w-xs">{tooltips}</p> : tooltips}
+        <TooltipContent className="p-4 z-100 max-w-xs" onMouseLeave={handleMouseLeave} onMouseEnter={handleMouseEnter}>
+          {typeof tooltips === 'string' ? <p>{tooltips}</p> : tooltips}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

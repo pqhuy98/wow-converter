@@ -244,10 +244,6 @@ export default function BrowseModelPage() {
     }
   };
 
-  if (!allFiles) {
-    return <div>Loading...</div>;
-  }
-
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
       <div className="mx-auto flex-1 flex flex-col w-full max-w-full">

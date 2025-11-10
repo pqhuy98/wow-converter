@@ -6,17 +6,17 @@ export const IconStyleSchema = z.enum(['classic-sd', 'reforged-hd', 'classic-hd-
 export const IconFrameSchema = z.enum(['btn', 'disbtn', 'pas', 'dispas', 'atc', 'disatc', 'att', 'upg', 'ssh', 'ssp', 'none']);
 
 export const IconExtrasSchema = z.object({
-  crop: z.boolean().optional(),
-  blackFrame: z.boolean().optional(),
-  heroFrame: z.boolean().optional(),
-  alpha: z.boolean().optional(),
+  crop: z.boolean().default(false),
 });
 
+export const IconResizeModeSchema = z.enum(['normal', 'ai']).default('normal');
+
 export const IconConversionOptionsSchema = z.object({
-  size: IconSizeSchema.optional(),
-  style: IconStyleSchema.optional(),
-  frame: IconFrameSchema.optional(),
+  size: IconSizeSchema,
+  style: IconStyleSchema.default('classic-hd-2.0'),
+  frame: IconFrameSchema.default('none'),
   extras: IconExtrasSchema.optional(),
+  resizeMode: IconResizeModeSchema.optional(),
 });
 
 // Schema for POST body (extras as object, not string)
@@ -27,5 +27,8 @@ export type IconSize = z.infer<typeof IconSizeSchema>;
 export type IconStyle = z.infer<typeof IconStyleSchema>;
 export type IconFrame = z.infer<typeof IconFrameSchema>;
 export type IconExtras = z.infer<typeof IconExtrasSchema>;
+export type IconResizeMode = z.infer<typeof IconResizeModeSchema>;
 export type IconConversionOptions = z.infer<typeof IconConversionOptionsSchema>;
-export type RequiredIconConversionOptions = Required<IconConversionOptions>;
+
+// Type representing options after Zod defaults are applied (size, style, frame, resizeMode are required)
+export type MergedIconConversionOptions = Required<Omit<IconConversionOptions, 'extras'>> & Partial<Pick<IconConversionOptions, 'extras'>>;

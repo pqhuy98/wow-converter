@@ -36,15 +36,26 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    void fetchConfig().then((config) => {
-      latestConfig = config;
-      setConfig(config);
+    void fetchConfig().then((newConfig) => {
+      latestConfig = newConfig;
+      setConfig(newConfig);
       setIsLoaded(true);
     });
     const itv = setInterval(() => {
-      void fetchConfig().then((config) => {
-        latestConfig = config;
-        setConfig(config);
+      void fetchConfig().then((newConfig) => {
+        latestConfig = newConfig;
+        // Only update state if config actually changed
+        setConfig((prevConfig) => {
+          if (
+            prevConfig.wowExportAssetDir === newConfig.wowExportAssetDir
+            && prevConfig.isSharedHosting === newConfig.isSharedHosting
+            && prevConfig.isDev === newConfig.isDev
+            && prevConfig.isClassic === newConfig.isClassic
+          ) {
+            return prevConfig; // Return previous config to avoid re-render
+          }
+          return newConfig; // Config changed, update state
+        });
       });
     }, 5000);
     return () => clearInterval(itv);

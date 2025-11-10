@@ -9,6 +9,7 @@ import {
   FileRow, FileRowWithThumbnail, VirtualListBox,
 } from '@/components/common/listbox';
 import TextureViewer from '@/components/common/texture-viewer';
+import { Button } from '@/components/ui/button';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
@@ -151,6 +152,43 @@ export default function BrowseTexturePage() {
     setIsImageLoading(false);
   }, []);
 
+  const scrollToAndSelectTexture = useCallback((texturePath: string) => {
+    // Find the texture in the current filtered results
+    const foundFile = deferredFiltered.find((f) => f.fileName === texturePath);
+
+    if (foundFile) {
+      // Found in current results, scroll to it and select it
+      const index = deferredFiltered.indexOf(foundFile);
+      const container = listRef.current;
+      if (!container) return;
+
+      // Calculate cumulative height up to this index
+      let scrollTop = CONTAINER_PADDING;
+      for (let i = 0; i < index; i++) {
+        const file = deferredFiltered[i];
+        const h = isIcon(file.fileName) ? FileRowWithThumbnail.ROW_HEIGHT : FileRow.ROW_HEIGHT;
+        scrollTop += h;
+      }
+
+      // Scroll to the item
+      container.scrollTo({
+        top: Math.max(0, scrollTop - 50), // Offset by 50px to show some context above
+        behavior: 'smooth',
+      });
+
+      // Select the item after a short delay to ensure it's visible
+      setTimeout(() => {
+        handleSelect(foundFile);
+      }, 100);
+    } else {
+      // Not found in current results, update search bar
+      const filename = texturePath.split('/').pop() ?? texturePath;
+      const searchQuery = `interface/icons/ ${filename}`;
+      setQuery(searchQuery);
+      setDebouncedQuery(searchQuery);
+    }
+  }, [deferredFiltered, handleSelect]);
+
   const isBusy = isImageLoading;
 
   const applySuggestion = (s: typeof suggestions[number]) => {
@@ -166,10 +204,6 @@ export default function BrowseTexturePage() {
     }
   };
 
-  if (!allFiles.length) {
-    return <div>Loading...</div>;
-  }
-
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
       <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
@@ -183,37 +217,42 @@ export default function BrowseTexturePage() {
                   <SearchIcon className="w-4 h-4" />
                   Browse Texture Files
                 </CardTitle>
+                <Button variant="outline" size="icon" className="ml-auto !mt-0 opacity-0 pointer-events-none" aria-hidden="true">
+                  <div className="h-4 w-4" />
+                </Button>
               </CardHeader>
               <CardContent className="flex flex-col flex-1 overflow-hidden p-3 min-w-0">
-                <div className="flex items-center relative w-full mb-2">
-                  <Input
-                    placeholder="Search texture, e.g. 'interface/icons'..."
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    disabled={isBusy}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        e.preventDefault();
-                        setQuery('');
-                        setDebouncedQuery('');
-                      }
-                    }}
-                    ref={inputRef}
-                    className="w-full sm:pr-[170px]"
-                  />
-                  <div className="absolute inset-y-0 right-2 hidden sm:flex items-center gap-2 pointer-events-none z-20">
-                    {suggestions.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
-                        onClick={() => applySuggestion(s)}
-                        disabled={isBusy}
-                        title={`Search for ${s}`}
-                      >
-                        {s}
-                      </button>
-                    ))}
+                <div className="flex items-center w-full mb-2">
+                  <div className="relative w-full">
+                    <Input
+                      placeholder="Search texture, e.g. 'interface/icons'..."
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      disabled={isBusy}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setQuery('');
+                          setDebouncedQuery('');
+                        }
+                      }}
+                      ref={inputRef}
+                      className="w-full sm:pr-[170px]"
+                    />
+                    <div className="absolute inset-y-0 right-2 hidden sm:flex items-center gap-2 pointer-events-none z-20">
+                      {suggestions.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
+                          onClick={() => applySuggestion(s)}
+                          disabled={isBusy}
+                          title={`Search for ${s}`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <VirtualListBox<FileEntry>
@@ -263,7 +302,7 @@ export default function BrowseTexturePage() {
           {/* Right: viewer */}
           <div className="lg:w-2/3 w-full h-full overflow-y-auto overflow-x-visible p-0 relative min-w-0">
             {selectedTexturePath && selectedIsIcon ? (
-              <IconExporter texturePath={selectedTexturePath} />
+              <IconExporter texturePath={selectedTexturePath} onSearchClick={scrollToAndSelectTexture} />
             ) : selectedTexturePath ? (
               <TextureViewer
                 texturePath={selectedTexturePath}

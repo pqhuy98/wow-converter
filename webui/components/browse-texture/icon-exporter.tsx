@@ -12,24 +12,33 @@ import {
 } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  IconFrame, IconSize, IconStyle,
+  IconFrame, IconResizeMode, IconSize, IconStyle,
 } from '@/lib/models/icon-export.model';
+import { getWc3Path } from '@/lib/utils/wc3.utils';
 
 import { useServerConfig } from '../server-config';
+import BorderStyleSelector from './border-style-selector';
 import IconPairBlock, { type IconVariant } from './icon-pair-block';
+import ResizeSelector from './resize-selector';
+import {
+  loadResizeModeFromStorage, loadSelectionFromStorage,
+  loadSizeFromStorage, loadStyleFromStorage, saveResizeModeToStorage, saveSelectionToStorage,
+  saveSizeToStorage, saveStyleToStorage,
+} from './settings';
 
 const SELECTION_ITEM_GAP = 12;
 
-interface SelectionItem {
+export interface SelectionItem {
   texturePath: string;
   style: IconStyle;
   groupIndex: number;
   variants: IconVariant[];
+  size: IconSize;
+  resizeMode?: IconResizeMode;
   id: string;
 }
 
@@ -45,7 +54,7 @@ const frameGroups: IconFrame[][] = [
 ];
 
 function generateIconVariants(styles: IconStyle[]): IconVariant[] {
-  const size: IconSize = 'original';
+  const size: IconSize = '128x128'; // Default size for variant display
   const variants: IconVariant[] = [];
   for (const style of styles) {
     for (let groupIndex = 0; groupIndex < frameGroups.length; groupIndex++) {
@@ -64,11 +73,11 @@ function generateIconVariants(styles: IconStyle[]): IconVariant[] {
   return variants;
 }
 
-function buildIconUrl(texturePath: string, variant: IconVariant): string {
+function buildIconUrl(texturePath: string, variant: IconVariant, size: IconSize, resizeMode?: IconResizeMode, useFallbackResize?: boolean): string {
   const encodedPath = encodeURIComponent(texturePath);
   const params = new URLSearchParams({
     mode: 'icon',
-    size: variant.size,
+    size, // Use size directly
     style: variant.style,
     frame: variant.frame,
   });
@@ -76,30 +85,42 @@ function buildIconUrl(texturePath: string, variant: IconVariant): string {
   if (variant.frame !== 'none') {
     params.set('extras', JSON.stringify({ crop: true }));
   }
+
+  // If AI resize is loading, use normal resize as fallback (blurry but visible)
+  let actualResizeMode = resizeMode;
+  if (useFallbackResize && resizeMode === 'ai') {
+    actualResizeMode = 'normal';
+  }
+
+  if (actualResizeMode) {
+    params.set('resizeMode', actualResizeMode);
+  }
   return `/api/texture/png/${encodedPath}?${params.toString()}`;
 }
 
 interface IconExporterProps {
   texturePath: string;
+  onSearchClick?: (texturePath: string, style?: IconStyle, size?: IconSize, resizeMode?: IconResizeMode) => void;
 }
-
-const STORAGE_KEY_STYLE = 'icon-exporter-selected-style';
-const STORAGE_KEY_SELECTION = 'icon-exporter-selection';
-const DEFAULT_STYLE: IconStyle = 'classic-sd';
 
 const tooltips = {
   exportAll: 'Export all icons in the selection as BLP files',
   clearSelection: 'Clear all items from the selection',
 };
 
-export default function IconExporter({ texturePath }: IconExporterProps) {
+function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) {
   const [selectedStyle, setSelectedStyle] = useState<IconStyle>(loadStyleFromStorage);
+  const [selectedSize, setSelectedSize] = useState<IconSize>(loadSizeFromStorage);
+  const [selectedResizeMode, setSelectedResizeMode] = useState<IconResizeMode | undefined>(loadResizeModeFromStorage);
+  const [textureDimensions, setTextureDimensions] = useState<{ width: number; height: number } | null>(null);
   const [selection, setSelection] = useState<SelectionItem[]>(loadSelectionFromStorage);
   const [cleaningAssets, setCleaningAssets] = useState<'ready' | 'pending' | 'cooldown'>('ready');
   const [exportingSelection, setExportingSelection] = useState(false);
   const [exportedOutputDirectory, setExportedOutputDirectory] = useState<string | null>(null);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState(false);
+  // Track loaded AI image URLs
+  const [loadedAiImageUrls, setLoadedAiImageUrls] = useState<Set<string>>(new Set());
   const serverConfig = useServerConfig();
 
   useEffect(() => {
@@ -107,31 +128,161 @@ export default function IconExporter({ texturePath }: IconExporterProps) {
   }, [selectedStyle]);
 
   useEffect(() => {
+    saveSizeToStorage(selectedSize);
+  }, [selectedSize]);
+
+  useEffect(() => {
+    saveResizeModeToStorage(selectedResizeMode);
+  }, [selectedResizeMode]);
+
+  useEffect(() => {
     saveSelectionToStorage(selection);
   }, [selection]);
 
-  const iconVariants = useMemo(() => generateIconVariants([selectedStyle]), [selectedStyle]);
+  // Reset loaded images when texture path changes
+  useEffect(() => {
+    setLoadedAiImageUrls(new Set());
+  }, [texturePath]);
 
-  const handleStyleToggle = useCallback((value: string) => {
-    if (value) {
-      setSelectedStyle(value as IconStyle);
-    }
-  }, []);
-
-  const handleAddToSelection = useCallback((groupIndex: number) => {
-    const groupVariants = iconVariants.filter((v) => v.groupIndex === groupIndex);
-    if (groupVariants.length === 0) return;
-
-    const newItem: SelectionItem = {
-      texturePath,
-      style: selectedStyle,
-      groupIndex,
-      variants: groupVariants,
-      id: `${texturePath}-${selectedStyle}-${groupIndex}-${Date.now()}`,
+  // Load texture image to get dimensions (image will be cached by browser)
+  useEffect(() => {
+    const img = new Image();
+    const handleLoad = () => {
+      setTextureDimensions({
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      });
+    };
+    const handleError = () => {
+      setTextureDimensions(null);
     };
 
-    setSelection((prev) => [...prev, newItem]);
-  }, [texturePath, selectedStyle, iconVariants]);
+    img.onload = handleLoad;
+    img.onerror = handleError;
+    // Use the PNG texture URL (will be cached by browser)
+    img.src = `/api/texture/png/${encodeURIComponent(texturePath)}`;
+
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [texturePath]);
+
+  const iconVariants = useMemo(() => generateIconVariants([selectedStyle]), [selectedStyle]);
+
+  // Compute expected AI image URLs - only include URLs that are actually rendered (shop icons)
+  const expectedAiImageUrls = useMemo(() => {
+    const isAiResize = selectedResizeMode === 'ai';
+    if (!isAiResize) {
+      return new Set<string>();
+    }
+
+    const expected = new Set<string>();
+    // Only add shop icon variant URLs (these are the ones actually rendered)
+    // Selection URLs will load when rendered, but we don't block dropdown for them
+    for (const variant of iconVariants) {
+      const url = buildIconUrl(texturePath, variant, selectedSize, selectedResizeMode, false);
+      expected.add(url);
+    }
+    return expected;
+  }, [texturePath, selectedSize, selectedResizeMode, iconVariants]);
+
+  // Check if dropdown should be disabled (when AI images are still loading)
+  const isBusy = useMemo(() => {
+    if (selectedResizeMode !== 'ai' || expectedAiImageUrls.size === 0) {
+      return false;
+    }
+
+    // Parse URLs and compare by parameter sets (more reliable than string normalization)
+    const parseUrlParams = (url: string): { pathname: string; params: Map<string, string> } => {
+      try {
+        let urlObj: URL;
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          urlObj = new URL(url);
+        } else {
+          urlObj = new URL(url, window.location.origin);
+        }
+        const params = new URLSearchParams(urlObj.search);
+        const paramsMap = new Map<string, string>();
+        for (const [key, value] of params.entries()) {
+          paramsMap.set(key, value);
+        }
+        return { pathname: urlObj.pathname, params: paramsMap };
+      } catch (e) {
+        console.warn('[IconExporter] Failed to parse URL:', url, e);
+        return { pathname: url, params: new Map() };
+      }
+    };
+
+    const urlMatches = (url1: string, url2: string): boolean => {
+      const parsed1 = parseUrlParams(url1);
+      const parsed2 = parseUrlParams(url2);
+      if (parsed1.pathname !== parsed2.pathname) return false;
+      if (parsed1.params.size !== parsed2.params.size) return false;
+      for (const [key, value] of parsed1.params.entries()) {
+        if (parsed2.params.get(key) !== value) return false;
+      }
+      return true;
+    };
+
+    // Check if all expected images are loaded by comparing parameter sets
+    const allLoaded = Array.from(expectedAiImageUrls).every((expectedUrl) => Array.from(loadedAiImageUrls).some((loadedUrl) => urlMatches(expectedUrl, loadedUrl)));
+
+    if (!allLoaded && expectedAiImageUrls.size > 0) {
+      const missing = Array.from(expectedAiImageUrls).filter((expectedUrl) => !Array.from(loadedAiImageUrls).some((loadedUrl) => urlMatches(expectedUrl, loadedUrl)));
+      console.log(`[IconExporter] isBusy=true: ${missing.length} images still loading. Expected: ${expectedAiImageUrls.size}, Loaded: ${loadedAiImageUrls.size}`);
+      if (missing.length > 0) {
+        console.log('[IconExporter] Missing URL:', missing[0]);
+      }
+    } else if (allLoaded && expectedAiImageUrls.size > 0) {
+      console.log(`[IconExporter] All ${expectedAiImageUrls.size} images loaded, dropdown enabled`);
+    }
+
+    return !allLoaded;
+  }, [selectedResizeMode, expectedAiImageUrls, loadedAiImageUrls]);
+
+  const handleStyleToggle = useCallback((value: string) => {
+    const newStyle = value as IconStyle;
+    setSelectedStyle(newStyle);
+    // Do not update selection - selection only changes when user explicitly clicks shop items
+  }, []);
+
+  const handleSizeChange = useCallback((newSize: IconSize) => {
+    setSelectedSize(newSize);
+    setLoadedAiImageUrls(new Set());
+  }, []);
+
+  const handleResizeModeChange = useCallback((mode: IconResizeMode) => {
+    setSelectedResizeMode(mode);
+    setLoadedAiImageUrls(new Set());
+  }, []);
+
+  const handleImageLoad = useCallback((imageSrc?: string) => {
+    // Only track AI-resized images
+    if (!imageSrc || selectedResizeMode !== 'ai') {
+      return;
+    }
+
+    // Check if this is an AI-resized image (not fallback/normal resize)
+    // Normalize URL for comparison (decode and re-encode to handle encoding differences)
+    const normalizedSrc = decodeURIComponent(imageSrc);
+    const resizeParam = 'resizeMode=ai';
+    const isAiResizeUrl = normalizedSrc.includes(resizeParam);
+
+    if (isAiResizeUrl) {
+      // Use the normalized URL for consistent comparison
+      const urlToAdd = imageSrc; // Keep original URL format
+      setLoadedAiImageUrls((prev) => {
+        // Check if already added
+        if (prev.has(urlToAdd)) {
+          return prev;
+        }
+        const next = new Set(prev).add(urlToAdd);
+        console.log(`[IconExporter] AI image loaded: ${urlToAdd} (${next.size} total)`);
+        return next;
+      });
+    }
+  }, [selectedResizeMode]);
 
   const handleRemoveFromSelection = useCallback((id: string) => {
     setSelection((prev) => prev.filter((item) => item.id !== id));
@@ -157,19 +308,28 @@ export default function IconExporter({ texturePath }: IconExporterProps) {
     setExportingSelection(true);
     try {
       // Map selection to API format - flatten variants into separate items
-      const items: Array<{ texturePath: string; options?: { size: string; style: string; frame: string; extras?: { crop?: boolean } } }> = [];
+      // Only include first occurrence of each Wc3 output path
+
+      const items: Array<{ texturePath: string; options?: { size: string; style: string; frame: string; extras?: { crop?: boolean }; resizeMode?: string } }> = [];
+      const seenKeys = new Set<string>();
 
       for (const item of selection) {
         for (const variant of item.variants) {
-          items.push({
-            texturePath: item.texturePath,
-            options: {
-              size: variant.size,
-              style: variant.style,
-              frame: variant.frame,
-              ...(variant.frame !== 'none' ? { extras: { crop: true } } : {}),
-            },
-          });
+          // Create unique key: Wc3 output path
+          const wc3Path = getWc3Path(item.texturePath, variant.frame);
+          if (!seenKeys.has(wc3Path)) {
+            seenKeys.add(wc3Path);
+            items.push({
+              texturePath: item.texturePath,
+              options: {
+                size: item.size,
+                style: variant.style,
+                frame: variant.frame,
+                ...(variant.frame !== 'none' ? { extras: { crop: true } } : {}),
+                ...(item.resizeMode ? { resizeMode: item.resizeMode } : {}),
+              },
+            });
+          }
         }
       }
 
@@ -245,45 +405,80 @@ export default function IconExporter({ texturePath }: IconExporterProps) {
     const groupVariants = iconVariants.filter((v) => v.groupIndex === groupIndex);
     if (groupVariants.length === 0) return null;
 
-    const isInSelection = selection.some(
+    // Check if there's an item with exact match on all fields: texturePath, style, groupIndex, size, and resizeMode
+    const existingItem = selection.find(
       (item) => item.texturePath === texturePath
         && item.style === selectedStyle
-        && item.groupIndex === groupIndex,
+        && item.groupIndex === groupIndex
+        && item.size === selectedSize
+        && item.resizeMode === selectedResizeMode,
     );
 
-    const selectionItemId = selection.find(
-      (item) => item.texturePath === texturePath
-        && item.style === selectedStyle
-        && item.groupIndex === groupIndex,
-    )?.id;
-
     const handlePairClick = () => {
-      if (isInSelection && selectionItemId) {
-        handleRemoveFromSelection(selectionItemId);
+      if (existingItem) {
+        // Exact match: remove it
+        handleRemoveFromSelection(existingItem.id);
       } else {
-        handleAddToSelection(groupIndex);
+        // Different resize or not in selection: replace/add
+        // Use setSelection directly to ensure atomic update
+        const groupVariantsForClick = iconVariants.filter((v) => v.groupIndex === groupIndex);
+        if (groupVariantsForClick.length === 0) return;
+
+        const newItem: SelectionItem = {
+          texturePath,
+          style: selectedStyle,
+          groupIndex,
+          variants: groupVariantsForClick,
+          size: selectedSize,
+          resizeMode: selectedResizeMode,
+          id: `${texturePath}-${selectedStyle}-${groupIndex}-${Date.now()}`,
+        };
+
+        setSelection((prev) => {
+          // Remove existing item with same texturePath and groupIndex (if exists)
+          const filtered = prev.filter((item) => !(
+            item.texturePath === texturePath
+            && item.groupIndex === groupIndex
+          ));
+
+          // Remove conflicting items (same Wc3 path) and add new item
+          const newSelection = filtered.filter((item) => !item.variants.some((itemVariant) => {
+            const itemWc3Path = getWc3Path(item.texturePath, itemVariant.frame);
+            return groupVariantsForClick.some((newVariant) => {
+              const newWc3Path = getWc3Path(texturePath, newVariant.frame);
+              return itemWc3Path === newWc3Path;
+            });
+          }));
+
+          return [...newSelection, newItem];
+        });
       }
     };
 
     return (
       <IconPairBlock
-        key={groupIndex}
+        key={`${texturePath}-${groupIndex}-${selectedStyle}-${selectedSize}-${selectedResizeMode ?? 'normal'}`}
         groupIndex={groupIndex}
         groupVariants={groupVariants}
         texturePath={texturePath}
         isInShop
-        isSelected={isInSelection}
+        isSelected={!!existingItem}
         onPairClick={handlePairClick}
-        buildIconUrl={buildIconUrl}
+        buildIconUrl={(path, variant, size, resizeMode, useFallback) => buildIconUrl(path, variant, size ?? selectedSize, resizeMode ?? selectedResizeMode, useFallback)}
+        onImageLoad={handleImageLoad}
+        textureDimensions={textureDimensions}
+        selectedSize={selectedSize}
+        selectedResizeMode={selectedResizeMode}
+        selectedStyle={selectedStyle}
       />
     );
   };
 
   return (
     <div className="h-full overflow-y-auto overflow-x-visible bg-secondary rounded-md">
-      <div className="flex flex-col lg:flex-row gap-0 pl-4 pr-0 min-h-full">
-        {/* Shop section */}
-        <div className="flex-1 min-w-0 py-4">
+        <div className="flex flex-col lg:flex-row gap-0 pl-4 pr-0 min-h-full">
+          {/* Shop section */}
+          <div className="flex-1 min-w-0 py-4">
           <div className="mb-4">
             <h2 className="text-2xl font-semibold mb-2">Icon Exporter</h2>
             <p className="text-sm text-muted-foreground">
@@ -291,25 +486,18 @@ export default function IconExporter({ texturePath }: IconExporterProps) {
               <span className="font-semibold text-foreground">{texturePath}</span>
             </p>
             <div className="flex flex-col sm:flex-row gap-3 mt-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Style:</span>
-                <ToggleGroup
-                  type="single"
-                  value={selectedStyle}
-                  onValueChange={handleStyleToggle}
-                  className="flex-wrap"
-                >
-                  <ToggleGroupItem value="classic-hd-2.0" aria-label="Classic HD 2.0">
-                    Classic HD 2.0
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="classic-sd" aria-label="Classic SD">
-                    Classic SD
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="reforged-hd" aria-label="Reforged HD">
-                    Reforged HD
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
+              <BorderStyleSelector
+                value={selectedStyle}
+                onValueChange={handleStyleToggle}
+              />
+              <ResizeSelector
+                size={selectedSize}
+                resizeMode={selectedResizeMode}
+                textureDimensions={textureDimensions}
+                onSizeChange={handleSizeChange}
+                onResizeModeChange={handleResizeModeChange}
+                disabled={isBusy}
+              />
             </div>
           </div>
           <div className="flex flex-wrap items-start gap-x-1 gap-y-3">
@@ -357,14 +545,21 @@ export default function IconExporter({ texturePath }: IconExporterProps) {
                       groupVariants={item.variants}
                       texturePath={item.texturePath}
                       isInShop={false}
-                      onPairClick={() => {
-                        handleRemoveFromSelection(item.id);
-                      }}
-                      buildIconUrl={buildIconUrl}
+                      isSelected={false}
+                      onPairClick={() => handleRemoveFromSelection(item.id)}
+                      buildIconUrl={(path, variant, size, resizeMode, useFallback) => buildIconUrl(path, variant, size ?? item.size, resizeMode ?? item.resizeMode, useFallback)}
+                      onImageLoad={handleImageLoad}
                       showPath
                       showRemoveButton
-                      onRemove={() => {
-                        handleRemoveFromSelection(item.id);
+                      onRemove={() => handleRemoveFromSelection(item.id)}
+                      selectedSize={item.size}
+                      selectedResizeMode={item.resizeMode}
+                      selectedStyle={item.style}
+                      onSearchClick={(path, style, size, resizeMode) => {
+                        if (style) setSelectedStyle(style as IconStyle);
+                        if (size) setSelectedSize(size as IconSize);
+                        if (resizeMode !== undefined) setSelectedResizeMode(resizeMode as IconResizeMode);
+                        onSearchClick?.(path, style as IconStyle | undefined, size as IconSize | undefined, resizeMode as IconResizeMode | undefined);
                       }}
                     />
                   ))}
@@ -502,55 +697,11 @@ export default function IconExporter({ texturePath }: IconExporterProps) {
             </div>
           )}
         </div>
+        </div>
       </div>
-    </div>
   );
 }
 
-function loadStyleFromStorage(): IconStyle {
-  if (typeof window === 'undefined') return DEFAULT_STYLE;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_STYLE);
-    if (!stored) return DEFAULT_STYLE;
-    const parsed = stored as IconStyle;
-    if (['classic-sd', 'reforged-hd', 'classic-hd-2.0'].includes(parsed)) {
-      return parsed;
-    }
-    return DEFAULT_STYLE;
-  } catch {
-    return DEFAULT_STYLE;
-  }
-}
-
-function saveStyleToStorage(style: IconStyle): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_STYLE, style);
-  } catch {
-    // Ignore storage errors
-  }
-}
-
-function loadSelectionFromStorage(): SelectionItem[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_SELECTION);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as SelectionItem[];
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSelectionToStorage(selection: SelectionItem[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_SELECTION, JSON.stringify(selection));
-  } catch {
-    // Ignore storage errors
-  }
+export default function IconExporter({ texturePath, onSearchClick }: IconExporterProps) {
+  return <IconExporterContent texturePath={texturePath} onSearchClick={onSearchClick} />;
 }

@@ -13,17 +13,18 @@ export type IconFrame = 'btn' | 'disbtn' | 'pas' | 'dispas' | 'atc' | 'disatc' |
 // Extras configuration
 export interface IconExtras {
   readonly crop?: boolean; // Apply 10% symmetric crop
-  readonly blackFrame?: boolean; // Apply black frame overlay
-  readonly heroFrame?: boolean; // Apply hero frame overlay
-  readonly alpha?: boolean; // Remove colors from transparent pixels (default: true)
 }
+
+// Resize mode options
+export type IconResizeMode = 'normal' | 'ai';
 
 // Main conversion options
 export interface IconConversionOptions {
-  readonly size?: IconSize; // Output size, default: '256x256'
-  readonly style?: IconStyle; // Frame style, default: 'classic-sd'
-  readonly frame?: IconFrame; // Frame type, default: 'btn'
+  readonly size: IconSize; // Output size (required)
+  readonly style?: IconStyle; // Frame style, default: 'classic-hd-2.0'
+  readonly frame?: IconFrame; // Frame type, default: 'none'
   readonly extras?: IconExtras; // Extra processing options
+  readonly resizeMode?: IconResizeMode; // Resize mode, default: 'normal'
 }
 
 // Frame label mapping for display
