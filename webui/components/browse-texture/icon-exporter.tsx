@@ -4,7 +4,7 @@ import {
   CheckCircle2,
   Copy,
   Download,
-  Info,
+  HelpCircle,
   Trash2,
 } from 'lucide-react';
 import {
@@ -24,9 +24,8 @@ import { useServerConfig } from '../server-config';
 import BorderStyleSelector from './border-style-selector';
 import IconPairBlock, { type IconVariant } from './icon-pair-block';
 import ResizeSelector from './resize-selector';
+import SelectionIconItem from './selection-icon-item';
 import { loadSettings, saveSettings } from './settings';
-
-const SELECTION_ITEM_GAP = 12;
 
 export interface SelectionItem {
   texturePath: string;
@@ -36,6 +35,12 @@ export interface SelectionItem {
   size: IconSize;
   resizeMode?: IconResizeMode;
   id: string;
+  outputName: string;
+}
+
+function extractBaseName(texturePath: string): string {
+  const filename = texturePath.split('/').pop() ?? texturePath;
+  return filename.replace(/\.(blp|png|jpg|jpeg)$/i, '');
 }
 
 const frameGroups: IconFrame[][] = [
@@ -116,6 +121,8 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
   const [exportedOutputDirectory, setExportedOutputDirectory] = useState<string | null>(null);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState(false);
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+  const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
   // Track loaded AI image URLs
   const [loadedAiImageUrls, setLoadedAiImageUrls] = useState<Set<string>>(new Set());
   const serverConfig = useServerConfig();
@@ -282,7 +289,22 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
   }, [selectedResizeMode]);
 
   const handleRemoveFromSelection = useCallback((id: string) => {
-    setSelection((prev) => prev.filter((item) => item.id !== id));
+    // Mark as removing to trigger exit animation
+    setRemovingIds((prev) => new Set(prev).add(id));
+
+    // Remove from selection after animation completes
+    setTimeout(() => {
+      setSelection((prev) => prev.filter((item) => item.id !== id));
+      setRemovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 300); // Match transition duration
+  }, []);
+
+  const handleRenameSelection = useCallback((id: string, outputName: string) => {
+    setSelection((prev) => prev.map((item) => (item.id === id ? { ...item, outputName } : item)));
   }, []);
 
   const handleClearSelection = useCallback(() => {
@@ -291,6 +313,8 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
 
   const handleCleanAssets = useCallback(() => {
     setCleaningAssets('pending');
+    setExportSuccessMessage(null);
+    setExportedOutputDirectory(null);
     void fetch('/api/export/character/clean', { method: 'POST' }).then(() => {
       setCleaningAssets('cooldown');
       setTimeout(() => {
@@ -303,17 +327,23 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
     if (selection.length === 0) return;
 
     setExportingSelection(true);
+    setExportSuccessMessage(null);
+    setExportedOutputDirectory(null);
     try {
       // Map selection to API format - flatten variants into separate items
       // Only include first occurrence of each Wc3 output path
 
-      const items: Array<{ texturePath: string; options?: { size: string; style: string; frame: string; extras?: { crop?: boolean }; resizeMode?: string } }> = [];
+      const items: Array<{ texturePath: string; options?: { size: string; style: string; frame: string; extras?: { crop?: boolean }; resizeMode?: string }; outputPath?: string }> = [];
       const seenKeys = new Set<string>();
 
       for (const item of selection) {
         for (const variant of item.variants) {
+          // Format texture path with output name
+          // getWc3Path only uses the filename, so we use the output name with .blp extension
+          const effectiveTexturePath = `${item.outputName}.blp`;
+
           // Create unique key: Wc3 output path
-          const wc3Path = getWc3Path(item.texturePath, variant.frame);
+          const wc3Path = getWc3Path(effectiveTexturePath, variant.frame);
           if (!seenKeys.has(wc3Path)) {
             seenKeys.add(wc3Path);
             items.push({
@@ -325,6 +355,8 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
                 ...(variant.frame !== 'none' ? { extras: { crop: true } } : {}),
                 ...(item.resizeMode ? { resizeMode: item.resizeMode } : {}),
               },
+              // Always use custom output path since outputName is required
+              outputPath: wc3Path,
             });
           }
         }
@@ -399,6 +431,21 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
   }, [selection, serverConfig.isSharedHosting]);
 
   const renderShopGroup = (groupIndex: number) => {
+    // When original size is selected, only show the Original frame group (groupIndex 7)
+    // But only if the texture's original size is NOT a standard icon size (64, 128, or 256)
+    if (selectedSize === 'original' && textureDimensions) {
+      const isStandardSize = (
+        (textureDimensions.width === 64 && textureDimensions.height === 64)
+        || (textureDimensions.width === 128 && textureDimensions.height === 128)
+        || (textureDimensions.width === 256 && textureDimensions.height === 256)
+      );
+
+      // Only hide other groups if original size is NOT standard
+      if (!isStandardSize && groupIndex !== 7) {
+        return null;
+      }
+    }
+
     const groupVariants = iconVariants.filter((v) => v.groupIndex === groupIndex);
     if (groupVariants.length === 0) return null;
 
@@ -411,6 +458,9 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
         && item.resizeMode === selectedResizeMode,
     );
 
+    // Consider item as not selected if it's being removed
+    const isSelected = existingItem ? !removingIds.has(existingItem.id) : false;
+
     const handlePairClick = () => {
       if (existingItem) {
         // Exact match: remove it
@@ -420,16 +470,6 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
         // Use setSelection directly to ensure atomic update
         const groupVariantsForClick = iconVariants.filter((v) => v.groupIndex === groupIndex);
         if (groupVariantsForClick.length === 0) return;
-
-        const newItem: SelectionItem = {
-          texturePath,
-          style: selectedStyle,
-          groupIndex,
-          variants: groupVariantsForClick,
-          size: selectedSize,
-          resizeMode: selectedResizeMode,
-          id: `${texturePath}-${selectedStyle}-${groupIndex}-${Date.now()}`,
-        };
 
         setSelection((prev) => {
           // Remove existing item with same texturePath and groupIndex (if exists)
@@ -447,6 +487,28 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
             });
           }));
 
+          const newItem: SelectionItem = {
+            texturePath,
+            style: selectedStyle,
+            groupIndex,
+            variants: groupVariantsForClick,
+            size: selectedSize,
+            resizeMode: selectedResizeMode,
+            id: `${texturePath}-${selectedStyle}-${groupIndex}-${Date.now()}`,
+            // Set default output name with underscore prefix
+            outputName: `_${extractBaseName(texturePath)}`,
+          };
+
+          // Mark as new item for entrance animation
+          setNewItemIds((current) => new Set(current).add(newItem.id));
+          setTimeout(() => {
+            setNewItemIds((current) => {
+              const next = new Set(current);
+              next.delete(newItem.id);
+              return next;
+            });
+          }, 300); // Match transition duration
+
           return [...newSelection, newItem];
         });
       }
@@ -458,119 +520,267 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
         groupIndex={groupIndex}
         groupVariants={groupVariants}
         texturePath={texturePath}
-        isInShop
-        isSelected={!!existingItem}
+        isSelected={isSelected}
         onPairClick={handlePairClick}
         buildIconUrl={(path, variant, size, resizeMode, useFallback) => buildIconUrl(path, variant, size ?? selectedSize, resizeMode ?? selectedResizeMode, useFallback)}
         onImageLoad={handleImageLoad}
         textureDimensions={textureDimensions}
         selectedSize={selectedSize}
         selectedResizeMode={selectedResizeMode}
-        selectedStyle={selectedStyle}
       />
     );
   };
 
   return (
-    <div className="h-full overflow-y-auto overflow-x-visible bg-secondary rounded-md">
-        <div className="flex flex-col lg:flex-row gap-0 pl-4 pr-0 min-h-full">
-          {/* Shop section */}
-          <div className="flex-1 min-w-0 py-4">
-          <div className="mb-4">
-            <h2 className="text-2xl font-semibold mb-2">Icon Exporter</h2>
-            <p className="text-sm text-muted-foreground">
-              Texture: {' '}
-              <span className="font-semibold text-foreground">{texturePath}</span>
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 mt-3">
-              <BorderStyleSelector
-                value={selectedStyle}
-                onValueChange={handleStyleToggle}
-              />
-              <ResizeSelector
-                size={selectedSize}
-                resizeMode={selectedResizeMode}
-                textureDimensions={textureDimensions}
-                onSizeChange={handleSizeChange}
-                onResizeModeChange={handleResizeModeChange}
-                disabled={isBusy}
-              />
+    <>
+      <style>{`
+        @keyframes slideIn {
+          from {
+            max-height: 0;
+            opacity: 0;
+          }
+          to {
+            max-height: 100px;
+            opacity: 1;
+          }
+        }
+      `}</style>
+      <div className="h-full overflow-hidden bg-secondary rounded-md flex flex-col lg:flex-row">
+        {/* Shop section */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-shrink-0 pl-4 pr-0 pt-4">
+            <div className="mb-4">
+              <h2 className="text-2xl font-semibold mb-2">Icon Exporter</h2>
+              <p className="text-sm text-muted-foreground">
+                Texture: {' '}
+                <span className="font-semibold text-foreground">{texturePath}</span>
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 mt-3">
+                <BorderStyleSelector
+                  value={selectedStyle}
+                  onValueChange={handleStyleToggle}
+                />
+                <ResizeSelector
+                  size={selectedSize}
+                  resizeMode={selectedResizeMode}
+                  textureDimensions={textureDimensions}
+                  onSizeChange={handleSizeChange}
+                  onResizeModeChange={handleResizeModeChange}
+                  disabled={isBusy}
+                />
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-start gap-x-1 gap-y-3">
-            {renderShopGroup(0)}
-            {renderShopGroup(1)}
-            {renderShopGroup(2)}
-            {renderShopGroup(3)}
-            {renderShopGroup(4)}
-            {renderShopGroup(5)}
-            {renderShopGroup(6)}
-            {renderShopGroup(7)}
+          <div className="flex-1 overflow-y-auto overflow-x-visible pl-4 pr-0 pb-4">
+            <div className="flex flex-wrap items-start gap-x-1 gap-y-3">
+              {renderShopGroup(0)}
+              {renderShopGroup(1)}
+              {renderShopGroup(2)}
+              {renderShopGroup(3)}
+              {renderShopGroup(4)}
+              {renderShopGroup(5)}
+              {renderShopGroup(6)}
+              {renderShopGroup(7)}
+            </div>
           </div>
         </div>
         {/* Selection section */}
-        <div className="flex flex-col min-w-0 bg-muted rounded-r-lg p-4 w-[345px] flex-shrink-0 border-l border-t border-b border-r border-border self-stretch" style={{ overflowX: 'hidden' }}>
-          <div className="flex items-center gap-2 mb-3 flex-shrink-0">
+        <div className="flex flex-col min-w-0 bg-muted rounded-r-lg w-[345px] flex-shrink-0 border-l border-t border-b border-r border-border overflow-hidden">
+          <div className="flex items-center gap-2 mb-3 flex-shrink-0 p-4 pb-0">
             <h3 className="text-2xl font-semibold">Selection</h3>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={selection.length === 0}
-                    onClick={handleClearSelection}
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{tooltips.clearSelection}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="overflow-y-auto" style={{ maxHeight: 'calc(100% - 140px)' }}>
-            {selection.length > 0 ? (
+            <div className="ml-auto">
               <TooltipProvider>
-                <div className="flex flex-wrap items-start pt-2 pr-4" style={{ rowGap: `${SELECTION_ITEM_GAP}px`, columnGap: `${SELECTION_ITEM_GAP}px`, overflowX: 'hidden' }}>
-                  {selection.map((item) => (
-                    <IconPairBlock
-                      key={item.id}
-                      groupIndex={item.groupIndex}
-                      groupVariants={item.variants}
-                      texturePath={item.texturePath}
-                      isInShop={false}
-                      isSelected={false}
-                      onPairClick={() => handleRemoveFromSelection(item.id)}
-                      buildIconUrl={(path, variant, size, resizeMode, useFallback) => buildIconUrl(path, variant, size ?? item.size, resizeMode ?? item.resizeMode, useFallback)}
-                      onImageLoad={handleImageLoad}
-                      showPath
-                      showRemoveButton
-                      onRemove={() => handleRemoveFromSelection(item.id)}
-                      selectedSize={item.size}
-                      selectedResizeMode={item.resizeMode}
-                      selectedStyle={item.style}
-                      onSearchClick={(path, style, size, resizeMode) => {
-                        if (style) setSelectedStyle(style as IconStyle);
-                        if (size) setSelectedSize(size as IconSize);
-                        if (resizeMode !== undefined) setSelectedResizeMode(resizeMode as IconResizeMode);
-                        onSearchClick?.(path, style as IconStyle | undefined, size as IconSize | undefined, resizeMode as IconResizeMode | undefined);
-                      }}
-                    />
-                  ))}
-                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={selection.length === 0}
+                      onClick={handleClearSelection}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{tooltips.clearSelection}</p>
+                  </TooltipContent>
+                </Tooltip>
               </TooltipProvider>
-            ) : (
-              <div className="py-4 text-left">
-                <p className="text-muted-foreground">
-                  Click on icon pairs to add them to your selection
-                </p>
-              </div>
-            )}
+            </div>
           </div>
-          <div className="mt-3 pt-3 border-t flex items-center gap-2 flex-shrink-0">
+          <div className="flex-1 overflow-y-auto overflow-x-auto relative">
+            <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-muted to-transparent pointer-events-none z-10" />
+            <div className="pt-2 pl-4 pb-4">
+              {selection.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  {selection.map((item) => {
+                    // Check if this item has duplicate output names with other items
+                    // An item has duplicates if any of its variants would produce the same output path
+                    // as any variant of any other item
+                    const hasDuplicate = selection.some((otherItem) => {
+                      if (otherItem.id === item.id) return false;
+                      // Check if any variant of this item conflicts with any variant of otherItem
+                      return item.variants.some((variant) => {
+                        const thisOutputPath = getWc3Path(`${item.outputName}.blp`, variant.frame);
+                        return otherItem.variants.some((otherVariant) => {
+                          const otherOutputPath = getWc3Path(`${otherItem.outputName}.blp`, otherVariant.frame);
+                          return thisOutputPath === otherOutputPath;
+                        });
+                      });
+                    });
+
+                    const isRemoving = removingIds.has(item.id);
+                    const isNew = newItemIds.has(item.id);
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`transition-all duration-300 ease-in-out ${
+                          isRemoving
+                            ? 'opacity-0 max-h-0 overflow-hidden -mb-1'
+                            : isNew
+                              ? 'opacity-0 max-h-0 overflow-hidden animate-[slideIn_0.3s_ease-out_forwards]'
+                              : 'opacity-100 max-h-[100px]'
+                        }`}
+                      >
+                        <SelectionIconItem
+                          texturePath={item.texturePath}
+                          variants={item.variants}
+                          size={item.size}
+                          resizeMode={item.resizeMode}
+                          style={item.style}
+                          outputName={item.outputName}
+                          hasDuplicateOutputName={hasDuplicate}
+                          onImageLoad={handleImageLoad}
+                          onRemove={() => handleRemoveFromSelection(item.id)}
+                          onRename={(outputName) => handleRenameSelection(item.id, outputName)}
+                          onSearchClick={(path, style, size, resizeMode) => {
+                            if (style) setSelectedStyle(style as IconStyle);
+                            if (size) setSelectedSize(size as IconSize);
+                            if (resizeMode !== undefined) setSelectedResizeMode(resizeMode as IconResizeMode);
+                            onSearchClick?.(path, style as IconStyle | undefined, size as IconSize | undefined, resizeMode as IconResizeMode | undefined);
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-4 text-left px-4">
+                  <p className="text-muted-foreground">
+                    Click on icon pairs to add them to your selection
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Success message section - expands when content appears */}
+          {exportSuccessMessage ? (
+            <div className="border-t flex-shrink-0 p-4 transition-all duration-1000">
+              <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-green-600 dark:text-green-500" />
+                  <div className="flex-1 space-y-2">
+                    <div className="text-sm font-medium text-green-600 dark:text-green-500">
+                      {exportSuccessMessage}
+                    </div>
+                    {exportedOutputDirectory && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-foreground/70">Exported to:</span>
+                        <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-foreground/80">
+                          exported-assets
+                        </code>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={() => {
+                                  if (exportedOutputDirectory) {
+                                    void navigator.clipboard.writeText(exportedOutputDirectory);
+                                    setCopiedPath(true);
+                                    setTimeout(() => setCopiedPath(false), 2000);
+                                  }
+                                }}
+                              >
+                                {copiedPath ? (
+                                  <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-500" />
+                                ) : (
+                                  <Copy className="h-3 w-3 text-foreground/60" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Copy full path</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {exportedOutputDirectory && (
+                  <div className="flex items-start gap-2 text-xs mt-2">
+                    <HelpCircle className="h-5 w-5 shrink-0 mt-0.5 text-foreground/50" />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="flex-1 text-left text-foreground/70 hover:text-foreground/90 underline underline-offset-2 cursor-help"
+                          >
+                            How to import to WC3 map
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-sm">
+                          <div className="space-y-2 text-xs">
+                            <p>
+                              Copy the contents of exported-assets folder into your WC3 map folder (save your map as folder, not .w3x archive).
+                            </p>
+                            <p className="text-muted-foreground">
+                              Alternatively, use World Editor's asset manager to import files one by one, setting the correct paths exactly as they appear in the export directory. This old-school manual method is not recommended because it's slow.
+                            </p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                )}
+                {exportSuccessMessage && serverConfig.isSharedHosting && exportSuccessMessage.includes('downloaded as ZIP') && (
+                  <div className="flex items-start gap-2 text-xs mt-2">
+                    <HelpCircle className="h-5 w-5 shrink-0 mt-0.5 text-foreground/50" />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="flex-1 text-left text-foreground/70 hover:text-foreground/90 underline underline-offset-2 cursor-help"
+                          >
+                            How to import to WC3 map
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-sm">
+                          <div className="space-y-2 text-xs">
+                            <p>
+                              Extract the ZIP file and copy the contents into your WC3 map folder (save your map as folder, not .w3x archive).
+                            </p>
+                            <p className="text-muted-foreground">
+                            Alternatively, use World Editor's asset manager to import files one by one, setting the correct paths exactly as they appear in the export directory. This old-school manual method is not recommended because it's slow.
+                            </p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+          {/* Export button section */}
+          <div className="border-t flex items-center gap-2 flex-shrink-0 p-4">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -624,78 +834,9 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
               </TooltipProvider>
             )}
           </div>
-          {exportSuccessMessage && (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-start gap-2 text-base">
-                <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-green-600 dark:text-green-400" />
-                <div className="flex-1 space-y-1">
-                  <span className="text-green-600 dark:text-green-400">{exportSuccessMessage}</span>
-                  {exportedOutputDirectory && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-green-600 dark:text-green-400">Exported to:</span>
-                      <span className="font-mono text-muted-foreground">exported-assets</span>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5"
-                              onClick={() => {
-                                if (exportedOutputDirectory) {
-                                  void navigator.clipboard.writeText(exportedOutputDirectory);
-                                  setCopiedPath(true);
-                                  setTimeout(() => setCopiedPath(false), 2000);
-                                }
-                              }}
-                            >
-                              {copiedPath ? (
-                                <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
-                              ) : (
-                                <Copy className="h-3 w-3" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Copy full path</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {exportedOutputDirectory && (
-                <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <span>
-                      Tip: for faster import to map, copy the contents into your WC3 map folder (save map as folder, not .w3x archive).
-                    </span>
-                    <span className="block">
-                      Alternatively, use the old-school method: World Editor's asset manager to import files one by one, setting the correct paths exactly as they appear in the export directory. This manual method is not recommended due to being slow and tedious.
-                    </span>
-                  </div>
-                </div>
-              )}
-              {exportSuccessMessage && serverConfig.isSharedHosting && exportSuccessMessage.includes('downloaded as ZIP') && (
-                <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <span>
-                      Tip: extract the ZIP file and copy the contents into your WC3 map folder (save map as folder, not .w3x archive) for faster import to map.
-                    </span>
-                    <span className="block">
-                      Alternatively, use the old-school method: World Editor's asset manager to import files one by one from the extracted ZIP, setting the correct paths exactly as they appear in the ZIP structure. This manual method is not recommended due to being slow and tedious.
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
         </div>
       </div>
+    </>
   );
 }
 

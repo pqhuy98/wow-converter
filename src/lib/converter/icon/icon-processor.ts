@@ -111,25 +111,38 @@ export async function processIconImage(
 
   // Determine frame size: if size is 'original', derive from image dimensions
   let frameSize: { width: number; height: number };
+  let canvasSize: { width: number; height: number };
+
   if (size === 'original') {
-    // Use closest standard size for frame (64, 128, or 256)
-    const imageSize = Math.min(originalWidth, originalHeight);
-    if (imageSize <= 64) {
-      frameSize = SIZE_MAPPING['64x64'];
-    } else if (imageSize <= 128) {
-      frameSize = SIZE_MAPPING['128x128'];
+    // If frame is 'none', use original image dimensions
+    if (frame === 'none') {
+      frameSize = { width: originalWidth, height: originalHeight };
+      canvasSize = frameSize;
     } else {
-      frameSize = SIZE_MAPPING['256x256'];
+      // Use closest standard size for frame (64, 128, or 256)
+      const imageSize = Math.min(originalWidth, originalHeight);
+      if (imageSize <= 64) {
+        frameSize = SIZE_MAPPING['64x64'];
+      } else if (imageSize <= 128) {
+        frameSize = SIZE_MAPPING['128x128'];
+      } else {
+        frameSize = SIZE_MAPPING['256x256'];
+      }
+      canvasSize = frameSize;
     }
   } else {
     frameSize = SIZE_MAPPING[size];
+    canvasSize = frameSize;
   }
-  const canvasSize = frameSize;
 
   // Determine effective size for custom frame data lookup
-  // If size is 'original', use the frame size we determined
+  // If size is 'original', use the frame size we determined (or closest standard size if frame is 'none')
   const effectiveSizeForFrame: Exclude<IconSize, 'original'> = size === 'original'
-    ? (frameSize.width === 64 ? '64x64' : frameSize.width === 128 ? '128x128' : '256x256')
+    ? (frame === 'none'
+      ? (originalWidth <= 64 && originalHeight <= 64 ? '64x64'
+        : originalWidth <= 128 && originalHeight <= 128 ? '128x128'
+          : '256x256')
+      : (frameSize.width === 64 ? '64x64' : frameSize.width === 128 ? '128x128' : '256x256'))
     : size;
 
   // Check for custom frame positioning/sizing
@@ -154,11 +167,13 @@ export async function processIconImage(
     image = await cropImage(image, 0.1);
   }
 
-  // Resize to target size
-  image = image.resize(targetSize.width, targetSize.height, {
-    fit: 'fill',
-    kernel: 'lanczos3',
-  });
+  // Resize to target size (skip if size is 'original' and frame is 'none' - already at original size)
+  if (!(size === 'original' && frame === 'none')) {
+    image = image.resize(targetSize.width, targetSize.height, {
+      fit: 'fill',
+      kernel: 'lanczos3',
+    });
+  }
 
   // Ensure RGBA
   image = image.ensureAlpha();

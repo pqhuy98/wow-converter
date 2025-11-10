@@ -18,6 +18,29 @@ const DEFAULT_SETTINGS: IconExporterSettings = {
   selection: [],
 };
 
+function extractBaseName(texturePath: string): string {
+  const filename = texturePath.split('/').pop() ?? texturePath;
+  return filename.replace(/\.(blp|png|jpg|jpeg)$/i, '');
+}
+
+function migrateSelectionItem(item: Partial<SelectionItem> & { texturePath: string; style: IconStyle; groupIndex: number; variants: SelectionItem['variants']; size: IconSize; id: string }): SelectionItem {
+  // Migrate old items that don't have outputName (or have old customName)
+  if (!item.outputName && !(item as { customName?: string }).customName) {
+    return {
+      ...item,
+      outputName: `_${extractBaseName(item.texturePath)}`,
+    };
+  }
+  // Migrate items with old customName field
+  if (!item.outputName && (item as { customName?: string }).customName) {
+    return {
+      ...item,
+      outputName: (item as { customName: string }).customName,
+    } as SelectionItem;
+  }
+  return item as SelectionItem;
+}
+
 export function loadSettings(): IconExporterSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
@@ -48,9 +71,20 @@ export function loadSettings(): IconExporterSettings {
       settings.resizeMode = parsed.resizeMode;
     }
 
-    // Validate selection
+    // Validate and migrate selection
     if (Array.isArray(parsed.selection)) {
-      settings.selection = parsed.selection;
+      settings.selection = parsed.selection
+        .filter((item): item is Partial<SelectionItem> & { texturePath: string; style: IconStyle; groupIndex: number; variants: SelectionItem['variants']; size: IconSize; id: string } => (
+          typeof item === 'object'
+          && item !== null
+          && typeof item.texturePath === 'string'
+          && typeof item.style === 'string'
+          && typeof item.groupIndex === 'number'
+          && Array.isArray(item.variants)
+          && typeof item.size === 'string'
+          && typeof item.id === 'string'
+        ))
+        .map(migrateSelectionItem);
     }
 
     return settings;

@@ -12,21 +12,21 @@ export function getWc3Path(texturePath: string, frame: IconFrame | string): stri
 
   switch (frame) {
     case 'btn':
-      return `ReplaceableTextures\\CommandButtons\\BTN_${baseName}.blp`;
+      return `ReplaceableTextures\\CommandButtons\\BTN${baseName}.blp`;
     case 'disbtn':
-      return `ReplaceableTextures\\CommandButtonsDisabled\\DISBTN_${baseName}.blp`;
+      return `ReplaceableTextures\\CommandButtonsDisabled\\DISBTN${baseName}.blp`;
     case 'pas':
-      return `ReplaceableTextures\\PassiveButtons\\PAS_${baseName}.blp`;
+      return `ReplaceableTextures\\PassiveButtons\\PAS${baseName}.blp`;
     case 'dispas':
-      return `ReplaceableTextures\\CommandButtonsDisabled\\DISPAS_${baseName}.blp`;
+      return `ReplaceableTextures\\CommandButtonsDisabled\\DISPAS${baseName}.blp`;
     case 'atc':
-      return `ReplaceableTextures\\CommandButtons\\ATC_${baseName}.blp`;
+      return `ReplaceableTextures\\CommandButtons\\ATC${baseName}.blp`;
     case 'disatc':
-      return `ReplaceableTextures\\CommandButtonsDisabled\\DISATC_${baseName}.blp`;
+      return `ReplaceableTextures\\CommandButtonsDisabled\\DISATC${baseName}.blp`;
     case 'upg':
-      return `ReplaceableTextures\\CommandButtons\\UPG_${baseName}.blp`;
+      return `ReplaceableTextures\\CommandButtons\\UPG${baseName}.blp`;
     case 'att':
-      return `ReplaceableTextures\\CommandButtons\\ATT_${baseName}.blp`;
+      return `ReplaceableTextures\\CommandButtons\\ATT${baseName}.blp`;
     case 'ssh':
       return `scorescreen-hero-${baseName}.blp`;
     case 'ssp':

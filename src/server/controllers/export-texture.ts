@@ -18,6 +18,75 @@ import { isSharedHosting, outputDir } from '../config';
 // Re-export types for API consistency
 export type { IconConversionOptions } from '@/lib/converter/icon';
 
+/**
+ * Validate and sanitize a path to prevent path traversal attacks
+ * @param inputPath - The path to validate
+ * @param allowedPrefix - Required prefix (e.g., 'interface/icons/')
+ * @returns Normalized path if valid, throws error if invalid
+ */
+function validatePath(inputPath: string, allowedPrefix: string): string {
+  // Check for path traversal attempts before decoding/normalization
+  if (inputPath.includes('..') || inputPath.includes('../') || inputPath.includes('..\\')) {
+    throw new Error('Invalid path: path traversal detected');
+  }
+
+  // Decode URL encoding
+  const decoded = decodeURIComponent(inputPath);
+
+  // Check again after decoding (in case of encoded ..)
+  if (decoded.includes('..') || decoded.includes('../') || decoded.includes('..\\')) {
+    throw new Error('Invalid path: path traversal detected');
+  }
+
+  // Normalize the path (resolves . and .. sequences)
+  // Note: path.normalize() may convert forward slashes to backslashes on Windows
+  const normalized = path.normalize(decoded);
+
+  // Check for absolute paths
+  if (path.isAbsolute(normalized)) {
+    throw new Error('Invalid path: absolute path not allowed');
+  }
+
+  // Normalize both paths to forward slashes for comparison (cross-platform)
+  const normalizedForComparison = normalized.replace(/\\/g, '/');
+  const normalizedPrefix = allowedPrefix.replace(/\\/g, '/');
+
+  // Ensure path starts with allowed prefix (case-insensitive)
+  if (!normalizedForComparison.toLowerCase().startsWith(normalizedPrefix.toLowerCase())) {
+    throw new Error(`Path must start with ${allowedPrefix}`);
+  }
+
+  // Return path with forward slashes (consistent format)
+  return normalizedForComparison;
+}
+
+/**
+ * Validate output path to prevent path traversal attacks
+ * @param outputPath - The output path to validate
+ * @returns Normalized path if valid, throws error if invalid
+ */
+function validateOutputPath(outputPath: string): string {
+  // Check for path traversal attempts before normalization
+  if (outputPath.includes('..') || outputPath.includes('../') || outputPath.includes('..\\')) {
+    throw new Error('Invalid output path: path traversal detected');
+  }
+
+  // Normalize the path
+  const normalized = path.normalize(outputPath);
+
+  // Check for absolute paths
+  if (path.isAbsolute(normalized)) {
+    throw new Error('Invalid output path: absolute path not allowed');
+  }
+
+  // Ensure path doesn't start with / or \
+  if (normalized.startsWith('/') || normalized.startsWith('\\')) {
+    throw new Error('Invalid output path: absolute path not allowed');
+  }
+
+  return normalized;
+}
+
 // Zod schema for icon query parameters (from URL query string)
 // extras comes as string from query params, needs transformation
 export const IconQuerySchema = IconConversionOptionsSchema.extend({
@@ -68,7 +137,14 @@ export function ControllerExportTexture(router: express.Router) {
       }
 
       // Normalize path (handle URL encoding)
-      const normalizedPath = decodeURIComponent(match[1]);
+      let normalizedPath: string;
+      try {
+        normalizedPath = validatePath(match[1], 'interface/icons/');
+      } catch (error) {
+        return res.status(400).json({
+          error: error instanceof Error ? error.message : 'Invalid path',
+        });
+      }
 
       // Get or export PNG path
       let finalPath: string;
@@ -147,20 +223,37 @@ export function ControllerExportTexture(router: express.Router) {
       }
 
       // Only allow icon conversion for files in interface/icons directory
-      for (const item of parsedRequest.items) {
-        if (!item.texturePath.toLowerCase().startsWith('interface/icons/')) {
-          return res.status(400).json({
-            error: 'Icon conversion is only available for files in interface/icons directory',
-          });
+      // Validate all paths before processing
+      try {
+        for (const item of parsedRequest.items) {
+          // Validate texture path
+          const validatedTexturePath = validatePath(item.texturePath, 'interface/icons/');
+
+          // Validate output path if provided
+          let validatedOutputPath: string | undefined;
+          if (item.outputPath) {
+            validatedOutputPath = validateOutputPath(item.outputPath);
+          }
+
+          // Replace with validated paths
+          item.texturePath = validatedTexturePath;
+          if (validatedOutputPath) {
+            item.outputPath = validatedOutputPath;
+          }
         }
+      } catch (error) {
+        return res.status(400).json({
+          error: error instanceof Error ? error.message : 'Invalid path',
+        });
       }
 
       // Filter duplicates: only keep first occurrence of each Wc3 output path
+      // Use outputPath if provided, otherwise generate from texturePath and frame
 
       const seenKeys = new Set<string>();
       const filteredItems = parsedRequest.items.filter((item) => {
         const frame = item.options?.frame ?? 'none';
-        const wc3Path = getWc3Path(item.texturePath, frame);
+        const wc3Path = item.outputPath ?? getWc3Path(item.texturePath, frame);
         if (seenKeys.has(wc3Path)) {
           return false;
         }

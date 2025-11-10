@@ -14,6 +14,7 @@ import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import type { IconResizeMode, IconSize, IconStyle } from '@/lib/models/icon-export.model';
 
 import IconExporter from './icon-exporter';
 
@@ -53,6 +54,7 @@ export default function BrowseTexturePage() {
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [selectedTexturePath, setSelectedTexturePath] = useState<string | undefined>(undefined);
   const [isImageLoading, setIsImageLoading] = useState(false);
+  const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const copyBtnRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -100,11 +102,14 @@ export default function BrowseTexturePage() {
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    // Defer scroll reset to avoid blocking the main thread
-    requestAnimationFrame(() => {
-      el.scrollTop = 0;
-    });
-  }, [debouncedQuery]);
+    // Only reset scroll if we don't have a pending scroll operation
+    if (!pendingScrollToPath) {
+      // Defer scroll reset to avoid blocking the main thread
+      requestAnimationFrame(() => {
+        el.scrollTop = 0;
+      });
+    }
+  }, [debouncedQuery, pendingScrollToPath]);
 
   // Ensure the copy icon on the selected row is visible if it is clipped
   useEffect(() => {
@@ -142,6 +147,41 @@ export default function BrowseTexturePage() {
     }
   }, []);
 
+  // Scroll to pending texture path after filtered results update
+  useEffect(() => {
+    if (!pendingScrollToPath) return;
+
+    const foundFile = deferredFiltered.find((f) => f.fileName === pendingScrollToPath);
+    if (foundFile) {
+      const index = deferredFiltered.indexOf(foundFile);
+      const container = listRef.current;
+      if (!container) {
+        setPendingScrollToPath(null);
+        return;
+      }
+
+      // Calculate cumulative height up to this index
+      let scrollTop = CONTAINER_PADDING;
+      for (let i = 0; i < index; i++) {
+        const file = deferredFiltered[i];
+        const h = isIcon(file.fileName) ? FileRowWithThumbnail.ROW_HEIGHT : FileRow.ROW_HEIGHT;
+        scrollTop += h;
+      }
+
+      // Scroll to the item
+      container.scrollTo({
+        top: Math.max(0, scrollTop - 50), // Offset by 50px to show some context above
+        behavior: 'smooth',
+      });
+
+      // Select the item after a short delay to ensure it's visible
+      setTimeout(() => {
+        handleSelect(foundFile);
+        setPendingScrollToPath(null);
+      }, 100);
+    }
+  }, [deferredFiltered, pendingScrollToPath, handleSelect]);
+
   const selectedIsIcon = selected ? isIcon(selected.fileName) : false;
 
   const handleImageLoad = useCallback(() => {
@@ -152,12 +192,15 @@ export default function BrowseTexturePage() {
     setIsImageLoading(false);
   }, []);
 
-  const scrollToAndSelectTexture = useCallback((texturePath: string) => {
-    // Find the texture in the current filtered results
+  const scrollToAndSelectTexture = useCallback((texturePath: string, _style?: IconStyle, _size?: IconSize, _resizeMode?: IconResizeMode) => {
+    // Extract base directory from texture path
+    const baseDir = texturePath.substring(0, texturePath.lastIndexOf('/') + 1);
+
+    // Check if the texture is already in the current filtered results
     const foundFile = deferredFiltered.find((f) => f.fileName === texturePath);
 
-    if (foundFile) {
-      // Found in current results, scroll to it and select it
+    if (foundFile && debouncedQuery.trim() === `${baseDir} `.trim()) {
+      // Already showing the right directory and texture is visible, scroll to it
       const index = deferredFiltered.indexOf(foundFile);
       const container = listRef.current;
       if (!container) return;
@@ -181,13 +224,13 @@ export default function BrowseTexturePage() {
         handleSelect(foundFile);
       }, 100);
     } else {
-      // Not found in current results, update search bar
-      const filename = texturePath.split('/').pop() ?? texturePath;
-      const searchQuery = `interface/icons/ ${filename}`;
+      // Need to update search query first, then scroll to texture
+      const searchQuery = `${baseDir} `;
       setQuery(searchQuery);
       setDebouncedQuery(searchQuery);
+      setPendingScrollToPath(texturePath);
     }
-  }, [deferredFiltered, handleSelect]);
+  }, [deferredFiltered, debouncedQuery, handleSelect]);
 
   const isBusy = isImageLoading;
 

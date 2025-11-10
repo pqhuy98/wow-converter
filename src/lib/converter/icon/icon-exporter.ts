@@ -231,7 +231,19 @@ export class IconExporter {
           : await fsExtra.readFile(finalPngPath);
 
         const blpPath = item.outputPath
-          ? path.join(outputDir, item.outputPath)
+          ? (() => {
+            // Validate output path doesn't escape output directory
+            const joinedPath = path.join(outputDir, item.outputPath);
+            const resolvedOutputDir = path.resolve(outputDir);
+            const resolvedBlpPath = path.resolve(joinedPath);
+
+            // Ensure the resolved path is within the output directory
+            if (!resolvedBlpPath.startsWith(resolvedOutputDir)) {
+              throw new Error('Access denied: output path outside output directory');
+            }
+
+            return joinedPath;
+          })()
           : item.options?.frame
             ? path.join(outputDir, this.getWc3Path(item.texturePath, item.options.frame).replace(/\\/g, '/'))
             : path.join(outputDir, this.getDefaultBlpFilename(item.texturePath));
