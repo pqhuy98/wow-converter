@@ -24,11 +24,7 @@ import { useServerConfig } from '../server-config';
 import BorderStyleSelector from './border-style-selector';
 import IconPairBlock, { type IconVariant } from './icon-pair-block';
 import ResizeSelector from './resize-selector';
-import {
-  loadResizeModeFromStorage, loadSelectionFromStorage,
-  loadSizeFromStorage, loadStyleFromStorage, saveResizeModeToStorage, saveSelectionToStorage,
-  saveSizeToStorage, saveStyleToStorage,
-} from './settings';
+import { loadSettings, saveSettings } from './settings';
 
 const SELECTION_ITEM_GAP = 12;
 
@@ -109,11 +105,12 @@ const tooltips = {
 };
 
 function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) {
-  const [selectedStyle, setSelectedStyle] = useState<IconStyle>(loadStyleFromStorage);
-  const [selectedSize, setSelectedSize] = useState<IconSize>(loadSizeFromStorage);
-  const [selectedResizeMode, setSelectedResizeMode] = useState<IconResizeMode | undefined>(loadResizeModeFromStorage);
+  const settings = loadSettings();
+  const [selectedStyle, setSelectedStyle] = useState<IconStyle>(settings.style);
+  const [selectedSize, setSelectedSize] = useState<IconSize>(settings.size);
+  const [selectedResizeMode, setSelectedResizeMode] = useState<IconResizeMode | undefined>(settings.resizeMode);
   const [textureDimensions, setTextureDimensions] = useState<{ width: number; height: number } | null>(null);
-  const [selection, setSelection] = useState<SelectionItem[]>(loadSelectionFromStorage);
+  const [selection, setSelection] = useState<SelectionItem[]>(settings.selection);
   const [cleaningAssets, setCleaningAssets] = useState<'ready' | 'pending' | 'cooldown'>('ready');
   const [exportingSelection, setExportingSelection] = useState(false);
   const [exportedOutputDirectory, setExportedOutputDirectory] = useState<string | null>(null);
@@ -124,19 +121,19 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
   const serverConfig = useServerConfig();
 
   useEffect(() => {
-    saveStyleToStorage(selectedStyle);
+    saveSettings({ style: selectedStyle });
   }, [selectedStyle]);
 
   useEffect(() => {
-    saveSizeToStorage(selectedSize);
+    saveSettings({ size: selectedSize });
   }, [selectedSize]);
 
   useEffect(() => {
-    saveResizeModeToStorage(selectedResizeMode);
+    saveSettings({ resizeMode: selectedResizeMode });
   }, [selectedResizeMode]);
 
   useEffect(() => {
-    saveSelectionToStorage(selection);
+    saveSettings({ selection });
   }, [selection]);
 
   // Reset loaded images when texture path changes

@@ -4,10 +4,6 @@ import type { SelectionItem } from './icon-exporter';
 
 const STORAGE_KEY = 'icon-exporter-settings';
 
-const DEFAULT_STYLE: IconStyle = 'classic-hd-2.0';
-const DEFAULT_SIZE: IconSize = '128x128';
-const DEFAULT_RESIZE_MODE: IconResizeMode = 'normal';
-
 interface IconExporterSettings {
   style: IconStyle;
   size: IconSize;
@@ -16,13 +12,13 @@ interface IconExporterSettings {
 }
 
 const DEFAULT_SETTINGS: IconExporterSettings = {
-  style: DEFAULT_STYLE,
-  size: DEFAULT_SIZE,
+  style: 'classic-hd-2.0',
+  size: 'original',
   resizeMode: undefined,
   selection: [],
 };
 
-function loadSettings(): IconExporterSettings {
+export function loadSettings(): IconExporterSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -31,9 +27,9 @@ function loadSettings(): IconExporterSettings {
 
     // Validate and merge with defaults
     const settings: IconExporterSettings = {
-      style: DEFAULT_STYLE,
-      size: DEFAULT_SIZE,
-      resizeMode: undefined,
+      style: DEFAULT_SETTINGS.style,
+      size: DEFAULT_SETTINGS.size,
+      resizeMode: DEFAULT_SETTINGS.resizeMode,
       selection: [],
     };
 
@@ -43,7 +39,7 @@ function loadSettings(): IconExporterSettings {
     }
 
     // Validate size
-    if (parsed.size && ['64x64', '128x128', '256x256'].includes(parsed.size)) {
+    if (parsed.size && ['64x64', '128x128', '256x256', 'original'].includes(parsed.size)) {
       settings.size = parsed.size;
     }
 
@@ -63,7 +59,7 @@ function loadSettings(): IconExporterSettings {
   }
 }
 
-function saveSettings(settings: Partial<IconExporterSettings>): void {
+export function saveSettings(settings: Partial<IconExporterSettings>): void {
   if (typeof window === 'undefined') return;
   try {
     const current = loadSettings();
@@ -76,39 +72,3 @@ function saveSettings(settings: Partial<IconExporterSettings>): void {
     // Ignore storage errors
   }
 }
-
-export function loadStyleFromStorage(): IconStyle {
-  return loadSettings().style;
-}
-
-export function saveStyleToStorage(style: IconStyle): void {
-  saveSettings({ style });
-}
-
-export function loadSizeFromStorage(): IconSize {
-  return loadSettings().size;
-}
-
-export function saveSizeToStorage(size: IconSize): void {
-  saveSettings({ size });
-}
-
-export function loadResizeModeFromStorage(): IconResizeMode | undefined {
-  return loadSettings().resizeMode;
-}
-
-export function saveResizeModeToStorage(resizeMode: IconResizeMode | undefined): void {
-  saveSettings({ resizeMode });
-}
-
-export { DEFAULT_SIZE, DEFAULT_RESIZE_MODE };
-
-export function loadSelectionFromStorage(): SelectionItem[] {
-  return loadSettings().selection;
-}
-
-export function saveSelectionToStorage(selection: SelectionItem[]): void {
-  saveSettings({ selection });
-}
-
-export { DEFAULT_STYLE };
