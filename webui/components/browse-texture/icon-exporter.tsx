@@ -234,8 +234,7 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
           paramsMap.set(key, value);
         }
         return { pathname: urlObj.pathname, params: paramsMap };
-      } catch (e) {
-        console.warn('[IconExporter] Failed to parse URL:', url, e);
+      } catch {
         return { pathname: url, params: new Map() };
       }
     };
@@ -253,16 +252,6 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
 
     // Check if all expected images are loaded by comparing parameter sets
     const allLoaded = Array.from(expectedAiImageUrls).every((expectedUrl) => Array.from(loadedAiImageUrls).some((loadedUrl) => urlMatches(expectedUrl, loadedUrl)));
-
-    if (!allLoaded && expectedAiImageUrls.size > 0) {
-      const missing = Array.from(expectedAiImageUrls).filter((expectedUrl) => !Array.from(loadedAiImageUrls).some((loadedUrl) => urlMatches(expectedUrl, loadedUrl)));
-      console.log(`[IconExporter] isBusy=true: ${missing.length} images still loading. Expected: ${expectedAiImageUrls.size}, Loaded: ${loadedAiImageUrls.size}`);
-      if (missing.length > 0) {
-        console.log('[IconExporter] Missing URL:', missing[0]);
-      }
-    } else if (allLoaded && expectedAiImageUrls.size > 0) {
-      console.log(`[IconExporter] All ${expectedAiImageUrls.size} images loaded, dropdown enabled`);
-    }
 
     return !allLoaded;
   }, [selectedResizeMode, expectedAiImageUrls, loadedAiImageUrls]);
@@ -303,9 +292,7 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
         if (prev.has(urlToAdd)) {
           return prev;
         }
-        const next = new Set(prev).add(urlToAdd);
-        console.log(`[IconExporter] AI image loaded: ${urlToAdd} (${next.size} total)`);
-        return next;
+        return new Set(prev).add(urlToAdd);
       });
     }
   }, [selectedResizeMode]);
@@ -398,7 +385,6 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
       }
 
       const result = await response.json();
-      console.log(`Successfully exported ${result.count} icon(s)`);
 
       // Store output directory if available (non-shared hosting)
       if (result.outputDirectory) {
