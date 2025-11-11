@@ -1,12 +1,11 @@
 'use client';
 
-import {
-  Info, Loader2,
-} from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import {
   useCallback, useEffect, useRef, useState,
 } from 'react';
 
+import { IconImage } from '@/components/common/icon-image';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -58,7 +57,7 @@ function splitWc3Path(path: string): { prefix: string; filename: string } {
   };
 }
 
-function IconImage({
+function IconImageWrapper({
   imageUrl,
   expectedSize,
   variantLabel,
@@ -102,33 +101,19 @@ function IconImage({
   }, [imageUrl]);
 
   return (
-    <div
-      className="relative flex flex-col items-center justify-center bg-black rounded"
-      style={{ width: `${expectedSize}px`, height: `${expectedSize}px` }}
-    >
-      {fallbackUrl && (
-        <img
-          src={fallbackUrl}
-          alt=""
-          className="absolute inset-0 w-full h-full object-contain rounded blur-sm z-0 opacity-50"
-          style={{ imageRendering: 'pixelated' }}
-          loading="eager"
-        />
-      )}
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center z-20">
-          <Loader2 className="h-12 w-12 animate-spin text-white" />
-        </div>
-      )}
-      <img
-        src={imageUrl}
-        alt={variantLabel}
-        className={`w-auto h-auto max-w-full max-h-full object-contain relative z-10 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-        loading="lazy"
-        onLoad={handleLoad}
-        onError={handleError}
-      />
-    </div>
+    <IconImage
+      src={imageUrl}
+      alt={variantLabel}
+      width={expectedSize}
+      height={expectedSize}
+      fallbackUrl={fallbackUrl ?? undefined}
+      isLoading={isLoading}
+      showLoadingSpinner={true}
+      showCheckerboard={variant.frame !== 'none'}
+      onLoad={handleLoad}
+      onError={handleError}
+      containerClassName="relative flex flex-col items-center justify-center rounded"
+    />
   );
 }
 
@@ -149,7 +134,7 @@ export default function IconPairBlock({
   return (
     <div
       className={`relative flex flex-col items-center justify-center rounded cursor-pointer transition-colors duration-200 ease-in-out self-start p-4 mr-4 last:mr-0 ${
-        isSelected ? 'bg-background hover:bg-background/90' : 'bg-transparent hover:bg-muted/30'
+        isSelected ? 'bg-primary/20' : 'bg-transparent'
       }`}
       onClick={onPairClick}
     >
@@ -160,12 +145,12 @@ export default function IconPairBlock({
         <TooltipProvider>
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>
-              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+              <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent className="max-w-none">
               <div className="font-mono text-xs space-y-1">
                 {groupVariants.map((variant) => {
-                  const wc3Path = getWc3Path(texturePath, variant.frame);
+                  const wc3Path = getWc3Path(`_${texturePath}`, variant.frame);
                   const { prefix, filename } = splitWc3Path(wc3Path);
                   return (
                     <p key={variant.label} className="break-all">
@@ -197,7 +182,7 @@ export default function IconPairBlock({
           };
           const expectedSize = getExpectedSize(imageUrl);
           return (
-            <IconImage
+            <IconImageWrapper
               key={`${texturePath}-${variant.label}-${size}-${resizeMode ?? 'normal'}`}
               imageUrl={imageUrl}
               expectedSize={expectedSize}

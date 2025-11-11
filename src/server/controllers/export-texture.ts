@@ -8,6 +8,7 @@ import {
   type IconConversionOptions,
   IconConversionOptionsSchema,
   IconExtrasSchema,
+  IconFrame,
   IconOptionsSchema,
 } from '@/lib/converter/icon';
 import { IconExporter } from '@/lib/converter/icon';
@@ -26,7 +27,7 @@ export type { IconConversionOptions } from '@/lib/converter/icon';
  */
 function validatePath(inputPath: string, allowedPrefix?: string): string {
   // Check for path traversal attempts before decoding/normalization
-  if (inputPath.includes('..') || inputPath.includes('../') || inputPath.includes('..\\')) {
+  if (inputPath.includes('..')) {
     throw new Error('Invalid path: path traversal detected');
   }
 
@@ -34,7 +35,7 @@ function validatePath(inputPath: string, allowedPrefix?: string): string {
   const decoded = decodeURIComponent(inputPath);
 
   // Check again after decoding (in case of encoded ..)
-  if (decoded.includes('..') || decoded.includes('../') || decoded.includes('..\\')) {
+  if (decoded.includes('..')) {
     throw new Error('Invalid path: path traversal detected');
   }
 
@@ -65,16 +66,31 @@ function validatePath(inputPath: string, allowedPrefix?: string): string {
 /**
  * Validate output path to prevent path traversal attacks
  * @param outputPath - The output path to validate
+ * @param frame - Optional icon frame type (if 'none', allows path separators)
  * @returns Normalized path if valid, throws error if invalid
  */
-function validateOutputPath(outputPath: string): string {
-  // Check for path traversal attempts before normalization
-  if (outputPath.includes('..') || outputPath.includes('../') || outputPath.includes('..\\')) {
+function validateOutputPath(outputPath: string, frame?: IconFrame): string {
+  const trimmed = outputPath.trim();
+
+  // Check for empty
+  if (!trimmed) {
+    throw new Error('Invalid output path: output path cannot be empty');
+  }
+
+  // Check for path traversal attempts (always blocked)
+  if (trimmed.includes('..')) {
     throw new Error('Invalid output path: path traversal detected');
   }
 
+  // For 'none' frame (raw), allow path separators; otherwise block them
+  if (frame !== 'none' && frame !== undefined) {
+    if (trimmed.includes('/') || trimmed.includes('\\')) {
+      throw new Error('Invalid output path: path separators (/, \\) are not allowed for this frame type');
+    }
+  }
+
   // Normalize the path
-  const normalized = path.normalize(outputPath);
+  const normalized = path.normalize(trimmed);
 
   // Check for absolute paths
   if (path.isAbsolute(normalized)) {
@@ -240,7 +256,8 @@ export function ControllerExportTexture(router: express.Router) {
           // Validate output path if provided
           let validatedOutputPath: string | undefined;
           if (item.outputPath) {
-            validatedOutputPath = validateOutputPath(item.outputPath);
+            const frame = item.options?.frame ?? 'none';
+            validatedOutputPath = validateOutputPath(item.outputPath, frame);
           }
 
           // Replace with validated paths

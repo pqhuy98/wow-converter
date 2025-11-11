@@ -28,9 +28,9 @@ export function getWc3Path(texturePath: string, frame: IconFrame | string): stri
     case 'att':
       return `ReplaceableTextures/CommandButtons/ATT${baseName}.blp`;
     case 'ssh':
-      return `scorescreen-hero-${baseName}.blp`;
+      return `SSH${baseName}.blp`;
     case 'ssp':
-      return `scorescreen-player-${baseName}.blp`;
+      return `SSP${baseName}.blp`;
     case 'none':
       return filename;
     default:

@@ -503,8 +503,10 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
             size: selectedSize,
             resizeMode: selectedResizeMode,
             id: `${texturePath}-${selectedStyle}-${groupIndex}-${Date.now()}`,
-            // Set default output name with underscore prefix
-            outputName: `_${extractBaseName(texturePath)}`,
+            // Set default output name: with underscore prefix if frame is not 'none'
+            outputName: groupVariantsForClick.some((v) => v.frame === 'none')
+              ? extractBaseName(texturePath)
+              : `_${extractBaseName(texturePath)}`,
           };
 
           // Mark as new item for entrance animation

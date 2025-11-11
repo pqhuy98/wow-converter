@@ -3,6 +3,7 @@
 import { AlertTriangle } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
+import { IconImage } from '@/components/common/icon-image';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -14,7 +15,8 @@ import {
 import type {
   IconFrame, IconResizeMode, IconSize, IconStyle,
 } from '@/lib/models/icon-export.model';
-import { FRAME_LABEL_MAP, STYLE_LABEL_MAP } from '@/lib/models/icon-export.model';
+import { STYLE_LABEL_MAP } from '@/lib/models/icon-export.model';
+import { getWc3Path } from '@/lib/utils/wc3.utils';
 
 import type { IconVariant } from './icon-pair-block';
 
@@ -39,9 +41,40 @@ function extractBaseName(texturePath: string): string {
   return filename.replace(/\.(blp|png|jpg|jpeg)$/i, '');
 }
 
+function validateOutputName(name: string, frame: IconFrame): { valid: boolean; error?: string } {
+  const trimmed = name.trim();
+
+  // Check for empty
+  if (!trimmed) {
+    return { valid: false, error: 'Output name cannot be empty' };
+  }
+
+  // Check for path traversal attacks (always blocked)
+  if (trimmed.includes('..')) {
+    return { valid: false, error: 'Output name cannot contain path traversal sequences (..)' };
+  }
+
+  // For 'none' frame (raw), allow path separators; otherwise block them
+  if (frame !== 'none') {
+    if (trimmed.includes('/') || trimmed.includes('\\')) {
+      const frameLabel = frame.toUpperCase();
+      return { valid: false, error: `Output name of ${frameLabel} cannot contain path separators (/, \\)` };
+    }
+  }
+
+  return { valid: true };
+}
+
 function formatIconName(texturePath: string, frame: IconFrame, outputName: string): string {
-  const framePrefix = FRAME_LABEL_MAP[frame] ?? '';
-  return framePrefix ? `${framePrefix}${outputName}` : outputName;
+  // For 'none' frame (raw), display the full outputName as-is to preserve path structure
+  if (frame === 'none') {
+    return outputName;
+  }
+
+  // For other frames, generate Wc3 path and return its basename (filename without extension)
+  const wc3Path = getWc3Path(`${outputName}.blp`, frame);
+  const filename = wc3Path.split('/').pop() ?? wc3Path;
+  return filename.replace(/\.blp$/i, '');
 }
 
 function formatSizeAndStyle(size: IconSize, resizeMode?: IconResizeMode, style?: IconStyle): string {
@@ -67,6 +100,7 @@ export default function SelectionIconItem({
   const mainVariant = variants[0];
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(outputName);
+  const [renameError, setRenameError] = useState<string | undefined>(undefined);
 
   const iconName = formatIconName(texturePath, mainVariant.frame, outputName);
   const sizeAndStyle = formatSizeAndStyle(size, resizeMode, style);
@@ -80,14 +114,24 @@ export default function SelectionIconItem({
 
   const handleRename = useCallback(() => {
     const trimmedValue = renameValue.trim();
-    // Ensure outputName always has a value (fallback to original base name with underscore)
-    const finalValue = trimmedValue || `_${extractBaseName(texturePath)}`;
+
+    // Validate the output name (pass frame to allow path separators for raw frame)
+    const validation = validateOutputName(trimmedValue, mainVariant.frame);
+    if (!validation.valid) {
+      setRenameError(validation.error);
+      return;
+    }
+
+    // Ensure outputName always has a value (fallback to original base name without underscore)
+    const finalValue = trimmedValue || extractBaseName(texturePath);
     onRename?.(finalValue);
     setIsRenameDialogOpen(false);
-  }, [renameValue, texturePath, onRename]);
+    setRenameError(undefined);
+  }, [renameValue, texturePath, mainVariant.frame, onRename]);
 
   const handleRenameDialogOpen = useCallback(() => {
     setRenameValue(outputName);
+    setRenameError(undefined);
     setIsRenameDialogOpen(true);
   }, [outputName]);
 
@@ -118,18 +162,18 @@ export default function SelectionIconItem({
         }
       }}
     >
-      <div className="flex-shrink-0">
-        <img
-          src={selectionImageUrl}
-          alt={iconName}
-          width={SELECTION_ICON_SIZE}
-          height={SELECTION_ICON_SIZE}
-          className="object-contain bg-black rounded"
-          loading="lazy"
-          onLoad={() => { onImageLoad?.(selectionImageUrl); }}
-          onError={() => { onImageLoad?.(selectionImageUrl); }}
-        />
-      </div>
+      <IconImage
+        src={selectionImageUrl}
+        alt={iconName}
+        width={SELECTION_ICON_SIZE}
+        height={SELECTION_ICON_SIZE}
+        containerClassName="flex-shrink-0 rounded"
+        className="rounded"
+        loading="lazy"
+        showCheckerboard={mainVariant.frame !== 'none'}
+        onLoad={() => { onImageLoad?.(selectionImageUrl); }}
+        onError={() => { onImageLoad?.(selectionImageUrl); }}
+      />
       <div className="flex flex-col justify-between whitespace-nowrap pr-8" style={{ height: `${SELECTION_ICON_SIZE}px` }}>
         {hasDuplicateOutputName ? (
           <TooltipProvider>
@@ -189,7 +233,13 @@ export default function SelectionIconItem({
           <div className="py-4">
             <Input
               value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
+              onChange={(e) => {
+                setRenameValue(e.target.value);
+                // Clear error when user types
+                if (renameError) {
+                  setRenameError(undefined);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -198,7 +248,11 @@ export default function SelectionIconItem({
               }}
               placeholder={extractBaseName(texturePath)}
               autoFocus
+              className={renameError ? 'border-destructive' : ''}
             />
+            {renameError && (
+              <p className="text-sm text-destructive mt-2">{renameError}</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>

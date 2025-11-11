@@ -5,6 +5,7 @@ import {
   memo, useEffect, useRef, useState,
 } from 'react';
 
+import { IconImage } from '@/components/common/icon-image';
 import { TooltipHelp } from '@/components/common/tooltip-help';
 import { useServerConfig } from '@/components/server-config';
 import {
@@ -121,19 +122,32 @@ const FileRowWithThumbnailComponent = memo(({
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="shrink-0 flex items-center justify-center bg-background border border-border rounded cursor-pointer" style={{ width: ICON_SIZE, height: ICON_SIZE }}>
+            <div className="shrink-0">
               {!shouldLoadImage && isSharedHosting ? (
-                <div className="text-xs text-muted-foreground text-center px-1"></div>
+                <div className="text-xs text-muted-foreground text-center px-1" style={{ width: ICON_SIZE, height: ICON_SIZE }} />
               ) : !imageError ? (
-                <img
+                <IconImage
                   src={imageUrl}
                   alt=""
-                  className="w-full h-full object-contain"
-                  onError={() => setImageError(true)}
+                  width={ICON_SIZE}
+                  height={ICON_SIZE}
+                  containerClassName="border border-border rounded cursor-pointer"
+                  className="rounded"
                   loading="lazy"
+                  onLoad={() => {
+                    const img = new Image();
+                    img.onload = () => {
+                      setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+                    };
+                    img.onerror = () => {
+                      setImageDimensions(null);
+                    };
+                    img.src = imageUrl;
+                  }}
+                  onError={() => setImageError(true)}
                 />
               ) : (
-                <div className="text-xs text-muted-foreground text-center px-1">Error</div>
+                <div className="text-xs text-muted-foreground text-center px-1 border border-border rounded" style={{ width: ICON_SIZE, height: ICON_SIZE }}>Error</div>
               )}
             </div>
           </TooltipTrigger>

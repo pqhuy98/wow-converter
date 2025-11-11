@@ -27,21 +27,6 @@ export interface IconConversionOptions {
   readonly resizeMode?: IconResizeMode; // Resize mode, default: 'normal'
 }
 
-// Frame label mapping for display
-export const FRAME_LABEL_MAP: Readonly<Record<IconFrame, string>> = {
-  btn: 'BTN',
-  disbtn: 'DISBTN',
-  pas: 'PAS',
-  dispas: 'DISPAS',
-  atc: 'ATC',
-  disatc: 'DISATC',
-  att: 'ATT',
-  upg: 'UPG',
-  ssh: 'SSH',
-  ssp: 'SSP',
-  none: 'Raw',
-} as const;
-
 // Style label mapping for display
 export const STYLE_LABEL_MAP: Readonly<Record<IconStyle, string>> = {
   'classic-sd': 'Classic SD',
