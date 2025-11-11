@@ -1,9 +1,12 @@
 'use client';
 
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import { memo, useEffect, useState } from 'react';
+import {
+  memo, useEffect, useRef, useState,
+} from 'react';
 
 import { TooltipHelp } from '@/components/common/tooltip-help';
+import { useServerConfig } from '@/components/server-config';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -11,6 +14,7 @@ import {
 export const ICON_SIZE = 48; // Icon thumbnail size in pixels
 const ICON_PADDING = 8;
 export const ICON_ROW_HEIGHT = ICON_SIZE + ICON_PADDING; // Icon size + padding for text
+const IMAGE_LOAD_DEBOUNCE_MS = 500; // Debounce delay before loading image
 
 type FileEntry = { fileDataID: number; fileName: string };
 
@@ -44,6 +48,9 @@ const FileRowWithThumbnailComponent = memo(({
   const [hasCopied, setHasCopied] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const { isSharedHosting } = useServerConfig();
+  const [shouldLoadImage, setShouldLoadImage] = useState(!isSharedHosting);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const renderHighlightedText = (text: string) => {
     if (!highlightRegex) return text;
@@ -57,8 +64,39 @@ const FileRowWithThumbnailComponent = memo(({
 
   const imageUrl = thumbnailUrl ?? `/api/texture/png/${encodeURIComponent(file.fileName)}`;
 
+  // Debounce image loading to avoid loading too many images during fast scrolling (only on shared hosting)
   useEffect(() => {
-    if (imageError) {
+    if (!isSharedHosting) {
+      if (!shouldLoadImage) setShouldLoadImage(true);
+      return undefined;
+    }
+
+    // Clear any pending timeout
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+
+    // Reset loading state when imageUrl changes
+    setShouldLoadImage(false);
+    setImageError(false);
+
+    // Schedule image load after debounce delay
+    loadTimeoutRef.current = setTimeout(() => {
+      setShouldLoadImage(true);
+    }, IMAGE_LOAD_DEBOUNCE_MS);
+
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+    };
+  }, [imageUrl, isSharedHosting]);
+
+  // Load image dimensions when shouldLoadImage becomes true
+  useEffect(() => {
+    if (!shouldLoadImage || imageError) {
       setImageDimensions(null);
       return;
     }
@@ -70,7 +108,7 @@ const FileRowWithThumbnailComponent = memo(({
       setImageDimensions(null);
     };
     img.src = imageUrl;
-  }, [imageUrl, imageError]);
+  }, [shouldLoadImage, imageUrl, imageError]);
 
   return (
     <div
@@ -84,7 +122,9 @@ const FileRowWithThumbnailComponent = memo(({
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="shrink-0 flex items-center justify-center bg-background border border-border rounded cursor-pointer" style={{ width: ICON_SIZE, height: ICON_SIZE }}>
-              {!imageError ? (
+              {!shouldLoadImage && isSharedHosting ? (
+                <div className="text-xs text-muted-foreground text-center px-1"></div>
+              ) : !imageError ? (
                 <img
                   src={imageUrl}
                   alt=""
