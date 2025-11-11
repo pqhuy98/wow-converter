@@ -4,6 +4,8 @@ alwaysApply: false
 ---
 - Avoid using `any` or `as` casting in TypeScript unless absolutely necessary. Avoid unncessary `instanceof` when developing in TypeScript, trust TypeScript static type.
 - Follow code best practices like DRY, YAGNI, SOLID, Clean Code. Avoid unnecessary complexity and overengineering.
+- Do not export functions, types, or constants that are not used outside their module/directory. Only export what is needed by external consumers.
+- Code organization: In files, export exported functions/types first, then unexported/internal functions. For classes, order methods as: public/no modifier → protected → private.
 - Run the app with `npm run dev` as background daemon emitting logs to `log.txt`. Tail the log file, when the message `Serving UI web interface at http://127.0.0.1:3001/` appears means server started successfully. Always kill the old server on port 3000 and 3001 before starting a new one. Server `npm run dev` has hot-reload, so no need to kill every code change.
 - Only when running as background agent mode on Cursor's cloud Docker container, wow.export is included only for code reference, never try to run it locally and do not modify its code from this repository. When not in background agent mode, e.g. in IDE mode, wow.export code can be modified.
 - Commit hygiene: squash commits before merging to `main`.

@@ -12,7 +12,8 @@ import {
 import type {
   IconFrame, IconResizeMode, IconSize, IconStyle,
 } from '@/lib/models/icon-export.model';
-import { getWc3Path } from '@/lib/utils/wc3.utils';
+
+import { getWc3PathForTooltip } from './utils';
 
 export interface IconVariant {
   size: IconSize;
@@ -47,13 +48,13 @@ const GROUP_LABELS: Readonly<Record<number, string>> = {
 } as const;
 
 function splitWc3Path(path: string): { prefix: string; filename: string } {
-  const lastBackslash = path.lastIndexOf('\\');
-  if (lastBackslash === -1) {
+  const lastSlash = path.lastIndexOf('/');
+  if (lastSlash === -1) {
     return { prefix: '', filename: path };
   }
   return {
-    prefix: path.substring(0, lastBackslash + 1),
-    filename: path.substring(lastBackslash + 1),
+    prefix: path.substring(0, lastSlash + 1),
+    filename: path.substring(lastSlash + 1),
   };
 }
 
@@ -150,7 +151,7 @@ export default function IconPairBlock({
             <TooltipContent className="max-w-none">
               <div className="font-mono text-xs space-y-1">
                 {groupVariants.map((variant) => {
-                  const wc3Path = getWc3Path(`_${texturePath}`, variant.frame);
+                  const wc3Path = getWc3PathForTooltip(texturePath, variant.frame);
                   const { prefix, filename } = splitWc3Path(wc3Path);
                   return (
                     <p key={variant.label} className="break-all">

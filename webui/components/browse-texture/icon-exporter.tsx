@@ -26,6 +26,7 @@ import IconPairBlock, { type IconVariant } from './icon-pair-block';
 import ResizeSelector from './resize-selector';
 import SelectionIconItem from './selection-icon-item';
 import { loadSettings, saveSettings } from './settings';
+import { getDefaultOutputName } from './utils';
 
 export interface SelectionItem {
   texturePath: string;
@@ -36,11 +37,6 @@ export interface SelectionItem {
   resizeMode?: IconResizeMode;
   id: string;
   outputName: string;
-}
-
-function extractBaseName(texturePath: string): string {
-  const filename = texturePath.split('/').pop() ?? texturePath;
-  return filename.replace(/\.(blp|png|jpg|jpeg)$/i, '');
 }
 
 const frameGroups: IconFrame[][] = [
@@ -503,10 +499,10 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
             size: selectedSize,
             resizeMode: selectedResizeMode,
             id: `${texturePath}-${selectedStyle}-${groupIndex}-${Date.now()}`,
-            // Set default output name: with underscore prefix if frame is not 'none'
-            outputName: groupVariantsForClick.some((v) => v.frame === 'none')
-              ? extractBaseName(texturePath)
-              : `_${extractBaseName(texturePath)}`,
+            outputName: getDefaultOutputName(
+              texturePath,
+              groupVariantsForClick[0]?.frame ?? 'none',
+            ),
           };
 
           // Mark as new item for entrance animation

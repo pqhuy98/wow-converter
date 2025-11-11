@@ -16,9 +16,9 @@ import type {
   IconFrame, IconResizeMode, IconSize, IconStyle,
 } from '@/lib/models/icon-export.model';
 import { STYLE_LABEL_MAP } from '@/lib/models/icon-export.model';
-import { getWc3Path } from '@/lib/utils/wc3.utils';
 
 import type { IconVariant } from './icon-pair-block';
+import { extractBaseName, formatIconName } from './utils';
 
 export interface SelectionIconItemProps {
   texturePath: string;
@@ -35,11 +35,6 @@ export interface SelectionIconItemProps {
 }
 
 const SELECTION_ICON_SIZE = 64;
-
-function extractBaseName(texturePath: string): string {
-  const filename = texturePath.split('/').pop() ?? texturePath;
-  return filename.replace(/\.(blp|png|jpg|jpeg)$/i, '');
-}
 
 function validateOutputName(name: string, frame: IconFrame): { valid: boolean; error?: string } {
   const trimmed = name.trim();
@@ -63,18 +58,6 @@ function validateOutputName(name: string, frame: IconFrame): { valid: boolean; e
   }
 
   return { valid: true };
-}
-
-function formatIconName(texturePath: string, frame: IconFrame, outputName: string): string {
-  // For 'none' frame (raw), display the full outputName as-is to preserve path structure
-  if (frame === 'none') {
-    return outputName;
-  }
-
-  // For other frames, generate Wc3 path and return its basename (filename without extension)
-  const wc3Path = getWc3Path(`${outputName}.blp`, frame);
-  const filename = wc3Path.split('/').pop() ?? wc3Path;
-  return filename.replace(/\.blp$/i, '');
 }
 
 function formatSizeAndStyle(size: IconSize, resizeMode?: IconResizeMode, style?: IconStyle): string {
