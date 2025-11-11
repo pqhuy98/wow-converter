@@ -8,7 +8,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
-  useCallback, useEffect, useMemo, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -126,6 +126,9 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
   // Track loaded AI image URLs
   const [loadedAiImageUrls, setLoadedAiImageUrls] = useState<Set<string>>(new Set());
   const serverConfig = useServerConfig();
+  // Track previous texture path and resize mode to detect changes
+  const prevTexturePathRef = useRef<string>(texturePath);
+  const prevResizeModeRef = useRef<IconResizeMode | undefined>(selectedResizeMode);
 
   useEffect(() => {
     saveSettings({ style: selectedStyle });
@@ -147,6 +150,25 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
   useEffect(() => {
     setLoadedAiImageUrls(new Set());
   }, [texturePath]);
+
+  // Reset resize mode to normal when texture path changes on shared hosting if it was previously AI
+  useEffect(() => {
+    const prevTexturePath = prevTexturePathRef.current;
+    const prevResizeMode = prevResizeModeRef.current;
+
+    // Check if texture path changed and previous resize mode was AI
+    if (
+      texturePath !== prevTexturePath
+      && serverConfig.isSharedHosting
+      && prevResizeMode === 'ai'
+    ) {
+      setSelectedResizeMode(undefined);
+    }
+
+    // Update refs for next comparison
+    prevTexturePathRef.current = texturePath;
+    prevResizeModeRef.current = selectedResizeMode;
+  }, [texturePath, selectedResizeMode, serverConfig.isSharedHosting]);
 
   // Load texture image to get dimensions (image will be cached by browser)
   useEffect(() => {
