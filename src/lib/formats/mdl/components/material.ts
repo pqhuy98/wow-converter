@@ -1,4 +1,4 @@
-import { AnimationOrStatic } from './animation';
+import { animatedValueToString, AnimationOrStatic } from './animation';
 import { Texture } from './texture';
 import { TextureAnim } from './texture-anim';
 
@@ -48,6 +48,7 @@ export function materialsToString(version: number, materials: Material[]) {
           ${version > 800 && layer.unlit ? 'Unlit,' : ''}
           ${layer.coordId && layer.coordId !== 0 ? `CoordId ${layer.coordId},` : ''}
           ${layer.tvertexAnim != null ? `TVertexAnimId ${layer.tvertexAnim.id},` : ''}
+          ${animatedValueToString('Alpha', layer.alpha)}
         }`).join('\n')}
       }`).join('\n')}
   }`;

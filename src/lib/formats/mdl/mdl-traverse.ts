@@ -64,6 +64,17 @@ export function iterateNodesAtTimestamp(mdl: MDL, sequence: Sequence, timestamp:
   });
 }
 
+export function iterateNodesFromSubtree(mdl: MDL, node: Node, callback: (node: Node) => unknown) {
+  const childrenList = buildChildrenLists(mdl);
+  const dfs = (current: Node) => {
+    callback(current);
+    for (const child of childrenList.get(current)!) {
+      dfs(child);
+    }
+  };
+  dfs(node);
+}
+
 export function iterateVerticesAtTimestamp(mdl: MDL, sequence: Sequence, timestamp: number, callback: (v: GeosetVertex, vPos: Vector3, geoset: Geoset) => unknown) {
   const nodeValues = new Map<Node, Value>();
   iterateNodesAtTimestamp(mdl, sequence, timestamp, (node, value) => {
