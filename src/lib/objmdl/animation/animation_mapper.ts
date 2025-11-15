@@ -2018,5 +2018,6 @@ export function isLoopAnimation(wowAnimation: string) {
     'EmoteTalkSubdued',
     'EmoteTalkFrustrated',
     'Hold',
+    'Strangulate',
   ].includes(wowAnimation);
 }
