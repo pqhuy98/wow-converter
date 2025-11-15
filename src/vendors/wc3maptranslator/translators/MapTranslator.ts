@@ -2,15 +2,29 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 
 import {
-  Doodad, Info, ObjectModificationTable, ObjectType, SpecialDoodad, Terrain, Unit,
+  Camera, Doodad, Info, ObjectModificationTable, ObjectType, Region, SpecialDoodad, Terrain, Unit,
 } from '../data';
+import { CamerasTranslator } from './CamerasTranslator';
 import { DoodadsTranslator } from './DoodadsTranslator';
 import { InfoTranslator } from './InfoTranslator';
 import { ObjectsTranslator } from './ObjectsTranslator';
+import { RegionsTranslator } from './RegionsTranslator';
 import { TerrainTranslator } from './TerrainTranslator';
 import { UnitsTranslator } from './UnitsTranslator';
 
-type FilePath = 'info' | 'terrain' | 'units' | 'doodads' | 'unitData' | 'itemData' | 'destructibleData' | 'doodadData' | 'abilityData' | 'buffData' | 'upgradeData';
+type FilePath = 'info'
+  | 'terrain'
+  | 'units'
+  | 'doodads'
+  | 'cameras'
+  | 'regions'
+  | 'unitData'
+  | 'itemData'
+  | 'destructibleData'
+  | 'doodadData'
+  | 'abilityData'
+  | 'buffData'
+  | 'upgradeData';
 
 export class MapTranslator {
   public info: Info;
@@ -22,6 +36,10 @@ export class MapTranslator {
   public doodads: Doodad[] = [];
 
   public specialDoodads: SpecialDoodad[] = [];
+
+  public cameras: Camera[] = [];
+
+  public regions: Region[] = [];
 
   public unitData: ObjectModificationTable = { original: {}, custom: {} };
 
@@ -48,6 +66,8 @@ export class MapTranslator {
       terrain: path.join(mapDir, 'war3map.w3e'),
       units: path.join(mapDir, 'war3mapUnits.doo'),
       doodads: path.join(mapDir, 'war3map.doo'),
+      cameras: path.join(mapDir, 'war3map.w3c'),
+      regions: path.join(mapDir, 'war3map.w3r'),
       unitData: path.join(mapDir, 'war3map.w3u'),
       itemData: path.join(mapDir, 'war3map.w3t'),
       destructibleData: path.join(mapDir, 'war3map.w3b'),
@@ -70,6 +90,14 @@ export class MapTranslator {
     const allDoodads = DoodadsTranslator.warToJson(readFileSync(this.filePaths.doodads)).json;
     this.doodads = allDoodads[0];
     this.specialDoodads = allDoodads[1];
+
+    if (existsSync(this.filePaths.cameras)) {
+      this.cameras = CamerasTranslator.warToJson(readFileSync(this.filePaths.cameras)).json;
+    }
+
+    if (existsSync(this.filePaths.regions)) {
+      this.regions = RegionsTranslator.warToJson(readFileSync(this.filePaths.regions)).json;
+    }
 
     if (existsSync(this.filePaths.unitData)) {
       this.unitData = ObjectsTranslator.warToJson(ObjectType.Units, readFileSync(this.filePaths.unitData)).json;
@@ -107,6 +135,12 @@ export class MapTranslator {
         break;
       case 'doodads':
         writeFileSync(this.filePaths.doodads, DoodadsTranslator.jsonToWar([this.doodads, this.specialDoodads]).buffer);
+        break;
+      case 'cameras':
+        writeFileSync(this.filePaths.cameras, CamerasTranslator.jsonToWar(this.cameras).buffer);
+        break;
+      case 'regions':
+        writeFileSync(this.filePaths.regions, RegionsTranslator.jsonToWar(this.regions).buffer);
         break;
       case 'unitData':
         writeFileSync(this.filePaths.unitData, ObjectsTranslator.jsonToWar(ObjectType.Units, this.unitData).buffer);

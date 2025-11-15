@@ -133,6 +133,30 @@ export class Wc3Converter {
           ? [fileName, objAbsolute.rotation[0].toFixed(2), objAbsolute.rotation[1].toFixed(2)].join(';')
           : fileName;
 
+        // Calculate positions
+        const percent = [
+          (objAbsolute.position[0] - min[0]) / modelSize[0],
+          (objAbsolute.position[1] - min[1]) / modelSize[1],
+          (objAbsolute.position[2] - min[2]) / modelSize[2],
+        ];
+        const inGameX = mapMin[0] + percent[0] * mapSize[0];
+        const inGameY = mapMin[1] + percent[1] * mapSize[1];
+
+        const zDiff = (dataHeightMax - dataHeightMin)
+          * (percent[2] - this.config.terrain.clampPercent.lower) / terrainClampPercentDiff;
+        const inGameZ = dataHeightToGameZ(dataHeightMin + zDiff);
+
+        let outOfBound = false;
+        if (inGameX < mapMin[0] || inGameX > mapMax[0] || inGameY < mapMin[1] || inGameY > mapMax[1]) {
+          outOfBound = true;
+          console.warn('Doodad', obj.model.relativePath, 'is outside of map bounds.');
+          // console.log(obj.id, objAbsolute.position, {
+          //   percent, inGameX, inGameY, inGameZ,
+          // }, { mapMin, mapMax });
+        }
+
+        if (outOfBound) return;
+
         // Insert new doodad type if not exists
         if (!modelPathToDoodadType.has(hashKey)) {
           const doodadType = map.addDoodadType([
@@ -178,30 +202,8 @@ export class Wc3Converter {
         }
         const id4Chars = modelPathToDoodadType.get(hashKey)!.code.slice(0, 4);
 
-        // Calculate positions
-        const percent = [
-          (objAbsolute.position[0] - min[0]) / modelSize[0],
-          (objAbsolute.position[1] - min[1]) / modelSize[1],
-          (objAbsolute.position[2] - min[2]) / modelSize[2],
-        ];
-        const inGameX = mapMin[0] + percent[0] * mapSize[0];
-        const inGameY = mapMin[1] + percent[1] * mapSize[1];
-
-        const zDiff = (dataHeightMax - dataHeightMin)
-          * (percent[2] - this.config.terrain.clampPercent.lower) / terrainClampPercentDiff;
-        const inGameZ = dataHeightToGameZ(dataHeightMin + zDiff);
-
-        let outOfBound = false;
-        if (inGameX < mapMin[0] || inGameX > mapMax[0] || inGameY < mapMin[1] || inGameY > mapMax[1]) {
-          outOfBound = true;
-          console.warn('Doodad', obj.model.relativePath, 'is outside of map bounds.');
-          console.log(obj.id, objAbsolute.position, {
-            percent, inGameX, inGameY, inGameZ,
-          }, { mapMin, mapMax });
-        }
-
         // Add doodad instance
-        !outOfBound && map.addDoodad(modelPathToDoodadType.get(hashKey)!, {
+        map.addDoodad(modelPathToDoodadType.get(hashKey)!, {
           id: 0,
           variation: 0,
           position: [inGameX, inGameY, inGameZ],

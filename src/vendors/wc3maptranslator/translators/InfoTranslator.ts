@@ -30,7 +30,7 @@ export class InfoTranslator implements Translator<Info> {
   public jsonToWar(infoJson: Info): WarResult {
     const outBufferToWar = new HexBuffer();
 
-    outBufferToWar.addInt(31); // file version, 0x1F
+    outBufferToWar.addInt(infoJson.fileVersion);
     outBufferToWar.addInt(infoJson.saves != null ? infoJson.saves : 0);
     outBufferToWar.addInt(infoJson.editorVersion != null ? infoJson.editorVersion : 0);
 
@@ -234,6 +234,7 @@ export class InfoTranslator implements Translator<Info> {
 
   public warToJson(buffer: Buffer): JsonResult<Info> {
     const result: Info = {
+      fileVersion: 33,
       map: {
         name: '',
         author: '',
@@ -318,7 +319,7 @@ export class InfoTranslator implements Translator<Info> {
     };
     const outBufferToJSON = new W3Buffer(buffer);
 
-    const _fileVersion = outBufferToJSON.readInt();
+    result.fileVersion = outBufferToJSON.readInt();
 
     result.saves = outBufferToJSON.readInt();
     result.editorVersion = outBufferToJSON.readInt();

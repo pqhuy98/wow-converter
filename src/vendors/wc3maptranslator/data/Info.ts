@@ -77,6 +77,7 @@ interface Prologue {
 }
 
 interface Info {
+  fileVersion: number
   saves: number
   gameVersion: GameVersion
   editorVersion: number

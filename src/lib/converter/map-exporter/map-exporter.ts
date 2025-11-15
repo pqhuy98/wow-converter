@@ -12,6 +12,7 @@ import { Wc3Converter } from '@/lib/converter/map-exporter/wc3-converter';
 import { Config } from '@/lib/global-config';
 import { Vector2 } from '@/lib/math/common';
 import { radians } from '@/lib/math/rotation';
+import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 
 export interface MapExportConfig {
@@ -77,13 +78,13 @@ export class MapExporter {
     this.mapManager = new MapManager();
   }
 
-  public async parseObjects() {
+  public async parseObjects(filter?: (id: string, type: WowObjectType) => boolean) {
     const {
       wowExportFolder, min, max, mapAngleDeg, mapId,
     } = this.mapExportConfig;
 
     this.wowObjectManager = new WowObjectManager(this.config);
-    this.filterDoodads = (_id, type) => (this.mapExportConfig.doodads.enable[type] ?? this.mapExportConfig.doodads.enable.others) && type !== 'unit';
+    this.filterDoodads = (id, type) => (this.mapExportConfig.doodads.enable[type] ?? this.mapExportConfig.doodads.enable.others) && type !== 'unit' && (filter?.(id, type) ?? true);
     await this.wowObjectManager.readTerrainsDoodads(
       buildPaths(`**/${wowExportFolder}`, min, max),
       this.filterDoodads,
@@ -124,9 +125,42 @@ export class MapExporter {
       throw new Error(`Too many doodads: ${this.mapManager.doodads.length}, limit is 130_000`);
     }
 
-    // Export doodad assets
-    await this.wowObjectManager.assetManager.exportTextures(outputDir);
-    await this.wowObjectManager.assetManager.exportModels(outputDir);
+    // Export only assets that are actually used by placed doodads
+    const am = this.wowObjectManager.assetManager;
+    const usedModelPaths = new Set<string>();
+    const collectModelPath = (mods: MapManager['doodadTypes'][number]['data']) => {
+      // dfil for doodads, bfil for destructibles
+      const file = mods.find((m) => (m.id === 'dfil' || m.id === 'bfil')
+        && m.type === ModificationType.string
+        && typeof m.value === 'string');
+      if (file && typeof file.value === 'string') {
+        usedModelPaths.add((file.value as string).replace(/\\/g, '/'));
+      }
+    };
+    this.mapManager.doodadTypes.forEach((t) => collectModelPath(t.data));
+    this.mapManager.destructibleTypes.forEach((t) => collectModelPath(t.data));
+
+    // Keep only models that match the used model paths
+    Array.from(am.models.entries()).forEach(([k, model]) => {
+      const rel = model.mdl.model.name.replace(/\\/g, '/');
+      if (!usedModelPaths.has(rel)) {
+        am.models.delete(k);
+      }
+    });
+
+    // Collect textures used by the remaining models and purge others
+    const usedTexturePngPaths: string[] = [];
+    am.models.forEach((model) => {
+      model.mdl.textures.forEach((tex) => {
+        // Derive from image (BLP) path and keep asset prefix if present
+        const pngPath = tex.image ? tex.image.replace(/\.blp$/i, '.png').replace(/\\/g, '/') : '';
+        if (pngPath) usedTexturePngPaths.push(pngPath);
+      });
+    });
+    am.purgeTextures(usedTexturePngPaths);
+
+    await am.exportTextures(outputDir);
+    await am.exportModels(outputDir);
   }
 
   public async exportCreatures(outputDir: string) {

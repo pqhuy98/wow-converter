@@ -1,5 +1,5 @@
 import {
-  Doodad, Modification, ObjectModificationTable, Terrain, Unit,
+  Camera, Doodad, Info, Modification, ObjectModificationTable, Player, Region, Terrain, Unit,
 } from '../data';
 import { MapTranslator } from '../translators';
 import { FourCCGenerator } from './war3-fourcc';
@@ -48,6 +48,14 @@ export class MapManager {
 
   abilities: IAbilityType[] = [];
 
+  regions: Region[] = [];
+
+  cameras: Camera[] = [];
+
+  info: Info;
+
+  players: Player[] = [];
+
   constructor() {
     this.mapData = new MapTranslator();
 
@@ -63,6 +71,10 @@ export class MapManager {
 
   load(mapDir: string) {
     this.mapData.load(mapDir);
+
+    // Info
+    this.info = this.mapData.info;
+    this.players = this.info?.players ?? [];
 
     this.registerTableFourCCs(this.mapData.unitData);
     this.registerTableFourCCs(this.mapData.itemData);
@@ -115,6 +127,10 @@ export class MapManager {
         data: value,
       });
     });
+    // Regions
+    this.regions = this.mapData.regions ?? [];
+    // Cameras
+    this.cameras = this.mapData.cameras ?? [];
   }
 
   get terrain() {
@@ -205,10 +221,23 @@ export class MapManager {
     this.abilities.forEach((ability) => {
       this.mapData.abilityData.custom[`${ability.code}:${ability.parent}`] = ability.data;
     });
+    // Sync regions back to translator
+    this.mapData.regions = this.regions ?? [];
+    // Sync cameras back to translator
+    this.mapData.cameras = this.cameras ?? [];
+    // Sync info back to translator
+    if (this.info) {
+      // keep players array in sync
+      if (this.players) this.info.players = this.players;
+      this.mapData.info = this.info;
+    }
     this.mapData.setMapDir(mapDir);
+    this.mapData.save('info');
     this.mapData.save('units');
     this.mapData.save('doodads');
     this.mapData.save('terrain');
+    this.mapData.save('cameras');
+    this.mapData.save('regions');
     this.mapData.save('unitData');
     this.mapData.save('doodadData');
     this.mapData.save('destructibleData');

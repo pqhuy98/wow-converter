@@ -4,9 +4,12 @@ import * as IQ from 'image-q';
 import { createRequire } from 'module';
 import path from 'path';
 import sharp from 'sharp';
+import { fileURLToPath } from 'url';
 import { parentPort } from 'worker_threads';
 
 const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 type MessageTask = {
   type: 'task',
@@ -34,13 +37,41 @@ function run() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let binding: any;
   try {
-    const binDir = path.join(process.cwd(), 'bin/blp-preview');
-    if (process.platform === 'win32') {
-      binding = require(path.join(binDir, 'win32-x64-binding.node'));
-    } else if (process.platform === 'darwin' && process.arch === 'arm64') {
-      binding = require(path.join(binDir, 'darwin-arm64-binding.node'));
-    } else if (process.platform === 'linux' && process.arch === 'x64') {
-      binding = require(path.join(binDir, 'linux-x64-binding.node'));
+    const candidateDirs: string[] = [];
+
+    // 1) Original behavior: resolve relative to current working directory
+    candidateDirs.push(path.join(process.cwd(), 'bin/blp-preview'));
+
+    // 2) Dist / exe layout: worker in dist root and bindings in dist/bin
+    candidateDirs.push(path.join(__dirname, 'bin/blp-preview'));
+
+    // 3) Source / node_modules layout: worker in src/lib/formats/blp and bindings in package-root/bin
+    candidateDirs.push(path.resolve(__dirname, '../../../../bin/blp-preview'));
+
+    // 4) Installed as dependency: resolve package root via its own package.json
+    try {
+      const pkgRoot = path.dirname(require.resolve('@pqhuy98/wow-converter/package.json'));
+      candidateDirs.push(path.join(pkgRoot, 'bin/blp-preview'));
+    } catch {
+      // ignore if package root cannot be resolved (e.g. compiled exe)
+    }
+
+    for (const binDir of candidateDirs) {
+      try {
+        if (process.platform === 'win32') {
+          binding = require(path.join(binDir, 'win32-x64-binding.node'));
+        } else if (process.platform === 'darwin' && process.arch === 'arm64') {
+          binding = require(path.join(binDir, 'darwin-arm64-binding.node'));
+        } else if (process.platform === 'linux' && process.arch === 'x64') {
+          binding = require(path.join(binDir, 'linux-x64-binding.node'));
+        }
+
+        if (binding) {
+          break;
+        }
+      } catch {
+        // try next candidate
+      }
     }
   } catch {
     // ignore, will fallback to JS

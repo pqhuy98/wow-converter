@@ -46,10 +46,12 @@ export class CamerasTranslator implements Translator<Camera[]> {
       outBufferToWar.addFloat(camera.roll != null ? camera.roll : 0);
       outBufferToWar.addFloat(camera.fov);
       outBufferToWar.addFloat(camera.farClipping);
-      outBufferToWar.addFloat(100); // (?) unknown - usually set to 100
-
-      // Camera name - must be null-terminated
-      outBufferToWar.addString(camera.name);
+      outBufferToWar.addFloat(camera.nearClipping != null ? camera.nearClipping : 16);
+      outBufferToWar.addFloat(camera.localPitch != null ? camera.localPitch : 0);
+      outBufferToWar.addFloat(camera.localYaw != null ? camera.localYaw : 0);
+      outBufferToWar.addFloat(camera.localRoll != null ? camera.localRoll : 0);
+      // Camera name - null-terminated string
+      outBufferToWar.addString(camera.name ?? '');
     });
 
     return {
@@ -78,6 +80,10 @@ export class CamerasTranslator implements Translator<Camera[]> {
         roll: 0,
         fov: 0,
         farClipping: 0,
+        nearClipping: 16,
+        localPitch: 0,
+        localYaw: 0,
+        localRoll: 0,
         name: '',
       };
 
@@ -90,7 +96,11 @@ export class CamerasTranslator implements Translator<Camera[]> {
       camera.roll = outBufferToJSON.readFloat();
       camera.fov = outBufferToJSON.readFloat(); // field of view
       camera.farClipping = outBufferToJSON.readFloat();
-      outBufferToJSON.readFloat(); // consume this unknown float field
+      camera.nearClipping = outBufferToJSON.readFloat();
+      camera.localPitch = outBufferToJSON.readFloat();
+      camera.localYaw = outBufferToJSON.readFloat();
+      camera.localRoll = outBufferToJSON.readFloat();
+      // Camera name: null-terminated string
       camera.name = outBufferToJSON.readString();
 
       result.push(camera);

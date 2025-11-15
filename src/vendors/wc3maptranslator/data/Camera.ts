@@ -9,6 +9,10 @@ interface Camera {
   roll: number
   fov: angle // field of view
   farClipping: number
+  nearClipping: number
+  localPitch: number
+  localYaw: number
+  localRoll: number
   name: string
 }
 
