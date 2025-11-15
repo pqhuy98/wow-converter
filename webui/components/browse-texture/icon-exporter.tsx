@@ -361,7 +361,7 @@ function IconExporterContent({ texturePath, onSearchClick }: IconExporterProps) 
                 ...(item.resizeMode ? { resizeMode: item.resizeMode } : {}),
               },
               // Always use custom output path since outputName is required
-              outputPath: wc3Path,
+              outputPath: effectiveTexturePath,
             });
           }
         }

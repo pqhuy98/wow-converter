@@ -102,7 +102,7 @@ function validateOutputPath(outputPath: string, frame?: IconFrame): string {
     throw new Error('Invalid output path: absolute path not allowed');
   }
 
-  return normalized;
+  return getWc3Path(normalized, frame ?? 'none');
 }
 
 // Zod schema for icon query parameters (from URL query string)
@@ -233,7 +233,7 @@ export function ControllerExportTexture(router: express.Router) {
         items: z.array(z.object({
           texturePath: z.string(),
           options: IconOptionsSchema.optional(),
-          outputPath: z.string().optional(),
+          outputPath: z.string(),
         })),
       });
 
@@ -278,7 +278,7 @@ export function ControllerExportTexture(router: express.Router) {
       const seenKeys = new Set<string>();
       const filteredItems = parsedRequest.items.filter((item) => {
         const frame = item.options?.frame ?? 'none';
-        const wc3Path = item.outputPath ?? getWc3Path(item.texturePath, frame);
+        const wc3Path = getWc3Path(item.outputPath, frame);
         if (seenKeys.has(wc3Path)) {
           return false;
         }
