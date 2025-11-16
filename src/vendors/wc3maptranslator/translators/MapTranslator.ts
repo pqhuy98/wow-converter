@@ -19,6 +19,11 @@ type FilePath = 'info'
   | 'cameras'
   | 'regions'
   | 'unitData'
+  | 'unitTypeSkins'
+  | 'destructibleTypeSkins'
+  | 'doodadTypeSkins'
+  | 'abilityTypeSkins'
+  | 'buffTypeSkins'
   | 'itemData'
   | 'destructibleData'
   | 'doodadData'
@@ -55,6 +60,16 @@ export class MapTranslator {
 
   public upgradeData: ObjectModificationTable = { original: {}, custom: {} };
 
+  public unitTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  public destructibleTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  public doodadTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  public abilityTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  public buffTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
   public filePaths: Record<FilePath, string>;
 
   constructor() {
@@ -69,6 +84,11 @@ export class MapTranslator {
       cameras: path.join(mapDir, 'war3map.w3c'),
       regions: path.join(mapDir, 'war3map.w3r'),
       unitData: path.join(mapDir, 'war3map.w3u'),
+      unitTypeSkins: path.join(mapDir, 'war3mapSkin.w3u'),
+      destructibleTypeSkins: path.join(mapDir, 'war3mapSkin.w3b'),
+      doodadTypeSkins: path.join(mapDir, 'war3mapSkin.w3d'),
+      abilityTypeSkins: path.join(mapDir, 'war3mapSkin.w3a'),
+      buffTypeSkins: path.join(mapDir, 'war3mapSkin.w3h'),
       itemData: path.join(mapDir, 'war3map.w3t'),
       destructibleData: path.join(mapDir, 'war3map.w3b'),
       doodadData: path.join(mapDir, 'war3map.w3d'),
@@ -101,6 +121,21 @@ export class MapTranslator {
 
     if (existsSync(this.filePaths.unitData)) {
       this.unitData = ObjectsTranslator.warToJson(ObjectType.Units, readFileSync(this.filePaths.unitData)).json;
+    }
+    if (existsSync(this.filePaths.unitTypeSkins)) {
+      this.unitTypeSkins = ObjectsTranslator.warToJson(ObjectType.Units, readFileSync(this.filePaths.unitTypeSkins)).json;
+    }
+    if (existsSync(this.filePaths.destructibleTypeSkins)) {
+      this.destructibleTypeSkins = ObjectsTranslator.warToJson(ObjectType.Destructables, readFileSync(this.filePaths.destructibleTypeSkins)).json;
+    }
+    if (existsSync(this.filePaths.doodadTypeSkins)) {
+      this.doodadTypeSkins = ObjectsTranslator.warToJson(ObjectType.Doodads, readFileSync(this.filePaths.doodadTypeSkins)).json;
+    }
+    if (existsSync(this.filePaths.abilityTypeSkins)) {
+      this.abilityTypeSkins = ObjectsTranslator.warToJson(ObjectType.Abilities, readFileSync(this.filePaths.abilityTypeSkins)).json;
+    }
+    if (existsSync(this.filePaths.buffTypeSkins)) {
+      this.buffTypeSkins = ObjectsTranslator.warToJson(ObjectType.Buffs, readFileSync(this.filePaths.buffTypeSkins)).json;
     }
     if (existsSync(this.filePaths.itemData)) {
       this.itemData = ObjectsTranslator.warToJson(ObjectType.Items, readFileSync(this.filePaths.itemData)).json;
@@ -144,6 +179,21 @@ export class MapTranslator {
         break;
       case 'unitData':
         writeFileSync(this.filePaths.unitData, ObjectsTranslator.jsonToWar(ObjectType.Units, this.unitData).buffer);
+        break;
+      case 'unitTypeSkins':
+        writeFileSync(this.filePaths.unitTypeSkins, ObjectsTranslator.jsonToWar(ObjectType.Units, this.unitTypeSkins).buffer);
+        break;
+      case 'destructibleTypeSkins':
+        writeFileSync(this.filePaths.destructibleTypeSkins, ObjectsTranslator.jsonToWar(ObjectType.Destructables, this.destructibleTypeSkins).buffer);
+        break;
+      case 'doodadTypeSkins':
+        writeFileSync(this.filePaths.doodadTypeSkins, ObjectsTranslator.jsonToWar(ObjectType.Doodads, this.doodadTypeSkins).buffer);
+        break;
+      case 'abilityTypeSkins':
+        writeFileSync(this.filePaths.abilityTypeSkins, ObjectsTranslator.jsonToWar(ObjectType.Abilities, this.abilityTypeSkins).buffer);
+        break;
+      case 'buffTypeSkins':
+        writeFileSync(this.filePaths.buffTypeSkins, ObjectsTranslator.jsonToWar(ObjectType.Buffs, this.buffTypeSkins).buffer);
         break;
       case 'itemData':
         writeFileSync(this.filePaths.itemData, ObjectsTranslator.jsonToWar(ObjectType.Items, this.itemData).buffer);

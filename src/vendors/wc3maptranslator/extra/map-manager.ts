@@ -31,6 +31,9 @@ export interface IDoodad extends Omit<Doodad, 'type'> {
 export interface IAbilityType extends IObjectData {
 }
 
+export interface IBuffType extends IObjectData {
+}
+
 export class MapManager {
   private mapData: MapTranslator;
 
@@ -48,6 +51,8 @@ export class MapManager {
 
   abilities: IAbilityType[] = [];
 
+  buffTypes: IBuffType[] = [];
+
   regions: Region[] = [];
 
   cameras: Camera[] = [];
@@ -55,6 +60,16 @@ export class MapManager {
   info: Info;
 
   players: Player[] = [];
+
+  unitTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  destructibleTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  doodadTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  abilityTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
+
+  buffTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
 
   constructor() {
     this.mapData = new MapTranslator();
@@ -83,6 +98,12 @@ export class MapManager {
     this.registerTableFourCCs(this.mapData.abilityData);
     this.registerTableFourCCs(this.mapData.buffData);
     this.registerTableFourCCs(this.mapData.upgradeData);
+
+    this.unitTypeSkins = this.mapData.unitTypeSkins ?? { original: {}, custom: {} };
+    this.destructibleTypeSkins = this.mapData.destructibleTypeSkins ?? { original: {}, custom: {} };
+    this.doodadTypeSkins = this.mapData.doodadTypeSkins ?? { original: {}, custom: {} };
+    this.abilityTypeSkins = this.mapData.abilityTypeSkins ?? { original: {}, custom: {} };
+    this.buffTypeSkins = this.mapData.buffTypeSkins ?? { original: {}, custom: {} };
 
     Object.entries(this.mapData.unitData.custom).forEach(([key, value]) => {
       const [code, parent] = key.split(':');
@@ -122,6 +143,14 @@ export class MapManager {
     Object.entries(this.mapData.abilityData.custom).forEach(([key, value]) => {
       const [code, parent] = key.split(':');
       this.abilities.push({
+        code,
+        parent,
+        data: value,
+      });
+    });
+    Object.entries(this.mapData.buffData.custom).forEach(([key, value]) => {
+      const [code, parent] = key.split(':');
+      this.buffTypes.push({
         code,
         parent,
         data: value,
