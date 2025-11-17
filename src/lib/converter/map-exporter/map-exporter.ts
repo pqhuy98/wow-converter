@@ -18,6 +18,7 @@ import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 export interface MapExportConfig {
   mapId: number;
   wowExportFolder: string;
+  wmoSet?: string[];
   min: Vector2;
   max: Vector2;
   mapAngleDeg: number;
@@ -85,6 +86,9 @@ export class MapExporter {
 
     this.wowObjectManager = new WowObjectManager(this.config);
     this.filterDoodads = (id, type) => (this.mapExportConfig.doodads.enable[type] ?? this.mapExportConfig.doodads.enable.others) && type !== 'unit' && (filter?.(id, type) ?? true);
+    if (this.mapExportConfig.wmoSet) {
+      await this.wowObjectManager.readTerrainsDoodads(this.mapExportConfig.wmoSet, this.filterDoodads);
+    }
     await this.wowObjectManager.readTerrainsDoodads(
       buildPaths(`**/${wowExportFolder}`, min, max),
       this.filterDoodads,

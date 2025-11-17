@@ -9,6 +9,8 @@ import { Bone } from '../components/node/node';
 import { Sequence } from '../components/sequence';
 import { MDLModify } from '.';
 
+const debug = false;
+
 export function convertToSd800(this: MDLModify) {
   const mdl = this.mdl;
   if (mdl.version.formatVersion === 800) return this;
@@ -247,7 +249,7 @@ export function convertToSd800(this: MDLModify) {
     throw new Error('Geoset matrices are not unique');
   }
 
-  console.log('Largest matrix size', mdl.geosets.reduce((max, gs) => Math.max(max, ...gs.matrices.map((m) => m.bones.length)), 0));
+  debug && console.log('Largest matrix size', mdl.geosets.reduce((max, gs) => Math.max(max, ...gs.matrices.map((m) => m.bones.length)), 0));
 
   this.optimizeKeyFrames();
   sortKeyframes.call(this);
@@ -298,5 +300,5 @@ function sortKeyframes(this: MDLModify) {
   this.mdl.sequences.forEach((s) => {
     s.interval = newIntervals.get(s)!;
   });
-  console.log('Sort keyframes took', chalk.yellow((performance.now() - start) / 1000), 'seconds');
+  debug && console.log('Sort keyframes took', chalk.yellow((performance.now() - start) / 1000), 'seconds');
 }

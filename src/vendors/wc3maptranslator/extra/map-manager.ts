@@ -261,7 +261,7 @@ export class MapManager {
       this.mapData.info = this.info;
     }
     this.mapData.setMapDir(mapDir);
-    this.mapData.save('info');
+    if (this.mapData.info) this.mapData.save('info');
     this.mapData.save('units');
     this.mapData.save('doodads');
     this.mapData.save('terrain');

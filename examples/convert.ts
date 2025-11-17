@@ -6,7 +6,7 @@ import {
   defaultMapExportConfig, gameZToPercent, MapExportConfig, MapExporter,
 } from '@/lib/converter/map-exporter/map-exporter';
 import { computeRecommendedTerrainClampPercent } from '@/lib/converter/map-exporter/wc3-converter';
-import { Vector3 } from '@/lib/math/common';
+import { Vector2, Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
 
 import { Config, getDefaultConfig } from '../src/lib/global-config';
@@ -29,21 +29,25 @@ const WowMap = {
   Durnhole: { id: 560, folder: 'HillsbradPast' },
 };
 
-const maps: [WowMap,
-  [number, number], // low x, low y
-  [number, number], // high x, high y
+const maps: ([WowMap,
+  Vector2, // low x, low y
+  Vector2, // high x, high y
   string, // output map file name
   number, // lower percent
   number, // upper percent
   number, // map angle degrees
-][] = [
-  [WowMap.Northrend, [29, 22], [29, 22], 'wrathgate.w3x', 0.05, 0.3, 0],
+] | [string, number, number, string, number])[] = [
+  // [WowMap.Northrend, [29, 22], [29, 22], 'wrathgate.w3x', 0.05, 0.3, 0],
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
   // [WowMap.Northrend, [32, 21], [33, 22], 'icecrown.w3x', 0, 0.4, 0],
   // [WowMap.Northrend, [18, 24], [19, 25], 'nexus.w3x', 0, 1, 0],
   // [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0, 1, 90],
   // [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
-  // [WowMap.IcecrownCitadel, [25, 23], [27, 24], 'icc-floor34.w3x', 0, 1, 0],
+  // [WowMap.IcecrownCitadel, [25, 23], [27, 24], 'icc-floor34.w3x', 1 - 2 * 0.095, 1, 0],
+  [
+    'world\\wmo\\dungeon\\icecrownraid\\icecrownraid_middle_section_set0.obj',
+    0.55, 0.65, 'icc-floor34-wmo.w3x', 90,
+  ],
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.5, 0.7, 180],
   // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
@@ -57,36 +61,51 @@ const maps: [WowMap,
   // [WowMap.TheMaw, [17, 21], [22, 25], 'themaw4.w3x'],
 ];
 
-const autoChoseClampPercent = true;
+const autoChoseClampPercent = false;
 
 const chosenMap = maps[0];
-const mapAngleDeg = chosenMap[6];
 
 const config: Config = {
   ...await getDefaultConfig(),
   isBulkExport: true,
   overrideModels: false,
-  mdx: true,
+  mdx: false,
 };
 
 const creatureScaleUp = 1;
 const mapOutputDir = `maps/${chosenMap[3]}`;
 
 const mapExportConfig: MapExportConfig = {
-  ...defaultMapExportConfig,
-  mapId: chosenMap[0].id,
-  wowExportFolder: chosenMap[0].folder,
-  min: chosenMap[1],
-  max: chosenMap[2],
-  mapAngleDeg,
-  terrain: {
-    clampPercent: {
-      lower: chosenMap[4],
-      upper: chosenMap[5],
+  ...(chosenMap.length === 5 ? {
+    ...defaultMapExportConfig,
+    mapId: 0,
+    wowExportFolder: '',
+    min: [0, 0],
+    max: [1, 1],
+    mapAngleDeg: chosenMap[4],
+    wmoSet: [chosenMap[0]],
+    terrain: {
+      clampPercent: {
+        lower: chosenMap[1],
+        upper: chosenMap[2],
+      },
+    },
+  } : {
+    ...defaultMapExportConfig,
+    mapId: chosenMap[0].id,
+    wowExportFolder: chosenMap[0].folder,
+    min: chosenMap[1],
+    max: chosenMap[2],
+    mapAngleDeg: chosenMap[6],
+    terrain: {
+      clampPercent: {
+        lower: chosenMap[4],
+        upper: chosenMap[5],
       // lower: gameZToPercent(1400),
       // upper: gameZToPercent(2600),
+      },
     },
-  },
+  }),
   creatures: {
     enable: false,
     allAreDoodads: true,
@@ -103,6 +122,12 @@ const mapExportConfig: MapExportConfig = {
   if (autoChoseClampPercent) {
     autoChooseClampPercent(mapExporter, mapExportConfig);
   }
+
+  mapExporter.wowObjectManager.iterateObjects((obj) => {
+    if (obj.id.includes('icecrown_bloodprince_portal_right')) {
+      obj.model?.mdl.modify.convertToSd800();
+    }
+  });
 
   await mapExporter.exportTerrainsDoodads(mapOutputDir);
   await mapExporter.exportCreatures(mapOutputDir);
