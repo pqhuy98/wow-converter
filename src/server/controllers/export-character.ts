@@ -220,7 +220,7 @@ export async function ControllerExportCharacter(router: express.Router) {
 
   router.post('/export/character', (req, res) => {
     if (!wowExportClient.isReady) {
-      return res.status(500).json({ error: 'wow.export RCP server is not ready' });
+      return res.status(500).json({ error: 'wow.export is not ready' });
     }
 
     try {

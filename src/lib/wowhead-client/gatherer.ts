@@ -1,3 +1,4 @@
+import { customFetch } from './http-client';
 import { g_itembonuses } from './snipped-data/g_itembonuses';
 import { getWowheadPrefix, ZamExpansion } from './zam-url';
 
@@ -31,7 +32,7 @@ export async function gatherItems(expansion: ZamExpansion, items: {itemId: numbe
 
   const url = buildGathererUrl(expansion, items.map((v) => v.itemId));
   console.log(url);
-  const res = await fetch(url, { method: 'GET' });
+  const res = await customFetch(url);
   const body = await res.text();
   if (!body) {
     return [];

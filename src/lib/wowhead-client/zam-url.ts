@@ -1,5 +1,7 @@
 import { LRUCache } from 'lru-cache';
 
+import { customFetch } from './http-client';
+
 export type ZamExpansion = 'classic' | 'tbc' | 'wrath' | 'cata' | 'mists' | 'live' | 'ptr' | 'ptr2' | 'latest-available';
 export type ZamType = 'npc' | 'object' | 'item' | 'dressing-room' | 'character-customization' | 'itemvisual';
 
@@ -75,7 +77,7 @@ export async function getLatestExpansionHavingUrl(path: string): Promise<ZamExpa
   for (const [_, zamEx] of expansionsReverse) {
     try {
       const base = getZamBaseUrl(zamEx);
-      const res = await fetch(`${base}/${path}`);
+      const res = await customFetch(`${base}/${path}`);
       if (!res.ok) throw new Error(`Failed to fetch latest available npc: ${res.status} ${res.statusText}`);
       return zamEx;
     } catch (e) {
@@ -111,7 +113,7 @@ const respCache = new LRUCache<string, string>({ max: 200 });
 export async function fetchWithCache(url: string): Promise<string> {
   const cached = respCache.get(url);
   if (cached) return cached;
-  const res = await fetch(url);
+  const res = await customFetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch wowhead url: ${url} ${res.status} ${res.statusText} ${await res.text()}`);
   }
