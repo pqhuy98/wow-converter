@@ -35,9 +35,9 @@ export interface IBuffType extends IObjectData {
 }
 
 export class MapManager {
-  private mapData: MapTranslator;
+  mapData: MapTranslator;
 
-  private fourCCGenerator: FourCCGenerator;
+  fourCCGenerator: FourCCGenerator;
 
   unitTypes: IUnitType[] = [];
 

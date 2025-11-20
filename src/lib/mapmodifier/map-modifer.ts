@@ -171,7 +171,10 @@ export function pasteMapIntoMap(source: MapManager, target: MapManager, x: numbe
     source.doodads.forEach((d) => {
       if (typeof d.type === 'string') {
         const newCode = remap.get(d.type);
-        if (newCode) d.type = newCode;
+        if (newCode) {
+          d.type = newCode;
+          d.skinId = newCode;
+        }
       }
     });
   }
@@ -219,6 +222,7 @@ export function pasteMapIntoMap(source: MapManager, target: MapManager, x: numbe
     target.doodads.push({
       ...doodad,
       type: code,
+      skinId: code,
       position: [
         doodad.position[0] + worldDeltaX,
         doodad.position[1] + worldDeltaY,

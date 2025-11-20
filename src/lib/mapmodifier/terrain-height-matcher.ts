@@ -12,15 +12,18 @@ import { radians } from '../math/rotation';
 import { V3 } from '../math/vector';
 import { nArray } from '../utils';
 
-const floodBrushSize = 2;
-const slopeThreshold = 45;
-
 interface Face {
   vertices: [Vector3, Vector3, Vector3];
   geosetId: number
 }
 
-export function matchTerrainToDoodadHeights(terrain: Terrain, doodadModels: [Doodad, string][]) {
+export function matchTerrainToDoodadHeights(terrain: Terrain, doodadModels: [Pick<Doodad, 'position' | 'scale' | 'angle'>, string][], {
+  floodBrushSize = 2,
+  slopeThreshold = 45,
+}: {
+  floodBrushSize?: number;
+  slopeThreshold?: number;
+} = {}) {
   const offset: Vector3 = [terrain.map.offset.x, terrain.map.offset.y, 0];
 
   const allFaces = doodadModels.flatMap(([doodad, mdlStr]) => {
@@ -70,7 +73,7 @@ export function matchTerrainToDoodadHeights(terrain: Terrain, doodadModels: [Doo
   function update(i: number, j: number, newDataHeight: number) {
     countArray[i][j]++;
     if (countArray[i][j] > 1) {
-    // max aggregating
+      // max aggregating
       sumArray[i][j] = Math.max(sumArray[i][j], newDataHeight);
       countArray[i][j] = 1;
 
@@ -78,10 +81,12 @@ export function matchTerrainToDoodadHeights(terrain: Terrain, doodadModels: [Doo
     // sumArray[i][j] += newDataHeight;
     } else {
       sumArray[i][j] = newDataHeight;
+      countArray[i][j] = 1;
     }
     const dataHeight = Math.round(sumArray[i][j] / countArray[i][j]);
+
     terrain.groundHeight[i][j] = Math.max(
-      terrain.groundHeight[i][j],
+      countArray[i][j] > 1 ? Math.max(terrain.groundHeight[i][j], dataHeight) : dataHeight,
       Math.max(dataHeightMin, Math.min(dataHeightMax, dataHeight)),
     );
   }

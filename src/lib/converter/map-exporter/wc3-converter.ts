@@ -159,11 +159,7 @@ export class Wc3Converter {
 
         // Insert new doodad type if not exists
         if (!modelPathToDoodadType.has(hashKey)) {
-          const doodadType = map.addDoodadType([
-            {
-              id: 'dfil', type: ModificationType.string, level: 0, column: 0, value: fileName,
-            },
-          ], false);
+          const doodadType = map.addDoodadType([], false);
           // Prefix generated doodads with ~ so that they are shown last in Object Editor.
           const doodadName = `~D ${path.basename(obj.model!.relativePath)} -- ${obj.type} -- ${doodadType.code}`;
 

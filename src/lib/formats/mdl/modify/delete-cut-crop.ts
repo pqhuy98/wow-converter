@@ -1,7 +1,9 @@
 import { Vector2, Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
 
-import { Face, GeosetVertex, SkinWeight } from '../components/geoset';
+import {
+  Face, Geoset, GeosetVertex, SkinWeight,
+} from '../components/geoset';
 import { Bone } from '../components/node/node';
 import { MDLModify } from '.';
 
@@ -153,12 +155,12 @@ export function cropVerticesOneDimension(this: MDLModify, dimension: number, low
   return this.deleteVerticesOutsideBox(vLow, vHigh);
 }
 
-export function deleteFacesIf(this: MDLModify, shouldDeleteFace: (face: Face) => boolean) {
+export function deleteFacesIf(this: MDLModify, shouldDeleteFace: (face: Face, geoset: Geoset) => boolean) {
   this.mdl.geosets.forEach((geoset) => {
     let verts = new Set<GeosetVertex>(geoset.vertices);
     const faces = new Set<Face>(geoset.faces);
     geoset.faces.forEach((face) => {
-      if (shouldDeleteFace(face)) {
+      if (shouldDeleteFace(face, geoset)) {
         faces.delete(face);
       }
     });

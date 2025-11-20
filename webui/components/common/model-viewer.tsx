@@ -32,6 +32,12 @@ const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 
 const MAX_DISTANCE = 2000000;
 
+interface CutBoxState {
+  visible: boolean;
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
 export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -48,6 +54,31 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
   const collisionInstancesRef = useRef<MdxModelInstance[]>([]);
   const boxModelRef = useRef<MdxModel | undefined>(undefined);
   const sphereModelRef = useRef<MdxModel | undefined>(undefined);
+  // Cut box primitives and instances
+  const cutBoxWireModelRef = useRef<MdxModel | undefined>(undefined);
+  const cutHandleModelRef = useRef<MdxModel | undefined>(undefined);
+  const cutFaceModelRef = useRef<MdxModel | undefined>(undefined);
+  const cutBoxInstanceRef = useRef<MdxModelInstance | null>(null);
+  const cutHandleInstancesRef = useRef<MdxModelInstance[]>([]);
+  const cutFaceInstancesRef = useRef<MdxModelInstance[]>([]);
+  const cutHandleDefsRef = useRef<ReadonlyArray<{ axis: 0 | 1 | 2; side: 'min' | 'max' }>>([
+    { axis: 0, side: 'min' },
+    { axis: 0, side: 'max' },
+    { axis: 1, side: 'min' },
+    { axis: 1, side: 'max' },
+    { axis: 2, side: 'min' },
+    { axis: 2, side: 'max' },
+  ]);
+  const [cutBox, setCutBox] = useState<CutBoxState>({ visible: false, min: [0, 0, 0], max: [0, 0, 0] });
+  const cutBoxRef = useRef<CutBoxState>(cutBox);
+  cutBoxRef.current = cutBox;
+  const [copiedCutCode, setCopiedCutCode] = useState<boolean>(false);
+  const hoveredFaceIdxRef = useRef<number>(-1);
+  const draggingCutHandleRef = useRef<{
+    axis: 0 | 1 | 2;
+    side: 'min' | 'max';
+    grabOffset: number; // difference between initial hit[axis] and current face coordinate
+  } | null>(null);
   const primsReadyRef = useRef<Promise<void> | undefined>(undefined);
   const loadRequestIdRef = useRef(0);
   const [gridVisible, setGridVisible] = useState(true);
@@ -71,12 +102,21 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
     // Prepare primitive models for collision visualization
     primsReadyRef.current = (async () => {
       try {
-        const [boxM, sphereM] = await Promise.all([
+        const colorCut = new Float32Array([1, 0.5, 0]); // orange wireframe
+        const colorHandle = new Float32Array([0, 0.9, 1]); // cyan solid
+        const faceColor = new Float32Array([0.95, 0.55, 0.1]); // face default
+        const [boxM, sphereM, cutWire, handleSphere, faceSolid] = await Promise.all([
           mdlx.createPrimitive(viewer, mdlx.primitives.createUnitCube(), { lines: true }),
           mdlx.createPrimitive(viewer, mdlx.primitives.createUnitSphere(12, 12), { lines: true }),
+          mdlx.createPrimitive(viewer, mdlx.primitives.createUnitCube(), { lines: true, color: colorCut }),
+          mdlx.createPrimitive(viewer, mdlx.primitives.createUnitSphere(10, 10), { color: colorHandle }),
+          mdlx.createPrimitive(viewer, mdlx.primitives.createUnitCube(), { color: faceColor }),
         ]);
         boxModelRef.current = boxM;
         sphereModelRef.current = sphereM;
+        cutBoxWireModelRef.current = cutWire;
+        cutHandleModelRef.current = handleSphere;
+        cutFaceModelRef.current = faceSolid;
       } catch (e) {
         // Fallbacks handled above; ignore
       }
@@ -160,6 +200,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
     let onTouchEnd: ((e: TouchEvent) => void) | null = null;
 
     let modelInstance: MdxModelInstance | null = null;
+    let cutSyncInterval: number | undefined;
 
     void (async () => {
       // Ensure collision primitives are ready before loading shapes
@@ -196,6 +237,155 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
 
       // Add scene and basic camera, grid setup
       scene.addInstance(modelInstance);
+
+      // Initialize/reset Cut Box state to model bounds (approximate using bounding sphere)
+      const initCutBox = () => {
+        const b = modelInstance!.getBounds();
+        const min: [number, number, number] = [b.x - b.r, b.y - b.r, -b.r];
+        const max: [number, number, number] = [b.x + b.r, b.y + b.r, b.r];
+        setCutBox((prev) => ({ visible: prev.visible, min, max }));
+      };
+      initCutBox();
+
+      // Helpers for Cut Box instances
+      const ensureCutBoxInstances = () => {
+        if (!cutBoxWireModelRef.current || !cutHandleModelRef.current) return;
+        if (!cutBoxInstanceRef.current) {
+          const inst = cutBoxWireModelRef.current.addInstance();
+          inst.setScene(scene);
+          cutBoxInstanceRef.current = inst;
+        }
+        if (cutHandleInstancesRef.current.length === 0) {
+          cutHandleInstancesRef.current = cutHandleDefsRef.current.map(() => {
+            const h = cutHandleModelRef.current!.addInstance();
+            h.setScene(scene);
+            return h;
+          });
+        }
+        if (cutFaceInstancesRef.current.length === 0 && cutFaceModelRef.current) {
+          cutFaceInstancesRef.current = cutHandleDefsRef.current.map(() => {
+            const f = cutFaceModelRef.current!.addInstance();
+            f.setScene(scene);
+            return f;
+          });
+        }
+      };
+
+      const showHideCutBoxInstances = (show: boolean) => {
+        if (cutBoxInstanceRef.current) {
+          try { show ? cutBoxInstanceRef.current.show?.() : cutBoxInstanceRef.current.hide?.(); } catch { /* noop */ }
+        }
+        for (const h of cutHandleInstancesRef.current) {
+          try { show ? h.show?.() : h.hide?.(); } catch { /* noop */ }
+        }
+        for (const f of cutFaceInstancesRef.current) {
+          try { show ? f.show?.() : f.hide?.(); } catch { /* noop */ }
+        }
+      };
+
+      const updateCutBoxTransforms = () => {
+        ensureCutBoxInstances();
+        const inst = cutBoxInstanceRef.current;
+        const defs = cutHandleDefsRef.current;
+        if (!inst || cutHandleInstancesRef.current.length !== defs.length || cutFaceInstancesRef.current.length !== defs.length) return;
+        const [minX, minY, minZ] = cutBoxRef.current.min;
+        const [maxX, maxY, maxZ] = cutBoxRef.current.max;
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const cz = (minZ + maxZ) / 2;
+        const sx = (maxX - minX) / 2 || 0.0001;
+        const sy = (maxY - minY) / 2 || 0.0001;
+        const sz = (maxZ - minZ) / 2 || 0.0001;
+        inst.setLocation([cx, cy, cz]);
+        inst.setScale([sx, sy, sz]);
+        // Handle size proportional to smallest dimension
+        const diag = Math.max(0.0001, Math.min(sx, sy, sz));
+        const handleScale = Math.max(0.02, Math.min(0.2, diag * 0.3));
+        cutHandleInstancesRef.current.forEach((h, i) => {
+          const def = defs[i]!;
+          const hx = def.axis === 0 ? (def.side === 'min' ? minX : maxX) : cx;
+          const hy = def.axis === 1 ? (def.side === 'min' ? minY : maxY) : cy;
+          const hz = def.axis === 2 ? (def.side === 'min' ? minZ : maxZ) : cz;
+          h.setLocation([hx, hy, hz]);
+          h.uniformScale(handleScale);
+        });
+        // Opaque faces (thin cubes)
+        const faceThickness = Math.max(0.01, Math.min(0.2, diag * 0.1));
+        cutFaceInstancesRef.current.forEach((f, i) => {
+          const def = defs[i]!;
+          if (def.axis === 0) {
+            const x = def.side === 'min' ? minX : maxX;
+            f.setLocation([x, cy, cz]);
+            f.setScale([faceThickness, sy, sz]);
+          } else if (def.axis === 1) {
+            const y = def.side === 'min' ? minY : maxY;
+            f.setLocation([cx, y, cz]);
+            f.setScale([sx, faceThickness, sz]);
+          } else {
+            const z = def.side === 'min' ? minZ : maxZ;
+            f.setLocation([cx, cy, z]);
+            f.setScale([sx, sy, faceThickness]);
+          }
+        });
+        if (cutBoxRef.current.visible) {
+          showHideCutBoxInstances(true);
+        } else {
+          showHideCutBoxInstances(false);
+        }
+      };
+
+      const setFaceHighlight = (hoverIdx: number) => {
+        if (cutFaceInstancesRef.current.length === 0) return;
+        const defaultColor: number[] = [0.95, 0.55, 0.1];
+        const highlightColor: number[] = [1.0, 1.0, 0.0];
+        cutFaceInstancesRef.current.forEach((f, i) => {
+          try {
+            f.setVertexColor(i === hoverIdx ? highlightColor : defaultColor);
+          } catch { /* noop */ }
+        });
+      };
+
+      const pickFace = (ro: [number, number, number], rd: [number, number, number]) => {
+        const [minX, minY, minZ] = cutBoxRef.current.min;
+        const [maxX, maxY, maxZ] = cutBoxRef.current.max;
+        const eps = 1e-8;
+        let bestT = Number.POSITIVE_INFINITY;
+        let bestIdx = -1;
+        const testFace = (axis: 0 | 1 | 2, side: 'min' | 'max') => {
+          const defs = cutHandleDefsRef.current;
+          const idx = defs.findIndex((d) => d.axis === axis && d.side === side);
+          const faceCoord = axis === 0 ? (side === 'min' ? minX : maxX)
+            : axis === 1 ? (side === 'min' ? minY : maxY)
+              : (side === 'min' ? minZ : maxZ);
+          const rdA = rd[axis];
+          if (Math.abs(rdA) < eps) return; // parallel to face plane
+          const t = (faceCoord - ro[axis]) / rdA;
+          if (t <= 0 || t >= bestT) return;
+          const hitX = ro[0] + rd[0] * t;
+          const hitY = ro[1] + rd[1] * t;
+          const hitZ = ro[2] + rd[2] * t;
+          if (axis === 0) {
+            if (hitY >= minY - eps && hitY <= maxY + eps && hitZ >= minZ - eps && hitZ <= maxZ + eps) {
+              bestT = t; bestIdx = idx;
+            }
+          } else if (axis === 1) {
+            if (hitX >= minX - eps && hitX <= maxX + eps && hitZ >= minZ - eps && hitZ <= maxZ + eps) {
+              bestT = t; bestIdx = idx;
+            }
+          } else {
+            if (hitX >= minX - eps && hitX <= maxX + eps && hitY >= minY - eps && hitY <= maxY + eps) {
+              bestT = t; bestIdx = idx;
+            }
+          }
+        };
+        testFace(0, 'min'); testFace(0, 'max');
+        testFace(1, 'min'); testFace(1, 'max');
+        testFace(2, 'min'); testFace(2, 'max');
+        return bestIdx;
+      };
+
+      // Keep transforms in sync when state changes
+      cutSyncInterval = window.setInterval(updateCutBoxTransforms, 50);
 
       // Build collision shape instances (hidden by default)
       collisionInstancesRef.current = [];
@@ -240,6 +430,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
 
       // Utility to update camera position from spherical coords
       let isDragging = false;
+      let isDraggingCutHandle = false;
       let lastX = 0;
       let lastY = 0;
       let lastDistance = 0;
@@ -287,7 +478,85 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
 
       onMouseDown = (e: MouseEvent) => {
         e.preventDefault();
-        if (e.button === 0) leftDown = true;
+        if (e.button === 0) {
+          leftDown = true;
+          // Shift+Left: start Cut Box drag (prefer face; fallback to handle)
+          if (e.shiftKey && cutBoxRef.current.visible) {
+            ensureCutBoxInstances();
+            // Build a picking ray
+            const vp = scene.viewport;
+            const x = e.clientX - (canvas?.getBoundingClientRect().left || 0);
+            const y = e.clientY - (canvas?.getBoundingClientRect().top || 0);
+            const sy = (canvas?.height || 0) - y;
+            const ray = new Float32Array(6);
+            try {
+              camera.screenToWorldRay(ray, new Float32Array([x, sy]), vp);
+              const ro: [number, number, number] = [ray[0], ray[1], ray[2]];
+              const rf: [number, number, number] = [ray[3], ray[4], ray[5]];
+              const rd: [number, number, number] = [rf[0] - ro[0], rf[1] - ro[1], rf[2] - ro[2]];
+              const rdn = vec3.normalize(vecHeap, vec3.fromValues(rd[0], rd[1], rd[2]));
+              const [minX, minY, minZ] = cutBoxRef.current.min;
+              const [maxX, maxY, maxZ] = cutBoxRef.current.max;
+              const cx = (minX + maxX) / 2;
+              const cy = (minY + maxY) / 2;
+              const cz = (minZ + maxZ) / 2;
+              const sx = (maxX - minX) / 2 || 0.0001;
+              const syz = (maxY - minY) / 2 || 0.0001;
+              const szz = (maxZ - minZ) / 2 || 0.0001;
+              const diag = Math.max(0.0001, Math.min(sx, syz, szz));
+              const handleRadius = Math.max(0.02, Math.min(0.2, diag * 0.3));
+              // Prefer face under cursor
+              let chosenIdx = pickFace([ro[0], ro[1], ro[2]], [rd[0], rd[1], rd[2]]);
+              if (chosenIdx < 0 && cutHandleInstancesRef.current.length > 0) {
+                // fallback to handle spheres
+                let bestT = Number.POSITIVE_INFINITY;
+                cutHandleInstancesRef.current.forEach((_h, i) => {
+                  const def = cutHandleDefsRef.current[i]!;
+                  const hx = def.axis === 0 ? (def.side === 'min' ? minX : maxX) : cx;
+                  const hy = def.axis === 1 ? (def.side === 'min' ? minY : maxY) : cy;
+                  const hz = def.axis === 2 ? (def.side === 'min' ? minZ : maxZ) : cz;
+                  const ocx = ro[0] - hx;
+                  const ocy = ro[1] - hy;
+                  const ocz = ro[2] - hz;
+                  const b = 2 * (ocx * rdn[0] + ocy * rdn[1] + ocz * rdn[2]);
+                  const c = ocx * ocx + ocy * ocy + ocz * ocz - handleRadius * handleRadius;
+                  const disc = b * b - 4 * c;
+                  if (disc >= 0) {
+                    const t = (-b - Math.sqrt(disc)) / 2;
+                    if (t > 0 && t < bestT) {
+                      bestT = t;
+                      chosenIdx = i;
+                    }
+                  }
+                });
+              }
+              if (chosenIdx >= 0) {
+                const def = cutHandleDefsRef.current[chosenIdx]!;
+                // Compute camera-facing plane at current face center, and store grab offset
+                const planeNormal: [number, number, number] = [camera.directionZ[0], camera.directionZ[1], camera.directionZ[2]];
+                const faceCenter: [number, number, number] = def.axis === 0
+                  ? [(def.side === 'min' ? minX : maxX), cy, cz]
+                  : def.axis === 1
+                    ? [cx, (def.side === 'min' ? minY : maxY), cz]
+                    : [cx, cy, (def.side === 'min' ? minZ : maxZ)];
+                // Intersect current ray with this plane to compute grab offset
+                const denom0 = planeNormal[0] * rdn[0] + planeNormal[1] * rdn[1] + planeNormal[2] * rdn[2];
+                let grabOffset = 0;
+                if (Math.abs(denom0) > 1e-6) {
+                  const planeW0 = planeNormal[0] * faceCenter[0] + planeNormal[1] * faceCenter[1] + planeNormal[2] * faceCenter[2];
+                  const t0 = (planeW0 - (planeNormal[0] * ro[0] + planeNormal[1] * ro[1] + planeNormal[2] * ro[2])) / denom0;
+                  const hit0: [number, number, number] = [ro[0] + rdn[0] * t0, ro[1] + rdn[1] * t0, ro[2] + rdn[2] * t0];
+                  const currentFaceCoord = def.axis === 0 ? faceCenter[0] : def.axis === 1 ? faceCenter[1] : faceCenter[2];
+                  grabOffset = hit0[def.axis] - currentFaceCoord;
+                }
+                draggingCutHandleRef.current = { axis: def.axis, side: def.side, grabOffset };
+                isDraggingCutHandle = true;
+              }
+            } catch {
+              // ignore picking failures
+            }
+          }
+        }
         if (e.button === 1) middleDown = true;
         if (e.button === 2) rightDown = true;
         isDragging = leftDown || middleDown || rightDown;
@@ -313,7 +582,77 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       };
 
       onMouseMove = (e: MouseEvent) => {
+        // Hover highlight
+        if (!isTouch && cutBoxRef.current.visible && canvas) {
+          try {
+            const vp = scene.viewport;
+            const x = e.clientX - (canvas.getBoundingClientRect().left || 0);
+            const y = e.clientY - (canvas.getBoundingClientRect().top || 0);
+            const sy = (canvas.height || 0) - y;
+            const ray = new Float32Array(6);
+            camera.screenToWorldRay(ray, new Float32Array([x, sy]), vp);
+            const ro: [number, number, number] = [ray[0], ray[1], ray[2]];
+            const rf: [number, number, number] = [ray[3], ray[4], ray[5]];
+            const rd: [number, number, number] = [rf[0] - ro[0], rf[1] - ro[1], rf[2] - ro[2]];
+            const idx = pickFace([ro[0], ro[1], ro[2]], [rd[0], rd[1], rd[2]]);
+            if (idx !== hoveredFaceIdxRef.current) {
+              hoveredFaceIdxRef.current = idx;
+              setFaceHighlight(idx);
+            }
+          } catch { /* noop */ }
+        }
         if (!isDragging || isTouch) return;
+        // Cut Box dragging takes precedence over camera controls
+        if (isDraggingCutHandle && draggingCutHandleRef.current && canvas) {
+          const vp = scene.viewport;
+          const x = e.clientX - (canvas.getBoundingClientRect().left || 0);
+          const y = e.clientY - (canvas.getBoundingClientRect().top || 0);
+          const sy = (canvas.height || 0) - y;
+          const ray = new Float32Array(6);
+          try {
+            camera.screenToWorldRay(ray, new Float32Array([x, sy]), vp);
+            const ro: [number, number, number] = [ray[0], ray[1], ray[2]];
+            const rf: [number, number, number] = [ray[3], ray[4], ray[5]];
+            const rd: [number, number, number] = [rf[0] - ro[0], rf[1] - ro[1], rf[2] - ro[2]];
+            // Dynamic camera-facing plane through current face center
+            const axis = draggingCutHandleRef.current.axis;
+            const side = draggingCutHandleRef.current.side;
+            const camNormal: [number, number, number] = [camera.directionZ[0], camera.directionZ[1], camera.directionZ[2]];
+            const [minX, minY, minZ] = cutBoxRef.current.min;
+            const [maxX, maxY, maxZ] = cutBoxRef.current.max;
+            const cx = (minX + maxX) / 2;
+            const cy = (minY + maxY) / 2;
+            const cz = (minZ + maxZ) / 2;
+            const faceCenter: [number, number, number] = axis === 0
+              ? [(side === 'min' ? minX : maxX), cy, cz]
+              : axis === 1
+                ? [cx, (side === 'min' ? minY : maxY), cz]
+                : [cx, cy, (side === 'min' ? minZ : maxZ)];
+            const denom = camNormal[0] * rd[0] + camNormal[1] * rd[1] + camNormal[2] * rd[2];
+            if (Math.abs(denom) > 1e-6) {
+              const planeW = camNormal[0] * faceCenter[0] + camNormal[1] * faceCenter[1] + camNormal[2] * faceCenter[2];
+              const t = (planeW - (camNormal[0] * ro[0] + camNormal[1] * ro[1] + camNormal[2] * ro[2])) / denom;
+              const hitPoint: [number, number, number] = [ro[0] + rd[0] * t, ro[1] + rd[1] * t, ro[2] + rd[2] * t];
+              const desiredCoord = hitPoint[axis] - draggingCutHandleRef.current.grabOffset;
+              const eps = 1e-4;
+              const nextMin: [number, number, number] = [minX, minY, minZ];
+              const nextMax: [number, number, number] = [maxX, maxY, maxZ];
+              if (side === 'min') {
+                nextMin[axis] = Math.min(desiredCoord, nextMax[axis] - eps);
+              } else {
+                nextMax[axis] = Math.max(desiredCoord, nextMin[axis] + eps);
+              }
+              setCutBox((prev) => ({
+                visible: prev.visible,
+                min: nextMin,
+                max: nextMax,
+              }));
+            }
+          } catch {
+            // ignore
+          }
+          return;
+        }
         if (middleDown || (leftDown && rightDown)) { // pan with middle or L+R
           const dx = e.clientX - lastX;
           const dy = e.clientY - lastY;
@@ -384,6 +723,10 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         if (e.button === 1) middleDown = false;
         if (e.button === 2) rightDown = false;
         isDragging = leftDown || middleDown || rightDown;
+        if (!leftDown) {
+          isDraggingCutHandle = false;
+          draggingCutHandleRef.current = null;
+        }
       };
 
       onTouchMove = (e: TouchEvent) => {
@@ -461,7 +804,14 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         window.removeEventListener('mouseup', onMouseUp!);
         window.removeEventListener('resize', resizeCanvas!);
       }
+      try { if (typeof cutSyncInterval === 'number') clearInterval(cutSyncInterval); } catch { /* noop */ }
       viewer.resources.forEach((resource) => viewer.unload(resource));
+
+      try {
+        cutBoxInstanceRef.current = null;
+        cutHandleInstancesRef.current = [];
+        cutFaceInstancesRef.current = [];
+      } catch { /* noop */ }
 
       collisionInstancesRef.current = [];
       if (instanceRef.current === modelInstance) {
@@ -560,6 +910,23 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       setCurrentCamera(idx);
     } catch (e) {
       console.error('Failed to set camera', e);
+    }
+  };
+
+  const handleToggleCutBox = () => {
+    setCutBox((prev) => ({ ...prev, visible: !prev.visible }));
+    // Instances visibility will be toggled by the render loop sync
+  };
+  const handleCopyCutCode = async () => {
+    const m = cutBox.min.map((v) => Number(v.toFixed(2)));
+    const M = cutBox.max.map((v) => Number(v.toFixed(2)));
+    const code = `model.modify.deleteVerticesInsideBox([${m[0]}, ${m[1]}, ${m[2]}], [${M[0]}, ${M[1]}, ${M[2]}]);\n`;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCutCode(true);
+      setTimeout(() => setCopiedCutCode(false), 2000);
+    } catch {
+      // ignore
     }
   };
 
@@ -709,6 +1076,17 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
               tooltips={loadedCount === 0 ? 'No model loaded' : 'Download model'} asChild
             />
           </Button>}
+          {serverConfig.isDev && <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleToggleCutBox}
+            className="w-10 h-10 text-2xl bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))] focus:outline-none"
+          >
+            <TooltipHelp
+              trigger={<span>{cutBox.visible ? '✂□' : '□'}</span>}
+              tooltips={cutBox.visible ? 'Disable Cut Box' : 'Enable Cut Box'} asChild
+            />
+          </Button>}
         </div>
         <div className="absolute bottom-2 left-2 z-10 flex items-end gap-3">
           <TooltipHelp
@@ -789,6 +1167,22 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
               )}
             </ul>
           </div>
+          <div className="h-6" />
+          {cutBox.visible && <><div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-[60px] lg:z-10">
+            Cut Box
+          </div>
+          <div className="p-3 space-y-3 border-b border-[hsl(var(--viewer-divider))]">
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleCopyCutCode()}
+                className="flex-1 bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))]"
+              >
+                {copiedCutCode ? 'Copied' : 'Copy Code'}
+              </Button>
+            </div>
+          </div></>}
         </div>
       </div>
     </div>

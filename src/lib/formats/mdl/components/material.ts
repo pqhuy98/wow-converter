@@ -34,7 +34,6 @@ export function materialsToString(version: number, materials: Material[]) {
     ${materials.map((material) => `
       Material {
         ${material.constantColor ? 'ConstantColor,' : ''}
-        ${version > 800 && material.twoSided ? 'TwoSided,' : ''}
         ${material.layers.map((layer) => `
         Layer {
           FilterMode ${layer.filterMode},
