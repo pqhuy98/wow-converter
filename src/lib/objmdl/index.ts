@@ -11,7 +11,11 @@ import { Texture } from '@/lib/formats/mdl/components/texture';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { M2MetadataFile } from '@/lib/objmdl/metadata/m2_metadata';
 import { MTLFile } from '@/lib/objmdl/mtl';
-import { IFace, IGroup, OBJFile } from '@/lib/objmdl/obj';
+import {
+  IFace,
+  IGroup,
+  OBJFile,
+} from '@/lib/objmdl/obj';
 
 import { Config } from '../global-config';
 import { AnimationFile } from './animation/animation';
@@ -19,10 +23,20 @@ import { guessFilterMode } from './utils';
 
 const debug = false;
 
+// For ADT tiles exported as baked per-cell textures, sampling exactly
+// at 0 or 1 on UV borders can bleed from the outside border pixels.
+// Nudge UVs slightly inward to avoid filtering artifacts.
+const ADT_UV_PADDING = 1 / 512; // ~0.2% margin
+function padUv(u: number, v: number): [number, number] {
+  const scale = 1 - 2 * ADT_UV_PADDING;
+  return [u * scale + ADT_UV_PADDING, v * scale + ADT_UV_PADDING];
+}
+
 export async function convertWowExportModel(objFilePath: string, config: Config): Promise<{mdl: MDL, texturePaths: Set<string>}> {
   !config.isBulkExport && console.log('Converting OBJ model:', chalk.blue(objFilePath));
   const start0 = performance.now();
   let start = start0;
+  const isAdtModel = objFilePath.includes('adt_');
   const obj = await new OBJFile(objFilePath, config).parse();
   const mtl = await new MTLFile(objFilePath.replace(/\.obj$/, '.mtl'), config).parse();
 
@@ -129,8 +143,7 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
 
       // metadata does not have this material, fallback to resolve material from mtl file
       // ideally this should only happen for ADT models
-      const isAdt = objFilePath.includes('adt_');
-      if (!isAdt) {
+      if (!isAdtModel) {
         console.log(chalk.red('Warning: no material found for matName:', matName, 'submeshId:', submeshId));
       }
 
@@ -138,8 +151,8 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
       const texture: Texture = {
         id: 0,
         image: textureRelativePath ? path.join(config.assetPrefix, textureRelativePath.replace('.png', '.blp')) : '',
-        wrapHeight: true,
-        wrapWidth: true,
+        wrapHeight: !isAdtModel,
+        wrapWidth: !isAdtModel,
         wowData: {
           type: 0,
           pngPath: textureRelativePath || '',
@@ -152,7 +165,7 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
         layers: [
           {
             texture,
-            filterMode: textureRelativePath && !isAdt ? guessFilterMode(textureRelativePath) : 'None',
+            filterMode: textureRelativePath && !isAdtModel ? guessFilterMode(textureRelativePath) : 'None',
             unshaded: false,
             sphereEnvMap: false,
             twoSided: false,
@@ -237,12 +250,22 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
         if (!vMap.has(v.vertexIndex)) {
           const objN = obj.models[0].vertexNormals[v.vertexNormalIndex - 1];
           let objT = obj.models[0].textureCoords[v.textureCoordsIndex - 1];
-          const objT2 = obj.models[0].textureCoords2 ? obj.models[0].textureCoords2[v.textureCoordsIndex - 1] : undefined;
+          const objT2 = obj.models[0].textureCoords2
+            ? obj.models[0].textureCoords2[v.textureCoordsIndex - 1]
+            : undefined;
           if (!objT) {
             // console.error('No texture coords found for vertex', v.vertexIndex, 'in', objFilePath);
             // console.error('obj.models[0].textureCoords.length', obj.models[0].textureCoords.length);
             // console.error('obj.models[0].textureCoords - 1', v.textureCoordsIndex - 1);
             objT = { u: 0, v: 0, w: 0 };
+          }
+
+          const baseTexPos: [number, number] = isAdtModel
+            ? padUv(objT.u, 1 - objT.v)
+            : [objT.u, 1 - objT.v];
+          let baseTexPos2: [number, number] | undefined;
+          if (objT2) {
+            baseTexPos2 = isAdtModel ? padUv(objT2.u, 1 - objT2.v) : [objT2.u, 1 - objT2.v];
           }
 
           let skinWeights: SkinWeight[] | undefined;
@@ -261,8 +284,8 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
             id: 0,
             position: [objV.x, -objV.z, objV.y],
             normal: [objN.x, -objN.z, objN.y],
-            texPosition: [objT.u, 1 - objT.v],
-            texPosition2: objT2 ? [objT2.u, 1 - objT2.v] : undefined,
+            texPosition: baseTexPos,
+            texPosition2: baseTexPos2,
             matrix,
             skinWeights,
           });
