@@ -153,8 +153,10 @@ export async function exportCreatureModels(
         throw new Error(`No display id found for creature template ${c.template.entry}`);
       }
 
-      if (await exists(join(outputPath, `creature-${displayId}.mdx`)) && !config.overrideModels) {
-        debug && console.log('Skipping file already exists', chalk.yellow(`creature-${displayId}.mdx`));
+      const fileName = `creature-${displayId}`;
+      const fileNameFull = `${fileName}.${config.mdx ? 'mdx' : 'mdl'}`;
+      if (await exists(join(outputPath, fileNameFull)) && !config.overrideModels) {
+        debug && console.log('Skipping file already exists', chalk.yellow(fileNameFull));
         return;
       }
 
@@ -194,7 +196,7 @@ export async function exportCreatureModels(
         inGameMovespeed: 270,
         attachItems,
         attackTag,
-      }, `creature-${displayId}`);
+      }, fileName);
 
       start = performance.now();
       ex.optimizeModelsTextures();

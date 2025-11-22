@@ -272,4 +272,19 @@ export class MapManager {
     this.mapData.save('destructibleData');
     this.mapData.save('abilityData');
   }
+
+  findDoodadTypeWithString(fieldId: string, predicate: (value: string) => boolean) {
+    return this.doodadTypes.find((doodadType) => !!doodadType.data.find(
+      (data) => data.id === fieldId && typeof data.value === 'string' && predicate(data.value),
+    ));
+  }
+
+  findDoodadWithType(doodadType: IDoodadType | string) {
+    return this.doodads.find((doodad) => {
+      if (doodad.type === doodadType) return true;
+      const code1 = typeof doodad.type === 'string' ? doodad.type : doodad.type.code;
+      const code2 = typeof doodadType === 'string' ? doodadType : doodadType.code;
+      return code1 === code2;
+    });
+  }
 }
