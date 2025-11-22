@@ -12,7 +12,7 @@ export const dataHeightMax = 8192 * 2 - 512;
 
 export const maxGameHeightDiff = (dataHeightMax - dataHeightMin) / 4;
 
-export const distancePerTile = 4096 / 32;
+export const distancePerTile = 128;
 export const BlizzardNull = 65535;
 
 // Source: https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain

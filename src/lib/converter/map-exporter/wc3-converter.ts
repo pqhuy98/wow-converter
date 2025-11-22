@@ -205,9 +205,9 @@ export class Wc3Converter {
           position: [inGameX, inGameY, inGameZ],
           angle: degrees(objAbsolute.rotation[2]),
           scale: [
-            objAbsolute.scaleFactor * rootScale[0] + 0.0001,
-            objAbsolute.scaleFactor * rootScale[1] + 0.0001,
-            objAbsolute.scaleFactor * rootScale[2] + 0.0001,
+            objAbsolute.scaleFactor * rootScale[0],
+            objAbsolute.scaleFactor * rootScale[1],
+            objAbsolute.scaleFactor * rootScale[2],
           ],
           skinId: id4Chars,
           flags: {
