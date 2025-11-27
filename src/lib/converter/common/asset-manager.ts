@@ -213,7 +213,7 @@ export class AssetManager {
     };
 
     const POS_EPS = 1e-2; // match recompute-normals tolerance
-    const BORDER_EPS = 100; // select a small ring (~half unit) around border
+    const BORDER_EPS = 500; // select a small ring (~half unit) around border
     const q = (x: number) => Math.round(x / POS_EPS) * POS_EPS;
 
     const averageBorder = (a: Model, b: Model, axis: 'x' | 'z') => {

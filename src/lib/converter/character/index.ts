@@ -251,7 +251,7 @@ export class CharacterExporter {
       model.modify.concatenateSequences(attacks, 'Attack');
       model.sequences = model.sequences.filter((seq) => !attacks.includes(seq));
     });
-
+    model.modify.recomputeNormals();
     model.modify.optimizeKeyFrames();
     console.log('Total character export took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
     return model;
