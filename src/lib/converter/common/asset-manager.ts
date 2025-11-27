@@ -50,6 +50,9 @@ export class AssetManager {
     const start = performance.now();
     await mkdir(assetPath, { recursive: true });
     let writeCount = 0;
+    // Before exporting, harmonize normals across adjacent ADT tiles to avoid
+    // lighting seams between tile models.
+    this.smoothAdtTileBorders();
     await workerPool(maxConcurrency, Array.from(this.models.entries()).map(([relativePath, model]) => async () => {
       const fullPath = `${path.join(assetPath, this.config.assetPrefix, relativePath)}.${this.config.mdx ? 'mdx' : 'mdl'}`;
 
@@ -171,6 +174,125 @@ export class AssetManager {
       if (!usedTextures.has(removeExt(texturePath))) {
         this.textures.delete(texturePath);
       }
+    });
+  }
+
+  // -------- ADT helpers ---------------------------------------------------
+  // Average normals on shared borders between adjacent ADT tiles to remove
+  // visible lighting seams once in game. Operates in-place on stored models.
+  smoothAdtTileBorders() {
+    // Collect ADT models by tile indices
+    type TileKey = `${number}_${number}`;
+    const tiles = new Map<TileKey, Model>();
+    const re = /adt_(\d+)_(\d+)$/i;
+
+    this.models.forEach((model) => {
+      // model.mdl.model.name looks like ".../adt_27_32"
+      const base = path.basename(model.mdl.model.name);
+      const m = base.match(re);
+      if (m) {
+        const key = `${Number(m[1])}_${Number(m[2])}` as TileKey;
+        tiles.set(key, model);
+      }
+    });
+
+    const get = (x: number, y: number) => tiles.get(`${x}_${y}` as TileKey);
+
+    const getMinMax = (mdl: Model) => {
+      let minX = Infinity; let maxX = -Infinity;
+      let minZ = Infinity; let maxZ = -Infinity;
+      mdl.mdl.geosets.forEach((g) => g.vertices.forEach((v) => {
+        minX = Math.min(minX, v.position[0]);
+        maxX = Math.max(maxX, v.position[0]);
+        minZ = Math.min(minZ, v.position[2]);
+        maxZ = Math.max(maxZ, v.position[2]);
+      }));
+      return {
+        minX, maxX, minZ, maxZ,
+      };
+    };
+
+    const POS_EPS = 1e-2; // match recompute-normals tolerance
+    const BORDER_EPS = 100; // select a small ring (~half unit) around border
+    const q = (x: number) => Math.round(x / POS_EPS) * POS_EPS;
+
+    const averageBorder = (a: Model, b: Model, axis: 'x' | 'z') => {
+      const {
+        /* minX: _aMinX, */ maxX: aMaxX, /* minZ: _aMinZ, */ maxZ: aMaxZ,
+      } = getMinMax(a);
+      const {
+        minX: bMinX, /* maxX: _bMaxX, */ minZ: bMinZ, /* maxZ: _bMaxZ, */
+      } = getMinMax(b);
+
+      // Determine shared line coordinate and iterate along the orthogonal axis.
+      let aSel: (v: { position: [number, number, number] }) => boolean;
+      let bSel: (v: { position: [number, number, number] }) => boolean;
+      let keyFrom: (v: { position: [number, number, number] }) => number;
+
+      if (axis === 'x') {
+        const ax = aMaxX; // east border of A
+        const bx = bMinX; // west border of B
+        const borderX = (ax + bx) * 0.5;
+        aSel = (v) => Math.abs(v.position[0] - borderX) <= BORDER_EPS;
+        bSel = (v) => Math.abs(v.position[0] - borderX) <= BORDER_EPS;
+        keyFrom = (v) => q(v.position[2]); // use Z coordinate to pair
+      } else {
+        const az = aMaxZ; // north border of A
+        const bz = bMinZ; // south border of B
+        const borderZ = (az + bz) * 0.5;
+        aSel = (v) => Math.abs(v.position[2] - borderZ) <= BORDER_EPS;
+        bSel = (v) => Math.abs(v.position[2] - borderZ) <= BORDER_EPS;
+        keyFrom = (v) => q(v.position[0]); // use X coordinate to pair
+      }
+
+      const aMap = new Map<number, GeosetVertex[]>();
+      const bMap = new Map<number, GeosetVertex[]>();
+
+      a.mdl.geosets.forEach((g) => g.vertices.forEach((v) => {
+        if (aSel(v)) {
+          const k = keyFrom(v);
+          const arr = aMap.get(k) ?? [];
+          arr.push(v);
+          aMap.set(k, arr);
+        }
+      }));
+      b.mdl.geosets.forEach((g) => g.vertices.forEach((v) => {
+        if (bSel(v)) {
+          const k = keyFrom(v);
+          const arr = bMap.get(k) ?? [];
+          arr.push(v);
+          bMap.set(k, arr);
+        }
+      }));
+
+      // For each matched position along the border (ring), average normals
+      const keys = new Set<number>([...aMap.keys(), ...bMap.keys()]);
+      keys.forEach((k) => {
+        const aVerts = aMap.get(k);
+        const bVerts = bMap.get(k);
+        if (!aVerts || !bVerts) return;
+        let nx = 0; let ny = 0; let nz = 0;
+        const add = (v: GeosetVertex) => { nx += v.normal[0]; ny += v.normal[1]; nz += v.normal[2]; };
+        aVerts.forEach(add);
+        bVerts.forEach(add);
+        const len = Math.hypot(nx, ny, nz) || 1;
+        const avg: [number, number, number] = [nx / len, ny / len, nz / len];
+        const set = (v: GeosetVertex) => { v.normal = [avg[0], avg[1], avg[2]]; };
+        aVerts.forEach(set);
+        bVerts.forEach(set);
+      });
+    };
+
+    // Types used in helper above
+    type GeosetVertex = { position: [number, number, number], normal: [number, number, number] };
+
+    // Enumerate all tiles and harmonize with east and north neighbors
+    tiles.forEach((model, key) => {
+      const [sx, sy] = key.split('_').map(Number);
+      const east = get(sx + 1, sy);
+      if (east) averageBorder(model, east, 'x');
+      const north = get(sx, sy + 1);
+      if (north) averageBorder(model, north, 'z');
     });
   }
 }

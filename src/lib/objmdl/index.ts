@@ -25,11 +25,14 @@ const debug = false;
 
 // For ADT tiles exported as baked per-cell textures, sampling exactly
 // at 0 or 1 on UV borders can bleed from the outside border pixels.
-// Nudge UVs slightly inward to avoid filtering artifacts.
+// Inset UVs slightly to avoid filtering artifacts, but keep exact 0/1
+// at the outermost tile borders so adjacent tiles match seamlessly.
 const ADT_UV_PADDING = 1 / 512; // ~0.2% margin
-function padUv(u: number, v: number): [number, number] {
-  const scale = 1 - 2 * ADT_UV_PADDING;
-  return [u * scale + ADT_UV_PADDING, v * scale + ADT_UV_PADDING];
+const ADT_UV_EDGE_EPS = 1e-6;
+function padUvEdgeAware(u: number, v: number): [number, number] {
+  const uu = (u <= ADT_UV_EDGE_EPS) ? 0 : (u >= 1 - ADT_UV_EDGE_EPS) ? 1 : (u * (1 - 2 * ADT_UV_PADDING) + ADT_UV_PADDING);
+  const vv = (v <= ADT_UV_EDGE_EPS) ? 0 : (v >= 1 - ADT_UV_EDGE_EPS) ? 1 : (v * (1 - 2 * ADT_UV_PADDING) + ADT_UV_PADDING);
+  return [uu, vv];
 }
 
 export async function convertWowExportModel(objFilePath: string, config: Config): Promise<{mdl: MDL, texturePaths: Set<string>}> {
@@ -261,11 +264,11 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
           }
 
           const baseTexPos: [number, number] = isAdtModel
-            ? padUv(objT.u, 1 - objT.v)
+            ? padUvEdgeAware(objT.u, 1 - objT.v)
             : [objT.u, 1 - objT.v];
           let baseTexPos2: [number, number] | undefined;
           if (objT2) {
-            baseTexPos2 = isAdtModel ? padUv(objT2.u, 1 - objT2.v) : [objT2.u, 1 - objT2.v];
+            baseTexPos2 = isAdtModel ? padUvEdgeAware(objT2.u, 1 - objT2.v) : [objT2.u, 1 - objT2.v];
           }
 
           let skinWeights: SkinWeight[] | undefined;
@@ -331,6 +334,12 @@ export async function convertWowExportModel(objFilePath: string, config: Config)
   renameEffectWowAnimations(mdl);
 
   debug && console.log('basic parse took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
+
+  start = performance.now();
+  if (isAdtModel) {
+    mdl.modify.recomputeNormals();
+  }
+  debug && console.log('recomputeNormals took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
   start = performance.now();
   mdl.modify.optimizeKeyFrames();

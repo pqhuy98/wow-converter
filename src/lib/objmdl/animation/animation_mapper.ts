@@ -1956,6 +1956,8 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     // Effects
     case 'Hold': return { wc3Name: 'Stand', attackTag: '', loop: true };
     case 'Decay': return { wc3Name: 'Death', attackTag: '', loop: false };
+    case 'Spawn': return { wc3Name: 'Birth', attackTag: '', loop: false };
+    case 'Despawn': return { wc3Name: 'Death', attackTag: '', loop: false };
 
     default:
       return { wc3Name: `Cinematic ${wowAnimName}`, attackTag: '' };

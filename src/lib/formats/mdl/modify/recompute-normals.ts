@@ -11,14 +11,18 @@ export function recomputeNormals(this: MDLModify): MDLModify {
     a[0] * b[1] - a[1] * b[0],
   ];
   const length = (v: Vector3): number => Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-  const epsilon = 0.00001;
+
+  // Use a small spatial quantization so vertices that should be shared
+  // (e.g. at ADT chunk borders) are grouped even if their positions
+  // differ by tiny floating-point noise.
+  const POS_EPS = 1e-2; // be tolerant to tiny offsets introduced by exporters
+  const q = (x: number) => Math.round(x / POS_EPS) * POS_EPS;
+  const keyFromPosition = (pos: Vector3): string => `${q(pos[0])}|${q(pos[1])}|${q(pos[2])}`;
 
   // Build adjacency: which faces use which vertex
   const vertexToFaces = new Map<GeosetVertex, Face[]>();
-  // Group vertices by exact position (x, y, z)
+  // Group vertices by (quantized) position
   const positionToVertices = new Map<string, GeosetVertex[]>();
-
-  const keyFromPosition = (pos: Vector3): string => `${pos[0]}|${pos[1]}|${pos[2]}`;
 
   this.mdl.geosets.forEach((geoset) => {
     geoset.vertices.forEach((vert) => {
@@ -46,8 +50,10 @@ export function recomputeNormals(this: MDLModify): MDLModify {
     });
   });
 
-  // For each group of vertices that share the same position,
-  // reproduce GeosetVertex.createNormal(matches) from the Java code.
+  // For each group of vertices that share (quantized) position,
+  // accumulate area-weighted face normals and assign the same
+  // normalized result to all duplicates. This smooths seams on chunk
+  // borders inside a tile.
   positionToVertices.forEach((verticesAtPos) => {
     const sum: Vector3 = [0, 0, 0];
 
@@ -60,29 +66,22 @@ export function recomputeNormals(this: MDLModify): MDLModify {
         const p1 = v1.position;
         const p2 = v2.position;
 
-        // Equivalent to triangle.verts[0].delta(verts[1]).crossProduct(verts[1].delta(verts[2]))
+        // Unnormalized face normal (proportional to area)
         const e1 = sub(p0, p1);
         const e2 = sub(p1, p2);
         const perp = cross(e1, e2);
 
-        let mag = length(perp);
-        if (mag === 0) {
-          mag = epsilon;
-        }
-
-        const nx = perp[0] / mag;
-        const ny = perp[1] / mag;
-        const nz = perp[2] / mag;
-
-        sum[0] += nx;
-        sum[1] += ny;
-        sum[2] += nz;
+        sum[0] += perp[0];
+        sum[1] += perp[1];
+        sum[2] += perp[2];
       });
     });
 
     let sumMag = length(sum);
     if (sumMag === 0) {
-      sumMag = epsilon;
+      // Degenerate: fallback to +Z normal
+      sum[0] = 0; sum[1] = 0; sum[2] = 1;
+      sumMag = 1;
     }
 
     const normal: Vector3 = [sum[0] / sumMag, sum[1] / sumMag, sum[2] / sumMag];
