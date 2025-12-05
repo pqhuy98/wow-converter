@@ -53,7 +53,7 @@ export interface ItemData {
   ComponentTextures: { [componentId: string]: number };
 }
 
-const debug = true;
+const debug = false;
 
 const ArmorSlots = [
   EquipmentSlot.Head,

@@ -4,6 +4,8 @@ recent-exports.json
 .playwright-mcp
 wow-converter.code-workspace
 build
+.venv
+audfprint
 log.txt
 notes.txt
 target

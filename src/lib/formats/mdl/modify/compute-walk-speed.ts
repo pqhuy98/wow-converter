@@ -5,7 +5,7 @@ import { Node } from '../components/node/node';
 import { iterateNodesAtTimestamp } from '../mdl-traverse';
 import { MDLModify } from '.';
 
-const debug = true;
+const debug = false;
 
 export function computeWalkMovespeed(this: MDLModify) {
   this.mdl.sequences.forEach((seq) => {

@@ -34,7 +34,7 @@ export function inventoryTypeToEquipmentSlot(inventoryType: number, idx: number)
 }
 
 export function guessAttackTag(inventoryTypeR: number, inventoryTypeL: number): AttackTag {
-  const debug = true;
+  const debug = false;
   debug && console.log('inventoryTypeR', inventoryTypeR);
   debug && console.log('inventoryTypeL', inventoryTypeL);
   if (inventoryTypeR === InventoryType.RANGEDRIGHT) {

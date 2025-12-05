@@ -75,7 +75,7 @@ export interface CharacterCustomization {
   }[];
 }
 
-const debug = true;
+const debug = false;
 
 export async function fetchCharacterCustomization(zam: CharacterCustomizationZamUrl): Promise<CharacterCustomization> {
   if (zam.type !== 'character-customization') throw new Error('fetchCharacterCustomization expects a ZamUrl of type character-customization');

@@ -6,7 +6,7 @@ import { Bone } from '../components/node/node';
 import { MDL } from '../mdl';
 import { MDLModify } from '.';
 
-const debug = true;
+const debug = false;
 
 export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
   debug && console.log(`Attaching item "${path.basename(item.model.name)}" to bone "${bone.name}"...`);
