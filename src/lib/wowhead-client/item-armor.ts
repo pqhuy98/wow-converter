@@ -30,6 +30,7 @@ interface ItemFile {
   FileDataId: number;
   Race: number;
   Gender: number;
+  Class: number;
   ExtraData: number;
 }
 

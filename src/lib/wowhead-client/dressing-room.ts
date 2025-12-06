@@ -41,6 +41,7 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
   const data = decodeWithTemplate(cfg, tpl, pre) as {
     settings: {
       race: number,
+      class: number,
       gender: number,
       mount: number,
     },
@@ -79,6 +80,7 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
 
   return {
     Character: {
+      Class: data.settings.class,
       Race: data.settings.race,
       Gender: data.settings.gender,
       ChrModelId: raceGenderMap[data.settings.race][data.settings.gender],

@@ -301,7 +301,7 @@ function resolveHideGeosetIds(itemData: ItemData, targetRace: number, targetGend
   return Array.from(result).sort((a, b) => a - b);
 }
 
-export async function processItemData(url: ItemZamUrl, targetRace: number, targetGender: number): Promise<ItemMetata> {
+export async function processItemData(url: ItemZamUrl, targetRace: number, targetGender: number, targetClass: number): Promise<ItemMetata> {
   const itemData = await fetchItemMeta(url);
   const result: ItemMetata = {
     slotId: url.slotId,
@@ -310,12 +310,28 @@ export async function processItemData(url: ItemZamUrl, targetRace: number, targe
     itemSubClass: itemData.Item.ItemSubClass,
     displayId: url.displayId,
     flags: itemData.Item.Flags,
-    modelFiles: filterFilesByRaceGender(itemData.ModelFiles || {}, itemData.ComponentModels || {}, targetRace, targetGender, false),
+    modelFiles: filterFilesByRaceGenderClass(
+      itemData.ModelFiles || {},
+      itemData.ComponentModels || {},
+      targetRace,
+      targetGender,
+      targetClass,
+      false,
+      url.slotId ?? null,
+    ),
     modelTextureFiles: [
       Object.entries(itemData.Textures || {}).flatMap(([k, value]) => ({ fileDataId: value, componentId: Number(k) })),
       Object.entries(itemData.Textures2 || {}).flatMap(([k, value]) => ({ fileDataId: value, componentId: Number(k) })),
     ],
-    bodyTextureFiles: filterFilesByRaceGender(itemData.TextureFiles || {}, itemData.ComponentTextures || {}, targetRace, targetGender, true),
+    bodyTextureFiles: filterFilesByRaceGenderClass(
+      itemData.TextureFiles || {},
+      itemData.ComponentTextures || {},
+      targetRace,
+      targetGender,
+      targetClass,
+      true,
+      url.slotId ?? null,
+    ),
     hideGeosetIds: resolveHideGeosetIds(itemData, targetRace, targetGender),
     zamGeosetGroup: itemData.Item.GeosetGroup,
     originalData: itemData,
@@ -351,62 +367,54 @@ const raceGenderFallback = {
   1: [0, -1, 0, -1, 0, -1, 0, 3],
 };
 
-function filterFilesByRaceGender(
+type WowheadEntry = {
+  readonly FileDataId: number;
+  readonly Race: number;
+  readonly Gender: number;
+  readonly Class: number;
+  readonly ExtraData: number;
+};
+
+function filterFilesByRaceGenderClass(
   files: ItemData['ModelFiles'] | ItemData['TextureFiles'],
   components: ItemData['ComponentModels'] | ItemData['ComponentTextures'],
   targetRace: number,
   targetGender: number,
+  targetClass: number,
   isTexture: boolean,
+  slotId: number | null,
 ): FileWithComponent[] {
   const filteredFiles: FileWithComponent[] = [];
   const componentEntries = Object.entries(components || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
   for (let i = 0; i < componentEntries.length; i++) {
     const [componentId, id] = componentEntries[i];
     const entries = files[id] || [];
-    const matchingFiles = entries.filter((fileEntry) => (
-      // Check if this entry matches our race and gender OR is universal (Race: 0, Gender: 2)
-      (fileEntry.Race === targetRace || fileEntry.Race === 0)
-        && (fileEntry.Gender === targetGender || fileEntry.Gender > 1)));
-    matchingFiles.sort((a, b) => a.ExtraData - b.ExtraData);
 
-    let matchingFile = matchingFiles[0];
-    if (matchingFiles.length > 1 && matchingFiles[i]) {
-      matchingFile = matchingFiles[i];
-    }
-    // Fallback: use raceGenderFallback map like Wowhead. If no direct match, remap race/gender and retry.
-    if (!matchingFile) {
-      // try one-step fallback
-      const remap = (race: number, gender: number): [number, number] | null => {
-        const row = (raceGenderFallback as Record<number, number[] | undefined>)[race];
-        if (!row) return null;
-        const base = isTexture ? 4 : 0;
-        const idx = base + 2 * gender;
-        const r = row[idx];
-        const g = row[idx + 1];
-        if (r === undefined || g === undefined) return null;
-        return [r, g];
-      };
-
-      let cur: [number, number] | null = [targetRace, targetGender];
-      const visited = new Set<string>();
-      while (cur) {
-        const key = cur.join(':');
-        if (visited.has(key)) break;
-        visited.add(key);
-        const [r, g] = cur;
-        const tryFiles = entries.filter((fileEntry) => (
-          (fileEntry.Race === r || (r === 0 && fileEntry.Race === 0))
-            && (g === -1 ? fileEntry.Gender > 1 : (fileEntry.Gender === g || fileEntry.Gender > 1))));
-        tryFiles.sort((a, b) => a.ExtraData - b.ExtraData);
-        if (tryFiles.length) {
-          matchingFile = tryFiles[0];
-          break;
-        }
-        cur = remap(r, g);
+    if (isTexture) {
+      const best = wowheadSelectBestTexture(entries, targetGender, targetClass, targetRace);
+      const fileDataId = best?.c ?? 0;
+      if (fileDataId > 0) {
+        filteredFiles.push({ fileDataId, componentId: Number(componentId) });
       }
-    }
-    if (matchingFile) {
-      filteredFiles.push({ fileDataId: matchingFile.FileDataId, componentId: Number(componentId) });
+    } else {
+      // For shoulders, Wowhead uses ExtraData 0 for the first component (right) and 1 for the second (left):
+      //   pl.a(ModelFiles[r], 0, gender, class, race) for ComponentModels[0]
+      //   pl.a(ModelFiles[n], 1, gender, class, race) for ComponentModels[1]
+      // See class zl.gf in viewer.min.js.
+      let extraData = -1;
+      if (slotId === EquipmentSlot.Shoulder) {
+        const idx = Number(componentId);
+        if (idx === 0) {
+          extraData = 0;
+        } else if (idx === 1) {
+          extraData = 1;
+        }
+      }
+
+      const fileDataId = wowheadSelectBestModel(entries, extraData, targetGender, targetClass, targetRace);
+      if (fileDataId > 0) {
+        filteredFiles.push({ fileDataId, componentId: Number(componentId) });
+      }
     }
   }
   return filteredFiles;
@@ -417,13 +425,15 @@ export async function exportZamItemAsMdl({
   zam,
   targetRace,
   targetGender,
+  targetClass,
 }: {
   ctx: ExportContext;
   zam: ItemZamUrl;
   targetRace: number;
   targetGender: number;
+  targetClass: number;
 }): Promise<{model: Model, itemData: ItemMetata}> {
-  const result = await processItemData(zam, targetRace, targetGender);
+  const result = await processItemData(zam, targetRace, targetGender, targetClass);
   const modelId = result.modelFiles?.[0]?.fileDataId;
   if (!modelId) {
     throw new Error(`Found no model found for item ${zam.displayId}`);
@@ -432,4 +442,173 @@ export async function exportZamItemAsMdl({
   const model = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
   await applyReplaceableTextures(ctx, model.mdl, Object.fromEntries(result.modelTextureFiles[0].map((f) => [f.componentId, f.fileDataId])));
   return { model, itemData: result };
+}
+
+// wowhead viewer.min.js ports
+
+function wowheadRemapRaceGender(
+  gender: number,
+  race: number,
+  isTexture: boolean,
+): [number, number] | null {
+  const row = (raceGenderFallback as Record<number, readonly number[] | undefined>)[race];
+  if (!row) return null;
+  const base = isTexture ? 4 : 0;
+  const idx = base + 2 * gender;
+  const r = row[idx];
+  const g = row[idx + 1];
+  if (r === undefined || g === undefined) return null;
+  return [r, g];
+}
+
+function wowheadSelectBestTexture(
+  entries: WowheadEntry[],
+  gender: number,
+  clazz: number,
+  race: number,
+): { readonly c: number; readonly b: number; readonly a: number } | null {
+  // Port of pl.b from viewer.min.js ("selectBestTexture")
+  if (!entries || entries.length === 0) {
+    return null;
+  }
+
+  const bucket: number[] = new Array(24).fill(0);
+
+  for (let n = 0; n < entries.length; n++) {
+    const a = entries[n];
+    const o = a.Gender;
+    const h = a.Class;
+    const l = a.Race;
+    const u = a.ExtraData;
+    let c = 0;
+
+    if (gender > 1 || o !== gender) {
+      if (o < 2) {
+        continue;
+      }
+      c = 0;
+    } else {
+      c = 2;
+    }
+
+    let d = 1;
+    if (clazz > 0 && h === clazz) {
+      d = 0;
+    } else if (h > 0) {
+      continue;
+    }
+
+    let f = 1;
+    if (race > 0 && l === race) {
+      f = 0;
+    } else if (l > 0) {
+      continue;
+    }
+
+    const index = u + 3 * (f + 2 * (c + d));
+    if (index >= 0 && index < bucket.length) {
+      bucket[index] = a.FileDataId;
+    }
+  }
+
+  for (let t = 0; t < 2; t++) {
+    for (let e = 0; e < 2; e++) {
+      for (let i = 0; i < 2; i++) {
+        const s = 3 * (t + 2 * (e + 2 * i));
+        if (bucket[s] > 0) {
+          return {
+            c: bucket[s],
+            b: bucket[s + 1] ?? 0,
+            a: bucket[s + 2] ?? 0,
+          };
+        }
+      }
+    }
+  }
+
+  const remapped = wowheadRemapRaceGender(gender, race, true);
+  if (remapped && remapped[0] !== 0) {
+    const [newRace, newGender] = remapped;
+    return wowheadSelectBestTexture(entries, newGender, clazz, newRace);
+  }
+
+  return null;
+}
+
+function wowheadSelectBestModel(
+  entries: WowheadEntry[],
+  extraData: number,
+  gender: number,
+  clazz: number,
+  race: number,
+): number {
+  // Port of pl.a from viewer.min.js
+  const bucket: number[] = new Array(16).fill(0);
+
+  for (let idx = 0; idx < entries.length; idx++) {
+    const o = entries[idx];
+    const h = o.Gender;
+    const l = o.Class;
+    const u = o.Race;
+    const c = o.ExtraData;
+    let d = 0;
+
+    if (gender > 1 || h !== gender) {
+      if (h < 2) {
+        continue;
+      }
+      d = 0;
+    } else {
+      d = 2;
+    }
+
+    let f = 1;
+    if (clazz > 0 && l === clazz) {
+      f = 0;
+    } else if (l > 0) {
+      continue;
+    }
+
+    let g = 1;
+    if (race > 0 && u === race) {
+      g = 0;
+    } else if (u > 0) {
+      continue;
+    }
+
+    let b = 1;
+    if (extraData === -1 || c !== extraData) {
+      if (c !== -1 && extraData !== -1) {
+        continue;
+      }
+    } else {
+      b = 0;
+    }
+
+    const index = b + 2 * (g + 2 * (d + f));
+    if (index >= 0 && index < bucket.length) {
+      bucket[index] = o.FileDataId;
+    }
+  }
+
+  for (let t = 0; t < 2; t++) {
+    for (let e = 0; e < 2; e++) {
+      for (let i = 0; i < 2; i++) {
+        for (let s = 0; s < 2; s++) {
+          const r = s + 2 * (t + 2 * (e + 2 * i));
+          if (bucket[r]) {
+            return bucket[r];
+          }
+        }
+      }
+    }
+  }
+
+  const remapped = wowheadRemapRaceGender(gender, race, false);
+  if (remapped && remapped[0] !== 0) {
+    const [newRace, newGender] = remapped;
+    return wowheadSelectBestModel(entries, extraData, newGender, clazz, newRace);
+  }
+
+  return 0;
 }

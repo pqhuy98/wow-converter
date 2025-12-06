@@ -89,6 +89,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     throw new Error('prepareCharacterExport: URL has no character metadata');
   }
   const character = metadata.Character;
+  const clazz = character.Class;
   const race = character.Race;
   const gender = character.Gender;
 
@@ -102,7 +103,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     try {
       const itemData = await processItemData({
         expansion, type: 'item', displayId: itemId, slotId,
-      }, race, gender);
+      }, race, gender, clazz);
       equipmentSlots.push({ slotId, data: itemData });
     } catch (e) {
       console.error(chalk.red(`Failed to process item ${itemId} for slot ${slotId}: ${e}`));

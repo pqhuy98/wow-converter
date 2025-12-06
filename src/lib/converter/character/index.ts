@@ -354,6 +354,7 @@ export class CharacterExporter {
         zam,
         targetRace: 0, // universal
         targetGender: 2, // universal
+        targetClass: 0, // universal
       });
       return { model, inventoryType: itemData.inventoryType };
     }
