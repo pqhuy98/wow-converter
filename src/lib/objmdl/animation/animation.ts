@@ -339,7 +339,7 @@ export class AnimationFile implements AnimationData {
       const seqData = getWacraftSequenceData(animation);
       if (excludedAnimation.has(animId)) {
         seqAccumTime += animation.duration + 1;
-        // console.log("Skip animation", seqData.wc3Name, "of", this.filePath)
+        console.log(chalk.red('Skip unreadable animation', seqData.wowName, 'of', this.filePath));
         return null;
       }
 
