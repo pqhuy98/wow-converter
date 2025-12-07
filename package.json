@@ -28,7 +28,8 @@
     "zip": "powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath wow-converter.zip -Force\"",
     "build:app": "run-p build:webui build:wow.export build:bun && run-s build:copy zip",
     "build:server": "bun run clean && run-p build:webui",
-    "build": "bun run clean && bun run build:app"
+    "build": "bun run clean && bun run build:app",
+    "we": "./wow.export/bin/win-x64/wow.export.exe"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin-ts": "^2.13.0",
