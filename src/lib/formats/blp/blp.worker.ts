@@ -1,5 +1,6 @@
 /* eslint-disable import/no-dynamic-require */
-import { mkdir, writeFile } from 'fs/promises';
+import { writeFile } from 'fs/promises';
+import { ensureDir } from 'fs-extra';
 import * as IQ from 'image-q';
 import { createRequire } from 'module';
 import path from 'path';
@@ -116,7 +117,11 @@ function run() {
         }
 
         const blpBuffer = img.toBuffer(TYPE_BLP);
-        await mkdir(path.dirname(blpPath), { recursive: true });
+        try {
+          await ensureDir(path.dirname(blpPath));
+        } catch (err) {
+          // do nothing
+        }
         await writeFile(blpPath, blpBuffer);
         parentPort!.postMessage({ type: 'done', id, success: true });
       } catch (error: unknown) {
@@ -273,7 +278,12 @@ export async function png2BlpJs(pngBuffer: Buffer, distPath: string) {
   // Assemble final file: header + palette + pixelIndices + alpha
   const blpBuffer = Buffer.concat([header, paletteBuffer, indices, alphaBuffer]);
 
-  await mkdir(path.dirname(distPath), { recursive: true });
+  try {
+    await ensureDir(path.dirname(distPath));
+  } catch (err) {
+    // do nothing
+  }
+  await ensureDir(path.dirname(distPath));
   await writeFile(distPath, blpBuffer);
 }
 

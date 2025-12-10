@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { mkdir, statfs, writeFile } from 'fs/promises';
-import { exists } from 'fs-extra';
+import { ensureDir, exists } from 'fs-extra';
 import path from 'path';
 import sharp from 'sharp';
 
@@ -89,7 +89,11 @@ export class AssetManager {
     const start = performance.now();
 
     const exportedTexturePaths: string[] = [];
-    await mkdir(assetPath, { recursive: true });
+    try {
+      await ensureDir(assetPath);
+    } catch (err) {
+      // do nothing
+    }
     let writeCount = 0;
 
     // Collect all textures that need processing
