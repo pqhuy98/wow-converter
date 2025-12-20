@@ -1,14 +1,12 @@
 import chalk from 'chalk';
 
 import { distancePerTile, maxGameHeightDiff } from '@/lib/constants';
-import { isWowUnit } from '@/lib/converter/common/models';
+import { isWowUnit, WowAdt, WowObject } from '@/lib/converter/common/models';
 import {
   defaultMapExportConfig, gameZToPercent, MapExportConfig, MapExporter,
 } from '@/lib/converter/map-exporter/map-exporter';
 import { computeRecommendedTerrainClampPercent } from '@/lib/converter/map-exporter/wc3-converter';
-import { matchTerrainToDoodadHeights } from '@/lib/mapmodifier/terrain-height-matcher';
 import { Vector2, Vector3 } from '@/lib/math/common';
-import { calculateTriangleSlope } from '@/lib/math/geometry';
 import { V3 } from '@/lib/math/vector';
 
 import { Config, getDefaultConfig } from '../src/lib/global-config';
@@ -41,7 +39,7 @@ const maps: ([WowMap,
 ] | [string, number, number, string, number])[] = [
   // [WowMap.Northrend, [29, 22], [29, 22], 'wrathgate.w3x', 0.05, 0.3, 0],
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
-  [WowMap.Northrend, [27, 20], [28, 21], 'icecrown.w3x', 0.65, 0.77, 180],
+  // [WowMap.Northrend, [27, 20], [28, 21], 'icecrown.w3x', 0.65, 0.77, 180],
   // [WowMap.Northrend, [18, 24], [19, 25], 'nexus.w3x', 0, 1, 0],
   // [WowMap.DeathKnightStart, [41, 27], [43, 29], 'deathknightstart.w3x', 0, 1, 90],
   // [WowMap.IcecrownCitadel, [27, 32], [29, 33], 'icc-floor12.w3x'],
@@ -52,7 +50,11 @@ const maps: ([WowMap,
   // ],
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.5, 0.7, 180],
   // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
-  // [WowMap.Azeroth, [30, 31], [27, 28], 'undercity.w3x'],
+  // [WowMap.Azeroth, [29, 26], [33, 29], 'undercity.w3x', 0, 1, 0],
+  [
+    'world\\wmo\\lorderon\\undercity\\undercity_set0.obj',
+    0, 0.20, 'undercity-indoor.w3x', -90,
+  ],
   // [WowMap.Azeroth, [34, 28], [35, 29], 'andorhal.w3x', 0, 1, 0],
   // [WowMap.Kalimdor, [28, 33], [29, 34], 'kalimdor-forest.w3x', 0, 1, 0],
   // [WowMap.Kalimdor, [31, 33], [33, 36], 'taurent-city.w3x', 0, 1, 0],
@@ -63,7 +65,7 @@ const maps: ([WowMap,
   // [WowMap.TheMaw, [17, 21], [22, 25], 'themaw4.w3x'],
 ];
 
-const autoChoseClampPercent = false;
+const autoChoseClampPercent = true;
 
 const chosenMap = maps[0];
 
@@ -109,11 +111,13 @@ const mapExportConfig: MapExportConfig = {
     },
   }),
   creatures: {
-    enable: true,
+    enable: false,
     allAreDoodads: true,
     scaleUp: creatureScaleUp,
   },
 };
+
+const depth = 3; // 1: adt only, 2: adt + wmo + top m2, 3: adt + wmo + top m2 + wmo interiors
 
 (async function main() {
   const start = performance.now();
@@ -121,13 +125,14 @@ const mapExportConfig: MapExportConfig = {
 
   await mapExporter.parseObjects();
 
+  pruneDepth(mapExporter, depth);
+
   if (autoChoseClampPercent) {
     autoChooseClampPercent(mapExporter, mapExportConfig);
   }
 
   await mapExporter.exportTerrainsDoodads(mapOutputDir);
   await mapExporter.exportCreatures(mapOutputDir);
-  await iccExterior(mapExporter);
   mapExporter.saveWar3mapFiles(mapOutputDir);
   console.log(`Total map export time: ${chalk.yellow(((performance.now() - start) / 1000).toFixed(2))} s`);
 }())
@@ -192,32 +197,82 @@ function autoChooseClampPercent(mapConverter: MapExporter, mapExportConfig: MapE
   console.log(`Left out units: ${leftOut} (${leftOutBelow} below, ${leftOutAbove} above)`);
 }
 
-async function iccExterior(mapExporter: MapExporter) {
-  const assetManager = mapExporter.wowObjectManager.assetManager;
-  const model = (await assetManager.parse('world/wmo/northrend/icecrown/scourgewalls/icecrown_citadel_exterior.obj', true)).mdl;
+function pruneDepth(mapExporter: MapExporter, depth: number) {
+  const wowObjectManager = mapExporter.wowObjectManager;
+  if (!wowObjectManager) {
+    return;
+  }
 
-  // top
-  model.modify.deleteVerticesInsideBox([-62919.51, -68260.37, -10144.35], [79163.28, 73822.42, 71041.39]);
+  if (depth >= 3) {
+    // Full detail, no pruning needed.
+    return;
+  }
 
-  // botom
-  model.modify.deleteVerticesInsideBox([-62919.51, -68260.37, -67033.82], [79163.28, 73822.42, -17686.36]);
+  const nextRoots: WowObject[] = [];
+  const nextObjects = new Map<string, WowObject>();
+  const nextDoodads: WowObject[] = [];
+  const nextTerrains: WowAdt[] = [];
 
-  // wing top
-  model.modify.deleteVerticesInsideBox([-62919.51, -68260.37, -13959.3], [3360.02, 73822.42, 12591.98]);
+  const visit = (obj: WowObject, hasWmoAncestor: boolean): WowObject | null => {
+    const currentHasWmoAncestor = hasWmoAncestor || obj.type === 'wmo';
 
-  const floor = model.modify.deleteFacesIf((f) => {
-    const slope = calculateTriangleSlope([f.vertices[0].position, f.vertices[1].position, f.vertices[2].position]);
-    return slope > 20;
-  });
+    let keep = true;
+    if (depth === 1) {
+      // Keep only terrain (ADT) and creatures; drop all doodads and WMOs.
+      keep = obj.type === 'adt' || obj.type === 'unit';
+    } else if (depth === 2) {
+      if (obj.type === 'm2' || obj.type === 'gobj') {
+        // Treat M2 / GOBJ under any WMO as interior decorations and drop them.
+        keep = !currentHasWmoAncestor;
+      }
+    }
 
-  floor.removeSmallFaceComponents(100000);
-  floor.translate([0, 0, 200]);
-  floor.convertToSd800();
+    if (!keep) {
+      return null;
+    }
 
-  const mapManager = mapExporter.mapManager;
-  const iccType = mapManager.findDoodadTypeWithString('dfil', (value) => value.includes('icecrown_citadel_exterior'))!;
-  const iccDoodad = mapManager.findDoodadWithType(iccType)!;
-  matchTerrainToDoodadHeights(mapExporter.mapManager.terrain, [
-    [iccDoodad, floor.mdl.toMdl()],
-  ]);
+    const clone: WowObject = {
+      ...obj,
+      children: [],
+    };
+
+    nextObjects.set(clone.id, clone);
+
+    if (clone.type === 'adt') {
+      nextTerrains.push(clone as WowAdt);
+    } else if (clone.type !== 'unit') {
+      nextDoodads.push(clone);
+    }
+
+    for (const child of obj.children) {
+      const prunedChild = visit(child, currentHasWmoAncestor);
+      if (prunedChild) {
+        clone.children.push(prunedChild);
+      }
+    }
+
+    return clone;
+  };
+
+  for (const root of wowObjectManager.roots) {
+    const newRoot = visit(root, false);
+    if (newRoot) {
+      nextRoots.push(newRoot);
+    }
+  }
+
+  if (depth === 1) {
+    const hasAdtRoot = nextRoots.some((root) => root.type === 'adt');
+    wowObjectManager.roots = hasAdtRoot
+      ? nextRoots.filter((root) => root.type === 'adt')
+      : nextRoots;
+  } else {
+    wowObjectManager.roots = nextRoots;
+  }
+
+  wowObjectManager.objects = nextObjects;
+  wowObjectManager.doodads = nextDoodads;
+  if (nextTerrains.length > 0) {
+    wowObjectManager.terrains = nextTerrains;
+  }
 }

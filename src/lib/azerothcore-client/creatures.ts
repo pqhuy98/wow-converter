@@ -33,6 +33,13 @@ export async function getCreaturesInTile(
   tileXy: [number, number],
   extraConditions: Prisma.creatureWhereInput = {},
 ): Promise<Creature[]> {
+  try {
+    await prismaClient.$connect();
+  } catch (error) {
+    console.error('Cannot connect to database, skipping creatures data:', error);
+    return [];
+  }
+
   const [tileX, tileY] = tileXy;
 
   const tileSize = 533.3333333; // yards per ADT tile

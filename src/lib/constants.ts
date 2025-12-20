@@ -6,8 +6,15 @@ export const defaultLayer = 7;
 // export const dataHeightMin = 0;
 // export const dataHeightMax = 8192 * 2 - 1;
 // max height for default UI/MiscData.txt
-export const dataHeightMin = 512;
-export const dataHeightMax = 8192 * 2 - 512;
+// eslint-disable-next-line import/no-mutable-exports
+export let dataHeightMin = 512;
+// eslint-disable-next-line import/no-mutable-exports
+export let dataHeightMax = 8192 * 2 - 512;
+
+export function setDataHeightLimit(min: number, max: number) {
+  (dataHeightMin as number) = min;
+  (dataHeightMax as number) = max;
+}
 // console.log(dataHeightMin, dataHeightMax);
 
 export const maxGameHeightDiff = (dataHeightMax - dataHeightMin) / 4;

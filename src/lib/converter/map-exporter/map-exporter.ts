@@ -94,9 +94,7 @@ export class MapExporter {
       this.filterDoodads,
     );
 
-    if (this.mapExportConfig.creatures.enable) {
-      await this.wowObjectManager.readCreatures(mapId);
-    }
+    await this.wowObjectManager.readCreatures(mapId);
 
     console.log('Total objects:', this.wowObjectManager.objects.size);
     const typeCountMap = _([...this.wowObjectManager.objects.values()])
