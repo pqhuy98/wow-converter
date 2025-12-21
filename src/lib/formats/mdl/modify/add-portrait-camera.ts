@@ -5,7 +5,7 @@ import { iterateNodesAtTimestamp } from '../mdl-traverse';
 import { MDLModify } from '.';
 
 export function addPortraitCamera(this: MDLModify, standSequenceName: string = 'Stand') {
-  const cameraName = 'Portrait_Camera_generated';
+  const cameraName = 'Portrait_Camera';
 
   const cameraBone = this.mdl.bones.find((b) => b.name === 'Head')
     || this.mdl.bones.find((b) => b.name === 'Chest')

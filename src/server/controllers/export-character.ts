@@ -117,11 +117,6 @@ export async function ControllerExportCharacter(router: express.Router) {
       }
       if (request.formatVersion === '800') {
         mdl.modify.convertToSd800();
-        mdl.materials.forEach((m) => {
-          m.layers.forEach((l) => {
-            l.unshaded = true;
-          });
-        });
       }
       if (request.optimization?.removeUnusedVertices) {
         mdl.modify.removeUnusedVertices();
@@ -143,6 +138,19 @@ export async function ControllerExportCharacter(router: express.Router) {
       mdl.modify.optimizeKeyFrames();
       mdl.sync();
     });
+
+    // After removing unused materials/textures, purge unused textures from asset manager
+    if (request.optimization?.removeUnusedMaterialsTextures) {
+      const usedTexturePngPaths: string[] = [];
+      ce.models.forEach(([mdl]) => {
+        mdl.textures.forEach((tex) => {
+          // Derive from image (BLP) path and keep asset prefix if present
+          const pngPath = tex.image ? tex.image.replace(/\.blp$/i, '.png').replace(/\\/g, '/') : '';
+          if (pngPath) usedTexturePngPaths.push(pngPath);
+        });
+      });
+      ce.assetManager.purgeTextures(usedTexturePngPaths);
+    }
 
     const targetDir = request.isBrowse ? outputDirBrowse : outputDir;
     const texturePaths = await ce.writeAllTextures(targetDir);

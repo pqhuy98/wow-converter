@@ -46,7 +46,7 @@ const uiRouter = express.Router();
 
 async function main() {
   await ControllerExportCharacter(router);
-  await ControllerExportTexture(router);
+  ControllerExportTexture(router);
   ControllerMaps(router);
   ControllerDownload(router);
   ControllerGetConfig(router);
@@ -63,7 +63,7 @@ async function main() {
 
   // Error-handling middleware (must be **after** all routes)
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error(err);
+    console.error(chalk.red('Middleware error got:'), err);
     res.status(500).json({ error: err.message ?? err });
   });
 

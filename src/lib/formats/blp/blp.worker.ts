@@ -61,8 +61,6 @@ function run() {
       try {
         if (process.platform === 'win32') {
           binding = require(path.join(binDir, 'win32-x64-binding.node'));
-        } else if (process.platform === 'darwin' && process.arch === 'arm64') {
-          binding = require(path.join(binDir, 'darwin-arm64-binding.node'));
         } else if (process.platform === 'linux' && process.arch === 'x64') {
           binding = require(path.join(binDir, 'linux-x64-binding.node'));
         }
@@ -138,7 +136,7 @@ void run();
 /**
  * Faster variant of png2BlpJs using sharp for decoding and optimized quantization path.
  * - Decodes PNG via libvips (sharp) into raw RGBA
- * - Skips quantization entirely when unique RGBA colors ≤ 256
+ * - Skips quantization entirely when unique RGB colors ≤ 256 (alpha treated as a separate mask channel)
  * - Uses faster image-q settings when quantization is necessary
  * - Minimizes intermediate allocations and extra copies
  */
@@ -153,62 +151,69 @@ export async function png2BlpJs(pngBuffer: Buffer, distPath: string) {
   const height = info.height;
   const pixelCount = width * height;
 
-  // Pre-allocate buffers once
-  const indices = Buffer.alloc(pixelCount);
-  const alphaBuffer = Buffer.alloc(pixelCount);
+  // Pre-allocate mip0 buffers once
+  const indices0 = Buffer.alloc(pixelCount);
+  const alpha0 = Buffer.alloc(pixelCount);
 
-  // Attempt fast-path: build palette directly if unique RGBA colors ≤ 256
+  // Attempt fast-path: build palette directly if unique RGB colors ≤ 256 (alpha is stored separately)
   // Build mapping while scanning; abort early if unique > 256
-  const colourToIndexFast = new Map<number, number>();
+  const rgbToIndexFast = new Map<number, number>();
   const paletteBufferFast = Buffer.alloc(256 * 4, 0);
   let paletteSizeFast = 0;
   let exceededFastPath = false;
 
   for (let i = 0; i < pixelCount; i++) {
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-    const a = data[i * 4 + 3];
+    const r = data[i * 4]!;
+    const g = data[i * 4 + 1]!;
+    const b = data[i * 4 + 2]!;
+    const a = data[i * 4 + 3]!;
+    alpha0[i] = a;
 
-    // 32-bit RGBA key
-    const key = (r << 24) | (g << 16) | (b << 8) | a;
-    let idx = colourToIndexFast.get(key);
+    // 24-bit RGB key
+    const key = rgbKey(r, g, b);
+    let idx = rgbToIndexFast.get(key);
     if (idx === undefined) {
       if (paletteSizeFast === 256) {
         exceededFastPath = true;
-        break;
+        continue;
       }
       idx = paletteSizeFast;
-      colourToIndexFast.set(key, idx);
-      // B, G, R, A in palette as per WC3 BLP expectation
+      rgbToIndexFast.set(key, idx);
+      // B, G, R, A in palette; palette alpha is unused for BLP1 indexed+separate-alpha, keep it opaque.
       const p = idx * 4;
       paletteBufferFast[p] = b;
       paletteBufferFast[p + 1] = g;
       paletteBufferFast[p + 2] = r;
-      paletteBufferFast[p + 3] = a;
+      paletteBufferFast[p + 3] = 0xff;
       paletteSizeFast++;
     }
   }
 
   let paletteBuffer: Buffer;
+  let paletteSize: number;
 
   if (!exceededFastPath) {
     // Fast path succeeded – use the directly built palette and fill outputs in a second pass
     paletteBuffer = paletteBufferFast;
+    paletteSize = paletteSizeFast;
 
     for (let i = 0; i < pixelCount; i++) {
-      const r = data[i * 4];
-      const g = data[i * 4 + 1];
-      const b = data[i * 4 + 2];
-      const a = data[i * 4 + 3];
-      const key = (r << 24) | (g << 16) | (b << 8) | a;
-      const idx = colourToIndexFast.get(key)!;
-      indices[i] = idx;
-      alphaBuffer[i] = a;
+      const r = data[i * 4]!;
+      const g = data[i * 4 + 1]!;
+      const b = data[i * 4 + 2]!;
+      const idx = rgbToIndexFast.get(rgbKey(r, g, b)) ?? 0;
+      indices0[i] = idx;
     }
   } else {
+    // Slow path: quantize RGB only (alpha treated as a separate mask channel).
+    // We do this by forcing alpha to 255 for palette building + dithering, while preserving the original alpha stream.
+    const dataOpaque = Buffer.from(data);
+    for (let i = 0; i < pixelCount; i++) {
+      dataOpaque[i * 4 + 3] = 255;
+    }
+
     // Slow path: quantize using image-q with faster settings
-    const pointContainer = IQ.utils.PointContainer.fromUint8Array(data, width, height);
+    const pointContainer = IQ.utils.PointContainer.fromUint8Array(dataOpaque, width, height);
 
     const palette = await IQ.buildPalette([pointContainer], {
       colors: 256,
@@ -227,32 +232,52 @@ export async function png2BlpJs(pngBuffer: Buffer, distPath: string) {
 
     // Build palette buffer (BGRA), zero-initialized then filled up to palette size
     paletteBuffer = Buffer.alloc(256 * 4, 0);
-    const colourToIndex = new Map<number, number>();
+    paletteSize = 0;
+    const rgbToIndex = new Map<number, number>();
     for (let i = 0; i < palettePoints.length && i < 256; i++) {
       const p = palettePoints[i];
       const bufIndex = i * 4;
       paletteBuffer[bufIndex] = p.b;
       paletteBuffer[bufIndex + 1] = p.g;
       paletteBuffer[bufIndex + 2] = p.r;
-      paletteBuffer[bufIndex + 3] = p.a;
+      paletteBuffer[bufIndex + 3] = 0xff;
 
-      const key = (p.r << 24) | (p.g << 16) | (p.b << 8) | p.a;
-      colourToIndex.set(key, i);
+      const key = rgbKey(p.r, p.g, p.b);
+      if (!rgbToIndex.has(key)) {
+        rgbToIndex.set(key, i);
+      }
+      paletteSize++;
     }
 
     // Map quantized RGBA pixels to palette indices
     const quantRGBA = quantised.toUint8Array();
     for (let i = 0; i < pixelCount; i++) {
-      const r = quantRGBA[i * 4];
-      const g = quantRGBA[i * 4 + 1];
-      const b = quantRGBA[i * 4 + 2];
-      const a = quantRGBA[i * 4 + 3];
-      const key = (r << 24) | (g << 16) | (b << 8) | a;
-      const idx = colourToIndex.get(key) ?? 0;
-      indices[i] = idx;
-      alphaBuffer[i] = data[i * 4 + 3];
+      const r = quantRGBA[i * 4]!;
+      const g = quantRGBA[i * 4 + 1]!;
+      const b = quantRGBA[i * 4 + 2]!;
+      const idx = rgbToIndex.get(rgbKey(r, g, b)) ?? 0;
+      indices0[i] = idx;
     }
   }
+
+  // Build a 64x64x64 LUT for fast nearest-palette mapping for mip levels.
+  // This matches the C++ encoder's approach (nearest in BT.709-weighted space).
+  const lut64 = buildLut64FromPalette(paletteBuffer, paletteSize);
+
+  // Plan mip chain up to 16 levels, stopping at 1x1 (avoid repeated 1x1 mips).
+  const mipDims: Array<{readonly w: number; readonly h: number}> = [];
+  {
+    let mw = width;
+    let mh = height;
+    for (let level = 0; level < 16; level++) {
+      mipDims.push({ w: mw, h: mh });
+      if (mw === 1 && mh === 1) break;
+      mw = Math.max(1, Math.ceil(mw / 2));
+      mh = Math.max(1, Math.ceil(mh / 2));
+    }
+  }
+
+  const mipCount = mipDims.length;
 
   // ----------------------------------------------------------------------------
   // Header construction (BLP1)
@@ -266,17 +291,68 @@ export async function png2BlpJs(pngBuffer: Buffer, distPath: string) {
   header.writeUInt32LE(width, 12);
   header.writeUInt32LE(height, 16);
   header.writeUInt32LE(0, 20); // extra (unused)
-  header.writeUInt32LE(0, 24); // hasMipmaps (0)
+  header.writeUInt32LE(mipCount > 1 ? 1 : 0, 24); // hasMipmaps
 
   const offsetPos = 28;
   const sizePos = offsetPos + 64;
   const pixelDataOffset = BLP1_HEADER_SIZE + 1024; // palette follows header
-  const pixelDataSize = indices.length + alphaBuffer.length;
-  header.writeUInt32LE(pixelDataOffset, offsetPos); // mip0 offset
-  header.writeUInt32LE(pixelDataSize, sizePos); // mip0 size
 
-  // Assemble final file: header + palette + pixelIndices + alpha
-  const blpBuffer = Buffer.concat([header, paletteBuffer, indices, alphaBuffer]);
+  let totalMipBytes = 0;
+  for (const d of mipDims) {
+    totalMipBytes += d.w * d.h * 2; // indices + alpha
+  }
+
+  const out = Buffer.allocUnsafe(BLP1_HEADER_SIZE + 1024 + totalMipBytes);
+  paletteBuffer.copy(out, BLP1_HEADER_SIZE);
+
+  // Fill mip offset/size tables and write mip payloads sequentially.
+  let writeOffset = pixelDataOffset;
+  let currentRgba: Uint8Array = data;
+  let cw = width;
+  let ch = height;
+
+  for (let level = 0; level < mipCount; level++) {
+    const pixels = cw * ch;
+    const mipBytes = pixels * 2;
+    header.writeUInt32LE(writeOffset, offsetPos + level * 4);
+    header.writeUInt32LE(mipBytes, sizePos + level * 4);
+
+    if (level === 0) {
+      indices0.copy(out, writeOffset);
+      alpha0.copy(out, writeOffset + pixels);
+    } else {
+      const idxDst = out.subarray(writeOffset, writeOffset + pixels);
+      const aDst = out.subarray(writeOffset + pixels, writeOffset + mipBytes);
+
+      for (let i = 0; i < pixels; i++) {
+        const base = i * 4;
+        const r = currentRgba[base]!;
+        const g = currentRgba[base + 1]!;
+        const b = currentRgba[base + 2]!;
+        const a = currentRgba[base + 3]!;
+
+        const r6 = r >> 2;
+        const g6 = g >> 2;
+        const b6 = b >> 2;
+        idxDst[i] = lut64[(r6 << 12) | (g6 << 6) | b6]!;
+        aDst[i] = a;
+      }
+    }
+
+    writeOffset += mipBytes;
+
+    if (level + 1 < mipCount) {
+      const next = downsample2x2SeparateAlpha(currentRgba, cw, ch);
+      currentRgba = next.rgba;
+      cw = next.w;
+      ch = next.h;
+    }
+  }
+
+  // Copy finalized header (with mip tables) into output
+  header.copy(out, 0);
+
+  const blpBuffer = out;
 
   try {
     await ensureDir(path.dirname(distPath));
@@ -285,6 +361,89 @@ export async function png2BlpJs(pngBuffer: Buffer, distPath: string) {
   }
   await ensureDir(path.dirname(distPath));
   await writeFile(distPath, blpBuffer);
+}
+
+function rgbKey(r: number, g: number, b: number): number {
+  return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+}
+
+function dist2Bt709(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
+  const wr = 0.2126;
+  const wg = 0.7152;
+  const wb = 0.0722;
+  const dr = r1 - r2;
+  const dg = g1 - g2;
+  const db = b1 - b2;
+  return wr * dr * dr + wg * dg * dg + wb * db * db;
+}
+
+function buildLut64FromPalette(paletteBuffer: Buffer, paletteSize: number): Uint8Array {
+  const count = Math.max(1, Math.min(256, paletteSize));
+  const pr = new Float32Array(count);
+  const pg = new Float32Array(count);
+  const pb = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const p = i * 4;
+    pb[i] = paletteBuffer[p]!;
+    pg[i] = paletteBuffer[p + 1]!;
+    pr[i] = paletteBuffer[p + 2]!;
+  }
+
+  const lut = new Uint8Array(64 * 64 * 64);
+  let idx = 0;
+  for (let rr = 0; rr < 64; rr++) {
+    const rSrgb = ((rr << 2) | 2);
+    for (let gg = 0; gg < 64; gg++) {
+      const gSrgb = ((gg << 2) | 2);
+      for (let bb = 0; bb < 64; bb++) {
+        const bSrgb = ((bb << 2) | 2);
+        let best = 0;
+        let bestD = Number.POSITIVE_INFINITY;
+        for (let k = 0; k < count; k++) {
+          const d = dist2Bt709(rSrgb, gSrgb, bSrgb, pr[k]!, pg[k]!, pb[k]!);
+          if (d < bestD) {
+            bestD = d;
+            best = k;
+          }
+        }
+        lut[idx++] = best;
+      }
+    }
+  }
+  return lut;
+}
+
+function downsample2x2SeparateAlpha(src: Uint8Array, sw: number, sh: number): { rgba: Uint8Array; w: number; h: number } {
+  const dw = Math.max(1, Math.ceil(sw / 2));
+  const dh = Math.max(1, Math.ceil(sh / 2));
+  const dst = new Uint8Array(dw * dh * 4);
+
+  for (let y = 0; y < dh; y++) {
+    const sy0 = Math.min(sh - 1, y * 2);
+    const sy1 = Math.min(sh - 1, sy0 + 1);
+    for (let x = 0; x < dw; x++) {
+      const sx0 = Math.min(sw - 1, x * 2);
+      const sx1 = Math.min(sw - 1, sx0 + 1);
+
+      const i00 = (sy0 * sw + sx0) * 4;
+      const i10 = (sy0 * sw + sx1) * 4;
+      const i01 = (sy1 * sw + sx0) * 4;
+      const i11 = (sy1 * sw + sx1) * 4;
+
+      const sumR = (src[i00]! + src[i10]! + src[i01]! + src[i11]!) >>> 0;
+      const sumG = (src[i00 + 1]! + src[i10 + 1]! + src[i01 + 1]! + src[i11 + 1]!) >>> 0;
+      const sumB = (src[i00 + 2]! + src[i10 + 2]! + src[i01 + 2]! + src[i11 + 2]!) >>> 0;
+      const sumA = (src[i00 + 3]! + src[i10 + 3]! + src[i01 + 3]! + src[i11 + 3]!) >>> 0;
+
+      const di = (y * dw + x) * 4;
+      dst[di] = (sumR + 2) >> 2;
+      dst[di + 1] = (sumG + 2) >> 2;
+      dst[di + 2] = (sumB + 2) >> 2;
+      dst[di + 3] = (sumA + 2) >> 2;
+    }
+  }
+
+  return { rgba: dst, w: dw, h: dh };
 }
 
 /**

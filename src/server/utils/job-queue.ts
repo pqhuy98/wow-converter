@@ -1,3 +1,5 @@
+import chalk from 'chalk';
+
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 type JobStatus = 'pending' | 'processing' | 'done' | 'failed';
@@ -130,7 +132,7 @@ export class JobQueue<T, V> {
           job.status = 'failed';
           job.error = err instanceof Error ? err.message : String(err);
           job.finishedAt = Date.now();
-          console.error(err);
+          console.log(chalk.red('Job failed:'), job.id, err);
           this.jobsFailed++;
           if (err instanceof Error && err.message.includes('Job timeout')) {
             await wowExportClient.resetConnection();

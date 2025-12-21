@@ -132,7 +132,7 @@ export class AssetManager {
       exportedTexturePaths.push(blpPath);
       if (await exists(blpPath) && !this.texturesOverwrite.has(texturePath)) {
         const size = readBlpSizeSync(blpPath);
-        if (size && size.width === targetWidth && size.height === targetHeight) {
+        if (!this.config.overrideTextures && size && size.width === targetWidth && size.height === targetHeight) {
           debug && console.log('Skipping existing texture', blpPath);
           continue;
         }

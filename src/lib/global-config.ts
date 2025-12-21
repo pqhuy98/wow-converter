@@ -5,6 +5,7 @@ export interface Config {
   assetPrefix: string
   rawModelScaleUp: number
   overrideModels: boolean
+  overrideTextures: boolean
   mdx?: boolean
   infiniteExtentBoundRadiusThreshold: number
   isBulkExport?: boolean
@@ -18,6 +19,7 @@ export async function getDefaultConfig(): Promise<Config> {
     infiniteExtentBoundRadiusThreshold: 2000, // WC3 distance unit
     rawModelScaleUp: 56,
     overrideModels: true,
+    overrideTextures: false,
     wowExportAssetDir: await wowExportClient.getAssetDir(),
   };
 }
