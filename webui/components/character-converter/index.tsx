@@ -53,6 +53,7 @@ export function CharacterConverter() {
   const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>('1000');
   const [optimization, setOptimization] = useState<Optimization>({
     sortSequences: true,
+    allMaterialsUnshaded: false,
     removeUnusedVertices: true,
     removeUnusedNodes: true,
     removeUnusedMaterialsTextures: true,

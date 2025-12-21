@@ -8,7 +8,7 @@ import {
 } from '../ui/select';
 
 const tooltips = {
-  sortSequences: 'Sort animations by name in the order of: Stand, Walk, Attack, Spell, Death, Decay, Cinematic XXX.',
+  allMaterialsUnshaded: 'Force all materials to be marked as Unshaded.',
   removeUnusedVertices: 'Remove geoset vertices that are not used by any geoset faces.',
   removeUnusedNodes: 'Remove nodes that are not used in any geosets or do not contain used children nodes.',
   removeUnusedMaterials: 'Remove materials and textures that are not used in any geosets.',
@@ -26,14 +26,14 @@ export function OptimizationOptions({ optimization, setOptimization }: {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <div className="flex items-center space-x-2">
           <Checkbox
-            id="sortSequences"
-            checked={optimization.sortSequences}
-            onCheckedChange={(checked) => setOptimization({ ...optimization, sortSequences: checked as boolean })
+            id="allMaterialsUnshaded"
+            checked={optimization.allMaterialsUnshaded ?? false}
+            onCheckedChange={(checked) => setOptimization({ ...optimization, allMaterialsUnshaded: checked as boolean })
             }
           />
-          <Label htmlFor="sortSequences" className="text-sm flex items-center gap-2">
-            Sort Sequences
-            <TooltipHelp tooltips={tooltips.sortSequences}/>
+          <Label htmlFor="allMaterialsUnshaded" className="text-sm flex items-center gap-2">
+            All Materials Unshaded
+            <TooltipHelp tooltips={tooltips.allMaterialsUnshaded}/>
           </Label>
         </div>
 

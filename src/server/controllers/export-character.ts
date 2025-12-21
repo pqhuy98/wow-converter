@@ -24,10 +24,11 @@ export const ExporCharacterRequestSchema = z.object({
   character: CharacterSchema,
   outputFileName: LocalRefValueSchema,
   optimization: z.object({
-    sortSequences: z.boolean().optional(),
-    removeUnusedVertices: z.boolean().optional(),
-    removeUnusedNodes: z.boolean().optional(),
-    removeUnusedMaterialsTextures: z.boolean().optional(),
+    sortSequences: z.boolean().optional().default(true),
+    allMaterialsUnshaded: z.boolean().optional().default(false),
+    removeUnusedVertices: z.boolean().optional().default(true),
+    removeUnusedNodes: z.boolean().optional().default(true),
+    removeUnusedMaterialsTextures: z.boolean().optional().default(true),
     maxTextureSize: z.enum(['256', '512', '1024']).optional(),
   }),
   format: z.enum(['mdx', 'mdl']),
@@ -134,6 +135,13 @@ export async function ControllerExportCharacter(router: express.Router) {
       }
       if (request.optimization?.removeUnusedMaterialsTextures) {
         mdl.modify.removeUnusedMaterialsTextures();
+      }
+      if (request.optimization.allMaterialsUnshaded) {
+        mdl.materials.forEach((material) => {
+          material.layers.forEach((layer) => {
+            layer.unshaded = true;
+          });
+        });
       }
       mdl.modify.optimizeKeyFrames();
       mdl.sync();

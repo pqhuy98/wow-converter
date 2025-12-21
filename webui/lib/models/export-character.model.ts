@@ -41,6 +41,7 @@ export type ModelFormatVersion = '800' | '1000'
 
 export interface Optimization {
   sortSequences?: boolean
+  allMaterialsUnshaded?: boolean
   removeUnusedVertices?: boolean
   removeUnusedNodes?: boolean
   removeUnusedMaterialsTextures?: boolean
