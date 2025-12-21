@@ -86,7 +86,9 @@ export class BlpWorkerPool {
       this.pump();
     });
 
-    worker.on('error', () => {
+    worker.on('error', (err) => {
+      console.log('BLB worker restarted due to error:', err);
+
       // Requeue the in-flight task if any, then respawn
       if (worker.__currentTask) {
         this.queue.unshift(worker.__currentTask);
