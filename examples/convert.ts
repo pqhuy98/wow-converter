@@ -27,6 +27,7 @@ const WowMap = {
   IcecrownCitadel: { id: 631, folder: 'icecrowncitadel' },
   TheMaw: { id: 2456, folder: '2456' },
   Durnhole: { id: 560, folder: 'HillsbradPast' },
+  StratholmeRaid: { id: 533, folder: 'stratholmeraid' },
 };
 
 const maps: ([WowMap,
@@ -51,11 +52,12 @@ const maps: ([WowMap,
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.5, 0.7, 180],
   // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [29, 26], [33, 29], 'undercity.w3x', 0, 1, 0],
-  [
-    'world\\wmo\\lorderon\\undercity\\undercity_set0.obj',
-    0, 0.20, 'undercity-indoor.w3x', -90,
-  ],
+  // [
+  //   'world\\wmo\\lorderon\\undercity\\undercity_set0.obj',
+  //   0, 0.20, 'undercity-indoor.w3x', -90,
+  // ],
   // [WowMap.Azeroth, [34, 28], [35, 29], 'andorhal.w3x', 0, 1, 0],
+  [WowMap.StratholmeRaid, [37, 25], [39, 27], 'stratholmeraid.w3x', 0, 1, 0],
   // [WowMap.Kalimdor, [28, 33], [29, 34], 'kalimdor-forest.w3x', 0, 1, 0],
   // [WowMap.Kalimdor, [31, 33], [33, 36], 'taurent-city.w3x', 0, 1, 0],
   // [WowMap.Durnhole, [27, 25], [32, 30], 'durnhole.w3x', 0, 1, 0],
