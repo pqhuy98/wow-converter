@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 
 import { Button } from '@/components/ui/button';
 
-import ModelViewerUi from '../../components/common/model-viewer';
+import ModelViewerUi from '../../components/common/model-viewer/model-viewer';
 
 export default function ViewerPage() {
   return (

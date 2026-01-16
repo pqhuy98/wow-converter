@@ -14,7 +14,7 @@ import {
 } from '@/lib/models/export-character.model';
 import { formatDurationBetween, formatTimestamp } from '@/lib/utils/format.utils';
 
-import ModelViewerUi from '../../components/common/model-viewer';
+import ModelViewerUi from '../../components/common/model-viewer/model-viewer';
 
 export default function RecentsPage() {
   const [jobs, setJobs] = useState<FullJobStatus[]>([]);

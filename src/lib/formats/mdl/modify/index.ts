@@ -1,5 +1,7 @@
 import _ from 'lodash';
 
+import { V3 } from '@/lib/math/vector';
+
 import { Bound } from '../components/extent';
 import { Sequence } from '../components/sequence';
 import { MDL } from '../mdl';
@@ -188,4 +190,12 @@ export class MDLModify {
   removeSmallFaceComponents = removeSmallFaceComponents;
 
   recomputeNormals = recomputeNormals;
+
+  centerModelMinZ() {
+    const min = this.mdl.model.minimumExtent;
+    const max = this.mdl.model.maximumExtent;
+    const center = V3.negative(V3.mean(min, max));
+    this.translate([center[0], center[1], min[2]]);
+    return this;
+  }
 }

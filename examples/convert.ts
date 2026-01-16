@@ -58,6 +58,10 @@ const maps: ([WowMap,
   // ],
   // [WowMap.Azeroth, [34, 28], [35, 29], 'andorhal.w3x', 0, 1, 0],
   [WowMap.StratholmeRaid, [37, 25], [39, 27], 'stratholmeraid.w3x', 0, 1, 0],
+  // [
+  //   'world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.obj',
+  //   0, 1, 'stratholmeraid-indoor.w3x', 90,
+  // ],
   // [WowMap.Kalimdor, [28, 33], [29, 34], 'kalimdor-forest.w3x', 0, 1, 0],
   // [WowMap.Kalimdor, [31, 33], [33, 36], 'taurent-city.w3x', 0, 1, 0],
   // [WowMap.Durnhole, [27, 25], [32, 30], 'durnhole.w3x', 0, 1, 0],
@@ -113,7 +117,7 @@ const mapExportConfig: MapExportConfig = {
     },
   }),
   creatures: {
-    enable: false,
+    enable: true,
     allAreDoodads: true,
     scaleUp: creatureScaleUp,
   },
@@ -132,6 +136,10 @@ const depth = 3; // 1: adt only, 2: adt + wmo + top m2, 3: adt + wmo + top m2 + 
   if (autoChoseClampPercent) {
     autoChooseClampPercent(mapExporter, mapExportConfig);
   }
+
+  mapExporter.wowObjectManager.roots.forEach((root) => {
+    root.children = root.children.filter((child) => child.id.includes('stratholme_raid_set0') || child.type === 'unit');
+  });
 
   await mapExporter.exportTerrainsDoodads(mapOutputDir);
   await mapExporter.exportCreatures(mapOutputDir);

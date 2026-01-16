@@ -12,7 +12,7 @@ import React, {
 
 import { SettingsDialogButton } from '@/components/browse-model/settings-dialog';
 import { FileRow, VirtualListBox } from '@/components/common/listbox';
-import ModelViewerUi from '@/components/common/model-viewer';
+import ModelViewerUi from '@/components/common/model-viewer/model-viewer';
 import { Terminal } from '@/components/common/terminal';
 import {
   Card, CardContent, CardHeader, CardTitle,

@@ -9,7 +9,7 @@ import { AttachItems } from '@/components/character-converter/attach-items';
 import { CharacterConfig } from '@/components/character-converter/character-config';
 import { ExportSection } from '@/components/character-converter/export-section';
 import { isLocalRef, validateRef } from '@/components/character-converter/ref-input';
-import ModelViewerUi from '@/components/common/model-viewer';
+import ModelViewerUi from '@/components/common/model-viewer/model-viewer';
 import { Terminal } from '@/components/common/terminal';
 import { Button } from '@/components/ui/button';
 import {
