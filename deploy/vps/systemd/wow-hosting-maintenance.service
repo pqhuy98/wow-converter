@@ -1,0 +1,7 @@
+[Unit]
+Description=Weekly wow-converter disk cleanup and service restart
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/wow-hosting/scripts/weekly-maintenance.sh

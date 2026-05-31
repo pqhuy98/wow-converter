@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="${WOW_CONVERTER_REPO:-/root/wow-converter}"
+cd "${REPO}"
+git fetch origin main --quiet
+
+LOCAL="$(git rev-parse HEAD)"
+REMOTE="$(git rev-parse origin/main)"
+if [[ "${LOCAL}" != "${REMOTE}" ]]; then
+  SCRIPT="/root/wow-hosting/scripts/deploy-app.sh"
+  [[ -x "${SCRIPT}" ]] || SCRIPT="${REPO}/deploy/vps/scripts/deploy-app.sh"
+  bash "${SCRIPT}"
+fi

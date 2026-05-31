@@ -1,0 +1,19 @@
+[Unit]
+Description=wow-converter (Bun)
+After=network-online.target wow-export.service
+Requires=wow-export.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/wow-converter
+EnvironmentFile=-/root/wow-converter/.env
+Environment=PATH=/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--dns-result-order=ipv4first
+ExecStart=/root/wow-hosting/scripts/run-wowconverter.sh
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

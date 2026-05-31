@@ -1,0 +1,6 @@
+[Unit]
+Description=Poll GitHub for wow-converter updates and deploy
+
+[Service]
+Type=oneshot
+ExecStart=/root/wow-hosting/scripts/poll-and-deploy.sh
