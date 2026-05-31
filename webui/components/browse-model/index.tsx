@@ -28,6 +28,7 @@ import {
   ModelFormatVersion,
   Optimization,
 } from '@/lib/models/export-character.model';
+import { formatDocumentTitle, getBrowsePageTitle } from '@/lib/utils/browse-page-title';
 
 type FileEntry = { fileDataID: number; fileName: string };
 
@@ -126,6 +127,10 @@ export default function BrowseModelPage() {
       setPendingScrollToPath(null);
     },
   });
+
+  useEffect(() => {
+    document.title = formatDocumentTitle(getBrowsePageTitle(query, selected?.fileName ?? pendingScrollToPath));
+  }, [query, selected?.fileName, pendingScrollToPath]);
 
   // Reset scroll only when debounced search changes and no pending scroll
   useScrollResetOnSearchChange({

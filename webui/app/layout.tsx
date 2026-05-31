@@ -7,7 +7,10 @@ import { ServerConfigProvider } from '@/components/server-config';
 import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
-  title: 'Huy\'s wow-converter',
+  title: {
+    default: 'Huy\'s wow-converter',
+    template: '%s | Huy\'s wow-converter',
+  },
   description: 'Easily export WoW NPC models into Warcraft 3 MDL/MDX',
 };
 

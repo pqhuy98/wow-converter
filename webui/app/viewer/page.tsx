@@ -1,68 +1,11 @@
-'use client';
+import type { Metadata } from 'next';
 
-import { ArrowLeft } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import ViewerPage from './viewer-content';
 
-import { Button } from '@/components/ui/button';
+export const metadata: Metadata = {
+  title: 'Model Viewer',
+};
 
-import ModelViewerUi from '../../components/common/model-viewer/model-viewer';
-
-export default function ViewerPage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <Viewer />
-    </Suspense>
-  );
-}
-
-function Viewer() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const modelPath = searchParams.get('model');
-  const source = searchParams.get('source') ?? 'export';
-  if (!['export', 'browse'].includes(source)) {
-    return (
-      <div className="h-screen w-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-center">
-          <h1 className="text-2xl mb-4">Invalid URL</h1>
-        </div>
-      </div>
-    );
-  }
-
-  if (!modelPath) {
-    return (
-      <div className="h-screen w-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-center">
-          <h1 className="text-2xl mb-4">No model specified</h1>
-          <Button
-            variant="secondary"
-            onClick={() => router.back()}
-            className="bg-accent text-accent-foreground hover:bg-accent/80"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Go Back
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-screen w-screen bg-background relative">
-      <div className="absolute top-4 left-4 z-10">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => router.back()}
-          className="bg-secondary text-foreground hover:bg-accent"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-      </div>
-      <ModelViewerUi modelPath={decodeURIComponent(modelPath)} alwaysFullscreen={true} source={source as 'export' | 'browse'} />
-    </div>
-  );
+export default function Page() {
+  return <ViewerPage />;
 }
