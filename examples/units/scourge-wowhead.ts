@@ -3,7 +3,7 @@ import esMain from 'es-main';
 import { wowhead } from '@/lib/converter/character';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Vector3 } from '@/lib/math/common';
-import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
 import { outputDir } from '@/server/config';
 
 import { ce } from './common';

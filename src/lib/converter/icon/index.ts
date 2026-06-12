@@ -31,4 +31,4 @@ export {
   HD_DESATURATION_FRAMES,
   SIZE_MAPPING,
   STYLE_FOLDER_MAP,
-} from './constants';
+} from '@/lib/converter/icon/constants';

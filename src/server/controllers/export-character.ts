@@ -10,6 +10,9 @@ import z from 'zod';
 import {
   CharacterExporter, CharacterSchema, LocalRefSchema, LocalRefValueSchema,
 } from '@/lib/converter/character';
+import {
+  ExportProfileSnapshot, formatExportProfile, profileScope, profileSync, runWithExportProfile,
+} from '@/lib/export-profile';
 import { Config, getDefaultConfig } from '@/lib/global-config';
 import { stableStringify, waitUntil } from '@/lib/utils';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
@@ -64,6 +67,7 @@ export type ExportCharacterResponse = {
   }
   outputDirectory?: string
   versionId: string
+  profile?: ExportProfileSnapshot
 }
 
 const queueConfig: QueueConfig<ExportCharacterRequest, ExportCharacterResponse> = {
@@ -98,118 +102,130 @@ export async function ControllerExportCharacter(router: express.Router) {
 
   /** Core export logic, extracted into its own function so the queue worker can reuse it */
   async function handleExport(job: ExportCharacterJob) {
-    const start = performance.now();
-    const request = job.request;
-    const ce = new CharacterExporter({
-      ...ceConfig,
-      maxTextureSize: request.optimization.maxTextureSize
-        ? parseInt(request.optimization.maxTextureSize, 10)
-        : undefined,
-    });
-    console.log(`Start exporting ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
-    logs = [];
-
-    await wowExportClient.syncConfig();
-    await ce.exportCharacter(request.character, request.outputFileName);
-
-    ce.models.forEach(([mdl]) => {
-      if (request.optimization?.sortSequences) {
-        mdl.modify.sortSequences();
-      }
-      if (request.formatVersion === '800') {
-        mdl.modify.convertToSd800();
-      }
-      if (request.optimization?.removeUnusedVertices) {
-        mdl.modify.removeUnusedVertices();
-      }
-      const particlesDensity = request.character.particlesDensity;
-      if (particlesDensity != null) {
-        if (particlesDensity > 0 && particlesDensity !== 1) {
-          mdl.modify.scaleParticlesDensity(particlesDensity);
-        } else if (particlesDensity === 0) {
-          mdl.particleEmitter2s = [];
-        }
-      }
-      if (request.optimization?.removeUnusedNodes) {
-        mdl.modify.removeUnusedNodes();
-      }
-      if (request.optimization?.removeUnusedMaterialsTextures) {
-        mdl.modify.removeUnusedMaterialsTextures();
-      }
-      if (request.optimization.allMaterialsUnshaded) {
-        mdl.materials.forEach((material) => {
-          material.layers.forEach((layer) => {
-            layer.unshaded = true;
-          });
-        });
-      }
-      mdl.modify.optimizeKeyFrames();
-      mdl.sync();
-    });
-
-    // After removing unused materials/textures, purge unused textures from asset manager
-    if (request.optimization?.removeUnusedMaterialsTextures) {
-      const usedTexturePngPaths: string[] = [];
-      ce.models.forEach(([mdl]) => {
-        mdl.textures.forEach((tex) => {
-          // Derive from image (BLP) path and keep asset prefix if present
-          const pngPath = tex.image ? tex.image.replace(/\.blp$/i, '.png').replace(/\\/g, '/') : '';
-          if (pngPath) usedTexturePngPaths.push(pngPath);
-        });
+    const { result: resp, profile } = await runWithExportProfile(async () => {
+      const request = job.request;
+      const ce = new CharacterExporter({
+        ...ceConfig,
+        maxTextureSize: request.optimization.maxTextureSize
+          ? parseInt(request.optimization.maxTextureSize, 10)
+          : undefined,
       });
-      ce.assetManager.purgeTextures(usedTexturePngPaths);
-    }
+      console.log(`Start exporting ${request.outputFileName}: ${chalk.gray(JSON.stringify(request, null, 2))}`);
+      logs = [];
 
-    const targetDir = request.isBrowse ? outputDirBrowse : outputDir;
-    const texturePaths = await ce.writeAllTextures(targetDir);
-    const modelPaths = await ce.writeAllModels(targetDir, request.format);
+      await profileScope('syncConfig', () => wowExportClient.syncConfig());
+      await profileScope('exportCharacter', () => ce.exportCharacter(request.character, request.outputFileName));
 
-    const exportedModels = await Promise.all(modelPaths.map(async (modelPath) => ({
-      path: path.relative(targetDir, `${modelPath}.${request.format}`),
-      size: (await fsExtra.stat(`${modelPath}.${request.format}`)).size,
-    })));
-    const exportedTextures = await Promise.all(texturePaths.map(async (texturePath) => ({
-      path: path.relative(targetDir, texturePath),
-      size: (await fsExtra.stat(texturePath)).size,
-    })));
-    exportedTextures.sort((a, b) => a.path.localeCompare(b.path));
+      profileSync('postProcess', () => {
+        ce.models.forEach(([mdl]) => {
+          if (request.optimization?.sortSequences) {
+            mdl.modify.sortSequences();
+          }
+          if (request.formatVersion === '800') {
+            mdl.modify.convertToSd800();
+          }
+          if (request.optimization?.removeUnusedVertices) {
+            mdl.modify.removeUnusedVertices();
+          }
+          const particlesDensity = request.character.particlesDensity;
+          if (particlesDensity != null) {
+            if (particlesDensity > 0 && particlesDensity !== 1) {
+              mdl.modify.scaleParticlesDensity(particlesDensity);
+            } else if (particlesDensity === 0) {
+              mdl.particleEmitter2s = [];
+            }
+          }
+          if (request.optimization?.removeUnusedNodes) {
+            mdl.modify.removeUnusedNodes();
+          }
+          if (request.optimization?.removeUnusedMaterialsTextures) {
+            mdl.modify.removeUnusedMaterialsTextures();
+          }
+          if (request.optimization.allMaterialsUnshaded) {
+            mdl.materials.forEach((material) => {
+              material.layers.forEach((layer) => {
+                layer.unshaded = true;
+              });
+            });
+          }
+          mdl.modify.optimizeKeyFrames();
+          mdl.sync();
+        });
 
-    // Return the list of exported assets to the caller – zipping happens on-demand via the download API
-    const resp: ExportCharacterResponse = {
-      exportedModels,
-      exportedTextures,
-      outputDirectory: !isSharedHosting ? path.resolve(targetDir) : undefined,
-      versionId: job.id,
-      modelStats: {
-        formatVersion: request.formatVersion === '800' ? 800 : 1000,
-        globalSequences: ce.models.reduce((acc, [mdl]) => acc + mdl.globalSequences.length, 0),
-        sequences: ce.models.reduce((acc, [mdl]) => acc + mdl.sequences.length, 0),
-        geosets: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.length, 0),
-        geosetAnims: ce.models.reduce((acc, [mdl]) => acc + mdl.geosetAnims.length, 0),
-        materials: ce.models.reduce((acc, [mdl]) => acc + mdl.materials.length, 0),
-        textures: ce.models.reduce((acc, [mdl]) => acc + mdl.textures.length, 0),
-        textureAnims: ce.models.reduce((acc, [mdl]) => acc + mdl.textureAnims.length, 0),
-        bones: ce.models.reduce((acc, [mdl]) => acc + mdl.bones.length, 0),
-        lights: ce.models.reduce((acc, [mdl]) => acc + mdl.lights.length, 0),
-        ribbonEmitters: ce.models.reduce((acc, [mdl]) => acc + mdl.ribbonEmitters.length, 0),
-        particles: ce.models.reduce((acc, [mdl]) => acc + mdl.particleEmitter2s.length, 0),
-        attachments: ce.models.reduce((acc, [mdl]) => acc + mdl.attachments.length, 0),
-        eventObjects: ce.models.reduce((acc, [mdl]) => acc + mdl.eventObjects.length, 0),
-        helpers: ce.models.reduce((acc, [mdl]) => acc + mdl.helpers.length, 0),
-        collisionShapes: ce.models.reduce((acc, [mdl]) => acc + mdl.collisionShapes.length, 0),
-        cameras: ce.models.reduce((acc, [mdl]) => acc + mdl.cameras.length, 0),
-        vertices: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.reduce((acc, g) => acc + g.vertices.length, 0), 0),
-        faces: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.reduce((acc, g) => acc + g.faces.length, 0), 0),
-      },
-    };
+        // After removing unused materials/textures, purge unused textures from asset manager
+        if (request.optimization?.removeUnusedMaterialsTextures) {
+          const usedTexturePngPaths: string[] = [];
+          ce.models.forEach(([mdl]) => {
+            mdl.textures.forEach((tex) => {
+              // Derive from image (BLP) path and keep asset prefix if present
+              const pngPath = tex.image ? tex.image.replace(/\.blp$/i, '.png').replace(/\\/g, '/') : '';
+              if (pngPath) usedTexturePngPaths.push(pngPath);
+            });
+          });
+          ce.assetManager.purgeTextures(usedTexturePngPaths);
+        }
+      });
+
+      const targetDir = request.isBrowse ? outputDirBrowse : outputDir;
+      // Texture BLP encoding runs in worker threads while MDX serialization
+      // occupies the main thread — overlap them.
+      const [texturePaths, modelPaths] = await Promise.all([
+        profileScope('writeTextures', () => ce.writeAllTextures(targetDir)),
+        profileScope('writeModels', () => ce.writeAllModels(targetDir, request.format)),
+      ]);
+
+      const exportedModels = await Promise.all(modelPaths.map(async (modelPath) => ({
+        path: path.relative(targetDir, `${modelPath}.${request.format}`),
+        size: (await fsExtra.stat(`${modelPath}.${request.format}`)).size,
+      })));
+      const exportedTextures = await Promise.all(texturePaths.map(async (texturePath) => ({
+        path: path.relative(targetDir, texturePath),
+        size: (await fsExtra.stat(texturePath)).size,
+      })));
+      exportedTextures.sort((a, b) => a.path.localeCompare(b.path));
+
+      // Return the list of exported assets to the caller – zipping happens on-demand via the download API
+      const resp: ExportCharacterResponse = {
+        exportedModels,
+        exportedTextures,
+        outputDirectory: !isSharedHosting ? path.resolve(targetDir) : undefined,
+        versionId: job.id,
+        modelStats: {
+          formatVersion: request.formatVersion === '800' ? 800 : 1000,
+          globalSequences: ce.models.reduce((acc, [mdl]) => acc + mdl.globalSequences.length, 0),
+          sequences: ce.models.reduce((acc, [mdl]) => acc + mdl.sequences.length, 0),
+          geosets: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.length, 0),
+          geosetAnims: ce.models.reduce((acc, [mdl]) => acc + mdl.geosetAnims.length, 0),
+          materials: ce.models.reduce((acc, [mdl]) => acc + mdl.materials.length, 0),
+          textures: ce.models.reduce((acc, [mdl]) => acc + mdl.textures.length, 0),
+          textureAnims: ce.models.reduce((acc, [mdl]) => acc + mdl.textureAnims.length, 0),
+          bones: ce.models.reduce((acc, [mdl]) => acc + mdl.bones.length, 0),
+          lights: ce.models.reduce((acc, [mdl]) => acc + mdl.lights.length, 0),
+          ribbonEmitters: ce.models.reduce((acc, [mdl]) => acc + mdl.ribbonEmitters.length, 0),
+          particles: ce.models.reduce((acc, [mdl]) => acc + mdl.particleEmitter2s.length, 0),
+          attachments: ce.models.reduce((acc, [mdl]) => acc + mdl.attachments.length, 0),
+          eventObjects: ce.models.reduce((acc, [mdl]) => acc + mdl.eventObjects.length, 0),
+          helpers: ce.models.reduce((acc, [mdl]) => acc + mdl.helpers.length, 0),
+          collisionShapes: ce.models.reduce((acc, [mdl]) => acc + mdl.collisionShapes.length, 0),
+          cameras: ce.models.reduce((acc, [mdl]) => acc + mdl.cameras.length, 0),
+          vertices: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.reduce((acc, g) => acc + g.vertices.length, 0), 0),
+          faces: ce.models.reduce((acc, [mdl]) => acc + mdl.geosets.reduce((acc, g) => acc + g.faces.length, 0), 0),
+        },
+      };
+
+      return resp;
+    });
 
     console.log(
       'Job finished',
-      `${chalk.yellow(`${((performance.now() - start) / 1000).toFixed(2)}s`)}`,
-      chalk.gray(JSON.stringify(_.omit(resp, 'exportedTextures', 'modelStats'), null, 2)),
+      `${chalk.yellow(`${((profile?.totalMs ?? 0) / 1000).toFixed(2)}s`)}`,
+      chalk.gray(JSON.stringify(_.omit(resp, 'exportedTextures', 'modelStats', 'profile'), null, 2)),
     );
+    if (profile) {
+      console.log(formatExportProfile(profile));
+    }
 
-    return resp;
+    return { ...resp, profile: profile ?? undefined };
   }
 
   const jobQueue = new JobQueue<ExportCharacterRequest, ExportCharacterResponse>(

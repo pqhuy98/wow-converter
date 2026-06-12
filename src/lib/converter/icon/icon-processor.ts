@@ -2,7 +2,8 @@ import sharp from 'sharp';
 
 import {
   HD_DESATURATION_FRAMES, SIZE_MAPPING,
-} from './constants';
+} from '@/lib/converter/icon/constants';
+
 import {
   loadFrameImage,
   optimalCropMargin,

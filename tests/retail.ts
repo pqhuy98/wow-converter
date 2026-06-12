@@ -1,6 +1,6 @@
-import { TestConfig } from './classic';
+import { TestCaseTuple, TestConfig } from './classic';
 
-const testCases: string[][] = [ // [base, weaponR, weaponL, size][]
+const testCases: TestCaseTuple[] = [ // [base, weaponR, weaponL, size][]
   ['https://www.wowhead.com/wotlk/npc=36855/lady-deathwhisper'],
   ['https://www.wowhead.com/wotlk/npc=36612/lord-marrowgar'],
   ['https://www.wowhead.com/mop-classic/npc=71953/xuen'],

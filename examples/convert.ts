@@ -38,7 +38,7 @@ const maps: ([WowMap,
   number, // upper percent
   number, // map angle degrees
 ] | [string, number, number, string, number])[] = [
-  // [WowMap.Northrend, [29, 22], [29, 22], 'wrathgate.w3x', 0.05, 0.3, 0],
+  // [WowMap.Northrend, [29, 22], [29, 23], 'wrathgate.w3x', 0.05, 0.3, 0],
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
   // [WowMap.Northrend, [27, 20], [28, 21], 'icecrown.w3x', 0.65, 0.77, 180],
   // [WowMap.Northrend, [18, 24], [19, 25], 'nexus.w3x', 0, 1, 0],
@@ -50,14 +50,14 @@ const maps: ([WowMap,
   //   0.55, 0.65, 'icc-floor34-wmo.w3x', 90,
   // ],
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.5, 0.7, 180],
-  // [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
+  [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [29, 26], [33, 29], 'undercity.w3x', 0, 1, 0],
   // [
   //   'world\\wmo\\lorderon\\undercity\\undercity_set0.obj',
   //   0, 0.20, 'undercity-indoor.w3x', -90,
   // ],
   // [WowMap.Azeroth, [34, 28], [35, 29], 'andorhal.w3x', 0, 1, 0],
-  [WowMap.StratholmeRaid, [37, 25], [39, 27], 'stratholmeraid.w3x', 0, 1, 0],
+  // [WowMap.StratholmeRaid, [37, 25], [39, 27], 'stratholmeraid.w3x', 0, 1, 0],
   // [
   //   'world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.obj',
   //   0, 1, 'stratholmeraid-indoor.w3x', 90,
@@ -136,10 +136,6 @@ const depth = 3; // 1: adt only, 2: adt + wmo + top m2, 3: adt + wmo + top m2 + 
   if (autoChoseClampPercent) {
     autoChooseClampPercent(mapExporter, mapExportConfig);
   }
-
-  mapExporter.wowObjectManager.roots.forEach((root) => {
-    root.children = root.children.filter((child) => child.id.includes('stratholme_raid_set0') || child.type === 'unit');
-  });
 
   await mapExporter.exportTerrainsDoodads(mapOutputDir);
   await mapExporter.exportCreatures(mapOutputDir);

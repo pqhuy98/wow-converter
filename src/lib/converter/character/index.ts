@@ -1,26 +1,27 @@
 import chalk from 'chalk';
 import { writeFile } from 'fs/promises';
-import { ensureDir, exists } from 'fs-extra';
+import { ensureDir } from 'fs-extra';
 import path, { dirname, join } from 'path';
 import { z } from 'zod';
 
 import { AssetManager } from '@/lib/converter/common/asset-manager';
+import { AttackTagSchema } from '@/lib/converter/wow-model/animation/animation-mapper';
+import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
+import { profileSync } from '@/lib/export-profile';
 import { Sequence } from '@/lib/formats/mdl/components/sequence';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
 import { Config } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
-import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { decodeDressingRoom } from '@/lib/wowhead-client/dressing-room';
 import { CharacterData, fetchNpcMeta, fetchObjectMeta } from '@/lib/wowhead-client/objects';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
 
-import { AttackTagSchema } from '../../objmdl/animation/animation_mapper';
 import { Model } from '../common/models';
 import { guessAttackTag, InventoryType } from './item-mapper';
-import { ensureLocalModelFileExists, ExportContext } from './utils';
+import { ExportContext, exportLocalModelAsMdl } from './utils';
 import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
 import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
 import { exportZamItemAsMdl, getEquipmentSlotName } from './wowhead-exporter/item-model';
@@ -251,27 +252,21 @@ export class CharacterExporter {
       model.modify.concatenateSequences(attacks, 'Attack');
       model.sequences = model.sequences.filter((seq) => !attacks.includes(seq));
     });
-    model.modify.recomputeNormals();
-    model.modify.optimizeKeyFrames();
+    profileSync('recomputeNormals', () => { model.modify.recomputeNormals(); });
+    profileSync('optimizeKeyFrames', () => { model.modify.optimizeKeyFrames(); });
     console.log('Total character export took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
     return model;
   }
 
   private async exportBaseMdl(ctx: ExportContext, char: Character): Promise<MDL> {
     if (char.base.type === 'local') {
-      const fullPath = await ensureLocalModelFileExists(char.base.value);
-      const base = (await this.assetManager.parse(fullPath, true)).mdl;
-      if (ctx.withCollision) {
-        const collisionRelativePath = `${fullPath.replace(/\.obj$/, '')}.phys.obj`;
-        const collisionFullPath = path.join(this.config.wowExportAssetDir, collisionRelativePath);
-        console.log('collisionPath', collisionFullPath);
-        if (await exists(collisionFullPath)) {
-          const collision = (await this.assetManager.parse(collisionRelativePath, true)).mdl;
-          base.geosets.push(...collision.geosets);
-          base.textures.push(...collision.textures);
-          base.materials.push(...collision.materials);
-          base.bones.push(...collision.bones);
-        }
+      const { model, collision } = await exportLocalModelAsMdl(this.assetManager, this.config, char.base.value, ctx.withCollision);
+      const base = model.mdl;
+      if (collision) {
+        base.geosets.push(...collision.geosets);
+        base.textures.push(...collision.textures);
+        base.materials.push(...collision.materials);
+        base.bones.push(...collision.bones);
       }
       return base;
     }
@@ -339,8 +334,8 @@ export class CharacterExporter {
 
   private async exportItem(ctx: ExportContext, ref: Ref): Promise<{model: Model, inventoryType?: InventoryType}> {
     if (ref.type === 'local') {
-      const path = await ensureLocalModelFileExists(ref.value);
-      return { model: await this.assetManager.parse(path, true) };
+      const { model } = await exportLocalModelAsMdl(this.assetManager, this.config, ref.value);
+      return { model };
     }
     if (ref.type === 'wowhead' || ref.type === 'displayID') {
       const zam: ZamUrl = ref.type === 'wowhead'

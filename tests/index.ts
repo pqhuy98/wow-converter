@@ -11,8 +11,8 @@ import {
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config, getDefaultConfig } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
-import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
-import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { AttackTag } from '@/lib/converter/wow-model/animation/animation-mapper';
+import { WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
@@ -24,7 +24,8 @@ await wowExportClient.waitUntilReady();
 
 const testConfig = wowExportClient.isClassic() ? testConfigClassic : testConfigRetail;
 const mapDir = testConfig.map;
-const testCases = testConfig.testCases;
+const testLimit = Number(process.env.TEST_LIMIT || 0);
+const testCases = testLimit > 0 ? testConfig.testCases.slice(0, testLimit) : testConfig.testCases;
 
 const isFresh = process.argv.includes('--fresh');
 if (isFresh) {
@@ -49,12 +50,7 @@ const ceConfig: Config = {
 async function exportTestCases() {
   const npcs: {name: string, mdl?: MDL}[] = [];
 
-  for (let i = 0; i < testCases.length; i++) {
-    const url = testCases[i];
-    const base = Array.isArray(url) ? url[0] : url;
-    const weaponR = Array.isArray(url) ? url[1] : undefined;
-    const weaponL = Array.isArray(url) ? url[2] : undefined;
-    const sizeStr = Array.isArray(url) ? url[3] : '';
+  for (const [base, weaponR = '', weaponL = '', sizeStr = ''] of testCases) {
     const size: Size = sizeStr === '' ? undefined : sizeStr as Size;
 
     const attachItems: Record<string, AttachItem> = {};

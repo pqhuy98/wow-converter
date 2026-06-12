@@ -15,9 +15,9 @@ export function toMap<T, K extends(keyof T)>(array: T[], key: K) {
   return new Map(array.map((item) => [item[key], item]));
 }
 
-export function waitUntil(condition: () => boolean | Promise<boolean>) {
-  if (condition()) return Promise.resolve(true);
-  return new Promise((resolve) => {
+export async function waitUntil(condition: () => boolean | Promise<boolean>) {
+  if (await condition()) return true;
+  return new Promise<boolean>((resolve) => {
     // eslint-disable-next-line @typescript-eslint/no-misused-promises
     const interval = setInterval(async () => {
       if (await condition()) {

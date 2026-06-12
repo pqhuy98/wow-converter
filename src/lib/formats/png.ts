@@ -1,5 +1,7 @@
 import sharp, { OverlayOptions } from 'sharp';
 
+import { sharpFromExportAsset } from '@/lib/export-asset-store';
+
 const debug = false;
 
 /**
@@ -8,7 +10,7 @@ const debug = false;
  * @throws Error if image dimensions are invalid
  */
 export async function getPngDimensions(pngPath: string): Promise<{ width: number; height: number }> {
-  const metadata = await sharp(pngPath).metadata();
+  const metadata = await sharpFromExportAsset(pngPath).metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error('Invalid image dimensions');
   }
@@ -16,8 +18,9 @@ export async function getPngDimensions(pngPath: string): Promise<{ width: number
 }
 
 // We need to resize the PNG but RGB and alpha are separate, since wow use alpha as mask
-export async function resizePng(fromPath: string, targetWidth: number, targetHeight: number) {
-  const src = sharp(fromPath);
+export async function resizePng(from: string | Buffer, targetWidth: number, targetHeight: number) {
+  const fromPath = typeof from === 'string' ? from : '<buffer>';
+  const src = typeof from === 'string' ? sharpFromExportAsset(from) : sharp(from);
   const meta = await src.metadata();
 
   debug && console.log('Original image metadata', fromPath, meta);
@@ -63,7 +66,7 @@ export async function drawPngsOnBasePng(
   basePngPath: string,
   draws: PngDraw[],
 ): Promise<Buffer> {
-  const base = sharp(basePngPath);
+  const base = sharpFromExportAsset(basePngPath);
   const meta = await base.metadata();
 
   if (!meta.width || !meta.height) {
@@ -88,7 +91,7 @@ export async function drawPngsOnBasePng(
       console.log('Abnormal transparency, removing alpha', draw.pngPath);
       input = await sharp(
         // cannot chain sharp operations otherwise RGB will turn to 0
-        await sharp(draw.pngPath).removeAlpha().toBuffer(),
+        await sharpFromExportAsset(draw.pngPath).removeAlpha().toBuffer(),
       ).resize({ width: targetWidth, height: targetHeight, fit: 'outside' })
         .toBuffer();
     } else {
@@ -107,7 +110,7 @@ export async function drawPngsOnBasePng(
 }
 
 async function isAbnormalTransparency(pngPath: string): Promise<boolean> {
-  const png = sharp(pngPath);
+  const png = sharpFromExportAsset(pngPath);
   const metadata = await png.metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error('PNG must have width and height metadata');

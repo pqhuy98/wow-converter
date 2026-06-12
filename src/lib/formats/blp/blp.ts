@@ -1,10 +1,14 @@
 import chalk from 'chalk';
 import fs from 'fs';
-import { readFile } from 'fs/promises';
 
 import { maxConcurrency } from '@/lib/constants';
+import { readExportAsset } from '@/lib/export-asset-store';
 
 import { ensureBlpWorkerPool } from './blp.orches';
+
+async function readPngInput(png: string | Buffer): Promise<Buffer> {
+  return typeof png === 'string' ? readExportAsset(png) : png;
+}
 
 export function readBlpSizeSync(blpPath: string): { width: number, height: number } | null {
   try {
@@ -32,18 +36,45 @@ export function readBlpSizeSync(blpPath: string): { width: number, height: numbe
 
 // tasks managed by orchestrator; no local worker state here
 
+export interface BlpConvertItem {
+  /** PNG file path (export-asset store) or PNG bytes. */
+  png?: string | Buffer;
+  /** Raw WoW BLP2 bytes; decoded to PNG in the worker (direct pipeline). */
+  blp2?: Buffer;
+  /** Optional downscale applied before BLP1 encoding. */
+  resizeTo?: { width: number, height: number };
+  blpPath: string;
+}
+
+async function resolveItemInput(item: BlpConvertItem): Promise<{ data: Buffer, kind: 'png' | 'blp2' }> {
+  if (item.blp2) return { data: item.blp2, kind: 'blp2' };
+  if (item.png === undefined) throw new Error(`BLP convert item has no input: ${item.blpPath}`);
+  return { data: await readPngInput(item.png), kind: 'png' };
+}
+
 // Batch processing with true parallelism
-export async function pngsToBlps(
-  items: { png: string | Buffer, blpPath: string }[],
-): Promise<void> {
+export async function pngsToBlps(items: BlpConvertItem[]): Promise<void> {
+  // Inline fallback (BLP_WORKERS=0): convert on the main thread, bypassing
+  // worker_threads entirely. Workaround for Bun crashing in worker threads
+  // on Windows; output bytes are identical to the worker path.
+  if (process.env.BLP_WORKERS === '0') {
+    console.log(`Converting ${chalk.yellow(items.length)} textures to BLPs (inline, no workers)`);
+    const { convertTextureToBlp } = await import('./blp.convert');
+    for (const item of items) {
+      const { data, kind } = await resolveItemInput(item);
+      await convertTextureToBlp({ [kind]: data, resizeTo: item.resizeTo }, item.blpPath);
+    }
+    return;
+  }
+
   const concurrency = Math.min(maxConcurrency, items.length);
-  console.log(`Converting ${chalk.yellow(items.length)} PNG textures to BLPs (${chalk.yellow(concurrency)} concurrent threads)`);
+  console.log(`Converting ${chalk.yellow(items.length)} textures to BLPs (${chalk.yellow(concurrency)} concurrent threads)`);
 
   const pool = ensureBlpWorkerPool(concurrency);
 
   const promises: Promise<void>[] = items.map(async (item) => {
-    const pngBuffer = typeof item.png === 'string' ? await readFile(item.png) : item.png;
-    return pool.submit(pngBuffer, item.blpPath);
+    const { data, kind } = await resolveItemInput(item);
+    return pool.submit({ data, kind, resizeTo: item.resizeTo }, item.blpPath);
   });
 
   await Promise.all(promises);

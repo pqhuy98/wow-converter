@@ -4,6 +4,7 @@ import fsExtra from 'fs-extra';
 import path from 'path';
 import { z } from 'zod';
 
+import { exportTexture } from '@/lib/converter/character/utils';
 import { FileEntry, MapListItem, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import { isDev } from '../config';
@@ -27,10 +28,13 @@ const tileSchema = z.object({
 const exportAdtBodySchema = z.object({
   tiles: z.array(tileSchema).min(1),
   quality: z.union([
+    z.literal(0), // no terrain texture
     z.literal(512),
     z.literal(1024),
     z.literal(2048),
     z.literal(4096),
+    z.literal(8192),
+    z.literal(16384),
   ]),
   includeM2: z.boolean(),
   includeWMO: z.boolean(),
@@ -156,7 +160,7 @@ export function ControllerMaps(router: express.Router) {
   });
 
   // GET /api/maps/:map/minimap/:x/:y -> PNG bytes
-  // We export the BLP as PNG using wow.export's exportTextures.
+  // The minimap BLP is decoded to PNG via the pipeline-aware exportTexture helper.
   router.get('/maps/:map/minimap/:x/:y', async (req, res) => {
     try {
       const { map } = req.params;
@@ -189,7 +193,8 @@ export function ControllerMaps(router: express.Router) {
         res.setHeader('Content-Type', 'image/png');
         if (!isDev) res.setHeader('Cache-Control', 'public, max-age=86400');
         res.setHeader('ETag', etag);
-        return res.sendFile(preexistingPng);
+        // express sendFile fails on Bun/Windows for these paths
+        return res.send(await fsExtra.readFile(path.resolve(preexistingPng)));
       }
 
       // Resolve the BLP using the prebuilt hash table
@@ -198,16 +203,13 @@ export function ControllerMaps(router: express.Router) {
       if (!file?.fileDataID) {
         return res.status(404).json({ error: 'Minimap tile not found' });
       }
-      const textures = await wowExportClient.exportTextures([file.fileDataID]);
-      const pngPath = textures.find((t) => /\.png$/i.test(t.file))?.file;
-      if (!pngPath) {
-        return res.status(500).json({ error: 'Failed to export minimap texture' });
-      }
+      const relPng = await exportTexture(file.fileDataID);
+      const pngPath = path.join(assetDir, relPng);
 
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=86400');
       res.setHeader('ETag', etag);
-      return res.sendFile(pngPath);
+      return res.send(await fsExtra.readFile(path.resolve(pngPath)));
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

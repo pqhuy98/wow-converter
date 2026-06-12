@@ -1,7 +1,6 @@
+import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '@/lib/converter/character/utils';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { CharacterData } from '@/lib/wowhead-client/objects';
-
-import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '../utils';
 
 export async function exportCreatureNpcAsMdl(ctx: ExportContext, meta: CharacterData): Promise<MDL> {
   if (!meta.Model) throw new Error('Creature NPC must contain Model');

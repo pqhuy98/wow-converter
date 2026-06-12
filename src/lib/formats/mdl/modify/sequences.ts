@@ -1,7 +1,7 @@
 import _ from 'lodash';
 
+import { WowAnimName } from '@/lib/converter/wow-model/animation/animation-mapper';
 import { Vector3 } from '@/lib/math/common';
-import { WowAnimName } from '@/lib/objmdl/animation/animation_mapper';
 
 import { Animation } from '../components/animation';
 import { Sequence } from '../components/sequence';

@@ -1,20 +1,26 @@
 import chalk from 'chalk';
-import { mkdir, statfs, writeFile } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import { ensureDir, exists } from 'fs-extra';
 import path from 'path';
 import sharp from 'sharp';
 
 import { maxConcurrency } from '@/lib/constants';
-import { pngsToBlps, readBlpSizeSync } from '@/lib/formats/blp/blp';
-import { resizePng } from '@/lib/formats/png';
+import {
+  exportAssetExists, sharpFromExportAsset,
+} from '@/lib/export-asset-store';
+import { profileScope } from '@/lib/export-profile';
+import { BlpConvertItem, pngsToBlps, readBlpSizeSync } from '@/lib/formats/blp/blp';
+import { Config } from '@/lib/global-config';
+import { EulerRotation, Vector3 } from '@/lib/math/common';
 import { workerPool } from '@/lib/utils';
+import { getRawWowFile } from '@/lib/wow/archive/client/raw-client';
 
-import { Config } from '../../global-config';
-import { EulerRotation, Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
-import { convertWowExportModel } from '../../objmdl';
+import { ConvertM2Options, convertM2ToMdl } from '../wow-model/direct/m2';
+import { convertWowExportModel } from '../wow-model/legacy';
 import { Model, WowObject } from './models';
+import { getTextureSource, TextureSource } from './texture-source';
 
 export class AssetManager {
   models = new Map<string, Model>();
@@ -31,18 +37,33 @@ export class AssetManager {
       return this.models.get(objectPath)!;
     }
 
-    const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
-    const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
-    const { mdl, texturePaths } = await convertWowExportModel(objFullPath, this.config);
-    const model: Model = {
-      relativePath: mdl.model.name,
-      mdl,
-    };
-    if (!noCache) {
-      this.models.set(objectPath, model);
-    }
-    texturePaths.forEach((p) => this.textures.add(p));
-    return model;
+    return profileScope(`assetManager.parse/${path.basename(objectPath, '.obj')}`, async () => {
+      const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
+      const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
+      const { mdl, texturePaths } = await convertWowExportModel(objFullPath, this.config);
+      const model: Model = {
+        relativePath: mdl.model.name,
+        mdl,
+      };
+      if (!noCache) {
+        this.models.set(objectPath, model);
+      }
+      texturePaths.forEach((p) => this.textures.add(p));
+      return model;
+    });
+  }
+
+  /** Direct M2 -> MDL conversion (no server OBJ export). */
+  async parseDirect(opts: ConvertM2Options): Promise<Model> {
+    return profileScope(`assetManager.parseDirect/${opts.fileDataID}`, async () => {
+      const { mdl, texturePaths } = await convertM2ToMdl(this.config, opts);
+      const model: Model = {
+        relativePath: mdl.model.name,
+        mdl,
+      };
+      texturePaths.forEach((p) => this.textures.add(p));
+      return model;
+    });
   }
 
   async exportModels(assetPath: string) {
@@ -56,7 +77,7 @@ export class AssetManager {
     await workerPool(maxConcurrency, Array.from(this.models.entries()).map(([relativePath, model]) => async () => {
       const fullPath = `${path.join(assetPath, this.config.assetPrefix, relativePath)}.${this.config.mdx ? 'mdx' : 'mdl'}`;
 
-      if (!this.config.overrideModels && await exists(fullPath)) {
+      if (!this.config.overrideModels && await exportAssetExists(fullPath)) {
         // console.log('Skipping model already exists', fullPath);
         return;
       }
@@ -96,62 +117,84 @@ export class AssetManager {
     }
     let writeCount = 0;
 
-    // Collect all textures that need processing
-    const texturesToProcess: Array<{
-      png: string | Buffer;
-      blpPath: string;
-    }> = [];
-    for (const texturePath of this.textures) {
-      const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
-      if (!await exists(fromPath)) {
-        console.warn('Skipping texture not found', fromPath);
-        continue;
-      }
-
-      // Read source PNG dimensions once so we can compute the target size for current limit
-      const maxSize = this.config.maxTextureSize ?? Infinity;
-      let width = 0;
-      let height = 0;
-      try {
-        const meta = await sharp(fromPath).metadata();
-        width = meta.width ?? 0;
-        height = meta.height ?? 0;
-      } catch (err) {
-        console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
-        console.log(await statfs(fromPath));
-      }
-
-      // Compute target size for current limit; if limit increased, target grows accordingly
-      const scale = Math.min(1, maxSize / Math.max(width, height));
-      const targetWidth = Math.round(width * scale);
-      const targetHeight = Math.round(height * scale);
-
-      // Skip only if the existing BLP exactly matches the target size
-      const debug = false;
-      const blpPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
-      exportedTexturePaths.push(blpPath);
-      if (await exists(blpPath) && !this.texturesOverwrite.has(texturePath)) {
-        const size = readBlpSizeSync(blpPath);
-        if (!this.config.overrideTextures && size && size.width === targetWidth && size.height === targetHeight) {
-          debug && console.log('Skipping existing texture', blpPath);
-          continue;
+    // Collect all textures that need processing. Metadata reads and skip
+    // checks run concurrently; the per-texture work is I/O + PNG header
+    // decoding, which serialized this loop before.
+    const texturesToProcess: BlpConvertItem[] = [];
+    const collected = await workerPool(
+      maxConcurrency,
+      Array.from(this.textures).map((texturePath) => async (): Promise<{ exportedPath: string, item?: BlpConvertItem } | undefined> => {
+        const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
+        // Direct pipeline: pixel data comes from the texture-source registry
+        // (raw WoW BLP via raw-client, or composited PNG bytes) instead of an
+        // exported PNG file.
+        const source: TextureSource | undefined = getTextureSource(texturePath);
+        let rawBlp2: Buffer | undefined;
+        if (!source && !await exportAssetExists(fromPath)) {
+          console.warn('Skipping texture not found', fromPath);
+          return undefined;
         }
-      }
 
-      // Now we need to export the texture again and resize it if needed
-      let pngInput: string | Buffer = fromPath;
-      if (this.config.maxTextureSize) {
+        // Read source dimensions once so we can compute the target size for current limit
+        const maxSize = this.config.maxTextureSize ?? Infinity;
+        let width = 0;
+        let height = 0;
         try {
-          if ((width > targetWidth) || (height > targetHeight)) {
-            debug && console.log('Resizing texture', fromPath, width, height, 'to', targetWidth, targetHeight);
-            pngInput = await resizePng(fromPath, targetWidth, targetHeight);
+          if (source?.kind === 'blp') {
+            rawBlp2 = await getRawWowFile(source.fileDataID);
+            width = rawBlp2.readUInt32LE(12);
+            height = rawBlp2.readUInt32LE(16);
+          } else if (source?.kind === 'png') {
+            const meta = await sharp(source.png).metadata();
+            width = meta.width ?? 0;
+            height = meta.height ?? 0;
+          } else {
+            const meta = await sharpFromExportAsset(fromPath).metadata();
+            width = meta.width ?? 0;
+            height = meta.height ?? 0;
           }
         } catch (err) {
-          console.warn('Failed to read PNG metadata, proceeding without resize:', fromPath, err);
+          console.warn('Failed to read texture metadata, proceeding without resize:', fromPath, err);
         }
+
+        // Compute target size for current limit; if limit increased, target grows accordingly
+        const scale = Math.min(1, maxSize / Math.max(width, height));
+        const targetWidth = Math.round(width * scale);
+        const targetHeight = Math.round(height * scale);
+
+        // Skip only if the existing BLP exactly matches the target size
+        const blpPath = path.join(assetPath, this.config.assetPrefix, texturePath.replace('.png', '.blp'));
+        if (await exists(blpPath) && !this.texturesOverwrite.has(texturePath)) {
+          const size = readBlpSizeSync(blpPath);
+          if (!this.config.overrideTextures && size && size.width === targetWidth && size.height === targetHeight) {
+            return { exportedPath: blpPath };
+          }
+        }
+
+        const needsResize = !!this.config.maxTextureSize && ((width > targetWidth) || (height > targetHeight));
+        const resizeTo = needsResize ? { width: targetWidth, height: targetHeight } : undefined;
+
+        if (source?.kind === 'blp' && rawBlp2) {
+          // Decode + resize + encode all happen in the worker.
+          return { exportedPath: blpPath, item: { blp2: rawBlp2, resizeTo, blpPath } };
+        }
+        if (source?.kind === 'png') {
+          // Copy so transferring the buffer to a worker doesn't detach the registry's copy.
+          return { exportedPath: blpPath, item: { png: Buffer.from(source.png), resizeTo, blpPath } };
+        }
+        // Legacy file path: the file bytes are read on the main thread by
+        // pngsToBlps, and the resize (if any) runs inside the BLP worker.
+        return { exportedPath: blpPath, item: { png: fromPath, resizeTo, blpPath } };
+      }),
+    );
+
+    for (const entry of collected) {
+      if (!entry) continue;
+      exportedTexturePaths.push(entry.exportedPath);
+      if (entry.item) {
+        texturesToProcess.push(entry.item);
+        writeCount++;
       }
-      writeCount++;
-      texturesToProcess.push({ png: pngInput, blpPath });
     }
 
     // Process textures in parallel using the new non-blocking conversion

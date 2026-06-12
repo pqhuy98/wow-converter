@@ -1,16 +1,21 @@
 import chalk from 'chalk';
 import { createHash } from 'crypto';
-import { writeFile } from 'fs/promises';
 import _ from 'lodash';
 import path from 'path';
 
-import { MDL } from '@/lib/formats/mdl/mdl';
-import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
-import { drawPngsOnBasePng, PngDraw } from '@/lib/formats/png';
+import {
+  applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture,
+} from '@/lib/converter/character/utils';
 import {
   ANIM_NAMES, AttackTag, getWc3AnimName, getWowAnimName,
-} from '@/lib/objmdl/animation/animation_mapper';
-import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+} from '@/lib/converter/wow-model/animation/animation-mapper';
+import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
+import { writeExportAsset } from '@/lib/export-asset-store';
+import { profileScope, profileSync } from '@/lib/export-profile';
+import { MDL } from '@/lib/formats/mdl/mdl';
+import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
+import { forkCollectionModel } from '@/lib/formats/mdl/modify/fork-collection-model';
+import { drawPngsOnBasePng, PngDraw } from '@/lib/formats/png';
 import { ExportCharacterParams, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { fetchCharacterCustomization } from '@/lib/wowhead-client/character-customization';
 import { EquipmentSlot } from '@/lib/wowhead-client/item-armor';
@@ -18,10 +23,9 @@ import { CharacterData } from '@/lib/wowhead-client/objects';
 import { ZamExpansion } from '@/lib/wowhead-client/zam-url';
 
 import { Model } from '../../common/models';
+import { isDirectPipeline } from '../../common/pipeline';
 import { InventoryType } from '../item-mapper';
-import {
-  applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture,
-} from '../utils';
+import { exportCharacterDirectAsModel } from './character-direct';
 import {
   EquipmentSlotData,
   filterCollectionGeosets,
@@ -43,27 +47,37 @@ export async function exportCharacterAsMdl({
   attackTag: AttackTag | undefined
 }): Promise<MDL> {
   // Export the base model
-  const prep = await prepareCharacterExport(metaData, expansion);
+  const prep = await profileScope('prepareCharacterExport', () => prepareCharacterExport(metaData, expansion));
   const start = performance.now();
   !ctx.config.isBulkExport && console.log('wow.export character - race:', prep.rpcParams.race, 'gender:', prep.rpcParams.gender);
-  const result = await wowExportClient.exportCharacter({
+  // The full RPC body shape is kept even in direct mode: the export suffix
+  // (part of the model name) is derived from its JSON form.
+  const rpcBody = {
     ...prep.rpcParams,
     excludeAnimationIds: getExcludedAnimIds(keepCinematic, attackTag),
-  });
+  };
+
+  let charMdl: MDL;
+  if (isDirectPipeline()) {
+    charMdl = (await profileScope('exportBaseDirect', () => exportCharacterDirectAsModel(ctx, rpcBody))).mdl;
+  } else {
+    charMdl = await profileScope('exportBaseLegacy', async () => {
+      const result = await wowExportClient.exportCharacter(rpcBody);
+      const baseDir = await wowExportClient.getAssetDir();
+      const relative = path.relative(baseDir, result.exportPath);
+      return (await ctx.assetManager.parse(relative, true)).mdl;
+    });
+  }
   console.log('wow.export character took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
-  const baseDir = await wowExportClient.getAssetDir();
-  const relative = path.relative(baseDir, result.exportPath);
-  const charMdl = (await ctx.assetManager.parse(relative, true)).mdl;
-
   // Replace the base texture with the prebaked texture
-  await applyPrebakedTextrure(ctx, charMdl, prep);
-  await applyEquipmentsBodyTextures(ctx, charMdl, prep, expansion);
-  await applyCloakTexture(ctx, charMdl, prep.equipmentSlots);
+  await profileScope('applyPrebakedTexture', () => applyPrebakedTextrure(ctx, charMdl, prep));
+  await profileScope('applyEquipmentsBodyTextures', () => applyEquipmentsBodyTextures(ctx, charMdl, prep, expansion));
+  await profileScope('applyCloakTexture', () => applyCloakTexture(ctx, charMdl, prep.equipmentSlots));
 
   // Attach items with models
-  await attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots, metaData);
-  await applyCustomzationCollections(ctx, charMdl, metaData, prep, expansion);
+  await profileScope('attachEquipmentsWithModel', () => attachEquipmentsWithModel(ctx, charMdl, prep.equipmentSlots, metaData));
+  await profileScope('applyCustomzationCollections', () => applyCustomzationCollections(ctx, charMdl, metaData, prep, expansion));
 
   // If the item has trousers, remove the tabard geoset
   if (charMdl.geosets.some((g) => g.name.startsWith('Trousers') && g.name !== 'Trousers1')) {
@@ -71,7 +85,7 @@ export async function exportCharacterAsMdl({
   }
 
   // Apply replaceable textures
-  await applyReplaceableTextures(ctx, charMdl, prep.replaceableTextures);
+  await profileScope('applyReplaceableTextures', () => applyReplaceableTextures(ctx, charMdl, prep.replaceableTextures));
 
   return charMdl;
 }
@@ -97,19 +111,21 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
   const equipmentSlots: EquipmentSlotData[] = [];
 
   const slotIds = Object.values(EquipmentSlot).filter((v) => typeof v === 'number') as number[];
-  for (const slotId of slotIds) {
-    const itemId = metadata.Equipment?.[slotId.toString()];
-    if (!itemId) continue;
-    try {
-      const itemData = await processItemData({
-        expansion, type: 'item', displayId: itemId, slotId,
-      }, race, gender, clazz);
-      equipmentSlots.push({ slotId, data: itemData });
-    } catch (e) {
-      console.error(chalk.red(`Failed to process item ${itemId} for slot ${slotId}: ${e}`));
-      continue;
+  await profileScope('processEquipmentItems', async () => {
+    for (const slotId of slotIds) {
+      const itemId = metadata.Equipment?.[slotId.toString()];
+      if (!itemId) continue;
+      try {
+        const itemData = await profileScope(`processItem/${itemId}`, () => processItemData({
+          expansion, type: 'item', displayId: itemId, slotId,
+        }, race, gender, clazz));
+        equipmentSlots.push({ slotId, data: itemData });
+      } catch (e) {
+        console.error(chalk.red(`Failed to process item ${itemId} for slot ${slotId}: ${e}`));
+        continue;
+      }
     }
-  }
+  });
 
   console.log('Equipments:', equipmentSlots.map((s) => getEquipmentSlotName(s.slotId)));
 
@@ -166,11 +182,11 @@ async function checkCharacterFileDataIdOverride(metadata: CharacterData, expansi
 }
 
 async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, metadata: CharacterData, prep: Prep, expansion: ZamExpansion) {
-  const charCus = await fetchCharacterCustomization({
+  const charCus = await profileScope('fetchCharCustomization', () => fetchCharacterCustomization({
     expansion,
     type: 'character-customization',
     chrModelId: prep.chrModelId,
-  });
+  }));
 
   const customizations = metadata.Creature?.CreatureCustomizations ?? [];
   const collections = new Map<number, [Model, Set<number>]>();
@@ -182,14 +198,15 @@ async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, me
       const customization = customizations.find((c) => c.optionId === option.Id && c.choiceId === choice.Id);
       if (!customization) continue;
       for (const element of choice.Elements) {
-        if (element.SkinnedModel && (element.VariationChoiceID <= 0 || choiceIds.has(element.VariationChoiceID))) {
-          const collectionFileId = element.SkinnedModel.CollectionFileDataID;
+        const skinnedModel = element.SkinnedModel;
+        if (skinnedModel && (element.VariationChoiceID <= 0 || choiceIds.has(element.VariationChoiceID))) {
+          const collectionFileId = skinnedModel.CollectionFileDataID;
           if (!collections.has(collectionFileId)) {
-            const collectionModel = await exportModelFileIdAsMdl(ctx, element.SkinnedModel.CollectionFileDataID, {});
-            collections.set(element.SkinnedModel.CollectionFileDataID, [collectionModel, new Set<number>()]);
+            const collectionModel = await profileScope(`exportCustomizationCollection/${collectionFileId}`, () => exportModelFileIdAsMdl(ctx, skinnedModel.CollectionFileDataID, {}));
+            collections.set(skinnedModel.CollectionFileDataID, [collectionModel, new Set<number>()]);
           }
           const [, geosetIds] = collections.get(collectionFileId)!;
-          const geosetId = element.SkinnedModel.GeosetType * 100 + element.SkinnedModel.GeosetID;
+          const geosetId = skinnedModel.GeosetType * 100 + skinnedModel.GeosetID;
           geosetIds.add(geosetId);
         }
         if (element.Material) {
@@ -218,7 +235,7 @@ async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, me
     }
   }
   const debug = false;
-  await Promise.all(Array.from(collections.entries()).map(async ([fileDataId, [model, geosetIds]]) => {
+  await Promise.all(Array.from(collections.entries()).map(async ([fileDataId, [model, geosetIds]]) => profileScope(`mergeCustomizationCollection/${fileDataId}`, async () => {
     debug && console.log('applyCustomzationCollections', fileDataId, geosetIds);
     const mdl = model.mdl;
     debug && console.log('model.geosets', mdl.geosets.map((g) => g.wowData.submeshId));
@@ -232,13 +249,14 @@ async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, me
       }
     });
 
-    await applyReplaceableTextures(ctx, mdl, replaceableTextures);
+    await profileScope('applyReplaceableTextures', () => applyReplaceableTextures(ctx, mdl, replaceableTextures));
     charMdl.modify.addMdlCollectionItemToModel(mdl);
-  }));
+  })));
 }
 
 async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equipmentSlots: EquipmentSlotData[], metadata: CharacterData) {
-  const collections = new Map<number, Model>();
+  /** Pristine collection exports — never mutated; attach copies come from forkCollectionModel. */
+  const collectionTemplates = new Map<number, Model>();
   const attachmentResults: {
     attachmentId: WoWAttachmentID | undefined,
     itemMdl: MDL,
@@ -250,83 +268,100 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
   // Attach individual item model to the character model
   const attachItemModel = async (slotData: EquipmentSlotData, idx: number, attachmentId: WoWAttachmentID | undefined) => {
-    debug && console.log('attachItemModel', attachmentId != null ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
-
     const itemData = slotData.data;
-
     const fileDataId = itemData.modelFiles[idx].fileDataId;
-    const itemReplaceableTextures = Object.fromEntries(itemData.modelTextureFiles[idx].map((f) => [f.componentId, f.fileDataId]));
-    debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTextures);
 
-    const itemModel = !collections.has(fileDataId)
-      ? await exportModelFileIdAsMdl(ctx, fileDataId, {})
-      : _.cloneDeep(collections.get(fileDataId)!);
-    const itemMdl = itemModel.mdl;
+    await profileScope(`attachGear/${fileDataId}`, async () => {
+      debug && console.log('attachItemModel', attachmentId != null ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
 
-    await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures);
+      const itemReplaceableTextures = Object.fromEntries(itemData.modelTextureFiles[idx].map((f) => [f.componentId, f.fileDataId]));
+      debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTextures);
 
-    const isCollection = collections.has(fileDataId) || canAddMdlCollectionItemToModel(charMdl, itemMdl);
-
-    if (isCollection) {
-      if (!collections.has(fileDataId)) {
-        collections.set(fileDataId, _.cloneDeep(itemModel));
+      if (collectionTemplates.has(fileDataId)) {
+        const template = collectionTemplates.get(fileDataId)!;
+        const enabledGeosets = profileSync('filterCollectionGeosets', () => filterCollectionGeosets(equipmentSlots, slotData, template.mdl));
+        const itemModel = forkCollectionModel(template, enabledGeosets);
+        const itemMdl = itemModel.mdl;
+        await profileScope('applyReplaceableTextures', () => applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures));
+        charMdl.modify.addMdlCollectionItemToModel(itemMdl);
+        attachmentResults.push({
+          attachmentId, itemMdl, ok: true, fileDataId,
+        });
+        return;
       }
 
-      const debug = false;
-      debug && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
-      const enabledGeosets = filterCollectionGeosets(equipmentSlots, slotData, itemMdl);
+      const exported = await profileScope('exportItem', () => exportModelFileIdAsMdl(ctx, fileDataId, {}), { fileDataId });
+      const isCollection = canAddMdlCollectionItemToModel(charMdl, exported.mdl);
 
-      debug && console.log('all available geosets', fileDataId, itemMdl.geosets.map((g) => `${getSubmeshName(g.wowData.submeshId)} (${g.wowData.submeshId})`));
+      let itemModel: Model;
+      if (isCollection) {
+        collectionTemplates.set(fileDataId, exported);
+        const enabledGeosets = profileSync('filterCollectionGeosets', () => filterCollectionGeosets(equipmentSlots, slotData, exported.mdl));
+        itemModel = forkCollectionModel(exported, enabledGeosets);
+      } else {
+        itemModel = exported;
+      }
 
-      itemMdl.geosets = enabledGeosets;
-      debug && console.log('chosen geosets', itemMdl.geosets.map((g) => g.name));
+      const itemMdl = itemModel.mdl;
 
-      charMdl.modify.addMdlCollectionItemToModel(itemMdl);
+      await profileScope('applyReplaceableTextures', () => applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures));
+
+      if (isCollection) {
+        const debugCollection = false;
+        debugCollection && console.log('itemData.slotId', itemData.slotId, itemData.slotId ? getEquipmentSlotName(itemData.slotId) : 'null');
+        debugCollection && console.log('all available geosets', fileDataId, collectionTemplates.get(fileDataId)!.mdl.geosets.map((g) => `${getSubmeshName(g.wowData.submeshId)} (${g.wowData.submeshId})`));
+        debugCollection && console.log('chosen geosets', itemMdl.geosets.map((g) => g.name));
+
+        charMdl.modify.addMdlCollectionItemToModel(itemMdl);
+        attachmentResults.push({
+          attachmentId, itemMdl, ok: true, fileDataId,
+        });
+        return;
+      }
+
+      // not a collection, add to bone — exported model used directly
+
+      if (attachmentId == null) {
+        console.error(chalk.red(`Cannot add item ${fileDataId} to model as bone because no attachment id is provided.`));
+        return;
+      }
+
+      const attachment = charMdl.wowAttachments.find((a) => a.wowAttachmentId === attachmentId);
+      if (!attachment) {
+        console.error(chalk.red(`Cannot find bone for wow attachment ${attachmentId} (${getWoWAttachmentName(attachmentId)})`));
+        if (charMdl.wowAttachments.length === 0) {
+          console.error(chalk.red(`No WoW attachments data found in this model ${charMdl.model.name}`));
+        }
+        attachmentResults.push({
+          attachmentId, itemMdl, ok: false, fileDataId,
+        });
+        return;
+      }
+
+      if (attachmentId === WoWAttachmentID.HandLeft) {
+        const shouldFlipY = itemData.flags & 256;
+        if (shouldFlipY) {
+          itemMdl.modify.flipY();
+        }
+      }
+
+      // Apply item visual
+      if (metadata.ItemEffects && metadata.ItemEffects.some((v) => v.Slot === slotData.slotId)) {
+        const modelFileId = metadata.ItemEffects.find((v) => v.Slot === slotData.slotId)!.Model;
+        console.log('Apply item visual', modelFileId);
+        const visualMdl = await profileScope(`exportItemVisual/${modelFileId}`, () => exportModelFileIdAsMdl(ctx, modelFileId, {}));
+        itemMdl.wowAttachments.forEach((a) => {
+          itemMdl.modify.addMdlItemToBone(_.cloneDeep(visualMdl.mdl), a.bone);
+        });
+      }
+
+      charMdl.modify.addMdlItemToBone(itemMdl, attachment.bone);
       attachmentResults.push({
         attachmentId, itemMdl, ok: true, fileDataId,
       });
-      return;
-    }
-
-    // not a collection, add to bone
-
-    if (attachmentId == null) {
-      console.error(chalk.red(`Cannot add item ${fileDataId} to model as bone because no attachment id is provided.`));
-      return;
-    }
-
-    const attachment = charMdl.wowAttachments.find((a) => a.wowAttachmentId === attachmentId);
-    if (!attachment) {
-      console.error(chalk.red(`Cannot find bone for wow attachment ${attachmentId} (${getWoWAttachmentName(attachmentId)})`));
-      if (charMdl.wowAttachments.length === 0) {
-        console.error(chalk.red(`No WoW attachments data found in this model ${charMdl.model.name}`));
-      }
-      attachmentResults.push({
-        attachmentId, itemMdl, ok: false, fileDataId,
-      });
-      return;
-    }
-
-    if (attachmentId === WoWAttachmentID.HandLeft) {
-      const shouldFlipY = itemData.flags & 256;
-      if (shouldFlipY) {
-        itemMdl.modify.flipY();
-      }
-    }
-
-    // Apply item visual
-    if (metadata.ItemEffects && metadata.ItemEffects.some((v) => v.Slot === slotData.slotId)) {
-      const modelFileId = metadata.ItemEffects.find((v) => v.Slot === slotData.slotId)!.Model;
-      console.log('Apply item visual', modelFileId);
-      const visualMdl = await exportModelFileIdAsMdl(ctx, modelFileId, {});
-      itemMdl.wowAttachments.forEach((a) => {
-        itemMdl.modify.addMdlItemToBone(_.cloneDeep(visualMdl.mdl), a.bone);
-      });
-    }
-
-    charMdl.modify.addMdlItemToBone(itemMdl, attachment.bone);
-    attachmentResults.push({
-      attachmentId, itemMdl, ok: true, fileDataId,
+    }, {
+      slot: slotData.slotId,
+      attachment: attachmentId ?? -1,
     });
   };
 
@@ -500,11 +535,11 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
     `);
   }
 
-  const charCus = await fetchCharacterCustomization({
+  const charCus = await profileScope('fetchCharCustomization', () => fetchCharacterCustomization({
     expansion,
     type: 'character-customization',
     chrModelId: prep.chrModelId,
-  });
+  }));
 
   // Wowhead overlays texture-only items onto the body compositor in a specific slot priority order (hr)
   // Reference (minified): viewer.min.js hr = [0,16,0,15,1,7,10,5,6,6,8,0,0,17,18,19,14,20,0,9,7,21,22,23,0,24,25,0]
@@ -548,34 +583,36 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
   const debug = false;
 
   const textureDraws: PngDraw[] = [];
-  for (const t of overlays) {
-    const section = charCus.TextureSections.find((s) => s.SectionType === t.componentId);
-    if (!section) {
-      console.error(chalk.red(`Texture section not found for file ${t.fileDataId} component ${t.componentId}`));
-      continue;
+  await profileScope('exportOverlayTextures', async () => {
+    for (const t of overlays) {
+      const section = charCus.TextureSections.find((s) => s.SectionType === t.componentId);
+      if (!section) {
+        console.error(chalk.red(`Texture section not found for file ${t.fileDataId} component ${t.componentId}`));
+        continue;
+      }
+      debug && console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
+      const pngPath = path.join(ctx.config.wowExportAssetDir, await exportTexture(t.fileDataId));
+      textureDraws.push({
+        pngPath,
+        x: section.X,
+        y: section.Y,
+        width: section.Width,
+        height: section.Height,
+      });
     }
-    debug && console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
-    const pngPath = path.join(ctx.config.wowExportAssetDir, await exportTexture(t.fileDataId));
-    textureDraws.push({
-      pngPath,
-      x: section.X,
-      y: section.Y,
-      width: section.Width,
-      height: section.Height,
-    });
-  }
+  });
 
   const basePng = path.join(ctx.config.wowExportAssetDir, baseTexture.wowData.pngPath);
   debug && console.log('Base PNG:', basePng);
   debug && console.log('Texture draws:', textureDraws);
 
-  const newPng = await drawPngsOnBasePng(basePng, textureDraws);
+  const newPng = await profileScope('compositeBodyTexture', () => drawPngsOnBasePng(basePng, textureDraws));
 
   let newPngName = createHash('md5').update(JSON.stringify({ basePng, textureDraws })).digest('hex');
   newPngName = `${ctx.outputFile}-${newPngName}`;
 
   const newPngPath = path.join(ctx.config.wowExportAssetDir, `${newPngName}.png`);
-  await writeFile(newPngPath, newPng);
+  await profileScope('writeBodyTexture', () => writeExportAsset(newPngPath, newPng));
   const newBlpPath = path.join(ctx.config.assetPrefix, path.relative(ctx.config.wowExportAssetDir, newPngPath))
     .replace('.png', '.blp');
 

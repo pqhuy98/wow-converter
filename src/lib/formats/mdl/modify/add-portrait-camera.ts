@@ -1,4 +1,5 @@
 import { Vector3 } from '@/lib/math/common';
+import { seededRandom } from '@/lib/math/random';
 import { V3 } from '@/lib/math/vector';
 
 import { iterateNodesAtTimestamp } from '../mdl-traverse';
@@ -48,10 +49,12 @@ export function addPortraitCamera(this: MDLModify, standSequenceName: string = '
     Root: 1,
   }[cameraBone.name]!;
 
+  // Deterministic per-model randomness so repeated exports are byte-identical.
+  const rand = seededRandom(`portrait-camera:${this.mdl.model.name}`);
   const cameraPosition = V3.sum(nodePos, [
     distanceScale * this.mdl.model.maximumExtent[0],
-    0.5 * (Math.random() - 0.5) * this.mdl.model.maximumExtent[1],
-    (Math.random() * 0.2 - 0.1) * this.mdl.model.maximumExtent[2],
+    0.5 * (rand() - 0.5) * this.mdl.model.maximumExtent[1],
+    (rand() * 0.2 - 0.1) * this.mdl.model.maximumExtent[2],
   ]);
   console.log('Generated portrait camera looking at bone', cameraBone.name);
   // console.log('Target position', nodePos);

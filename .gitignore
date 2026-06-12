@@ -16,6 +16,7 @@ maps/*
 !maps/test-*.w3x/
 maps/test-*.w3x/*.mdx
 maps/test-*.w3x/wow/**/*.blp
+tests/wow-native/out
 # Logs
 logs
 *.log

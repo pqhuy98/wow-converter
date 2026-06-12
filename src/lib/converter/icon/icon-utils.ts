@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 
-import { FRAME_FILE_MAP, STYLE_FOLDER_MAP } from './constants';
+import { FRAME_FILE_MAP, STYLE_FOLDER_MAP } from '@/lib/converter/icon/constants';
+
 import type { IconFrame, IconSize, IconStyle } from './schemas';
 
 const REMOVE_COLORS_THRESHOLD = 1;

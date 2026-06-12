@@ -3,15 +3,17 @@ import csv from 'csv-parser';
 import {
   createReadStream,
 } from 'fs';
-import { exists } from 'fs-extra';
 import { glob } from 'glob';
 import path from 'path';
 
 import { getCreaturesInTile } from '@/lib/azerothcore-client/creatures';
+import {
+  exportAssetExists,
+} from '@/lib/export-asset-store';
+import { Config } from '@/lib/global-config';
+import { EulerRotation, Vector3 } from '@/lib/math/common';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
-import { Config } from '../../global-config';
-import { EulerRotation, Vector3 } from '../../math/common';
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../../math/rotation';
 import { V3 } from '../../math/vector';
 import { AssetManager, computeAbsoluteMinMaxExtents } from './asset-manager';
@@ -200,7 +202,7 @@ export class WowObjectManager {
     }
 
     const childrenCsvPath = this.full(path.join(`${objectPath}_ModelPlacementInformation.csv`));
-    if (await exists(childrenCsvPath)) {
+    if (await exportAssetExists(childrenCsvPath)) {
       const rows = await this.parsePlacementCsv(childrenCsvPath);
       await Promise.all(rows.map(async (row) => {
         const id = `${row.FileDataID}:${row.ModelFile}:${row.PositionX}:${row.PositionY}:${row.PositionZ}`;

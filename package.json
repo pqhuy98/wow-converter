@@ -12,7 +12,9 @@
     "lint": "eslint src/**/*.ts --fix",
     "dev": "run-p dev:server dev:webui",
     "dev:server": "bun --watch src/server/index.ts",
+    "dev:wow-data-server": "bun --watch src/wow-data-server/index.ts",
     "dev:webui": "cd webui && bun run dev",
+    "wow-data-server": "bun src/wow-data-server/index.ts",
     "start": "set NODE_ENV=production && bun src/server/index.ts",
     "test": "bun tests/index.ts",
     "test:fresh": "bun tests/index.ts --fresh",
@@ -29,6 +31,8 @@
     "build:app": "run-p build:webui build:wow.export build:bun && run-s build:copy zip",
     "build:server": "bun run clean && run-p build:webui",
     "build": "bun run clean && bun run build:app",
+    "build:blp:win": "cd node-images-blp && npx node-gyp rebuild && shx cp build/Release/binding.node ../bin/blp-preview/win32-x64-binding.node",
+    "build:blp:linux": "cd node-images-blp && npx node-gyp rebuild && cp build/Release/binding.node ../bin/blp-preview/linux-x64-binding.node",
     "we": "./wow.export/bin/win-x64/wow.export.exe"
   },
   "devDependencies": {

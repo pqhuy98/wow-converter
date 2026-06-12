@@ -1,0 +1,84 @@
+import chalk from 'chalk';
+
+import { readExportAssetUtf8 } from '@/lib/export-asset-store';
+import { Config } from '@/lib/global-config';
+
+export interface ObjMaterial {
+  name: string;
+  Ns?: number;
+  Ka?: [number, number, number];
+  Ks?: [number, number, number];
+  Ke?: [number, number, number];
+  Ni?: number;
+  illum?: number;
+  map_Kd?: string;
+  map_d?: string;
+}
+
+export class MTLFile {
+  materials: ObjMaterial[] = [];
+
+  constructor(private filePath: string, private config: Config) {}
+
+  async parse(): Promise<this> {
+    let mtlContent: string;
+    try {
+      !this.config.isBulkExport && console.log('Loading:', chalk.gray(this.filePath));
+      mtlContent = await readExportAssetUtf8(this.filePath);
+    } catch (e) {
+      console.error('Cannot read mtl file', this.filePath, ' - skip it');
+      return this;
+    }
+
+    const lines = mtlContent.split('\n');
+    let currentMaterial: ObjMaterial | null = null;
+
+    lines.forEach((line) => {
+      const trimmedLine = line.trim();
+      if (trimmedLine.length === 0 || trimmedLine.startsWith('#')) {
+        return; // Ignore empty lines and comments
+      }
+
+      const [key, ...values] = trimmedLine.split(/\s+/);
+
+      switch (key) {
+        case 'newmtl':
+          if (currentMaterial) {
+            this.materials.push(currentMaterial);
+          }
+          currentMaterial = { name: values[0] };
+          break;
+        case 'Ns':
+          if (currentMaterial) currentMaterial.Ns = parseFloat(values[0]);
+          break;
+        case 'Ka':
+        case 'Ks':
+        case 'Ke':
+          if (currentMaterial) {
+            currentMaterial[key] = values.map(Number) as [number, number, number];
+          }
+          break;
+        case 'Ni':
+          if (currentMaterial) currentMaterial.Ni = parseFloat(values[0]);
+          break;
+        case 'illum':
+          if (currentMaterial) currentMaterial.illum = parseInt(values[0], 10);
+          break;
+        case 'map_Kd':
+        case 'map_d':
+          if (currentMaterial) {
+            currentMaterial[key] = values.join(' ');
+          }
+          break;
+        default:
+          console.warn(`Unknown property ${key}`);
+          break;
+      }
+    });
+
+    if (currentMaterial) {
+      this.materials.push(currentMaterial);
+    }
+    return this;
+  }
+}

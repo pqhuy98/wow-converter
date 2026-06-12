@@ -2,6 +2,10 @@ import fsExtra from 'fs-extra';
 import path from 'path';
 import sharp from 'sharp';
 
+import { exportTexture } from '@/lib/converter/character/utils';
+import {
+  exportAssetExists, readExportAsset, sharpFromExportAsset,
+} from '@/lib/export-asset-store';
 import { pngsToBlps } from '@/lib/formats/blp/blp';
 import { getPngDimensions } from '@/lib/formats/png';
 import { getDefaultConfig } from '@/lib/global-config';
@@ -103,20 +107,11 @@ export class IconExporter {
 
     // Check if PNG already exists, if not export it
     let finalPath = resolvedPath;
-    if (!await fsExtra.pathExists(resolvedPath)) {
-      // Export texture if not already exported
-      const textures = await wowExportClient.exportTextures([fileDataID]);
-      if (textures.length === 0) {
-        throw new Error(`Failed to export texture: ${wowTexturePath}`);
-      }
-
-      const exportedPngPath = textures.find((t) => /\.png$/i.test(t.file))?.file;
-      if (!exportedPngPath) {
-        throw new Error('Failed to export texture as PNG');
-      }
+    if (!await exportAssetExists(resolvedPath)) {
+      const relPng = await exportTexture(fileDataID);
+      const resolvedExportedPath = path.resolve(this.assetDir, relPng);
 
       // Verify exported path is within asset directory
-      const resolvedExportedPath = path.resolve(exportedPngPath);
       if (!resolvedExportedPath.startsWith(resolvedAssetDir)) {
         throw new Error('Access denied: exported path outside asset directory');
       }
@@ -124,7 +119,7 @@ export class IconExporter {
       finalPath = resolvedExportedPath;
 
       // Check if file exists after export
-      if (!await fsExtra.pathExists(finalPath)) {
+      if (!await exportAssetExists(finalPath)) {
         throw new Error('Texture file not found after export');
       }
     }
@@ -136,7 +131,7 @@ export class IconExporter {
    * Resize PNG using normal algorithm (shift 1px up-left to match AI resize alignment)
    */
   private async resizePngNormal(pngPath: string, targetSize: number): Promise<Buffer> {
-    const resizedBuffer = await sharp(pngPath)
+    const resizedBuffer = await sharpFromExportAsset(pngPath)
       .resize(targetSize + 1, targetSize + 1, {
         fit: 'fill',
         kernel: 'lanczos3',
@@ -168,7 +163,7 @@ export class IconExporter {
 
     // If size is "original", use original image without resizing
     if (size === 'original') {
-      pngBuffer = await fsExtra.readFile(pngPath);
+      pngBuffer = await readExportAsset(pngPath);
     } else {
       // Extract target size from size option ('64x64' -> 64, '128x128' -> 128, '256x256' -> 256)
       const targetSize = size === '64x64' ? 64
@@ -181,7 +176,7 @@ export class IconExporter {
 
       // Only resize if source is different from target
       if (sourceSize === targetSize) {
-        pngBuffer = await fsExtra.readFile(pngPath);
+        pngBuffer = await readExportAsset(pngPath);
       } else if (resizeMode === 'ai' && sourceSize < targetSize) {
         // AI resize - only if source is smaller than target
         const finalPngPath = await this.resizeAiPngWithCache(pngPath, size);

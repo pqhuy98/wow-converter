@@ -6,12 +6,13 @@ import { exists } from 'fs-extra';
 import _ from 'lodash';
 import { join } from 'path';
 
+import { Config } from '@/lib/global-config';
+import { toMap, workerPool } from '@/lib/utils';
+
 import {
   Character, CharacterExporter, displayID, wowhead,
 } from '../converter/character';
 import { guessAttackTag, inventoryTypeToEquipmentSlot } from '../converter/character/item-mapper';
-import { Config } from '../global-config';
-import { toMap, workerPool } from '../utils';
 
 const prismaClient = new PrismaClient();
 
@@ -210,8 +211,10 @@ export async function exportCreatureModels(
       console.log('optimize models and textures took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       start = performance.now();
-      await ex.writeAllTextures(outputPath);
-      await ex.writeAllModels(outputPath, config.mdx ? 'mdx' : 'mdl');
+      await Promise.all([
+        ex.writeAllTextures(outputPath),
+        ex.writeAllModels(outputPath, config.mdx ? 'mdx' : 'mdl'),
+      ]);
       console.log('write models and textures took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
 
       const end = performance.now();

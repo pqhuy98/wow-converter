@@ -3,11 +3,12 @@ import path from 'path';
 import {
   dataHeightMax, dataHeightMin, dataHeightToGameZ, distancePerTile, maxGameHeightDiff,
 } from '@/lib/constants';
+import { Vector3 } from '@/lib/math/common';
 import { ModificationType, Terrain } from '@/vendors/wc3maptranslator/data';
 import { IDoodadType, IUnitType, MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 
 import { getInitialTerrain } from '../../mapmodifier/terrain';
-import { Vector3 } from '../../math/common';
+import { seededRandom } from '../../math/random';
 import { degrees } from '../../math/rotation';
 import { V3 } from '../../math/vector';
 import { computeAbsoluteMinMaxExtents } from '../common/asset-manager';
@@ -434,6 +435,8 @@ function computeTerrainHeightMap(roots: WowObject[], config: MapExportConfig) {
   console.log({ ratio: ratioZ, height, width });
 
   const heightMap = Array.from({ length: height + 1 }, () => Array<number>(width + 1).fill(-1));
+  // Deterministic randomness so repeated map exports are byte-identical.
+  const random = seededRandom(`terrain-height-map:${width}x${height}`);
   roots.forEach((root) => {
     root.model!.mdl.geosets
       .forEach((geoset) => geoset.vertices.forEach((v) => {
@@ -453,8 +456,8 @@ function computeTerrainHeightMap(roots: WowObject[], config: MapExportConfig) {
           console.error('Out of bounds', { percent, position });
           throw new Error('Out of bounds');
         }
-        const iX = (Math.random() > 0.5 ? Math.round : Math.floor)(percent[0] * width);
-        const iY = (Math.random() > 0.5 ? Math.round : Math.floor)(percent[1] * height);
+        const iX = (random() > 0.5 ? Math.round : Math.floor)(percent[0] * width);
+        const iY = (random() > 0.5 ? Math.round : Math.floor)(percent[1] * height);
         // [Y is height][X is width]
         heightMap[iY][iX] = Math.max(heightMap[iY][iX], Math.max(0, Math.min(1, percent[2])));
       }));

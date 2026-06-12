@@ -1,7 +1,6 @@
 import { Creature } from '@/lib/azerothcore-client/creatures';
-
-import { MDL } from '../../formats/mdl/mdl';
-import { EulerRotation, Vector3 } from '../../math/common';
+import { MDL } from '@/lib/formats/mdl/mdl';
+import { EulerRotation, Vector3 } from '@/lib/math/common';
 
 export type WowObjectType = 'adt' | 'wmo' | 'm2' | 'gobj' | 'unit';
 

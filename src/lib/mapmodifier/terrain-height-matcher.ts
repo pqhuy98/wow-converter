@@ -1,16 +1,16 @@
 import _ from 'lodash';
 import { parseMDL } from 'war3-model';
 
-import { Doodad, Terrain } from '@/vendors/wc3maptranslator/data';
-
 import {
   dataHeightMax, dataHeightMin, distancePerTile, gameZToDataHeight, maxGameHeightDiff,
-} from '../constants';
+} from '@/lib/constants';
+import { nArray } from '@/lib/utils';
+import { Doodad, Terrain } from '@/vendors/wc3maptranslator/data';
+
 import { Vector2, Vector3 } from '../math/common';
 import { calculateTriangleSlope, findIntegerPointsInTriangle, getZProjectionOfXyInTriangle } from '../math/geometry';
 import { radians } from '../math/rotation';
 import { V3 } from '../math/vector';
-import { nArray } from '../utils';
 
 interface Face {
   vertices: [Vector3, Vector3, Vector3];

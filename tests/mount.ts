@@ -10,7 +10,7 @@ import {
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config, getDefaultConfig } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
-import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 

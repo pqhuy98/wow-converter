@@ -1,5 +1,5 @@
-import { AttackTag } from '@/lib/objmdl/animation/animation_mapper';
-import { WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { AttackTag } from '@/lib/converter/wow-model/animation/animation-mapper';
+import { WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
 
 export enum InventoryType {
   WEAPON = 13,

@@ -1,0 +1,712 @@
+/**
+ * ADT loader, ported from wow.export (src/js/3D/loaders/ADTLoader.js).
+ */
+import { ReadStringBlock } from '@/lib/wow/formats/adt/loader-generics';
+
+import { BufferWrapper } from '../buffer';
+import type { WDTLoader } from './wdt-loader';
+
+export interface ADTChunk {
+  flags: number;
+  indexX: number;
+  indexY: number;
+  nLayers: number;
+  nDoodadRefs: number;
+  holesHighRes: number[];
+  ofsMCLY: number;
+  ofsMCRF: number;
+  ofsMCAL: number;
+  sizeAlpha: number;
+  ofsMCSH: number;
+  sizeShadows: number;
+  areaID: number;
+  nMapObjRefs: number;
+  holesLowRes: number;
+  unk1: number;
+  lowQualityTextureMap: number[];
+  noEffectDoodad: bigint;
+  ofsMCSE: number;
+  numMCSE: number;
+  ofsMCLQ: number;
+  sizeMCLQ: number;
+  position: number[];
+  ofsMCCV: number;
+  ofsMCLW: number;
+  unk2: number;
+
+  // Sub-chunks
+  vertices?: number[];
+  vertexShading?: { r: number; g: number; b: number; a: number }[];
+  normals?: number[][];
+  blendBatches?: {
+    mbmhIndex: number; indexCount: number; indexFirst: number; vertexCount: number; vertexFirst: number;
+  }[];
+}
+
+export interface LiquidInstance {
+  chunkIndex: number;
+  instanceIndex: number;
+  liquidType: number;
+  liquidObject: number;
+  minHeightLevel: number;
+  maxHeightLevel: number;
+  xOffset: number;
+  yOffset: number;
+  width: number;
+  height: number;
+  bitmap: number[];
+  vertexData: {
+    height?: number[];
+    depth?: number[];
+    uv?: { x: number; y: number }[];
+  };
+  offsetExistsBitmap: number;
+  offsetVertexData: number;
+}
+
+export interface LiquidChunk {
+  attributes: { fishable: bigint | number; deep: bigint | number };
+  instances: LiquidInstance[];
+}
+
+export interface ADTHeader {
+  flags: number;
+  ofsMCIN: number;
+  ofsMTEX: number;
+  ofsMMDX: number;
+  ofsMMID: number;
+  ofsMWMO: number;
+  ofsMWID: number;
+  ofsMDDF: number;
+  ofsMODF: number;
+  ofsMFBO: number;
+  ofsMH20: number;
+  ofsMTXF: number;
+  unk: number[];
+}
+
+export interface TexChunkLayer {
+  textureId: number;
+  flags: number;
+  offsetMCAL: number;
+  effectID: number;
+}
+
+export interface TexChunk {
+  layers?: TexChunkLayer[];
+  alphaLayers?: number[][];
+}
+
+export interface TexParams {
+  flags: number;
+  height: number;
+  offset: number;
+  unk3: number;
+}
+
+export interface DoodadEntry {
+  mmidEntry: number;
+  uniqueId: number;
+  position: number[];
+  rotation: number[];
+  scale: number;
+  flags: number;
+}
+
+export interface WorldModelEntry {
+  mwidEntry: number;
+  uniqueId: number;
+  position: number[];
+  rotation: number[];
+  lowerBounds: number[];
+  upperBounds: number[];
+  flags: number;
+  doodadSet: number;
+  nameSet: number;
+  scale: number;
+}
+
+type ChunkHandlerMap = Record<number, (this: ADTLoader, data: BufferWrapper, chunkSize: number) => void>;
+
+export class ADTLoader {
+  data: BufferWrapper;
+
+  version?: number;
+
+  chunks!: ADTChunk[];
+
+  chunkIndex = 0;
+
+  texChunks!: TexChunk[];
+
+  wdt?: WDTLoader;
+
+  handlers!: ChunkHandlerMap;
+
+  header?: ADTHeader;
+
+  liquidChunks?: LiquidChunk[];
+
+  // Tex
+  textures?: Record<number, string>;
+
+  texParams?: TexParams[];
+
+  heightTextureFileDataIDs?: number[];
+
+  diffuseTextureFileDataIDs?: number[];
+
+  // Obj
+  m2Names?: Record<number, string>;
+
+  m2Offsets?: number[];
+
+  wmoNames?: Record<number, string>;
+
+  wmoOffsets?: number[];
+
+  models?: DoodadEntry[];
+
+  worldModels?: WorldModelEntry[];
+
+  doodadSets?: number[];
+
+  constructor(data: BufferWrapper) {
+    this.data = data;
+  }
+
+  /** Parse this ADT as a root file. */
+  loadRoot(): void {
+    this.chunks = new Array(16 * 16);
+    this.chunkIndex = 0;
+
+    this.handlers = ADTChunkHandlers;
+    this._load();
+  }
+
+  /** Parse this ADT as an object file. */
+  loadObj(): void {
+    this.handlers = ADTObjChunkHandlers;
+    this._load();
+  }
+
+  /** Parse this ADT as a texture file. */
+  loadTex(wdt: WDTLoader): void {
+    this.texChunks = new Array(16 * 16);
+    this.chunkIndex = 0;
+    this.wdt = wdt;
+
+    this.handlers = ADTTexChunkHandlers;
+    this._load();
+  }
+
+  /** Load the ADT file, parsing it. */
+  private _load(): void {
+    while (this.data.remainingBytes > 0) {
+      const chunkID = this.data.readUInt32LE();
+      const chunkSize = this.data.readUInt32LE();
+      const nextChunkPos = this.data.offset + chunkSize;
+
+      const handler = this.handlers[chunkID];
+      if (handler) handler.call(this, this.data, chunkSize);
+
+      // Ensure that we start at the next chunk exactly.
+      this.data.seek(nextChunkPos);
+    }
+  }
+}
+
+const ADTChunkHandlers: ChunkHandlerMap = {
+  // MVER (Version)
+  0x4D564552(data) {
+    this.version = data.readUInt32LE();
+    if (this.version !== 18) throw new Error(`Unexpected ADT version: ${this.version}`);
+  },
+
+  // MCNK
+  0x4D434E4B(data, chunkSize) {
+    const endOfs = data.offset + chunkSize;
+    const chunk: ADTChunk = {
+      flags: data.readUInt32LE(),
+      indexX: data.readUInt32LE(),
+      indexY: data.readUInt32LE(),
+      nLayers: data.readUInt32LE(),
+      nDoodadRefs: data.readUInt32LE(),
+      holesHighRes: data.readUInt8(8),
+      ofsMCLY: data.readUInt32LE(),
+      ofsMCRF: data.readUInt32LE(),
+      ofsMCAL: data.readUInt32LE(),
+      sizeAlpha: data.readUInt32LE(),
+      ofsMCSH: data.readUInt32LE(),
+      sizeShadows: data.readUInt32LE(),
+      areaID: data.readUInt32LE(),
+      nMapObjRefs: data.readUInt32LE(),
+      holesLowRes: data.readUInt16LE(),
+      unk1: data.readUInt16LE(),
+      lowQualityTextureMap: data.readInt16LE(8),
+      noEffectDoodad: data.readInt64LE(),
+      ofsMCSE: data.readUInt32LE(),
+      numMCSE: data.readUInt32LE(),
+      ofsMCLQ: data.readUInt32LE(),
+      sizeMCLQ: data.readUInt32LE(),
+      position: data.readFloatLE(3),
+      ofsMCCV: data.readUInt32LE(),
+      ofsMCLW: data.readUInt32LE(),
+      unk2: data.readUInt32LE(),
+    };
+    this.chunks[this.chunkIndex++] = chunk;
+
+    // Read sub-chunks.
+    while (data.offset < endOfs) {
+      const chunkID = data.readUInt32LE();
+      const subChunkSize = data.readUInt32LE();
+      const nextChunkPos = data.offset + subChunkSize;
+
+      const handler = RootMCNKChunkHandlers[chunkID];
+      if (handler) handler.call(chunk, data, subChunkSize);
+
+      // Ensure that we start at the next chunk exactly.
+      data.seek(nextChunkPos);
+    }
+  },
+
+  // MH2O (Liquids)
+  0x4D48324F(data) {
+    const base = data.offset;
+    const dataOffsets = new Set<number>();
+
+    const chunkHeaders = new Array<{ offsetInstances: number; layerCount: number; offsetAttributes: number }>(256);
+    const chunks = new Array<LiquidChunk>(256);
+    this.liquidChunks = chunks;
+
+    for (let i = 0; i < 256; i++) {
+      chunkHeaders[i] = {
+        offsetInstances: data.readUInt32LE(),
+        layerCount: data.readUInt32LE(),
+        offsetAttributes: data.readUInt32LE(),
+      };
+
+      if (chunkHeaders[i].offsetAttributes > 0) dataOffsets.add(chunkHeaders[i].offsetAttributes);
+
+      chunks[i] = {
+        attributes: { fishable: 0, deep: 0 },
+        instances: new Array(chunkHeaders[i].layerCount),
+      };
+    }
+
+    const allInstances: LiquidInstance[] = [];
+    for (let i = 0; i < 256; i++) {
+      const header = chunkHeaders[i];
+      const chunk = chunks[i];
+
+      if (header.layerCount > 0) {
+        data.seek(base + header.offsetInstances);
+
+        for (let j = 0; j < header.layerCount; j++) {
+          const instance: LiquidInstance = {
+            chunkIndex: i,
+            instanceIndex: j,
+            liquidType: data.readUInt16LE(),
+            liquidObject: data.readUInt16LE(),
+            minHeightLevel: data.readFloatLE(),
+            maxHeightLevel: data.readFloatLE(),
+            xOffset: data.readUInt8(),
+            yOffset: data.readUInt8(),
+            width: data.readUInt8(),
+            height: data.readUInt8(),
+            bitmap: [],
+            vertexData: {},
+            offsetExistsBitmap: data.readUInt32LE(),
+            offsetVertexData: data.readUInt32LE(),
+          };
+
+          // default values for liquidObject <= 41
+          if (instance.liquidObject <= 41) {
+            instance.xOffset = 0;
+            instance.yOffset = 0;
+            instance.width = 8;
+            instance.height = 8;
+          }
+
+          if (instance.offsetExistsBitmap > 0) dataOffsets.add(instance.offsetExistsBitmap);
+
+          if (instance.offsetVertexData > 0) dataOffsets.add(instance.offsetVertexData);
+
+          chunk.instances[j] = instance;
+          allInstances.push(instance);
+        }
+      }
+    }
+
+    const sortedOffsets = Array.from(dataOffsets).sort((a, b) => a - b);
+
+    for (let i = 0; i < 256; i++) {
+      const header = chunkHeaders[i];
+      const chunk = chunks[i];
+
+      if (header.offsetAttributes > 0) {
+        data.seek(base + header.offsetAttributes);
+        chunk.attributes.fishable = data.readUInt64LE();
+        chunk.attributes.deep = data.readUInt64LE();
+      }
+    }
+
+    for (const instance of allInstances) {
+      if (instance.offsetExistsBitmap > 0) {
+        data.seek(base + instance.offsetExistsBitmap);
+        const bitmapSize = Math.ceil((instance.width * instance.height + 7) / 8);
+        instance.bitmap = data.readUInt8(bitmapSize);
+      }
+
+      // Handle special case: if offsetVertexData is 0 and liquidType != 2, use LVF = 2 (height always 0.0)
+      if (instance.offsetVertexData === 0 && instance.liquidType !== 2) {
+        // LVF = 2 case: depth only, height is always 0.0
+        const vertexCount = (instance.width + 1) * (instance.height + 1);
+        instance.vertexData = {
+          height: new Array(vertexCount).fill(0.0),
+        };
+      } else if (instance.offsetVertexData > 0) {
+        const vertexCount = (instance.width + 1) * (instance.height + 1);
+        const offsetIndex = sortedOffsets.indexOf(instance.offsetVertexData);
+        let dataSize: number;
+
+        // Calculate data size using next offset
+        if (offsetIndex < sortedOffsets.length - 1) {
+          dataSize = sortedOffsets[offsetIndex + 1] - instance.offsetVertexData;
+        } else {
+          // This is the last data block, we need to determine size differently.
+          // For now, estimate based on vertex count and common formats.
+          dataSize = vertexCount * 5; // Default to case 0 (height + depth)
+        }
+
+        data.seek(base + instance.offsetVertexData);
+
+        const bytesPerVertex = dataSize / vertexCount;
+        const vertexData: LiquidInstance['vertexData'] = {};
+        instance.vertexData = vertexData;
+
+        if (bytesPerVertex === 5) {
+          // Case 0: Height + Depth (5 bytes per vertex)
+          vertexData.height = data.readFloatLE(vertexCount);
+          vertexData.depth = data.readUInt8(vertexCount);
+        } else if (bytesPerVertex === 8) {
+          // Case 1: Height + UV (8 bytes per vertex)
+          vertexData.height = data.readFloatLE(vertexCount);
+          const uv = new Array<{ x: number; y: number }>(vertexCount);
+          vertexData.uv = uv;
+          for (let i = 0; i < vertexCount; i++) {
+            uv[i] = {
+              x: data.readUInt16LE(),
+              y: data.readUInt16LE(),
+            };
+          }
+        } else if (bytesPerVertex === 1) {
+          // Case 2: Depth only (1 byte per vertex)
+          vertexData.depth = data.readUInt8(vertexCount);
+        } else if (bytesPerVertex === 9) {
+          // Case 3: Height + UV + Depth (9 bytes per vertex)
+          vertexData.height = data.readFloatLE(vertexCount);
+          const uv = new Array<{ x: number; y: number }>(vertexCount);
+          vertexData.uv = uv;
+          for (let i = 0; i < vertexCount; i++) {
+            uv[i] = {
+              x: data.readUInt16LE(),
+              y: data.readUInt16LE(),
+            };
+          }
+          vertexData.depth = data.readUInt8(vertexCount);
+        }
+      }
+    }
+  },
+
+  // MHDR (Header)
+  0x4D484452(data) {
+    this.header = {
+      flags: data.readUInt32LE(),
+      ofsMCIN: data.readUInt32LE(),
+      ofsMTEX: data.readUInt32LE(),
+      ofsMMDX: data.readUInt32LE(),
+      ofsMMID: data.readUInt32LE(),
+      ofsMWMO: data.readUInt32LE(),
+      ofsMWID: data.readUInt32LE(),
+      ofsMDDF: data.readUInt32LE(),
+      ofsMODF: data.readUInt32LE(),
+      ofsMFBO: data.readUInt32LE(),
+      ofsMH20: data.readUInt32LE(),
+      ofsMTXF: data.readUInt32LE(),
+      unk: data.readUInt32LE(4),
+    };
+  },
+};
+
+const RootMCNKChunkHandlers: Record<number, (this: ADTChunk, data: BufferWrapper, chunkSize: number) => void> = {
+  // MCVT (vertices)
+  0x4D435654(data) {
+    this.vertices = data.readFloatLE(145);
+  },
+
+  // MCCV (Vertex Shading)
+  0x4D434356(data) {
+    const shading = new Array<{ r: number; g: number; b: number; a: number }>(145);
+    this.vertexShading = shading;
+    for (let i = 0; i < 145; i++) {
+      shading[i] = {
+        r: data.readUInt8(),
+        g: data.readUInt8(),
+        b: data.readUInt8(),
+        a: data.readUInt8(),
+      };
+    }
+  },
+
+  // MCNR (Normals)
+  0x4D434E52(data) {
+    const normals = new Array<number[]>(145);
+    this.normals = normals;
+    for (let i = 0; i < 145; i++) {
+      const x = data.readInt8();
+      const z = data.readInt8();
+      const y = data.readInt8();
+
+      normals[i] = [x, y, z];
+    }
+  },
+
+  // MCBB (Blend Batches)
+  0x4D434242(data, chunkSize) {
+    const count = chunkSize / 20;
+    const blend = new Array<NonNullable<ADTChunk['blendBatches']>[number]>(count);
+    this.blendBatches = blend;
+
+    for (let i = 0; i < count; i++) {
+      blend[i] = {
+        mbmhIndex: data.readUInt32LE(),
+        indexCount: data.readUInt32LE(),
+        indexFirst: data.readUInt32LE(),
+        vertexCount: data.readUInt32LE(),
+        vertexFirst: data.readUInt32LE(),
+      };
+    }
+  },
+};
+
+const ADTTexChunkHandlers: ChunkHandlerMap = {
+  // MVER (Version)
+  0x4D564552(data) {
+    this.version = data.readUInt32LE();
+    if (this.version !== 18) throw new Error(`Unexpected ADT version: ${this.version}`);
+  },
+
+  // MTEX (Textures)
+  0x4D544558(data, chunkSize) {
+    this.textures = ReadStringBlock(data, chunkSize);
+  },
+
+  // MCNK (Texture Chunks)
+  0x4D434E4B(data, chunkSize) {
+    const endOfs = data.offset + chunkSize;
+    const chunk: TexChunk = {};
+    this.texChunks[this.chunkIndex++] = chunk;
+
+    // Read sub-chunks.
+    while (data.offset < endOfs) {
+      const chunkID = data.readUInt32LE();
+      const subChunkSize = data.readUInt32LE();
+      const nextChunkPos = data.offset + subChunkSize;
+
+      const handler = TexMCNKChunkHandlers[chunkID];
+      if (handler) handler.call(chunk, data, subChunkSize, this.wdt);
+
+      // Ensure that we start at the next chunk exactly.
+      data.seek(nextChunkPos);
+    }
+  },
+
+  // MTXP
+  0x4D545850(data, chunkSize) {
+    const count = chunkSize / 16;
+    const params = new Array<TexParams>(count);
+    this.texParams = params;
+
+    for (let i = 0; i < count; i++) {
+      params[i] = {
+        flags: data.readUInt32LE(),
+        height: data.readFloatLE(),
+        offset: data.readFloatLE(),
+        unk3: data.readUInt32LE(),
+      };
+    }
+  },
+
+  // MHID
+  0x4D484944(data, chunkSize) {
+    this.heightTextureFileDataIDs = data.readUInt32LE(chunkSize / 4);
+  },
+
+  // MDID
+  0x4D444944(data, chunkSize) {
+    this.diffuseTextureFileDataIDs = data.readUInt32LE(chunkSize / 4);
+  },
+};
+
+const TexMCNKChunkHandlers: Record<number, (this: TexChunk, data: BufferWrapper, chunkSize: number, root?: WDTLoader) => void> = {
+  // MCLY
+  0x4D434C59(data, chunkSize) {
+    const count = chunkSize / 16;
+    const layers = new Array<TexChunkLayer>(count);
+    this.layers = layers;
+
+    for (let i = 0; i < count; i++) {
+      layers[i] = {
+        textureId: data.readUInt32LE(),
+        flags: data.readUInt32LE(),
+        offsetMCAL: data.readUInt32LE(),
+        effectID: data.readInt32LE(),
+      };
+    }
+  },
+
+  // MCAL
+  0x4D43414C(data, _chunkSize, root) {
+    const layerCount = this.layers!.length;
+    const alphaLayers = new Array<number[]>(layerCount);
+    this.alphaLayers = alphaLayers;
+    alphaLayers[0] = new Array(64 * 64).fill(255);
+
+    let ofs = 0;
+    for (let i = 1; i < layerCount; i++) {
+      const layer = this.layers![i];
+
+      if (layer.offsetMCAL !== ofs) throw new Error('MCAL offset mis-match');
+
+      if (layer.flags & 0x200) {
+        // Compressed.
+        const alphaLayer = new Array<number>(64 * 64);
+        alphaLayers[i] = alphaLayer;
+
+        let inOfs = 0;
+        let outOfs = 0;
+
+        while (outOfs < 4096) {
+          const info = data.readUInt8();
+          inOfs++;
+
+          const mode = (info & 0x80) >> 7;
+          let count = (info & 0x7F);
+
+          if (mode !== 0) {
+            const value = data.readUInt8();
+            inOfs++;
+
+            while (count-- > 0 && outOfs < 4096) {
+              alphaLayer[outOfs] = value;
+              outOfs++;
+            }
+          } else {
+            while (count-- > 0 && outOfs < 4096) {
+              const value = data.readUInt8();
+              inOfs++;
+
+              alphaLayer[outOfs] = value;
+              outOfs++;
+            }
+          }
+        }
+
+        ofs += inOfs;
+        if (outOfs !== 4096) throw new Error('Broken ADT.');
+      } else if (root!.flags! & 0x4 || root!.flags! & 0x80) {
+        // Uncompressed (4096)
+        alphaLayers[i] = data.readUInt8(4096);
+        ofs += 4096;
+      } else {
+        // Uncompressed (2048)
+        const alphaLayer = new Array<number>(64 * 64);
+        alphaLayers[i] = alphaLayer;
+        const rawLayer = data.readUInt8(2048);
+        ofs += 2048;
+
+        for (let j = 0; j < 2048; j++) {
+          alphaLayer[2 * j + 0] = ((rawLayer[j] & 0x0F) >> 0) * 17;
+          alphaLayer[2 * j + 1] = ((rawLayer[j] & 0xF0) >> 4) * 17;
+        }
+      }
+    }
+  },
+};
+
+const ADTObjChunkHandlers: ChunkHandlerMap = {
+  // MVER (Version)
+  0x4D564552(data) {
+    this.version = data.readUInt32LE();
+    if (this.version !== 18) throw new Error(`Unexpected ADT version: ${this.version}`);
+  },
+
+  // MMDX (Doodad Filenames)
+  0x4D4D4458(data, chunkSize) {
+    this.m2Names = ReadStringBlock(data, chunkSize);
+  },
+
+  // MMID (M2 Offsets)
+  0x4D4D4944(data, chunkSize) {
+    this.m2Offsets = data.readUInt32LE(chunkSize / 4);
+  },
+
+  // MWMO (WMO Filenames)
+  0x4D574D4F(data, chunkSize) {
+    this.wmoNames = ReadStringBlock(data, chunkSize);
+  },
+
+  // MWID (WMO Offsets)
+  0x4D574944(data, chunkSize) {
+    this.wmoOffsets = data.readUInt32LE(chunkSize / 4);
+  },
+
+  // MDDF
+  0x4D444446(data, chunkSize) {
+    const count = chunkSize / 36;
+    const entries = new Array<DoodadEntry>(count);
+    this.models = entries;
+
+    for (let i = 0; i < count; i++) {
+      entries[i] = {
+        mmidEntry: data.readUInt32LE(),
+        uniqueId: data.readUInt32LE(),
+        position: data.readFloatLE(3),
+        rotation: data.readFloatLE(3),
+        scale: data.readUInt16LE(),
+        flags: data.readUInt16LE(),
+      };
+    }
+  },
+
+  // MODF
+  0x4D4F4446(data, chunkSize) {
+    const count = chunkSize / 64;
+    const entries = new Array<WorldModelEntry>(count);
+    this.worldModels = entries;
+
+    for (let i = 0; i < count; i++) {
+      entries[i] = {
+        mwidEntry: data.readUInt32LE(),
+        uniqueId: data.readUInt32LE(),
+        position: data.readFloatLE(3),
+        rotation: data.readFloatLE(3),
+        lowerBounds: data.readFloatLE(3),
+        upperBounds: data.readFloatLE(3),
+        flags: data.readUInt16LE(),
+        doodadSet: data.readUInt16LE(),
+        nameSet: data.readUInt16LE(),
+        scale: data.readUInt16LE(),
+      };
+    }
+  },
+
+  // MWDS
+  0x4D574453(data, chunkSize) {
+    this.doodadSets = data.readUInt16LE(chunkSize / 2);
+  },
+};
+
+export default ADTLoader;

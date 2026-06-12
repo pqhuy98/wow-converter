@@ -16,6 +16,7 @@ export const startupRequests: ExportCharacterRequest[] = [
     },
     optimization: {
       sortSequences: true,
+      allMaterialsUnshaded: false,
       removeUnusedVertices: true,
       removeUnusedNodes: true,
       removeUnusedMaterialsTextures: true,

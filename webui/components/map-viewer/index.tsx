@@ -19,9 +19,9 @@ import MinimapViewer, { MapInfo } from './minimap-viewer';
 
 interface MapResponse { id: number | string; name: string; dir: string }
 
-type TextureResolution = '512' | '1024' | '4096' | '8192' | '16384'
+type TextureResolution = '0' | '512' | '1024' | '4096' | '8192' | '16384'
 
-const showMapExport = false;
+const showMapExport = true;
 
 export default function MapViewer() {
   const { isDev } = useServerConfig();
@@ -259,6 +259,7 @@ export default function MapViewer() {
                   <div className="flex items-center gap-2 pt-2 mt-auto">
                     <label className="text-sm text-muted-foreground">Texture size</label>
                     <select className="border rounded px-2 py-1 bg-background" value={texSize} onChange={(e) => setTexSize(e.target.value as TextureResolution)}>
+                      <option value="0">None</option>
                       <option value="512">512</option>
                       <option value="1024">1024</option>
                       <option value="4096">4096</option>

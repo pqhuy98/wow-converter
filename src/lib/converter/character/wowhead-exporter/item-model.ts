@@ -1,10 +1,10 @@
+import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '@/lib/converter/character/utils';
 import { Geoset } from '@/lib/formats/mdl/components/geoset';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { EquipmentSlot, fetchItemMeta, ItemData } from '@/lib/wowhead-client/item-armor';
 import { ItemZamUrl } from '@/lib/wowhead-client/zam-url';
 
 import { Model } from '../../common/models';
-import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '../utils';
 
 interface FileWithComponent {
   fileDataId: number;

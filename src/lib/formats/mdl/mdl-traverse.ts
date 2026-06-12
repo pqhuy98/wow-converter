@@ -1,4 +1,5 @@
-import { QuaternionRotation, Vector3 } from '../../math/common';
+import { QuaternionRotation, Vector3 } from '@/lib/math/common';
+
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, quatNoRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
 import { Geoset, GeosetVertex } from './components/geoset';

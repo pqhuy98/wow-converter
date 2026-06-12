@@ -98,6 +98,19 @@ export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
     if (slotId && slotBackup[slotId]) {
       return fetchItemMeta({ ...zam, slotId: slotBackup[slotId] });
     }
+    // Some item metas are missing from a specific expansion's CDN (e.g. wrath)
+    // but exist on another (live/classic); retry against any expansion that has it.
+    if (zam.expansion !== 'latest-available') {
+      try {
+        const fallback = await getLatestExpansionHavingUrl(path);
+        if (fallback !== expansion) {
+          console.warn(`Item meta ${path} missing on ${expansion}, using ${fallback}`);
+          return fetchItemMeta({ ...zam, expansion: fallback });
+        }
+      } catch {
+        // fall through to original error
+      }
+    }
     throw e;
   }
 }

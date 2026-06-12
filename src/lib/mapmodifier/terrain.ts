@@ -1,9 +1,8 @@
-import { Terrain } from '@/vendors/wc3maptranslator/data';
-
 import {
   dataHeightMax, dataHeightMin, defaultLayer, distancePerTile,
-} from '../constants';
-import { nArray } from '../utils';
+} from '@/lib/constants';
+import { nArray } from '@/lib/utils';
+import { Terrain } from '@/vendors/wc3maptranslator/data';
 
 export function getInitialTerrain(
   height: number,

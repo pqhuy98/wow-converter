@@ -1,6 +1,7 @@
 import { parsers } from '@pqhuy98/mdx-m3-viewer';
 
-import { Vector3 } from '../../math/common';
+import { Vector3 } from '@/lib/math/common';
+
 import { Animation } from './components/animation';
 import { Camera, camerasToString } from './components/camera';
 import { Bound } from './components/extent';

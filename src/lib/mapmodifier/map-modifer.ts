@@ -1,5 +1,6 @@
 import assert from 'assert';
 
+import { distancePerTile } from '@/lib/constants';
 import { Vector2 } from '@/lib/math/common';
 import {
   Camera,
@@ -11,7 +12,6 @@ import {
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 import { FourCCGenerator } from '@/vendors/wc3maptranslator/extra/war3-fourcc';
 
-import { distancePerTile } from '../constants';
 import { getInitialTerrain } from './terrain';
 
 export interface Wc3Map {

@@ -96,17 +96,60 @@ function getTypeFromWowheadUrl(url: string): ZamType | undefined {
   return undefined;
 }
 
+function getEntityIdFromWowheadUrl(url: string): number | null {
+  const m = url.match(/\/(?:item|npc|object)[=/](\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function parseDisplayIdFromGathererHtml(html: string, entityId: number): number | null {
+  const match = html.match(/WH\.Gatherer\.addData\([^,]+,[^,]+,\s*(\{[\s\S]*\})\);?/);
+  if (!match?.[1]) return null;
+  try {
+    const data = JSON.parse(match[1]) as Record<string, {
+      json?: { displayid?: number };
+      jsonequip?: { displayid?: number };
+    }>;
+    const entry = data[String(entityId)];
+    const displayid = entry?.json?.displayid ?? entry?.jsonequip?.displayid;
+    return typeof displayid === 'number' ? displayid : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchItemDisplayIdViaGatherer(expansion: ZamExpansion, itemId: number): Promise<number | null> {
+  const gathererUrl = `${getWowheadPrefix(expansion)}/gatherer?items=${itemId}`;
+  const res = await customFetch(gathererUrl);
+  if (!res.ok) return null;
+  return parseDisplayIdFromGathererHtml(await res.text(), itemId);
+}
+
 async function getDisplayIdFromUrl(url: string): Promise<{ displayId: number, slotId: number | null }> {
   const byJson = url.match(/\/(?:npc|item)\/(\d+)\.json/i)?.[1];
   if (byJson) return { displayId: parseInt(byJson, 10), slotId: null };
-  // Fallback to parsing embedded data attributes
+
   const html = await fetchWithCache(url);
   const m = html.match(/data-mv-display-id="(\d+)"/);
-  if (!m) {
-    throw new Error(`Cannot extract displayId from wowhead url: ${url}`);
+  if (m) {
+    const slotM = html.match(/data-mv-slot="(\d+)"/);
+    return { displayId: parseInt(m[1], 10), slotId: slotM ? parseInt(slotM[1], 10) : null };
   }
-  const slotM = html.match(/data-mv-slot="(\d+)"/);
-  return { displayId: parseInt(m[1], 10), slotId: slotM ? parseInt(slotM[1], 10) : null };
+
+  const type = getTypeFromWowheadUrl(url);
+  const entityId = getEntityIdFromWowheadUrl(url);
+  if (type === 'item' && entityId !== null) {
+    const fromPage = parseDisplayIdFromGathererHtml(html, entityId);
+    if (fromPage !== null) {
+      return { displayId: fromPage, slotId: null };
+    }
+    const expansion = getExpansionFromUrl(url) || 'live';
+    const fromGatherer = await fetchItemDisplayIdViaGatherer(expansion, entityId);
+    if (fromGatherer !== null) {
+      return { displayId: fromGatherer, slotId: null };
+    }
+  }
+
+  throw new Error(`Cannot extract displayId from wowhead url: ${url}`);
 }
 
 const respCache = new LRUCache<string, string>({ max: 200 });

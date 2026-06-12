@@ -2,9 +2,15 @@ import fs from 'fs';
 import { cpus } from 'os';
 import { Worker } from 'worker_threads';
 
+export type BlpTaskInput = {
+  data: Buffer,
+  kind: 'png' | 'blp2',
+  resizeTo?: { width: number, height: number },
+};
+
 type Task = {
   id: number,
-  pngBuffer: Buffer,
+  input: BlpTaskInput,
   blpPath: string,
   resolve: () => void,
   reject: (e: Error) => void,
@@ -13,9 +19,11 @@ type Task = {
 type WorkerTaskMessage = {
   type: 'task',
   id: number,
-  pngArrayBuffer: ArrayBuffer,
+  arrayBuffer: ArrayBuffer,
   byteOffset: number,
   byteLength: number,
+  kind: 'png' | 'blp2',
+  resizeTo?: { width: number, height: number },
   blpPath: string,
 };
 type WorkerDoneMessage = { type: 'done', id: number, success: boolean, error?: string };
@@ -117,13 +125,16 @@ export class BlpWorkerPool {
       if (!task) return;
       w.__currentTask = task;
       w.busy = true;
-      const arrayBuffer: ArrayBuffer = task.pngBuffer.buffer as ArrayBuffer;
+      const { data } = task.input;
+      const arrayBuffer: ArrayBuffer = data.buffer as ArrayBuffer;
       const message: WorkerTaskMessage = {
         type: 'task',
         id: task.id,
-        pngArrayBuffer: arrayBuffer,
-        byteOffset: task.pngBuffer.byteOffset,
-        byteLength: task.pngBuffer.byteLength,
+        arrayBuffer,
+        byteOffset: data.byteOffset,
+        byteLength: data.byteLength,
+        kind: task.input.kind,
+        resizeTo: task.input.resizeTo,
         blpPath: task.blpPath,
       };
       // Transfer ownership of the ArrayBuffer to avoid copying memory
@@ -131,11 +142,11 @@ export class BlpWorkerPool {
     }
   }
 
-  submit(pngBuffer: Buffer, blpPath: string): Promise<void> {
+  submit(input: BlpTaskInput, blpPath: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const task: Task = {
         id: this.nextTaskId++,
-        pngBuffer,
+        input,
         blpPath,
         resolve,
         reject,
@@ -180,9 +191,9 @@ export function getBlpWorkerPoolSize(): number {
   return singletonPool ? singletonPool.getSize() : 0;
 }
 
-export function submitBlpTask(pngBuffer: Buffer, blpPath: string): Promise<void> {
+export function submitBlpTask(input: BlpTaskInput, blpPath: string): Promise<void> {
   const pool = ensureBlpWorkerPool();
-  return pool.submit(pngBuffer, blpPath);
+  return pool.submit(input, blpPath);
 }
 
 export async function shutdownBlpWorkerPool(): Promise<void> {

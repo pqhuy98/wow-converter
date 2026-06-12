@@ -1,4 +1,4 @@
-import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/objmdl/animation/bones_mapper';
+import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
 
 import { MDLModify } from '.';
 

@@ -1,10 +1,12 @@
+export type TestCaseTuple = readonly [string, string?, string?, string?];
+
 export interface TestConfig {
   name: string;
   map: string;
-  testCases: string[][];
+  testCases: TestCaseTuple[];
 }
 
-const classicTestCases: string[][] = [
+const classicTestCases: TestCaseTuple[] = [
   ['https://www.wowhead.com/mop-classic/npc=28714/ildine-sorrowspear'],
   ['https://www.wowhead.com/mop-classic/npc=28674/aludane-whitecloud'],
   ['https://www.wowhead.com/mop-classic/npc=30115/vereesa-windrunner'],
