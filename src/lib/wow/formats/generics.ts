@@ -105,6 +105,11 @@ export function doOnce<T>(key: string, func: () => Promise<T>): () => Promise<T>
   };
 }
 
+/** Clear doOnce memoization so DB/character caches can rebuild after a CASC switch. */
+export function resetDoOnceCache(): void {
+  doOnceCache.clear();
+}
+
 export function filesize(bytes: number): string {
   let size = Number.isNaN(bytes) ? 0 : bytes;
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];

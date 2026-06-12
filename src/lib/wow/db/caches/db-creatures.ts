@@ -103,4 +103,10 @@ export function getCreatureCacheStats(): { initialized: boolean; creatureDisplay
   };
 }
 
+export function resetCreatureCache(): void {
+  creatureDisplays.clear();
+  displayIDToFileDataID.clear();
+  isInitialized = false;
+}
+
 export default { initializeCreatureData, getCreatureDisplaysByFileDataID, getFileDataIDByDisplayID };

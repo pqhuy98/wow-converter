@@ -42,4 +42,9 @@ export function getModelFileDataCacheStats(): { modelResIDs: number; fileDataIDs
   return { modelResIDs: modelResIDToFileDataID.size, fileDataIDs: fileDataIDs.size };
 }
 
+export function resetModelFileDataCache(): void {
+  modelResIDToFileDataID.clear();
+  fileDataIDs.clear();
+}
+
 export default { initializeModelFileData, getModelFileDataID, getFileDataIDs };

@@ -14,9 +14,6 @@ import {
   ExportProfileSnapshot, getExportProfile, profileScope,
 } from '@/lib/export-profile';
 import { waitUntil } from '@/lib/utils';
-import {
-  getCascLocalProduct, getCascLocalWow, getCascRemoteProduct, getCascRemoteRegion,
-} from '@/lib/wow/env';
 
 interface CASCInfo {
   type: string;
@@ -474,6 +471,8 @@ export class WowExportRestClient {
 
   private logWarnedBootstrap = false;
 
+  private logWarnedConnected = false;
+
   private async bootstrap(): Promise<void> {
     if (this.bootPromise) return this.bootPromise;
     this.bootPromise = (async () => {
@@ -487,24 +486,29 @@ export class WowExportRestClient {
           const info = await this.getCASCInfo();
           this.cascInfo = info;
           this.status.cascLoaded = true;
-          console.log(chalk.green('✅ Retrieved wow.export WoW installation:'), info.build.Product, info.buildName);
-        } catch (err) {
-          // Attempt automatic CASC loading using environment hints
-          await this.tryAutoLoadCASC();
+          console.log(chalk.green('✅ WoW data ready:'), info.build.Product, info.buildName);
+          this.logWarnedCASC = false;
+        } catch {
+          // CASC is loaded by wow-data-server startup (.env) or the web UI (/setup).
+          if (!this.logWarnedCASC) {
+            console.log(chalk.gray('WoW data not loaded yet — use the web UI (/setup) or set CASC_* in .env'));
+            this.logWarnedCASC = true;
+          }
         }
 
-        if (this.isReady) {
-          console.log(chalk.green('✅ Connected to wow.export:'), chalk.gray(this.baseURL));
-          this.logWarnedBootstrap = false;
+        if (!this.logWarnedConnected) {
+          console.log(chalk.green('✅ Connected to wow-data-server:'), chalk.gray(this.baseURL));
+          this.logWarnedConnected = true;
         }
       } catch (e) {
         if (!this.logWarnedBootstrap) {
-          console.error(chalk.yellow(`⏳ Cannot connect to wow.export at ${this.baseURL}. Is it running?`));
+          console.error(chalk.yellow(`⏳ Cannot connect to wow-data-server at ${this.baseURL}. Is it running?`));
           this.logWarnedBootstrap = true;
         }
         this.status.connected = false;
         this.status.configLoaded = false;
         this.status.cascLoaded = false;
+        this.logWarnedConnected = false;
       }
     })().finally(() => {
       this.bootPromise = null;
@@ -512,23 +516,40 @@ export class WowExportRestClient {
     return this.bootPromise;
   }
 
+  /** Poll for CASC without re-running full bootstrap (avoids log spam while waiting for /setup). */
+  private async pollCascReady(): Promise<void> {
+    if (this.status.cascLoaded) return;
+    try {
+      const info = await this.getCASCInfo();
+      this.cascInfo = info;
+      this.status.cascLoaded = true;
+      console.log(chalk.green('✅ WoW data ready:'), info.build.Product, info.buildName);
+      this.logWarnedCASC = false;
+    } catch {
+      // Still waiting for CASC to be configured.
+    }
+  }
+
   private startHeartbeat(): void {
     const tick = () => {
       try {
-        if (!this.isReady) {
-          if (!this.bootPromise) {
-            void this.bootstrap();
-          }
-        } else {
-          void this.safeGetJSON('/rest/getCascInfo').then((res) => {
-            if (!(res.ok && res.json?.id === 'CASC_INFO')) {
-              this.status.connected = false;
-              this.status.cascLoaded = false;
-            }
-          });
+        if (!this.status.connected) {
+          if (!this.bootPromise) void this.bootstrap();
+          return;
         }
+        if (!this.status.cascLoaded) {
+          void this.pollCascReady();
+          return;
+        }
+        void this.safeGetJSON('/rest/getCascInfo').then((res) => {
+          if (!(res.ok && res.json?.id === 'CASC_INFO')) {
+            this.status.cascLoaded = false;
+            this.cascInfo = null;
+          }
+        });
       } catch (e) {
         this.status.connected = false;
+        this.logWarnedConnected = false;
       }
     };
     setInterval(tick, 500);
@@ -536,58 +557,6 @@ export class WowExportRestClient {
   }
 
   private logWarnedCASC = false;
-
-  private async tryAutoLoadCASC(): Promise<void> {
-    if (this.status.cascLoaded) return;
-
-    const localPath = getCascLocalWow();
-    const localProduct = getCascLocalProduct();
-    const remoteRegion = getCascRemoteRegion();
-    const remoteProduct = getCascRemoteProduct();
-
-    if (localPath) {
-      try {
-        console.log(chalk.gray(`Attempting to load local CASC from "${localPath}", product: ${localProduct}`));
-        const builds = await this.loadCASCLocal(localPath);
-        const buildIdx = Math.max(0, builds.findIndex((b) => b.Product === localProduct));
-        const info = await this.loadCASCBuild(buildIdx);
-        this.cascInfo = info;
-        this.status.cascLoaded = true;
-        console.log(chalk.green('✅ Loaded local CASC:'), info.build.Product, info.buildName);
-        this.logWarnedCASC = false;
-        return;
-      } catch (e) {
-        if (!this.logWarnedCASC) {
-          console.error(chalk.yellow(`⚠️ Failed to load local CASC: ${e}`));
-          this.logWarnedCASC = true;
-        }
-      }
-    }
-
-    if (!this.status.cascLoaded && remoteRegion && remoteProduct) {
-      try {
-        console.log(chalk.gray(`Attempting to load remote CASC, region: ${remoteRegion}, product: ${remoteProduct}`));
-        const builds = await this.loadCASCRemote(remoteRegion);
-        const buildIdx = Math.max(0, builds.findIndex((b) => b.Product === remoteProduct));
-        const info = await this.loadCASCBuild(buildIdx);
-        this.cascInfo = info;
-        this.status.cascLoaded = true;
-        console.log(chalk.green('✅ Loaded remote CASC:'), info.build.Product, info.buildName);
-        this.logWarnedCASC = false;
-        return;
-      } catch (e) {
-        if (!this.logWarnedCASC) {
-          console.error(chalk.yellow(`⚠️ Failed to load remote CASC: ${e}`));
-          this.logWarnedCASC = true;
-        }
-      }
-    }
-
-    if (!this.status.cascLoaded && !this.logWarnedCASC) {
-      console.error(chalk.yellow('⏳ Please choose your WoW installation in wow.export.'));
-      this.logWarnedCASC = true;
-    }
-  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async getJSON(path: string, params?: Record<string, unknown>): Promise<any> {

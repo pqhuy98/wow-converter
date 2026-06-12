@@ -14,7 +14,7 @@ import {
   ExportProfileSnapshot, formatExportProfile, profileScope, profileSync, runWithExportProfile,
 } from '@/lib/export-profile';
 import { Config, getDefaultConfig } from '@/lib/global-config';
-import { stableStringify, waitUntil } from '@/lib/utils';
+import { stableStringify } from '@/lib/utils';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 import { Job, JobQueue, QueueConfig } from '@/server/utils/job-queue';
 
@@ -94,8 +94,18 @@ console.log = (...args) => {
 };
 
 export async function ControllerExportCharacter(router: express.Router) {
-  await waitUntil(() => wowExportClient.isReady);
-  ceConfig = await getDefaultConfig();
+  // Placeholder until wow-data-server responds; do not block HTTP startup on CASC (/setup must work first).
+  ceConfig = {
+    assetPrefix: 'wow',
+    mdx: true,
+    infiniteExtentBoundRadiusThreshold: 2000,
+    rawModelScaleUp: 56,
+    overrideModels: true,
+    overrideTextures: false,
+    wowExportAssetDir: '.cache/wowexport',
+  };
+  void getDefaultConfig().then((c) => { ceConfig = c; }).catch(() => {});
+  void wowExportClient.waitUntilReady().then(() => getDefaultConfig()).then((c) => { ceConfig = c; }).catch(() => {});
   if (isSharedHosting) {
     console.log('Shared hosting mode enabled');
   }

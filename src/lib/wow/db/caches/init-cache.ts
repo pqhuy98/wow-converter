@@ -1,10 +1,10 @@
 /**
  * Model cache initialization, ported from wow.export (src/js/db/caches/init-cache.js).
  */
-import { initializeCreatureData } from './db-creatures';
-import { initializeItemDisplays } from './db-item-displays';
-import { initializeModelFileData } from './db-model-file-data';
-import { initializeTextureFileData } from './db-texture-file-data';
+import { initializeCreatureData, resetCreatureCache } from './db-creatures';
+import { initializeItemDisplays, resetItemDisplayCache } from './db-item-displays';
+import { initializeModelFileData, resetModelFileDataCache } from './db-model-file-data';
+import { initializeTextureFileData, resetTextureFileDataCache } from './db-texture-file-data';
 
 export function initModelCaches(): Promise<unknown>[] {
   return [
@@ -15,4 +15,11 @@ export function initModelCaches(): Promise<unknown>[] {
   ];
 }
 
-export default { initModelCaches };
+export function resetDbCaches(): void {
+  resetCreatureCache();
+  resetItemDisplayCache();
+  resetModelFileDataCache();
+  resetTextureFileDataCache();
+}
+
+export default { initModelCaches, resetDbCaches };

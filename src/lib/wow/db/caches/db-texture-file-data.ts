@@ -49,6 +49,11 @@ export function getTextureFileDataCacheStats(): { matResIDs: number; fileDataIDs
   return { matResIDs: matResIDToFileDataID.size, fileDataIDs: fileDataIDs.size };
 }
 
+export function resetTextureFileDataCache(): void {
+  matResIDToFileDataID.clear();
+  fileDataIDs.clear();
+}
+
 export default {
   initializeTextureFileData, ensureInitialized, getTextureFDIDsByMatID, getFileDataIDs,
 };

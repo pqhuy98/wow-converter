@@ -15,11 +15,7 @@
  *   CASC_REMOTE_PRODUCT   product for remote auto-load (default 'wow')
  *   WOW_EXPORT_DIR        optional: override exportDirectory (default .cache/wow-export)
  */
-import {
-  getCascLocalProduct, getCascLocalWow, getCascRemoteProduct, getCascRemoteRegion,
-} from '../lib/wow/env';
-import { write } from '../lib/wow/log';
-import { loadLocalCascFromInstall, loadRemoteCascFromRegion } from './casc-load';
+import { autoLoadCascFromEnv } from './auto-load-env';
 import { WowDataServer } from './rest-server';
 
 async function main(): Promise<void> {
@@ -35,36 +31,7 @@ async function main(): Promise<void> {
   // Bun on Windows may emit SIGHUP when the parent terminal closes.
   process.once('SIGHUP', () => shutdown('SIGHUP'));
 
-  const localDir = getCascLocalWow();
-  const remoteRegion = getCascRemoteRegion();
-
-  if (localDir) {
-    const product = getCascLocalProduct();
-    const t0 = Date.now();
-    console.log(`Auto-loading local CASC from ${localDir} (product: ${product})...`);
-    try {
-      const casc = await loadLocalCascFromInstall(localDir, product);
-      console.log(`CASC loaded (${casc.getBuildName()}) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    } catch (e) {
-      write('Auto-load of local CASC failed: %s', (e as Error).message);
-      console.error('Auto-load of local CASC failed:', (e as Error).message);
-      console.error('Server stays up; load CASC via POST /rest/loadCascLocal + /rest/loadCascBuild.');
-    }
-  } else if (remoteRegion) {
-    const product = getCascRemoteProduct();
-    const t0 = Date.now();
-    console.log(`Auto-loading remote CASC (region: ${remoteRegion}, product: ${product})...`);
-    try {
-      const casc = await loadRemoteCascFromRegion(remoteRegion, product);
-      console.log(`CASC loaded (${casc.getBuildName()}) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    } catch (e) {
-      write('Auto-load of remote CASC failed: %s', (e as Error).message);
-      console.error('Auto-load of remote CASC failed:', (e as Error).message);
-      console.error('Server stays up; load CASC via POST /rest/loadCascRemote + /rest/loadCascBuild.');
-    }
-  } else {
-    console.log('No CASC_LOCAL_WOW or CASC_REMOTE_REGION set; load CASC via REST (/rest/loadCascLocal or /rest/loadCascRemote).');
-  }
+  await autoLoadCascFromEnv();
 
   // Listen only after auto-load completes so REST clients cannot race startup.
   server.load();

@@ -53,4 +53,8 @@ export function getItemDisplayCacheStats(): { itemDisplays: number } {
   return { itemDisplays: itemDisplays.size };
 }
 
+export function resetItemDisplayCache(): void {
+  itemDisplays.clear();
+}
+
 export default { initializeItemDisplays, getItemDisplaysByFileDataID };

@@ -1,7 +1,9 @@
+import { normalizeInstallDirectory } from './normalize-install-directory';
+
 /** Local WoW install directory for CASC auto-load. */
 export function getCascLocalWow(): string | undefined {
   const v = process.env.CASC_LOCAL_WOW?.trim();
-  return v || undefined;
+  return v ? normalizeInstallDirectory(v) : undefined;
 }
 
 /** WoW product/build flavor for CASC auto-load (default 'wow' = retail). */

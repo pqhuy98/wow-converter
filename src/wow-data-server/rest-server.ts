@@ -19,6 +19,7 @@ import { ADTExporter } from '@/lib/wow/export/adt/adt-exporter';
 import { buildADTExportOptions, collectGameObjects, getTileBounds } from '@/lib/wow/export/adt/map-export-utils';
 import { getAllSkinsForModel } from '@/lib/wow/export/m2/model-export-service';
 import { getExportPath } from '@/lib/wow/export/writers/export-helper';
+import { normalizeInstallDirectory } from '@/lib/wow/normalize-install-directory';
 import { wowConfig } from '@/lib/wow/server/config';
 import { collectMemoryDiagnostics, formatMemoryDiagnostics } from '@/lib/wow/server/memory-diagnostics';
 import { runtimeState } from '@/lib/wow/server/runtime';
@@ -29,9 +30,11 @@ import {
 import { initModelCaches } from '../lib/wow/db/caches/init-cache';
 import { DB2Row, WDCReader } from '../lib/wow/db/wdc-reader';
 import { write } from '../lib/wow/log';
+import { autoLoadCascFromEnv } from './auto-load-env';
 import {
   awaitCascLoad, isCascLoaded, isCascLoading, loadCascBuildSingleFlight,
 } from './casc-load';
+import { softRestartRuntime } from './soft-restart';
 
 type JSONValue = unknown;
 
@@ -95,6 +98,10 @@ export class WowDataServer {
         return this.loadCascRemote(body, res);
       case '/rest/loadCascBuild':
         return this.loadCascBuild(body, res);
+      case '/rest/unloadCasc':
+        return this.handleUnloadCasc(res);
+      case '/rest/softRestart':
+        return this.handleSoftRestart(body, res);
       case '/rest/setConfig':
         return this.setConfig(body, res);
       case '/rest/charMeta':
@@ -345,14 +352,27 @@ export class WowDataServer {
       return;
     }
 
+    const installDirectory = normalizeInstallDirectory(body.installDirectory);
+    if (!installDirectory) {
+      this.sendJSON(res, 400, { id: 'ERR_INVALID_INSTALL', message: 'installDirectory is required' });
+      return;
+    }
+
+    if (this._pendingCASC instanceof CASCLocal
+      && normalizeInstallDirectory(this._pendingCASC.dir) === installDirectory) {
+      this.sendJSON(res, 200, { id: 'CASC_INSTALL_BUILDS', builds: this._pendingCASC.builds });
+      return;
+    }
+
     try {
-      const casc = new CASCLocal(body.installDirectory);
+      write('REST loadCascLocal requested: %s', installDirectory);
+      const casc = new CASCLocal(installDirectory);
       await casc.init();
       this._pendingCASC = casc;
       this.sendJSON(res, 200, { id: 'CASC_INSTALL_BUILDS', builds: casc.builds });
     } catch (e) {
       write('loadCascLocal failed: %s', (e as Error).message);
-      this.sendJSON(res, 400, { id: 'ERR_INVALID_INSTALL' });
+      this.sendJSON(res, 400, { id: 'ERR_INVALID_INSTALL', message: (e as Error).message });
     }
   }
 
@@ -372,6 +392,7 @@ export class WowDataServer {
     }
 
     try {
+      write('REST loadCascRemote requested: %s', body.regionTag);
       const casc = new CASCRemote(body.regionTag);
       await casc.init();
       this._pendingCASC = casc;
@@ -420,6 +441,41 @@ export class WowDataServer {
     } catch (e) {
       write('Failed to load CASC (native server): %s', (e as Error).stack);
       this.sendJSON(res, 500, { id: 'ERR_CASC_FAILED' });
+    }
+  }
+
+  handleUnloadCasc(res: http.ServerResponse): void {
+    try {
+      softRestartRuntime();
+      this._pendingCASC = null;
+      this._responseCache.clear();
+      this.sendJSON(res, 200, { id: 'CASC_UNLOADED' });
+    } catch (e) {
+      this.sendJSON(res, 409, { id: 'ERR_CASC_LOADING', message: (e as Error).message });
+    }
+  }
+
+  async handleSoftRestart(body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
+    try {
+      softRestartRuntime();
+      this._pendingCASC = null;
+      this._responseCache.clear();
+
+      const reloadEnv = body?.reloadEnv === true;
+      if (reloadEnv) {
+        const result = await autoLoadCascFromEnv();
+        this.sendJSON(res, 200, {
+          id: 'SOFT_RESTART_DONE',
+          cascLoaded: result.loaded,
+          buildName: result.buildName,
+          error: result.error,
+        });
+        return;
+      }
+
+      this.sendJSON(res, 200, { id: 'SOFT_RESTART_DONE', cascLoaded: false });
+    } catch (e) {
+      this.sendJSON(res, 409, { id: 'ERR_CASC_LOADING', message: (e as Error).message });
     }
   }
 

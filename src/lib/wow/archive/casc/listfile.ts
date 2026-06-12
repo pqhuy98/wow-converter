@@ -418,6 +418,17 @@ export function addEntry(fileDataID: number, fileName: string): void {
   nameLookup.set(fileName, fileDataID);
 }
 
+/** Clear in-memory listfile state so a new CASC build can load cleanly. */
+export function resetForCascUnload(): void {
+  loaded = false;
+  isPreloaded = false;
+  preloadPromise = null;
+  idLookup.clear();
+  nameLookup.clear();
+  preloadedIdLookup.clear();
+  preloadedNameLookup.clear();
+}
+
 export default {
   loadUnknowns,
   loadUnknownTextures,

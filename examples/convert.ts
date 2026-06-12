@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 import chalk from 'chalk';
 
 import { distancePerTile, maxGameHeightDiff } from '@/lib/constants';
@@ -8,6 +10,7 @@ import {
 import { computeRecommendedTerrainClampPercent } from '@/lib/converter/map-exporter/wc3-converter';
 import { Vector2, Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
+import { assertWowCascReady } from '@/lib/wow/wow-config-service';
 
 import { Config, getDefaultConfig } from '../src/lib/global-config';
 
@@ -126,6 +129,7 @@ const mapExportConfig: MapExportConfig = {
 const depth = 3; // 1: adt only, 2: adt + wmo + top m2, 3: adt + wmo + top m2 + wmo interiors
 
 (async function main() {
+  await assertWowCascReady();
   const start = performance.now();
   const mapExporter = new MapExporter(config, mapExportConfig);
 

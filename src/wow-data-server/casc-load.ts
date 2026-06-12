@@ -8,6 +8,7 @@ import { CASCLocal } from '@/lib/wow/archive/casc/casc-source-local';
 import { CASCRemote } from '@/lib/wow/archive/casc/casc-source-remote';
 import * as listfile from '@/lib/wow/archive/casc/listfile';
 import { load as loadTactKeys } from '@/lib/wow/archive/casc/tact-keys';
+import { write } from '@/lib/wow/log';
 import { runtimeState } from '@/lib/wow/server/runtime';
 
 let cascLoadPromise: Promise<CASC> | null = null;
@@ -27,12 +28,26 @@ export async function awaitCascLoad(): Promise<CASC | null> {
   return null;
 }
 
+/** Drop the active CASC source so a different installation can be loaded. */
+export function unloadCasc(): void {
+  if (cascLoadPromise) {
+    throw new Error('WoW data is still loading');
+  }
+  runtimeState.casc = null;
+  listfile.resetForCascUnload();
+}
+
 async function finalizeCascLoad(casc: CASC, buildIndex: number): Promise<CASC> {
+  const t0 = Date.now();
   await loadTactKeys();
   const preload = listfile.preload();
   await casc.load(buildIndex);
   await preload;
   runtimeState.casc = casc;
+  const buildName = casc.getBuildName();
+  const seconds = ((Date.now() - t0) / 1000).toFixed(1);
+  write('CASC loaded (%s) in %ss', buildName, seconds);
+  console.log(`CASC loaded (${buildName}) in ${seconds}s`);
   return casc;
 }
 

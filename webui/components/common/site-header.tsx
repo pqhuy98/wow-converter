@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { useServerConfig } from '../server-config';
 import { ThemeToggle } from './theme-toggle';
+import { WowConfigHeaderButton } from '../wow-config/wow-config-header-button';
 
 type ActiveTab = 'export' | 'browse' | 'browse-texture' | 'recents' | 'maps';
 
@@ -95,7 +96,8 @@ export default function SiteHeader() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="shrink-0 sm:absolute sm:right-1 ml-1 sm:ml-0">
+          <div className="flex shrink-0 items-center gap-1 sm:absolute sm:right-1 ml-1 sm:ml-0">
+            <WowConfigHeaderButton />
             <ThemeToggle />
           </div>
         </div>
