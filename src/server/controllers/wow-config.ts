@@ -13,6 +13,18 @@ import type { WowConfig } from '@/lib/wow/wow-config-state';
 import { isSharedHosting } from '../config';
 import { pickNativeFolder } from '../utils/pick-folder';
 
+const WOW_CONFIG_SHARED_HOSTING_LOCKED = 'WoW installation cannot be changed in shared hosting mode.';
+
+function assertWowConfigMutable(): void {
+  if (isSharedHosting) {
+    throw new Error(WOW_CONFIG_SHARED_HOSTING_LOCKED);
+  }
+}
+
+function wowConfigErrorStatus(error: Error): number {
+  return error.message === WOW_CONFIG_SHARED_HOSTING_LOCKED ? 403 : 400;
+}
+
 export function ControllerWowConfig(router: Router): void {
   router.get('/wow-config/status', async (_req, res, next) => {
     try {
@@ -23,11 +35,8 @@ export function ControllerWowConfig(router: Router): void {
   });
 
   router.post('/wow-config/pick-local-folder', (_req, res) => {
-    if (isSharedHosting) {
-      res.status(403).json({ error: 'Folder picker is not available in shared hosting mode' });
-      return;
-    }
     try {
+      assertWowConfigMutable();
       const startDirectory = typeof _req.body?.installDirectory === 'string'
         ? normalizeInstallDirectory(_req.body.installDirectory)
         : undefined;
@@ -41,21 +50,25 @@ export function ControllerWowConfig(router: Router): void {
       }
       res.json({ installDirectory });
     } catch (e) {
-      res.status(500).json({ error: (e as Error).message });
+      const err = e as Error;
+      res.status(wowConfigErrorStatus(err)).json({ error: err.message });
     }
   });
 
   router.post('/wow-config/reset', async (_req, res) => {
     try {
+      assertWowConfigMutable();
       await resetWowConfig();
       res.json(await getWowConfigStatus());
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const err = e as Error;
+      res.status(wowConfigErrorStatus(err)).json({ error: err.message });
     }
   });
 
   router.post('/wow-config/discover-local', async (req, res) => {
     try {
+      assertWowConfigMutable();
       const installDirectory = req.body?.installDirectory;
       if (typeof installDirectory !== 'string' || !installDirectory.trim()) {
         res.status(400).json({ error: 'installDirectory is required' });
@@ -64,12 +77,14 @@ export function ControllerWowConfig(router: Router): void {
       const builds = await discoverLocalBuilds(normalizeInstallDirectory(installDirectory));
       res.json({ builds });
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const err = e as Error;
+      res.status(wowConfigErrorStatus(err)).json({ error: err.message });
     }
   });
 
   router.post('/wow-config/discover-remote', async (req, res) => {
     try {
+      assertWowConfigMutable();
       const regionTag = req.body?.regionTag;
       if (typeof regionTag !== 'string' || !regionTag.trim()) {
         res.status(400).json({ error: 'regionTag is required' });
@@ -78,12 +93,14 @@ export function ControllerWowConfig(router: Router): void {
       const builds = await discoverRemoteBuilds(regionTag.trim());
       res.json({ builds });
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const err = e as Error;
+      res.status(wowConfigErrorStatus(err)).json({ error: err.message });
     }
   });
 
   router.post('/wow-config/apply', async (req, res) => {
     try {
+      assertWowConfigMutable();
       const {
         mode, installDirectory, regionTag, product,
       } = req.body ?? {};
@@ -123,7 +140,8 @@ export function ControllerWowConfig(router: Router): void {
       const status = await getWowConfigStatus();
       res.json({ cascInfo, status });
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const err = e as Error;
+      res.status(wowConfigErrorStatus(err)).json({ error: err.message });
     }
   });
 }

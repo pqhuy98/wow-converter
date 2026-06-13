@@ -83,7 +83,7 @@ export function setMemoryWowConfig(config: WowConfig | null): void {
 }
 
 export function getEffectiveWowConfig(): WowConfig | null {
-  return getEnvWowConfig() ?? memoryConfig;
+  return memoryConfig ?? getEnvWowConfig();
 }
 
 export function setWowConfigError(message: string | null): void {

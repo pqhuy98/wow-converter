@@ -22,6 +22,7 @@ import {
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@/components/ui/tabs';
+import { useServerConfig } from '@/components/server-config';
 
 import type { CascBuildSummary, WowConfigStatus } from './wow-config-context';
 import { useWowConfig } from './wow-config-context';
@@ -61,6 +62,7 @@ function gameOptionsFromBuilds(
 export function WowConfigSetup() {
   const router = useRouter();
   const { status, refresh } = useWowConfig();
+  const { isSharedHosting } = useServerConfig();
 
   const [mode, setMode] = useState<'local' | 'remote'>(status.config?.mode ?? 'local');
   const [installDirectory, setInstallDirectory] = useState(() => normalizeInstallDirectory(
@@ -266,6 +268,55 @@ export function WowConfigSetup() {
     );
   }
 
+  if (isSharedHosting) {
+    return (
+      <Card className="mx-auto max-w-xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {status.cascLoaded ? (
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+            ) : (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            )}
+            {status.cascLoaded ? 'WoW is loaded' : 'Loading WoW'}
+          </CardTitle>
+          <CardDescription>
+            {status.cascLoaded
+              ? status.cascInfo?.buildName
+              : 'WoW data is managed by the server on shared hosting.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {status.config && (
+            <div className="rounded-md border p-3 text-sm space-y-1">
+              <div className="font-medium">Server source</div>
+              {status.config.mode === 'local' ? (
+                <div className="text-muted-foreground break-all">{status.config.installDirectory}</div>
+              ) : (
+                <div className="text-muted-foreground">
+                  Online —
+                  {' '}
+                  {status.config.regionTag.toUpperCase()}
+                </div>
+              )}
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">
+            WoW installation cannot be changed from the web UI in shared hosting mode.
+          </p>
+          {status.error && (
+            <Alert variant="destructive">
+              <AlertDescription>{status.error}</AlertDescription>
+            </Alert>
+          )}
+          <Button asChild>
+            <Link href="/">Back</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (status.cascLoaded && !loadSuccess) {
     return (
       <Card className="mx-auto max-w-xl">
@@ -307,7 +358,7 @@ export function WowConfigSetup() {
             <Button asChild>
               <Link href="/">Back</Link>
             </Button>
-            {!status.configuredFromEnv && (
+            {!isSharedHosting && (
               <Button
                 type="button"
                 variant="outline"

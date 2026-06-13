@@ -105,7 +105,31 @@ function findBuildIndex(builds: CascBuildSummary[], product: string): number {
   return idx;
 }
 
-export async function applyWowConfig(config: WowConfig): Promise<CascInfoSummary> {
+/** If env is configured but CASC is not loaded yet, attempt apply once at startup. */
+let envApplyAttempted = false;
+/** If UI saved a config but wow-data-server restarted, attempt apply once. */
+let memoryApplyAttempted = false;
+/** User reset or applied a config via UI — do not re-apply .env at runtime. */
+let runtimeConfigOverride = false;
+let prevCascLoaded = false;
+
+export function resetWowConfigSession(): void {
+  runtimeConfigOverride = true;
+  memoryApplyAttempted = false;
+  setMemoryWowConfig(null);
+  setWowConfigError(null);
+}
+
+export interface ApplyWowConfigOptions {
+  /** When false, load CASC without persisting as the active UI config (env bootstrap only). */
+  persist?: boolean;
+}
+
+export async function applyWowConfig(
+  config: WowConfig,
+  options: ApplyWowConfigOptions = {},
+): Promise<CascInfoSummary> {
+  const persist = options.persist !== false;
   setWowConfigApplyInFlight(true);
   setWowConfigError(null);
   try {
@@ -119,7 +143,10 @@ export async function applyWowConfig(config: WowConfig): Promise<CascInfoSummary
     const buildIndex = findBuildIndex(builds, config.product);
     const { status, json } = await postJson('/rest/loadCascBuild', { buildIndex });
     if (json.id === 'CASC_INFO') {
-      if (!isEnvWowConfigured()) setMemoryWowConfig(config);
+      if (persist) {
+        setMemoryWowConfig(config);
+        runtimeConfigOverride = true;
+      }
       return summarizeCascInfo(json);
     }
     if (status === 409 && json.id === 'ERR_CASC_ACTIVE') {
@@ -136,23 +163,36 @@ export async function applyWowConfig(config: WowConfig): Promise<CascInfoSummary
   }
 }
 
-/** If env is configured but CASC is not loaded yet, attempt apply once. */
-let envApplyAttempted = false;
-/** If UI saved a config but wow-data-server restarted, attempt apply once. */
-let memoryApplyAttempted = false;
-let prevCascLoaded = false;
+export async function ensureEnvWowConfigLoaded(): Promise<void> {
+  if (runtimeConfigOverride || !isEnvWowConfigured() || envApplyAttempted) return;
+  envApplyAttempted = true;
 
-export function resetWowConfigSession(): void {
-  envApplyAttempted = false;
-  memoryApplyAttempted = false;
-  setMemoryWowConfig(null);
-  setWowConfigError(null);
+  if (await fetchCascInfo()) return;
+
+  const envConfig = getEnvWowConfig();
+  if (!envConfig) return;
+  try {
+    await applyWowConfig(envConfig, { persist: false });
+  } catch (e) {
+    setWowConfigError((e as Error).message);
+  }
+}
+
+/** Re-load CASC from the last UI config after wow-data-server restart. */
+export async function ensureMemoryWowConfigLoaded(): Promise<void> {
+  if (memoryApplyAttempted) return;
+  const config = getMemoryWowConfig();
+  if (!config) return;
+  if (await fetchCascInfo()) return;
+  memoryApplyAttempted = true;
+  try {
+    await applyWowConfig(config);
+  } catch (e) {
+    setWowConfigError((e as Error).message);
+  }
 }
 
 export async function resetWowConfig(): Promise<void> {
-  if (isEnvWowConfigured()) {
-    throw new Error('WoW is configured automatically and cannot be changed here.');
-  }
   const { json, status } = await postJson('/rest/softRestart', {});
   if (status === 404 || json.id === 'ERR_NOT_FOUND') {
     // Older wow-data-server without softRestart — fall back to unload only.
@@ -175,34 +215,6 @@ export async function resetWowConfig(): Promise<void> {
   wowExportClient.clearRuntimeCaches();
 }
 
-export async function ensureEnvWowConfigLoaded(): Promise<void> {
-  if (envApplyAttempted || !isEnvWowConfigured()) return;
-  const cascInfo = await fetchCascInfo();
-  if (cascInfo) return;
-  envApplyAttempted = true;
-  const envConfig = getEnvWowConfig();
-  if (!envConfig) return;
-  try {
-    await applyWowConfig(envConfig);
-  } catch (e) {
-    setWowConfigError((e as Error).message);
-  }
-}
-
-/** Re-load CASC from the last UI config after wow-data-server restart. */
-export async function ensureMemoryWowConfigLoaded(): Promise<void> {
-  if (memoryApplyAttempted || isEnvWowConfigured()) return;
-  const config = getMemoryWowConfig();
-  if (!config) return;
-  if (await fetchCascInfo()) return;
-  memoryApplyAttempted = true;
-  try {
-    await applyWowConfig(config);
-  } catch (e) {
-    setWowConfigError((e as Error).message);
-  }
-}
-
 /** Block until CASC is ready, or throw with a actionable message (CLI/scripts). */
 export async function assertWowCascReady(timeoutMs = 5000): Promise<void> {
   await ensureEnvWowConfigLoaded();
@@ -216,7 +228,7 @@ export async function assertWowCascReady(timeoutMs = 5000): Promise<void> {
     await new Promise((r) => { setTimeout(r, 200); });
   }
 
-  if (isEnvWowConfigured()) {
+  if (isEnvWowConfigured() && !runtimeConfigOverride) {
     throw new Error('CASC is set in .env but failed to load. Check wow-data-server logs.');
   }
   throw new Error(
@@ -236,9 +248,7 @@ export async function getWowConfigStatus(): Promise<WowConfigStatus> {
   }
 
   await ensureEnvWowConfigLoaded();
-  if (!isEnvWowConfigured()) {
-    await ensureMemoryWowConfigLoaded();
-  }
+  await ensureMemoryWowConfigLoaded();
 
   cascInfo = reachable ? await fetchCascInfo() : null;
   cascLoaded = cascInfo !== null;
@@ -247,7 +257,8 @@ export async function getWowConfigStatus(): Promise<WowConfigStatus> {
   const configuredFromEnv = isEnvWowConfigured();
   const config = getEffectiveWowConfig();
   const cascLoading = isWowConfigApplyInFlight();
-  const needsSetup = !configuredFromEnv && !cascLoaded && !getMemoryWowConfig();
+  const needsSetup = !cascLoaded && !getMemoryWowConfig()
+    && (runtimeConfigOverride || !configuredFromEnv);
 
   return {
     needsSetup,

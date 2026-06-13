@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 
 import { Button } from '@/components/ui/button';
 
+import { useServerConfig } from '../server-config';
 import type { WowConfigStatus } from './wow-config-context';
 import { useWowConfig } from './wow-config-context';
 
@@ -29,7 +30,23 @@ function headerLabel(status: WowConfigStatus): string {
 
 export function WowConfigHeaderButton() {
   const { status } = useWowConfig();
+  const { isSharedHosting } = useServerConfig();
   const label = useMemo(() => headerLabel(status), [status]);
+
+  if (isSharedHosting) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled
+        className="h-9 max-w-[min(100vw-8rem,14rem)] gap-1.5 px-2.5 font-normal"
+        title="WoW installation is fixed on shared hosting and cannot be changed here"
+      >
+        <HardDrive className="h-4 w-4 shrink-0" />
+        <span className="truncate text-xs">{label}</span>
+      </Button>
+    );
+  }
 
   return (
     <Button variant="outline" size="sm" asChild className="h-9 max-w-[min(100vw-8rem,14rem)] gap-1.5 px-2.5 font-normal">
