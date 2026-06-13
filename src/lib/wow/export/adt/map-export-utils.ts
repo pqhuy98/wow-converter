@@ -20,6 +20,7 @@ export interface ADTExportOptions {
   splitLargeTerrainBakes: boolean;
   mapsIncludeHoles: boolean;
   enableSharedChildren: boolean;
+  enableAbsoluteCSVPaths: boolean;
   modelsExportCollision: boolean;
   mapsIncludeWMO: boolean;
   mapsIncludeM2: boolean;
@@ -28,6 +29,8 @@ export interface ADTExportOptions {
   mapsIncludeFoliage: boolean;
   mapsIncludeLiquid: boolean;
   mapsIncludeGameObjects: boolean;
+  /** When true, ADT export writes placement CSV only for M2/WMO (no OBJ/MTL/BLP). */
+  mapsDirectModels: boolean;
 }
 
 /**
@@ -46,6 +49,7 @@ export function buildADTExportOptions(baseConfig: Partial<WowReaderConfig> = wow
     splitLargeTerrainBakes: !!pick('splitLargeTerrainBakes', false),
     mapsIncludeHoles: !!pick('mapsIncludeHoles', true),
     enableSharedChildren: !!pick('enableSharedChildren', false),
+    enableAbsoluteCSVPaths: !!pick('enableAbsoluteCSVPaths', false),
     modelsExportCollision: !!pick('modelsExportCollision', false),
     mapsIncludeWMO: !!pick('mapsIncludeWMO', true),
     mapsIncludeM2: !!pick('mapsIncludeM2', true),
@@ -54,6 +58,7 @@ export function buildADTExportOptions(baseConfig: Partial<WowReaderConfig> = wow
     mapsIncludeFoliage: !!pick('mapsIncludeFoliage', false),
     mapsIncludeLiquid: !!pick('mapsIncludeLiquid', true),
     mapsIncludeGameObjects: !!pick('mapsIncludeGameObjects', false),
+    mapsDirectModels: !!pick('mapsDirectModels', true),
   };
 }
 

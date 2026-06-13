@@ -14,6 +14,9 @@ import { BufferWrapper } from '../../formats/buffer';
 import { constants } from '../../formats/constants';
 import { WMOLoader } from '../../formats/wmo/wmo-loader';
 import { wowConfig } from '../../server/config';
+import type { ADTExportOptions } from '../adt/map-export-utils';
+import type { ExportProgress } from '../export-progress';
+import { modelReferencePath, placementCsvPath } from '../model-reference-path';
 import { FileManifestEntry, M2Exporter } from '../m2/m2-exporter';
 import { CSVWriter } from '../writers/csv-writer';
 import {
@@ -65,7 +68,12 @@ export class WMOExporter {
   /**
    * Export textures for this WMO.
    */
-  async exportTextures(out: string, mtl: MTLWriter | null = null, raw = false): Promise<{ textureMap: Map<number, TextureMapEntry>; materialMap: Map<number, string> }> {
+  async exportTextures(
+    out: string,
+    mtl: MTLWriter | null = null,
+    raw = false,
+    progress: ExportProgress | undefined = undefined,
+  ): Promise<{ textureMap: Map<number, TextureMapEntry>; materialMap: Map<number, string> }> {
     const config = wowConfig;
     const casc = getCasc();
 
@@ -81,6 +89,8 @@ export class WMOExporter {
     const usePosix = config.pathFormat === 'posix';
     const isClassic = !!this.wmo.textureNames;
     const materialCount = this.wmo.materials!.length;
+    const wmoName = path.basename(out, '.obj');
+    let textureStep = 0;
 
     for (let i = 0; i < materialCount; i++) {
       const material = this.wmo.materials![i];
@@ -174,6 +184,10 @@ export class WMOExporter {
           mtl?.addMaterial(matName, texFile);
           textureMap.set(fileDataID, { matPathRelative: texFile, matPath: texPath, matName });
 
+          textureStep++;
+          progress?.setLabel(`${wmoName} WMO textures`, textureStep);
+          progress?.advance(1);
+
           // MTL only supports one texture per material, only link the first unless we only want the second one (e.g. for shader 23).
           if (!materialMap.has(i) && dontUseFirstTexture === false) materialMap.set(i, matName);
 
@@ -189,9 +203,119 @@ export class WMOExporter {
   }
 
   /**
+   * Write WMO interior doodad placement CSV. When directModels is true, skips
+   * exporting M2 OBJ/MTL/BLP (converter resolves models from FileDataID).
+   */
+  async exportDoodadPlacementCsv(
+    out: string,
+    config: ADTExportOptions | typeof wowConfig,
+    progress?: ExportProgress,
+    directModels = false,
+  ): Promise<void> {
+    const wmo = this.wmo;
+    wmo.load();
+    const doodadSetMask = this.doodadSetMask;
+
+    const csvPath = placementCsvPath(out);
+    if (!config.overwriteFiles && await outputFileExists(csvPath)) {
+      write('Skipping model placement export %s (file exists, overwrite disabled)', csvPath);
+      return;
+    }
+
+    const useAbsolute = config.enableAbsoluteCSVPaths;
+    const usePosix = config.pathFormat === 'posix';
+    const outDir = path.dirname(out);
+    const csv = new CSVWriter(csvPath);
+    csv.addField('ModelFile', 'PositionX', 'PositionY', 'PositionZ', 'RotationW', 'RotationX', 'RotationY', 'RotationZ', 'ScaleFactor', 'DoodadSet', 'FileDataID');
+
+    const wmoLabel = path.basename(out, path.extname(out));
+    const doodadSets = wmo.doodadSets ?? [];
+    for (let i = 0, n = doodadSets.length; i < n; i++) {
+      if (!doodadSetMask?.[i]?.checked) continue;
+
+      const set = doodadSets[i];
+      const count = set.doodadCount;
+      if (directModels) {
+        write('Writing interior doodad placements for set %s (%d entries)...', set.name, count);
+      } else {
+        write('Exporting WMO doodad set %s with %d doodads...', set.name, count);
+      }
+      progress?.setLabel(`${wmoLabel}, ${set.name}`, 0, count);
+
+      for (let j = 0; j < count; j++) {
+        if (progress && j > 0 && j % 50 === 0) {
+          progress.setLabel(`${wmoLabel}, ${set.name}`, j, count);
+        }
+        const doodad = wmo.doodads![set.firstInstanceIndex + j];
+        let fileDataID = 0;
+        let fileName: string | undefined;
+
+        if (wmo.fileDataIDs) {
+          fileDataID = wmo.fileDataIDs[doodad.offset];
+          fileName = listfile.getByID(fileDataID);
+        } else {
+          fileName = wmo.doodadNames![doodad.offset];
+          fileDataID = listfile.getByFilename(fileName) || 0;
+        }
+
+        if (fileDataID <= 0) continue;
+
+        try {
+          if (directModels) {
+            fileName = modelReferencePath(fileDataID, 'm2');
+          } else if (fileName !== undefined) {
+            fileName = replaceExtension(fileName, '.obj');
+          } else {
+            fileName = listfile.formatUnknownFile(fileDataID, '.obj');
+          }
+
+          let m2Path: string;
+          if (config.enableSharedChildren) m2Path = getExportPath(fileName);
+          else m2Path = replaceFile(out, fileName);
+
+          if (!directModels && !doodadCache.has(fileDataID)) {
+            const data = await getCasc().getFile(fileDataID);
+            const modelMagic = data.readUInt32LE();
+            data.seek(0);
+            if (modelMagic === constants.MAGIC.MD21) {
+              const m2Export = new M2Exporter(data, undefined, fileDataID);
+              await m2Export.exportAsOBJ(m2Path, undefined, config.modelsExportCollision, progress);
+            } else if (modelMagic === constants.MAGIC.M3DT) {
+              write('Skipping M3 doodad %d (M3 export not supported natively)', fileDataID);
+            }
+            doodadCache.add(fileDataID);
+          }
+
+          let modelPath = path.relative(outDir, m2Path);
+          if (useAbsolute === true) modelPath = path.resolve(outDir, modelPath);
+          if (usePosix) modelPath = win32ToPosix(modelPath);
+
+          csv.addRow({
+            ModelFile: modelPath,
+            PositionX: doodad.position[0],
+            PositionY: doodad.position[1],
+            PositionZ: doodad.position[2],
+            RotationW: doodad.rotation[3],
+            RotationX: doodad.rotation[0],
+            RotationY: doodad.rotation[1],
+            RotationZ: doodad.rotation[2],
+            ScaleFactor: doodad.scale,
+            DoodadSet: set.name,
+            FileDataID: fileDataID,
+          });
+        } catch (e) {
+          write('Failed to load doodad %d for %s: %s', fileDataID, set.name, (e as Error).message);
+        }
+      }
+    }
+
+    await csv.write();
+  }
+
+  /**
    * Export the WMO model as a WaveFront OBJ.
    */
-  async exportAsOBJ(out: string, fileManifest?: FileManifestEntry[]): Promise<void> {
+  async exportAsOBJ(out: string, fileManifest?: FileManifestEntry[], progress: ExportProgress | undefined = undefined): Promise<void> {
     const casc = getCasc();
     const obj = new OBJWriter(out);
     const mtl = new MTLWriter(replaceExtension(out, '.mtl'));
@@ -209,7 +333,7 @@ export class WMOExporter {
     const wmo = this.wmo;
     wmo.load();
 
-    const texMaps = await this.exportTextures(out, mtl);
+    const texMaps = await this.exportTextures(out, mtl, false, progress);
 
     const materialMap = texMaps.materialMap;
     const textureMap = texMaps.textureMap;
@@ -266,7 +390,11 @@ export class WMOExporter {
 
     // Iterate over groups again and fill the allocated arrays.
     let indOfs = 0;
+    let groupIndex = 0;
     for (const group of groups) {
+      groupIndex++;
+      progress?.setLabel(`${wmoName} WMO groups`, groupIndex, groups.length);
+      progress?.advance(1);
       const indCount = group.vertices!.length / 3;
 
       const vertOfs = indOfs * 3;
@@ -308,101 +436,10 @@ export class WMOExporter {
 
     for (const arr of uvArrays) obj.addUVArray(arr);
 
-    const csvPath = replaceExtension(out, '_ModelPlacementInformation.csv');
-    if (config.overwriteFiles || !await outputFileExists(csvPath)) {
-      const useAbsolute = config.enableAbsoluteCSVPaths;
-      const usePosix = config.pathFormat === 'posix';
-      const outDir = path.dirname(out);
-      const csv = new CSVWriter(csvPath);
-      csv.addField('ModelFile', 'PositionX', 'PositionY', 'PositionZ', 'RotationW', 'RotationX', 'RotationY', 'RotationZ', 'ScaleFactor', 'DoodadSet', 'FileDataID');
-
-      // Doodad sets.
-      const doodadSets = wmo.doodadSets ?? [];
-      for (let i = 0, n = doodadSets.length; i < n; i++) {
-        // Skip disabled doodad sets.
-        if (!doodadSetMask?.[i]?.checked) continue;
-
-        const set = doodadSets[i];
-        const count = set.doodadCount;
-        write('Exporting WMO doodad set %s with %d doodads...', set.name, count);
-
-        for (let j = 0; j < count; j++) {
-          const doodad = wmo.doodads![set.firstInstanceIndex + j];
-          let fileDataID = 0;
-          let fileName: string | undefined;
-
-          if (wmo.fileDataIDs) {
-            // Retail, use fileDataID and lookup the filename.
-            fileDataID = wmo.fileDataIDs[doodad.offset];
-            fileName = listfile.getByID(fileDataID);
-          } else {
-            // Classic, use fileName and lookup the fileDataID.
-            fileName = wmo.doodadNames![doodad.offset];
-            fileDataID = listfile.getByFilename(fileName) || 0;
-          }
-
-          if (fileDataID > 0) {
-            try {
-              if (fileName !== undefined) {
-                // Replace M2 extension with OBJ.
-                fileName = replaceExtension(fileName, '.obj');
-              } else {
-                // Handle unknown files.
-                fileName = listfile.formatUnknownFile(fileDataID, '.obj');
-              }
-
-              let m2Path: string;
-              if (config.enableSharedChildren) m2Path = getExportPath(fileName);
-              else m2Path = replaceFile(out, fileName);
-
-              // Only export doodads that are not already exported.
-              if (!doodadCache.has(fileDataID)) {
-                const data = await casc.getFile(fileDataID);
-                const modelMagic = data.readUInt32LE();
-                data.seek(0);
-                if (modelMagic === constants.MAGIC.MD21) {
-                  const m2Export = new M2Exporter(data, undefined, fileDataID);
-                  await m2Export.exportAsOBJ(m2Path, undefined, config.modelsExportCollision);
-                } else if (modelMagic === constants.MAGIC.M3DT) {
-                  // M3 models are not supported by the native port (unused by wow-converter).
-                  write('Skipping M3 doodad %d (M3 export not supported natively)', fileDataID);
-                }
-
-                doodadCache.add(fileDataID);
-              }
-
-              let modelPath = path.relative(outDir, m2Path);
-
-              if (useAbsolute === true) modelPath = path.resolve(outDir, modelPath);
-
-              if (usePosix) modelPath = win32ToPosix(modelPath);
-
-              csv.addRow({
-                ModelFile: modelPath,
-                PositionX: doodad.position[0],
-                PositionY: doodad.position[1],
-                PositionZ: doodad.position[2],
-                RotationW: doodad.rotation[3],
-                RotationX: doodad.rotation[0],
-                RotationY: doodad.rotation[1],
-                RotationZ: doodad.rotation[2],
-                ScaleFactor: doodad.scale,
-                DoodadSet: set.name,
-                FileDataID: fileDataID,
-              });
-            } catch (e) {
-              write('Failed to load doodad %d for %s: %s', fileDataID, set.name, (e as Error).message);
-            }
-          }
-        }
-      }
-
-      await csv.write();
-      // CSVWriter skips writing empty files; only list the CSV in the
-      // manifest when it actually exists (no doodad sets enabled -> no file).
-      if (csv.rows.length > 0) fileManifest?.push({ type: 'PLACEMENT', fileDataID: this.wmo.fileDataID!, file: csv.out });
-    } else {
-      write('Skipping model placement export %s (file exists, overwrite disabled)', csvPath);
+    await this.exportDoodadPlacementCsv(out, config, progress, false);
+    const csvPath = placementCsvPath(out);
+    if (await outputFileExists(csvPath)) {
+      fileManifest?.push({ type: 'PLACEMENT', fileDataID: this.wmo.fileDataID!, file: csvPath });
     }
 
     if (!mtl.isEmpty) obj.setMaterialLibrary(path.basename(mtl.out));

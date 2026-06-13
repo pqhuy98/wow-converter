@@ -42,3 +42,8 @@ export function ensureConverterCasc(): void {
   if (runtimeState.casc) return;
   runtimeState.casc = new RemoteCasc() as unknown as CASC;
 }
+
+/** Drop the converter's remote CASC adapter so the next export re-registers cleanly. */
+export function resetConverterCasc(): void {
+  if (runtimeState.casc?.isRemote) runtimeState.casc = null;
+}

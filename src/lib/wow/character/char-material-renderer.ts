@@ -192,7 +192,7 @@ export class CharMaterialRenderer {
     // The converter process has no listfile; the direct pipeline passes the
     // server-resolved name instead.
     const filename = filenameOverride ?? listfile.getByID(chrCustomizationMaterial.FileDataID);
-    write('Loading texture %s for target %d with alpha %s', filename, chrCustomizationMaterial.ChrModelTextureTargetID, useAlpha);
+    // write('Loading texture %s for target %d with alpha %s', filename, chrCustomizationMaterial.ChrModelTextureTargetID, useAlpha);
 
     this.textureTargets.push({
       id: chrCustomizationMaterial.ChrModelTextureTargetID,

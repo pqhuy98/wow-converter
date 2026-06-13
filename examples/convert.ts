@@ -42,6 +42,7 @@ const maps: ([WowMap,
   number, // map angle degrees
 ] | [string, number, number, string, number])[] = [
   // [WowMap.Northrend, [29, 22], [29, 23], 'wrathgate.w3x', 0.05, 0.3, 0],
+  [WowMap.Northrend, [21, 27], [22, 28], 'valiancekeep.w3x', 0, 1, 0],
   // [WowMap.Northrend, [29, 15], [30, 18], 'icecrown.w3x', 0.63, 0.75, 180],
   // [WowMap.Northrend, [27, 20], [28, 21], 'icecrown.w3x', 0.65, 0.77, 180],
   // [WowMap.Northrend, [18, 24], [19, 25], 'nexus.w3x', 0, 1, 0],
@@ -53,7 +54,7 @@ const maps: ([WowMap,
   //   0.55, 0.65, 'icc-floor34-wmo.w3x', 90,
   // ],
   // [WowMap.IcecrownCitadel, [35, 30], [36, 31], 'frozen-throne.w3x', 0.5, 0.7, 180],
-  [WowMap.Azeroth, [32, 48], [32, 48], 'northshire-abbey.w3x', 0, 1, 0],
+  // [WowMap.Azeroth, [32, 48], [32, 4  8], 'northshire-abbey.w3x', 0, 1, 0],
   // [WowMap.Azeroth, [29, 26], [33, 29], 'undercity.w3x', 0, 1, 0],
   // [
   //   'world\\wmo\\lorderon\\undercity\\undercity_set0.obj',

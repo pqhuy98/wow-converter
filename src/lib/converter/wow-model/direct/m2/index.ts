@@ -121,7 +121,9 @@ export async function convertM2ToMdl(config: Config, opts: ConvertM2Options): Pr
     }
     if (!isM2) {
       // WMO branch (M3 still unsupported; WMOLoader rejects it like the server does).
-      return convertWmoToMdl(config, { fileDataID, fileName, raw });
+      return convertWmoToMdl(config, {
+        fileDataID, fileName, raw, exportPathOverride: opts.exportPathOverride,
+      });
     }
 
     const m2 = new M2Loader(new BufferWrapper(raw));

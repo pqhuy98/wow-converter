@@ -34,6 +34,8 @@ export interface ConvertWmoOptions {
   fileName?: string;
   /** Raw root WMO bytes, if the caller already fetched them. */
   raw?: Buffer;
+  /** Mirror legacy OBJ export path (includes `_setN` for ADT-placed WMOs). */
+  exportPathOverride?: string;
 }
 
 interface TextureMapEntry {
@@ -308,7 +310,8 @@ export async function convertWmoToMdl(config: Config, opts: ConvertWmoOptions): 
     const listfileName = opts.fileName ?? await getFileNameByID(fileDataID);
     const fileName = listfileName ?? `unknown/${fileDataID}.wmo`;
 
-    const exportPath = replaceExtension(virtualExportPath(exportRoot, fileName), '.obj');
+    const exportPath = opts.exportPathOverride
+      ?? replaceExtension(virtualExportPath(exportRoot, fileName), '.obj');
     const outDir = path.dirname(exportPath);
 
     const wmo = new WMOLoader(new BufferWrapper(raw), fileDataID);

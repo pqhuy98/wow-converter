@@ -10,6 +10,13 @@ const inFlight = new Map<number, Promise<string | undefined>>();
 const idCache = new Map<string, number | undefined>();
 const idInFlight = new Map<string, Promise<number | undefined>>();
 
+export function clearNameClientCache(): void {
+  cache.clear();
+  inFlight.clear();
+  idCache.clear();
+  idInFlight.clear();
+}
+
 export async function getFileNameByID(fileDataID: number): Promise<string | undefined> {
   if (cache.has(fileDataID)) return cache.get(fileDataID);
 

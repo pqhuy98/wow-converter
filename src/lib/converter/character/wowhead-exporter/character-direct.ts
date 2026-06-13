@@ -86,6 +86,10 @@ function buildCharacterGeosetMask(
 const BAKE_CACHE_MAX = 8;
 const bakeCache = new Map<string, Map<number, DirectDataTexture>>();
 
+export function clearCharacterBakeCache(): void {
+  bakeCache.clear();
+}
+
 function bakeCacheKey(body: ExportCharacterParams): string {
   return JSON.stringify({
     race: body.race,

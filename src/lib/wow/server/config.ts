@@ -65,6 +65,7 @@ export interface WowReaderConfig {
   mapsIncludeLiquid: boolean;
   mapsIncludeGameObjects: boolean;
   mapsIncludeHoles: boolean;
+  mapsDirectModels: boolean;
   mapsExportRaw: boolean;
   exportMapQuality: number;
   splitLargeTerrainBakes: boolean;
@@ -136,6 +137,7 @@ export const wowConfig: WowReaderConfig = {
   mapsIncludeLiquid: false,
   mapsIncludeGameObjects: true,
   mapsIncludeHoles: true,
+  mapsDirectModels: true,
   mapsExportRaw: false,
   exportMapQuality: 4096,
   splitLargeTerrainBakes: true,

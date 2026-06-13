@@ -16,6 +16,7 @@ import { M2Loader } from '@/lib/wow/formats/m2/m2-loader';
 import type { M2Animation, M2Attachment } from '@/lib/wow/formats/m2/m2-types';
 import { SKELLoader } from '@/lib/wow/formats/m2/skel-loader';
 import { getCasc } from '@/lib/wow/server/runtime';
+import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 export interface BonesData {
   bones: unknown;
@@ -34,6 +35,18 @@ interface SkeletonGraph {
 
 const GRAPH_CACHE_MAX = 8;
 const graphCache = new Map<string, SkeletonGraph>();
+
+/** Drop cached skeleton graphs (e.g. when the active CASC build changes). */
+export function clearSkeletonGraphCache(): void {
+  graphCache.clear();
+}
+
+async function currentBuildKey(): Promise<string> {
+  await wowExportClient.waitUntilReady();
+  const buildKey = wowExportClient.cascInfo?.buildKey;
+  if (!buildKey) throw new Error('No CASC build key available from data server');
+  return buildKey;
+}
 
 function cacheGet(key: string): SkeletonGraph | undefined {
   const hit = graphCache.get(key);
@@ -54,9 +67,10 @@ function cacheSet(key: string, value: SkeletonGraph): void {
 
 /** Load (or reuse) the full pre-exclusion skeleton graph for an M2. */
 async function loadSkeletonGraph(m2: M2Loader, m2FileDataID: number | undefined): Promise<SkeletonGraph> {
+  const buildKey = await currentBuildKey();
   const cacheKey = m2.skeletonFileID
-    ? `skel:${m2.skeletonFileID}`
-    : (m2FileDataID !== undefined ? `m2:${m2FileDataID}` : undefined);
+    ? `${buildKey}:skel:${m2.skeletonFileID}`
+    : (m2FileDataID !== undefined ? `${buildKey}:m2:${m2FileDataID}` : undefined);
   if (cacheKey) {
     const hit = cacheGet(cacheKey);
     if (hit) return hit;

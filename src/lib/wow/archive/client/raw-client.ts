@@ -12,7 +12,15 @@ import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import { readRawCachedFile, writeRawCachedFile } from './raw-cache';
 
-const inFlight = new Map<number, Promise<Buffer>>();
+const inFlight = new Map<string, Promise<Buffer>>();
+
+export function clearRawClientInFlight(): void {
+  inFlight.clear();
+}
+
+function inFlightKey(buildKey: string, fileDataID: number): string {
+  return `${buildKey}:${fileDataID}`;
+}
 
 async function currentBuildKey(): Promise<string> {
   await wowExportClient.waitUntilReady();
@@ -31,15 +39,16 @@ export async function getRawWowFile(fileDataID: number): Promise<Buffer> {
   const cached = await readRawCachedFile(buildKey, fileDataID);
   if (cached) return cached;
 
-  const pending = inFlight.get(fileDataID);
+  const flightKey = inFlightKey(buildKey, fileDataID);
+  const pending = inFlight.get(flightKey);
   if (pending) return pending;
 
   const promise = (async () => {
     const buf = await wowExportClient.downloadCascFile(fileDataID);
     await writeRawCachedFile(buildKey, fileDataID, buf);
     return buf;
-  })().finally(() => inFlight.delete(fileDataID));
+  })().finally(() => inFlight.delete(flightKey));
 
-  inFlight.set(fileDataID, promise);
+  inFlight.set(flightKey, promise);
   return promise;
 }

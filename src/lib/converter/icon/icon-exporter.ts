@@ -47,7 +47,8 @@ export class IconExporter {
 
     const listFiles = await getListFiles();
     for (const file of listFiles) {
-      this.fileNameToFileDataID.set(file.fileName, file.fileDataID);
+      const key = file.fileName.replace(/\\/g, '/');
+      this.fileNameToFileDataID.set(key, file.fileDataID);
     }
 
     this.aiResizer = new AiResizer();

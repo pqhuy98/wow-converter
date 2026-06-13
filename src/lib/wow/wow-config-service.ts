@@ -1,4 +1,5 @@
 import { constants } from '@/lib/wow/formats/constants';
+import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import type {
   CascBuildSummary, CascInfoSummary, WowConfig, WowConfigStatus,
@@ -171,6 +172,7 @@ export async function resetWowConfig(): Promise<void> {
     throw new Error(`Failed to reset WoW data (${String(json.id ?? status)})`);
   }
   resetWowConfigSession();
+  wowExportClient.clearRuntimeCaches();
 }
 
 export async function ensureEnvWowConfigLoaded(): Promise<void> {

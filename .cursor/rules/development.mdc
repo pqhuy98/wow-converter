@@ -25,3 +25,4 @@ alwaysApply: false
 - When using playwright MCP to export model, fill in the fields, click Export Character and wait for text `Export Successful` 10s then 20s then 40s. If taking more than 40s then check browser error message.
 - When taking screenshot of the exported model, click `⛶` to expand, `setViewport(1440, 900)`.
 - Documentation updates: before raising PR, always incorporate maintainer feedback into this file promptly. Keep it extremely compact and high-signal (short bullets over long prose).
+- Agentic loop: when running temporary Bun scripts, remember to put process.exit(0) so that the background process terminates instead of hanging indefinitely.

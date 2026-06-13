@@ -141,13 +141,30 @@ export abstract class CASC {
   fileExists(fileDataID: number): boolean {
     const root = this.rootEntries.get(fileDataID);
     if (root === undefined) return false;
+    return this.selectRootContentKey(root) !== null;
+  }
 
-    for (const [rootTypeIdx] of root.entries()) {
-      const rootType = this.rootTypes[rootTypeIdx];
-      if ((rootType.localeFlags & this.locale) && ((rootType.contentFlags & ContentFlags.LowViolence) === 0)) return true;
-    }
+  /**
+   * Pick the best content key for a root entry.
+   * Prefers the configured locale and non-LowViolence variants, then falls back
+   * to any locale (icons/textures are often locale-neutral in the CASC root).
+   */
+  private selectRootContentKey(root: RootEntry): CascKey | null {
+    const pick = (requireLocale: boolean, skipLowViolence: boolean): CascKey | null => {
+      for (const [rootTypeIdx, key] of root.entries()) {
+        const rootType = this.rootTypes[rootTypeIdx];
+        if (skipLowViolence && (rootType.contentFlags & ContentFlags.LowViolence)) continue;
+        if (rootType.contentFlags & ContentFlags.DoNotLoad) continue;
+        if (requireLocale && (rootType.localeFlags & this.locale) === 0) continue;
+        return key;
+      }
+      return null;
+    };
 
-    return false;
+    return pick(true, true)
+      ?? pick(true, false)
+      ?? pick(false, true)
+      ?? pick(false, false);
   }
 
   /**
@@ -158,17 +175,7 @@ export abstract class CASC {
     const root = this.rootEntries.get(fileDataID);
     if (root === undefined) throw new Error(`fileDataID does not exist in root: ${fileDataID}`);
 
-    let contentKey: CascKey | null = null;
-    for (const [rootTypeIdx, key] of root.entries()) {
-      const rootType = this.rootTypes[rootTypeIdx];
-
-      // Select the first root entry that has a matching locale and no LowViolence flag set.
-      if ((rootType.localeFlags & this.locale) && ((rootType.contentFlags & ContentFlags.LowViolence) === 0)) {
-        contentKey = key;
-        break;
-      }
-    }
-
+    const contentKey = this.selectRootContentKey(root);
     if (contentKey === null) throw new Error(`No root entry found for locale: ${this.locale}`);
 
     return this.getEncodingKeyForContentKey(contentKey);

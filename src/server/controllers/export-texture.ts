@@ -125,6 +125,8 @@ const iconExporter = new IconExporter();
 function getErrorStatus(error: Error): number {
   const message = error.message;
   if (message.includes('not found')) return 404;
+  if (message.includes('does not exist in root')) return 404;
+  if (message.includes('No root entry found for locale')) return 404;
   if (message.includes('Access denied')) return 403;
   return 500;
 }
@@ -220,7 +222,8 @@ export function ControllerExportTexture(router: express.Router) {
         return res.status(304).end();
       }
 
-      return res.sendFile(finalPath);
+      // express sendFile fails on Bun/Windows for these paths
+      return res.send(await fsExtra.readFile(path.resolve(finalPath)));
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

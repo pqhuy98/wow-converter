@@ -341,6 +341,9 @@ export class M2MetadataFile {
 
   animFileIDs: Data.AnimFileId[];
 
+  /** M2-local sequence list; color/particle tracks index into this, not SKEL bones. */
+  m2Animations?: readonly { duration: number }[];
+
   colors: Data.Color[];
 
   textureWeights: Data.M2Track<number>;
@@ -463,6 +466,12 @@ export class M2MetadataFile {
     return this.globalSequenceMap.get(id);
   }
 
+  /** Duration for M2 track slot `animId` (colors/particles use M2 indices, not SKEL). */
+  private sequenceDuration(animId: number): number | undefined {
+    return this.animFile.animations?.[animId]?.duration
+      ?? this.m2Animations?.[animId]?.duration;
+  }
+
   private m2trackToAnimation<T>(
     m2track: Data.M2Track<T>,
     type: AnimationType,
@@ -477,20 +486,28 @@ export class M2MetadataFile {
 
     let accumTime = 0;
     m2track.timestamps.forEach((timestamps, animId) => {
-      let maxTimestamp = -Infinity;
-      timestamps.forEach((timestamp, timestampI) => {
-        const value = transformation(m2track.values[animId][timestampI]);
-        result.keyFrames.set(timestamp + accumTime, value);
-        maxTimestamp = Math.max(maxTimestamp, timestamp + accumTime);
-      });
-      if (maxTimestamp >= -1 && !result.globalSeq) {
-        // Add the last key frame to the end of the animation to not lose the last frame of the animation
-        result.keyFrames.set(
-          accumTime + this.animFile.animations![animId].duration,
-          _.cloneDeep(result.keyFrames.get(maxTimestamp)!),
-        );
+      const duration = this.sequenceDuration(animId);
+      if (duration == null) {
+        return;
       }
-      accumTime += this.animFile.animations![animId].duration + 1;
+
+      if (timestamps != null) {
+        let maxTimestamp = -Infinity;
+        timestamps.forEach((timestamp, timestampI) => {
+          const value = transformation(m2track.values[animId][timestampI]);
+          result.keyFrames.set(timestamp + accumTime, value);
+          maxTimestamp = Math.max(maxTimestamp, timestamp + accumTime);
+        });
+        if (maxTimestamp >= -1 && !result.globalSeq) {
+          // Add the last key frame to the end of the animation to not lose the last frame of the animation
+          result.keyFrames.set(
+            accumTime + duration,
+            _.cloneDeep(result.keyFrames.get(maxTimestamp)!),
+          );
+        }
+      }
+
+      accumTime += duration + 1;
     });
     if (!result.keyFrames.size) return undefined;
     return result;

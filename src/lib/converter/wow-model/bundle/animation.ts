@@ -262,10 +262,13 @@ export class AnimationFile implements AnimationData {
         }
         let maxTimestamp = -Infinity;
         timestamps.forEach((timestamp, timestampI) => {
-          const [w, x, y, z] = bone.rotation.values[animId][timestampI];
-          if (x == null || y == null || z == null) return;
-          if (Math.abs(x) > 999999 || Math.abs(y) > 999999 || Math.abs(z) > 999999) return;
-          mdlBone.rotation!.keyFrames.set(timestamp + startTime, [w, -y, x, z]);
+          // M2Loader stores quaternions in standard [x, y, z, w] order after its
+          // own axis remap; MDL uses the same component order, so only the vector
+          // part needs the final coordinate-system conversion here.
+          const [x, y, z, w] = bone.rotation.values[animId][timestampI];
+          if (x == null || y == null || z == null || w == null) return;
+          if (Math.abs(x) > 999999 || Math.abs(y) > 999999 || Math.abs(z) > 999999 || Math.abs(w) > 999999) return;
+          mdlBone.rotation!.keyFrames.set(timestamp + startTime, [x, -z, y, w]);
           maxTimestamp = Math.max(maxTimestamp, timestamp + startTime);
         });
         if (maxTimestamp >= -1 && !mdlBone.rotation!.globalSeq) {

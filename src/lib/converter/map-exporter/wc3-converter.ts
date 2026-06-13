@@ -115,9 +115,12 @@ export class Wc3Converter {
     const modelPathToDoodadType = new Map<string, IDoodadType>();
 
     let doodadTypesWithPitchRoll = 0;
+    let doodadsPlaced = 0;
+    let doodadsOutOfBounds = 0;
     wowObjectManager.iterateObjects((obj, objAbsolute) => {
       // console.log('================================');
       if (filter(obj)) {
+        doodadsPlaced++;
         // WC3 pitch and roll must be negative, required by World Editor
         const wc3Roll = ((-objAbsolute.rotation[0]) % (Math.PI * 2) - Math.PI * 2) % (Math.PI * 2);
         const wc3Pitch = ((-objAbsolute.rotation[1]) % (Math.PI * 2) - Math.PI * 2) % (Math.PI * 2);
@@ -150,10 +153,7 @@ export class Wc3Converter {
         let outOfBound = false;
         if (inGameX < mapMin[0] || inGameX > mapMax[0] || inGameY < mapMin[1] || inGameY > mapMax[1]) {
           outOfBound = true;
-          console.warn('Doodad', obj.model.relativePath, 'is outside of map bounds.');
-          // console.log(obj.id, objAbsolute.position, {
-          //   percent, inGameX, inGameY, inGameZ,
-          // }, { mapMin, mapMax });
+          doodadsOutOfBounds++;
         }
 
         if (outOfBound) return;
@@ -222,6 +222,10 @@ export class Wc3Converter {
         });
       }
     });
+
+    if (doodadsOutOfBounds > 0) {
+      console.warn(`${doodadsOutOfBounds}/${doodadsPlaced} objects are outside of map bounds.`);
+    }
 
     return { doodadTypesWithPitchRoll };
   }

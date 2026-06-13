@@ -14,6 +14,7 @@ import {
   ExportProfileSnapshot, getExportProfile, profileScope,
 } from '@/lib/export-profile';
 import { waitUntil } from '@/lib/utils';
+import { clearConverterRuntimeCaches } from '@/lib/wow/clear-runtime-caches';
 
 interface CASCInfo {
   type: string;
@@ -142,6 +143,23 @@ export interface ExportADTParams {
   splitAlphaMaps?: boolean;
   splitLargeTerrainBakes?: boolean;
   gameObjects?: unknown[];
+  progressKey?: string;
+  tileIndex?: number;
+  tileCount?: number;
+  stepsPerTile?: number;
+}
+
+export interface ExportProgressResponse {
+  id: 'EXPORT_PROGRESS';
+  completedSteps: number;
+  totalSteps: number;
+  tileIndex: number;
+  tileCount: number;
+  stepsPerTile: number;
+  currentTile?: { x: number; y: number };
+  taskName?: string;
+  taskValue?: number;
+  taskMax?: number;
 }
 
 export interface ExportADTResult {
@@ -211,8 +229,35 @@ export class WowExportRestClient {
   }
 
   public async waitUntilReady() {
-    if (this.isReady) return;
-    await waitUntil(() => this.isReady);
+    if (!this.isReady) await waitUntil(() => this.isReady);
+    await this.refreshCascInfo();
+  }
+
+  /** Re-fetch CASC info so buildKey matches the data server after /setup changes. */
+  private async refreshCascInfo(): Promise<void> {
+    try {
+      const info = await this.getCASCInfo();
+      this.applyCascInfo(info);
+    } catch {
+      this.clearRuntimeCaches();
+    }
+  }
+
+  /** Drop converter-side WoW caches and CASC readiness state. */
+  public clearRuntimeCaches(): void {
+    clearConverterRuntimeCaches();
+    this.cascInfo = null;
+    this.status.cascLoaded = false;
+  }
+
+  private applyCascInfo(info: CASCInfo): void {
+    const prevKey = this.cascInfo?.buildKey;
+    if (prevKey && prevKey !== info.buildKey) {
+      clearConverterRuntimeCaches();
+      console.log(chalk.yellow('CASC build changed:'), prevKey, '->', info.buildKey);
+    }
+    this.cascInfo = info;
+    this.status.cascLoaded = true;
   }
 
   public isClassic() {
@@ -341,6 +386,9 @@ export class WowExportRestClient {
     if (res.status !== 200 || !(res.data instanceof ArrayBuffer || Buffer.isBuffer(res.data))) {
       let id = '';
       try { id = JSON.parse(Buffer.from(res.data as ArrayBuffer).toString('utf-8')).id; } catch { /* not json */ }
+      if (res.status === 404 || id === 'ERR_NOT_FOUND') {
+        throw new Error(`CASC file not found: ${fileDataID}`);
+      }
       throw new Error(`Failed to download CASC file ${fileDataID} (${res.status}${id ? ` ${id}` : ''})`);
     }
     const buf = Buffer.isBuffer(res.data) ? res.data : Buffer.from(res.data);
@@ -455,6 +503,22 @@ export class WowExportRestClient {
     throw new Error('Unexpected response for ADT export');
   }
 
+  public async getExportProgress(progressKey: string): Promise<ExportProgressResponse | undefined> {
+    const { ok, json } = await this.safeGetJSON('/rest/exportProgress', { key: progressKey });
+    if (ok && json?.id === 'EXPORT_PROGRESS') {
+      return json as ExportProgressResponse;
+    }
+    return undefined;
+  }
+
+  public async finalizeExportProgress(progressKey: string): Promise<ExportProgressResponse | undefined> {
+    const { status, data: json } = await this.postJSONAllowError('/rest/finalizeExportProgress', { key: progressKey });
+    if (status === 200 && json?.id === 'EXPORT_PROGRESS') {
+      return json as ExportProgressResponse;
+    }
+    return undefined;
+  }
+
   public async resetConnection(): Promise<void> {
     await this.bootstrap();
   }
@@ -484,8 +548,7 @@ export class WowExportRestClient {
 
         try {
           const info = await this.getCASCInfo();
-          this.cascInfo = info;
-          this.status.cascLoaded = true;
+          this.applyCascInfo(info);
           console.log(chalk.green('✅ WoW data ready:'), info.build.Product, info.buildName);
           this.logWarnedCASC = false;
         } catch {
@@ -496,10 +559,7 @@ export class WowExportRestClient {
           }
         }
 
-        if (!this.logWarnedConnected) {
-          console.log(chalk.green('✅ Connected to wow-data-server:'), chalk.gray(this.baseURL));
-          this.logWarnedConnected = true;
-        }
+        this.logWarnedConnected = true;
       } catch (e) {
         if (!this.logWarnedBootstrap) {
           console.error(chalk.yellow(`⏳ Cannot connect to wow-data-server at ${this.baseURL}. Is it running?`));
@@ -521,8 +581,7 @@ export class WowExportRestClient {
     if (this.status.cascLoaded) return;
     try {
       const info = await this.getCASCInfo();
-      this.cascInfo = info;
-      this.status.cascLoaded = true;
+      this.applyCascInfo(info);
       console.log(chalk.green('✅ WoW data ready:'), info.build.Product, info.buildName);
       this.logWarnedCASC = false;
     } catch {
@@ -543,9 +602,10 @@ export class WowExportRestClient {
         }
         void this.safeGetJSON('/rest/getCascInfo').then((res) => {
           if (!(res.ok && res.json?.id === 'CASC_INFO')) {
-            this.status.cascLoaded = false;
-            this.cascInfo = null;
+            this.clearRuntimeCaches();
+            return;
           }
+          this.applyCascInfo(res.json as unknown as CASCInfo);
         });
       } catch (e) {
         this.status.connected = false;

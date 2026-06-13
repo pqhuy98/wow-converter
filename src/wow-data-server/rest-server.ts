@@ -15,8 +15,14 @@ import { CASCLocal } from '@/lib/wow/archive/casc/casc-source-local';
 import { CASCRemote } from '@/lib/wow/archive/casc/casc-source-remote';
 import * as listfile from '@/lib/wow/archive/casc/listfile';
 import { readRawCachedFile, writeRawCachedFile } from '@/lib/wow/archive/client/raw-cache';
+import { registerWowDataServerClearHook } from '@/lib/wow/clear-runtime-caches';
 import { ADTExporter } from '@/lib/wow/export/adt/adt-exporter';
 import { buildADTExportOptions, collectGameObjects, getTileBounds } from '@/lib/wow/export/adt/map-export-utils';
+import {
+  createBatchExportProgress,
+  finalizeExportProgress,
+  getExportProgressSnapshot,
+} from '@/lib/wow/export/export-progress';
 import { getAllSkinsForModel } from '@/lib/wow/export/m2/model-export-service';
 import { getExportPath } from '@/lib/wow/export/writers/export-helper';
 import { normalizeInstallDirectory } from '@/lib/wow/normalize-install-directory';
@@ -85,6 +91,8 @@ export class WowDataServer {
         return this.debugMemory(res);
       case '/rest/getMapList':
         return this.getMapList(res);
+      case '/rest/exportProgress':
+        return this.exportProgress(query, res);
       default:
         return this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
     }
@@ -108,6 +116,8 @@ export class WowDataServer {
         return this.charMeta(body, res);
       case '/rest/exportADT':
         return this.exportADT(body, res);
+      case '/rest/finalizeExportProgress':
+        return this.finalizeExportProgress(body, res);
       default:
         return this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
     }
@@ -167,6 +177,10 @@ export class WowDataServer {
       const message = (e as Error).message;
       if (message.includes('does not exist in root')) {
         this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND', fileDataID });
+        return;
+      }
+      if (message.includes('No root entry found for locale')) {
+        this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND', fileDataID, message });
         return;
       }
       write('cascFile error for %d: %s', fileDataID, message);
@@ -448,7 +462,6 @@ export class WowDataServer {
     try {
       softRestartRuntime();
       this._pendingCASC = null;
-      this._responseCache.clear();
       this.sendJSON(res, 200, { id: 'CASC_UNLOADED' });
     } catch (e) {
       this.sendJSON(res, 409, { id: 'ERR_CASC_LOADING', message: (e as Error).message });
@@ -459,7 +472,6 @@ export class WowDataServer {
     try {
       softRestartRuntime();
       this._pendingCASC = null;
-      this._responseCache.clear();
 
       const reloadEnv = body?.reloadEnv === true;
       if (reloadEnv) {
@@ -508,10 +520,12 @@ export class WowDataServer {
   }
 
   async exportADT(body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
+    const progressKey = typeof body?.progressKey === 'string' ? body.progressKey : undefined;
     const casc = runtimeState.casc;
     const buildKey = casc?.getBuildKey() ?? '';
-    const cacheKey = this._makeCacheKey(`/rest/exportADT|${buildKey}`, body);
-    const cached = this._getCachedResponse(cacheKey);
+    const cacheBody = progressKey ? { ...body, progressKey: undefined } : body;
+    const cacheKey = this._makeCacheKey(`/rest/exportADT|${buildKey}`, cacheBody);
+    const cached = progressKey ? undefined : this._getCachedResponse(cacheKey);
     if (cached) { this.sendJSON(res, cached.status, cached.obj); return; }
     if (!casc) {
       this._sendAndCache(res, cacheKey, 409, { id: 'ERR_NO_CASC' });
@@ -590,11 +604,29 @@ export class WowDataServer {
         });
       }
 
-      const result = await exporter.export(baseDir, quality, gameObjects, requestOptions);
+      const progress = progressKey
+        && typeof body.tileIndex === 'number'
+        && typeof body.tileCount === 'number'
+        && typeof body.stepsPerTile === 'number'
+        ? createBatchExportProgress({
+          key: progressKey,
+          tileIndex: body.tileIndex,
+          tileCount: body.tileCount,
+          stepsPerTile: body.stepsPerTile,
+          currentTile: { x: tileX, y: tileY },
+        })
+        : undefined;
+
+      let result;
+      try {
+        result = await exporter.export(baseDir, quality, gameObjects, requestOptions, progress);
+      } finally {
+        progress?.syncTileComplete();
+      }
 
       // Keep WDT cache across REST exports for perf; only cleared on build change.
 
-      this._sendAndCache(res, cacheKey, 200, {
+      const responseObj = {
         id: 'EXPORT_RESULT',
         type: 'ADT',
         exportID,
@@ -606,17 +638,58 @@ export class WowDataServer {
         exportPath: baseDir,
         exportType: result.type,
         mainFile: result.path ? path.relative(wowConfig.exportDirectory, result.path) : null,
-      });
+      };
+      if (progressKey) {
+        this.sendJSON(res, 200, responseObj);
+      } else {
+        this._sendAndCache(res, cacheKey, 200, responseObj);
+      }
     } catch (e) {
       write('ADT export error: %s', (e as Error).message);
-      this._sendAndCache(res, cacheKey, 500, { id: 'ERR_INTERNAL', message: (e as Error).message, stack: (e as Error).stack });
+      const errObj = { id: 'ERR_INTERNAL', message: (e as Error).message, stack: (e as Error).stack };
+      if (progressKey) {
+        this.sendJSON(res, 500, errObj);
+      } else {
+        this._sendAndCache(res, cacheKey, 500, errObj);
+      }
     }
+  }
+
+  exportProgress(query: Record<string, unknown>, res: http.ServerResponse): void {
+    const key = typeof query.key === 'string' ? query.key : '';
+    if (!key) {
+      this.sendJSON(res, 400, { id: 'ERR_INVALID_PARAMETERS', message: 'key is required' });
+      return;
+    }
+    const snapshot = getExportProgressSnapshot(key);
+    if (!snapshot) {
+      this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
+      return;
+    }
+    this.sendJSON(res, 200, { id: 'EXPORT_PROGRESS', ...snapshot });
+  }
+
+  finalizeExportProgress(body: Record<string, unknown>, res: http.ServerResponse): void {
+    const key = typeof body?.key === 'string' ? body.key : '';
+    if (!key) {
+      this.sendJSON(res, 400, { id: 'ERR_INVALID_PARAMETERS', message: 'key is required' });
+      return;
+    }
+    finalizeExportProgress(key);
+    const snapshot = getExportProgressSnapshot(key);
+    if (!snapshot) {
+      this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
+      return;
+    }
+    this.sendJSON(res, 200, { id: 'EXPORT_PROGRESS', ...snapshot });
   }
 
   // --------------- internals ---------------
 
   load(): void {
-    if (this.isRunning) throw new Error('WoW data server is already running.');
+    if (this.isRunning) throw new Error('WoW data server is already running');
+
+    registerWowDataServerClearHook(() => this._responseCache.clear());
 
     this.server = http.createServer((req, res) => {
       void (async () => {

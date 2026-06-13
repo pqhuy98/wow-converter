@@ -13,6 +13,8 @@ import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
+import type { MapExportJobStatus } from '@/lib/models/map-export.model';
 
 import { useServerConfig } from '../server-config';
 import MinimapViewer, { MapInfo } from './minimap-viewer';
@@ -39,7 +41,9 @@ export default function MapViewer() {
   const [includeLiquid, setIncludeLiquid] = useState(true);
   const [includeFoliage, setIncludeFoliage] = useState(true);
   const [includeHoles, setIncludeHoles] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportJob, setExportJob] = useState<MapExportJobStatus | undefined>(undefined);
+
+  const isExporting = exportJob?.status === 'pending' || exportJob?.status === 'processing';
 
   // Virtualized list state (borrowed from browse page)
   const [query, setQuery] = useState('');
@@ -139,8 +143,12 @@ export default function MapViewer() {
   }, [mapInfo]);
 
   const onExportTerrain = useCallback(async () => {
-    if (!mapInfo || selectedTiles.length === 0) return;
-    setIsExporting(true);
+    if (!mapInfo || selectedTiles.length === 0 || isExporting) return;
+    setExportJob({
+      id: '',
+      status: 'pending',
+      submittedAt: Date.now(),
+    });
     try {
       const body = {
         tiles: selectedTiles,
@@ -159,17 +167,58 @@ export default function MapViewer() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        console.error('Export failed', await res.text());
-      } else {
-        const data = await res.json();
-        console.log('Export finished', data);
+        const text = await res.text();
+        setExportJob({
+          id: '',
+          status: 'failed',
+          error: text,
+          submittedAt: Date.now(),
+        });
+        return;
       }
+      const data = (await res.json()) as MapExportJobStatus;
+      setExportJob(data);
     } catch (e) {
-      console.error('Export error', e);
-    } finally {
-      setIsExporting(false);
+      setExportJob({
+        id: '',
+        status: 'failed',
+        error: e instanceof Error ? e.message : String(e),
+        submittedAt: Date.now(),
+      });
     }
-  }, [mapInfo, selectedTiles, texSize, includeM2, includeWMO, includeWMOSets, includeGameObjects, includeLiquid, includeFoliage, includeHoles]);
+  }, [mapInfo, selectedTiles, texSize, includeM2, includeWMO, includeWMOSets, includeGameObjects, includeLiquid, includeFoliage, includeHoles, isExporting]);
+
+  useEffect(() => {
+    if (!exportJob?.id || exportJob.status === 'done' || exportJob.status === 'failed') return undefined;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/maps/export-adt/status/${exportJob.id}`);
+        if (!res.ok) throw new Error(await res.text());
+        const data = (await res.json()) as MapExportJobStatus;
+        setExportJob((prev) => {
+          if (!prev || data.status === 'done' || data.status === 'failed') return data;
+          const prevSteps = prev.progress?.completedSteps ?? 0;
+          const nextSteps = data.progress?.completedSteps ?? prevSteps;
+          if (data.status === 'processing' && nextSteps < prevSteps) {
+            return { ...data, progress: prev.progress };
+          }
+          return data;
+        });
+      } catch (e) {
+        setExportJob({
+          id: exportJob.id,
+          status: 'failed',
+          error: e instanceof Error ? e.message : String(e),
+          submittedAt: exportJob.submittedAt,
+        });
+      }
+    };
+
+    const interval = setInterval(() => void poll(), 300);
+    void poll();
+    return () => clearInterval(interval);
+  }, [exportJob?.id, exportJob?.status]);
 
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
@@ -270,6 +319,34 @@ export default function MapViewer() {
                       {isExporting ? 'Exporting…' : `Export Tiles (${selectedTiles.length})`}
                     </Button>
                   </div>
+                  {exportJob && exportJob.status !== 'done' && (
+                    <div className="pt-3 space-y-2">
+                      <Progress value={exportJob.progress?.percent ?? (exportJob.status === 'pending' ? 0 : undefined)} />
+                      <p className="text-xs text-muted-foreground">
+                        {exportJob.status === 'pending' && exportJob.position != null && exportJob.position > 1
+                          ? `Queued (position ${exportJob.position})`
+                          : exportJob.progress
+                            ? `Step ${exportJob.progress.completedSteps} / ${exportJob.progress.totalSteps}`
+                              + ` · tile ${exportJob.progress.tileIndex + 1}/${exportJob.progress.tileCount}`
+                              + (exportJob.progress.currentTile
+                                ? ` (${exportJob.progress.currentTile.x}, ${exportJob.progress.currentTile.y})`
+                                : '')
+                              + (exportJob.progress.taskName ? ` · ${exportJob.progress.taskName}` : '')
+                            : 'Starting export…'}
+                      </p>
+                    </div>
+                  )}
+                  {exportJob?.status === 'done' && exportJob.result && (
+                    <p className="text-xs text-green-600 pt-2">
+                      Exported {exportJob.result.succeeded.length}/{exportJob.result.total} tiles
+                      {exportJob.result.failed.length > 0
+                        ? ` (${exportJob.result.failed.length} failed)`
+                        : ''}
+                    </p>
+                  )}
+                  {exportJob?.status === 'failed' && (
+                    <p className="text-xs text-destructive pt-2">{exportJob.error ?? 'Export failed'}</p>
+                  )}
                 </div>}
               </CardContent>
             </Card>

@@ -55,6 +55,7 @@ export async function buildMetadataObject(
     skeletonFileID: m2.skeletonFileID,
     boneFileIDs: m2.boneFileIDs,
     animFileIDs: m2.animFileIDs,
+    m2Animations: m2.animations,
     colors: m2.colors,
     textureWeights: m2.textureWeights,
     transparencyLookup: m2.transparencyLookup,

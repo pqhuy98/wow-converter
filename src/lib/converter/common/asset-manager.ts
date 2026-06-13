@@ -19,7 +19,7 @@ import { calculateChildAbsoluteEulerRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
 import { ConvertM2Options, convertM2ToMdl } from '../wow-model/direct/m2';
 import { convertWowExportModel } from '../wow-model/legacy';
-import { Model, WowObject } from './models';
+import { Model, WowObject, WowObjectType } from './models';
 import { getTextureSource, TextureSource } from './texture-source';
 
 export class AssetManager {
@@ -33,27 +33,47 @@ export class AssetManager {
   }
 
   async parse(objectPath: string, noCache: boolean): Promise<Model> {
+    return this.resolveModel(objectPath, undefined, 'm2', noCache);
+  }
+
+  /** Load a model from OBJ cache or directly from CASC when using the direct pipeline. */
+  async resolveModel(
+    objectPath: string,
+    fileDataID: number | undefined,
+    type: WowObjectType,
+    noCache: boolean,
+  ): Promise<Model> {
     if (this.models.has(objectPath) && !noCache) {
       return this.models.get(objectPath)!;
     }
 
-    return profileScope(`assetManager.parse/${path.basename(objectPath, '.obj')}`, async () => {
-      const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
-      const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
-      const { mdl, texturePaths } = await convertWowExportModel(objFullPath, this.config);
-      const model: Model = {
-        relativePath: mdl.model.name,
-        mdl,
-      };
-      if (!noCache) {
-        this.models.set(objectPath, model);
-      }
-      texturePaths.forEach((p) => this.textures.add(p));
+    const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
+    const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
+
+    if (type === 'adt' || await exportAssetExists(objFullPath)) {
+      return profileScope(`assetManager.parse/${path.basename(objectPath, '.obj')}`, async () => {
+        const { mdl, texturePaths } = await convertWowExportModel(objFullPath, this.config);
+        const model: Model = {
+          relativePath: mdl.model.name,
+          mdl,
+        };
+        if (!noCache) this.models.set(objectPath, model);
+        texturePaths.forEach((p) => this.textures.add(p));
+        return model;
+      });
+    }
+
+    if (fileDataID && fileDataID > 0 && (type === 'm2' || type === 'wmo' || type === 'gobj')) {
+      const exportPathOverride = path.join(this.config.wowExportAssetDir, objRelativePath);
+      const model = await this.parseDirect({ fileDataID, exportPathOverride });
+      if (!noCache) this.models.set(objectPath, model);
       return model;
-    });
+    }
+
+    throw new Error(`Model not found: ${objectPath}${fileDataID ? ` (fileDataID ${fileDataID})` : ''}`);
   }
 
-  /** Direct M2 -> MDL conversion (no server OBJ export). */
+  /** Direct M2/WMO -> MDL conversion (no server OBJ export). */
   async parseDirect(opts: ConvertM2Options): Promise<Model> {
     return profileScope(`assetManager.parseDirect/${opts.fileDataID}`, async () => {
       const { mdl, texturePaths } = await convertM2ToMdl(this.config, opts);

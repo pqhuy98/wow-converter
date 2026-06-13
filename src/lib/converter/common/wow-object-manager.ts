@@ -12,6 +12,7 @@ import {
 } from '@/lib/export-asset-store';
 import { Config } from '@/lib/global-config';
 import { EulerRotation, Vector3 } from '@/lib/math/common';
+import { stripModelReferenceExt } from '@/lib/wow/export/model-reference-path';
 import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
 
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../../math/rotation';
@@ -175,7 +176,12 @@ export class WowObjectManager {
       return;
     }
     this.objects.set(current.id, current);
-    current.model = await this.assetManager.parse(objectPath, false);
+    current.model = await this.assetManager.resolveModel(
+      objectPath,
+      current.fileDataID,
+      current.type,
+      false,
+    );
 
     if (isWowAdt(current)) {
       this.terrains.push(current);
@@ -206,7 +212,8 @@ export class WowObjectManager {
       const rows = await this.parsePlacementCsv(childrenCsvPath);
       await Promise.all(rows.map(async (row) => {
         const id = `${row.FileDataID}:${row.ModelFile}:${row.PositionX}:${row.PositionY}:${row.PositionZ}`;
-        const fileName = row.ModelFile.replaceAll('.obj', '');
+        const fileName = stripModelReferenceExt(row.ModelFile);
+        const fileDataID = parseInt(row.FileDataID, 10) || undefined;
 
         row.Type ??= 'm2';
         if (!isWowObjectType(row.Type)) {
@@ -219,6 +226,7 @@ export class WowObjectManager {
         } else {
           const child: WowObject = {
             id,
+            fileDataID,
             model: undefined,
             ...convertRowPositionRotation(row, current.type),
             scaleFactor: parseFloat(row.ScaleFactor),
@@ -250,7 +258,8 @@ export class WowObjectManager {
           }
 
           current.children.push(child);
-          await this.parseRecursive(path.join(path.dirname(objectPath), fileName), child);
+          const childObjectPath = path.normalize(path.join(path.dirname(objectPath), fileName)).replace(/\\/g, '/');
+          await this.parseRecursive(childObjectPath, child, filter);
         }
       }));
     }

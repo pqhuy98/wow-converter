@@ -1,7 +1,4 @@
-import { resetDbCaches } from '@/lib/wow/db/caches/init-cache';
-import { ADTExporter } from '@/lib/wow/export/adt/adt-exporter';
-import { WMOExporter } from '@/lib/wow/export/wmo/wmo-exporter';
-import { resetDoOnceCache } from '@/lib/wow/formats/generics';
+import { clearWowDataServerRuntimeCaches } from '@/lib/wow/clear-runtime-caches';
 import { write } from '@/lib/wow/log';
 
 import { isCascLoading, unloadCasc as unloadCascState } from './casc-load';
@@ -13,8 +10,5 @@ export function softRestartRuntime(): void {
   }
   write('Soft restart: unloading CASC and clearing caches');
   unloadCascState();
-  resetDoOnceCache();
-  resetDbCaches();
-  ADTExporter.clearCache();
-  WMOExporter.clearCache();
+  clearWowDataServerRuntimeCaches();
 }

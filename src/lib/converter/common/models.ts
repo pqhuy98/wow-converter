@@ -16,6 +16,7 @@ export interface Model {
 export interface WowObject {
   id: string;
   type: WowObjectType;
+  fileDataID?: number;
   model?: Model; // undefined for ADT and UNIT
   position: Vector3; // local to parent
   rotation: EulerRotation; // local to parent

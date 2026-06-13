@@ -21,6 +21,7 @@ import type { M2Attachment } from '../../formats/m2/m2-types';
 import { SKELLoader } from '../../formats/m2/skel-loader';
 import { Texture } from '../../formats/m2/texture';
 import { wowConfig } from '../../server/config';
+import type { ExportProgress } from '../export-progress';
 import type {
   FileManifestEntry, GeosetMaskEntry, SkeletonLike, TextureManifestEntry, VariantTexture,
 } from '../types/model-export';
@@ -92,6 +93,7 @@ export class M2Exporter {
     raw = false,
     mtl: MTLWriter | null = null,
     fullTexPaths = false,
+    progress: ExportProgress | undefined = undefined,
   ): Promise<Map<VariantTexture, TextureManifestEntry>> {
     const config = wowConfig;
     const validTextures = new Map<VariantTexture, TextureManifestEntry>();
@@ -104,6 +106,8 @@ export class M2Exporter {
     const usePosix = config.pathFormat === 'posix';
 
     let textureIndex = 0;
+    let progressTextures = 0;
+    const modelLabel = path.basename(out);
 
     // Export data textures first.
     for (const [textureName, dataTextureInfo] of this.dataTextures) {
@@ -146,11 +150,12 @@ export class M2Exporter {
           matPathRelative: texFile,
           matPath: texPath,
         });
+        progressTextures++;
+        progress?.setLabel(`${modelLabel} M2 textures`, progressTextures);
+        progress?.advance(1);
       } catch (e) {
         write('Failed to export data texture %d for M2: %s', textureName, e instanceof Error ? e.message : String(e));
       }
-
-      textureIndex++;
     }
 
     for (const texture of this.m2.textures) {
@@ -242,6 +247,9 @@ export class M2Exporter {
             matPathRelative: texFile,
             matPath: texPath,
           });
+          progressTextures++;
+          progress?.setLabel(`${modelLabel} M2 textures`, progressTextures);
+          progress?.advance(1);
         } catch (e) {
           write('Failed to export texture %d for M2: %s', texFileDataID, e instanceof Error ? e.message : String(e));
         }
@@ -256,7 +264,13 @@ export class M2Exporter {
   /**
    * Export the M2 model as a WaveFront OBJ.
    */
-  async exportAsOBJ(out: string, fileManifest?: FileManifestEntry[], exportCollision = false): Promise<void> {
+  async exportAsOBJ(
+    out: string,
+    fileManifest?: FileManifestEntry[],
+    exportCollision?: boolean,
+    progress: ExportProgress | undefined = undefined,
+  ): Promise<void> {
+    const exportCollisionMeshes = exportCollision ?? false;
     await profileScope('m2.load', async () => {
       await this.m2.load();
     });
@@ -282,7 +296,7 @@ export class M2Exporter {
 
     if (config.modelsExportUV2) obj.addUVArray(this.m2.uv2);
 
-    const validTextures = await profileScope('m2.exportTextures', () => this.exportTextures(outDir, false, mtl));
+    const validTextures = await profileScope('m2.exportTextures', () => this.exportTextures(outDir, false, mtl, false, progress));
     for (const [texFileDataID, texInfo] of validTextures) fileManifest?.push({ type: 'PNG', fileDataID: texFileDataID, file: texInfo.matPath });
 
     if (exportBones) {
@@ -425,6 +439,7 @@ export class M2Exporter {
         json.addProperty('skeletonFileID', this.m2.skeletonFileID);
         json.addProperty('boneFileIDs', this.m2.boneFileIDs);
         json.addProperty('animFileIDs', this.m2.animFileIDs);
+        json.addProperty('m2Animations', this.m2.animations);
         json.addProperty('colors', this.m2.colors);
         json.addProperty('textureWeights', this.m2.textureWeights);
         json.addProperty('transparencyLookup', this.m2.transparencyLookup);
@@ -482,7 +497,7 @@ export class M2Exporter {
       await mtl.write(config.overwriteFiles);
       fileManifest?.push({ type: 'MTL', fileDataID: this.fileDataID, file: mtl.out });
 
-      if (exportCollision) {
+      if (exportCollisionMeshes) {
         const phys = new OBJWriter(replaceExtension(out, '.phys.obj'));
         phys.setVertArray(this.m2.collisionPositions);
         phys.setNormalArray(this.m2.collisionNormals);

@@ -161,6 +161,11 @@ class CDNResolver {
     write('%s resolved as the fastest host with a ping of %dms', validHosts[0].host, validHosts[0].ping);
     return validHosts;
   }
+
+  clearCache(): void {
+    this.resolutionCache.clear();
+    this.failedHosts.clear();
+  }
 }
 
 export const cdnResolver = new CDNResolver();

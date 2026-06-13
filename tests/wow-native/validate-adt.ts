@@ -162,6 +162,8 @@ async function main() {
     mapsIncludeLiquid: requestBody.includeLiquid,
     mapsIncludeFoliage: requestBody.includeFoliage,
     mapsIncludeHoles: requestBody.includeHoles,
+    // wow.export REST still exports OBJ/MTL/BLP for models; disable direct mode for parity checks.
+    mapsDirectModels: false,
   });
   const baseDir = getExportPath(path.join('maps', MAP_DIR));
   const tileIndex = TILE_X * 64 + TILE_Y;

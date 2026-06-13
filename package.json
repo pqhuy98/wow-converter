@@ -11,7 +11,7 @@
   "scripts": {
     "lint": "eslint src/**/*.ts --fix",
     "dev": "run-p dev:server dev:webui",
-    "dev:server": "bun --watch src/server/index.ts",
+    "dev:server": "cross-env NODE_ENV=development bun --watch src/server/index.ts",
     "dev:wow-data-server": "bun --watch src/wow-data-server/index.ts",
     "dev:webui": "cd webui && bun run dev",
     "wow-data-server": "bun src/wow-data-server/index.ts",
