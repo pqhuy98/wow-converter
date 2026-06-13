@@ -152,6 +152,10 @@ export function WowConfigSetup() {
   }, [installDirectory, mode, regionTag, status.cascLoaded]);
 
   useEffect(() => {
+    if (status.cascLoaded) setError(null);
+  }, [status.cascLoaded]);
+
+  useEffect(() => {
     writeStoredInstallDirectory(installDirectory);
   }, [installDirectory]);
 
@@ -304,7 +308,7 @@ export function WowConfigSetup() {
           <p className="text-sm text-muted-foreground">
             WoW installation cannot be changed from the web UI in shared hosting mode.
           </p>
-          {status.error && (
+          {status.error && !status.cascLoaded && (
             <Alert variant="destructive">
               <AlertDescription>{status.error}</AlertDescription>
             </Alert>
@@ -349,7 +353,7 @@ export function WowConfigSetup() {
               WoW is configured automatically on startup.
             </p>
           )}
-          {error && (
+          {error && !status.cascLoaded && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>

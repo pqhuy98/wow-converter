@@ -15,7 +15,7 @@ import { CASCLocal } from '@/lib/wow/archive/casc/casc-source-local';
 import { CASCRemote } from '@/lib/wow/archive/casc/casc-source-remote';
 import * as listfile from '@/lib/wow/archive/casc/listfile';
 import { readRawCachedFile, writeRawCachedFile } from '@/lib/wow/archive/client/raw-cache';
-import { registerWowDataServerClearHook } from '@/lib/wow/clear-runtime-caches';
+import { releaseAdtExportBatchMemory, releaseAdtExportTileMemory } from '@/lib/wow/export/adt/adt-export-memory';
 import { ADTExporter } from '@/lib/wow/export/adt/adt-exporter';
 import { buildADTExportOptions, collectGameObjects, getTileBounds } from '@/lib/wow/export/adt/map-export-utils';
 import {
@@ -29,6 +29,7 @@ import { normalizeInstallDirectory } from '@/lib/wow/normalize-install-directory
 import { wowConfig } from '@/lib/wow/server/config';
 import { collectMemoryDiagnostics, formatMemoryDiagnostics } from '@/lib/wow/server/memory-diagnostics';
 import { runtimeState } from '@/lib/wow/server/runtime';
+import { registerWowDataServerClearHook } from '@/lib/wow/wow-data-server-hooks';
 
 import {
   CharacterMetaParams, getCharacterMeta,
@@ -458,9 +459,9 @@ export class WowDataServer {
     }
   }
 
-  handleUnloadCasc(res: http.ServerResponse): void {
+  async handleUnloadCasc(res: http.ServerResponse): Promise<void> {
     try {
-      softRestartRuntime();
+      await softRestartRuntime();
       this._pendingCASC = null;
       this.sendJSON(res, 200, { id: 'CASC_UNLOADED' });
     } catch (e) {
@@ -470,7 +471,7 @@ export class WowDataServer {
 
   async handleSoftRestart(body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
     try {
-      softRestartRuntime();
+      await softRestartRuntime();
       this._pendingCASC = null;
 
       const reloadEnv = body?.reloadEnv === true;
@@ -622,6 +623,7 @@ export class WowDataServer {
         result = await exporter.export(baseDir, quality, gameObjects, requestOptions, progress);
       } finally {
         progress?.syncTileComplete();
+        releaseAdtExportTileMemory();
       }
 
       // Keep WDT cache across REST exports for perf; only cleared on build change.
@@ -676,6 +678,7 @@ export class WowDataServer {
       return;
     }
     finalizeExportProgress(key);
+    releaseAdtExportBatchMemory();
     const snapshot = getExportProgressSnapshot(key);
     if (!snapshot) {
       this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });

@@ -31,9 +31,10 @@ import { JSONWriter } from '../writers/json-writer';
 import { MTLWriter } from '../writers/mtl-writer';
 import { OBJWriter } from '../writers/obj-writer';
 import { outputFileExists, writeOutputFile } from '../writers/output-sink';
+import { releaseAdtExportTileMemory } from './adt-export-memory';
 import { ADTExportOptions } from './map-export-utils';
 import {
-  bakeChunk, BakeMaterial, loadBakeTexture, resizeBilinear, rotate180,
+  bakeChunk, BakeMaterial, clearBakeTextureCache, fixChunkAlphaLayers, loadBakeTexture, resizeBilinear, rotate180,
 } from './terrain-baker';
 
 const MAP_SIZE = constants.GAME.MAP_SIZE;
@@ -80,6 +81,13 @@ let isFoliageAvailable = false;
 let hasLoadedFoliage = false;
 let dbTextures: WDCReader | undefined;
 let dbDoodads: WDCReader | undefined;
+
+export function clearFoliageTables(): void {
+  dbTextures = undefined;
+  dbDoodads = undefined;
+  hasLoadedFoliage = false;
+  isFoliageAvailable = false;
+}
 
 /** Load and cache GroundEffectDoodad and GroundEffectTexture data tables. */
 const loadFoliageTables = async (): Promise<void> => {
@@ -665,11 +673,9 @@ export class ADTExporter {
 
             const materials = new Array<BakeMaterial | undefined>(materialIDs.length);
             progress?.setLabel(`Tile ${this.tileID}, loading textures`, 0, materialIDs.length);
-            for (let i = 0, n = materials.length; i < n; i++) {
-              progress?.setLabel(`Tile ${this.tileID}, loading textures`, i + 1, n);
-              const diffuseFileDataID = materialIDs[i];
-
-              if (diffuseFileDataID === 0) continue;
+            await Promise.all(materialIDs.map(async (diffuseFileDataID, i) => {
+              if (diffuseFileDataID === 0) return;
+              progress?.setLabel(`Tile ${this.tileID}, loading textures`, i + 1, materialIDs.length);
 
               const mat: BakeMaterial = { scale: 1, heightScale: 0, heightOffset: 1 };
               materials[i] = mat;
@@ -684,103 +690,106 @@ export class ADTExporter {
                   mat.heightOffset = params.offset;
                 }
               }
+            }));
+
+            const deltaX = firstChunk.position[1] - TILE_SIZE;
+            const deltaY = firstChunk.position[0] - TILE_SIZE;
+
+            const chunkJobs: {
+              chunkIndex: number;
+              canvasSize: number;
+              indices: number[];
+              translation: [number, number];
+              tileSize: number;
+              zoom: number;
+              alphaLayers: (Uint8Array | number[] | undefined)[];
+              layerMaterialIndices: (number | undefined)[];
+            }[] = [];
+
+            for (let x = 0; x < 16; x++) {
+              for (let y = 0; y < 16; y++) {
+                const ofsX = -deltaX - (CHUNK_SIZE * 7.5) + (y * CHUNK_SIZE);
+                const ofsY = -deltaY - (CHUNK_SIZE * 7.5) + (x * CHUNK_SIZE);
+                const chunkIndex = (x * 16) + y;
+                const texChunk = texAdt.texChunks[chunkIndex];
+                const indices = chunkMeshes[chunkIndex];
+                const fixAlphaMap = !(rootAdt.chunks[chunkIndex].flags & (1 << 15));
+                const alphaLayers = fixChunkAlphaLayers(texChunk.alphaLayers || [], fixAlphaMap);
+
+                const texLayers = texChunk.layers ?? [];
+                const layerMaterialIndices = new Array<number | undefined>(4);
+                for (let i = 0, n = texLayers.length; i < n; i++) {
+                  if (i < 4) layerMaterialIndices[i] = texLayers[i].textureId;
+                }
+
+                chunkJobs.push({
+                  chunkIndex,
+                  canvasSize: chunkSizePx,
+                  indices,
+                  translation: [ofsX, ofsY],
+                  tileSize: TILE_SIZE,
+                  zoom: 0.0625,
+                  alphaLayers,
+                  layerMaterialIndices,
+                });
+              }
             }
 
-            // Persistent chunk canvas (the GL canvas is cleared once to black
-            // and never between chunk draws).
+            progress?.setLabel(`Tile ${this.tileID}, baking textures`, 0, 256);
+
+            const applyRotatedChunk = async (
+              chunkIndex: number,
+              rotated: Uint8ClampedArray,
+              bakeChunkIDRef: { value: number },
+            ) => {
+              if (isSplittingTextures) {
+                const tilePath = path.join(dir, `tex_${this.tileID}_${bakeChunkIDRef.value++}.png`);
+                if (config.overwriteFiles || !await outputFileExists(tilePath)) {
+                  await writePNG(tilePath, rotated, chunkSizePx, chunkSizePx);
+                }
+              } else {
+                const chunkX = chunkIndex % 16;
+                const chunkY = Math.floor(chunkIndex / 16);
+                for (let row = 0; row < chunkSizePx; row++) {
+                  const srcOfs = row * chunkSizePx * 4;
+                  const dstOfs = ((chunkY * chunkSizePx + row) * quality + chunkX * chunkSizePx) * 4;
+                  composite!.set(rotated.subarray(srcOfs, srcOfs + chunkSizePx * 4), dstOfs);
+                }
+              }
+            };
+
             const chunkCanvas = new Uint8ClampedArray(chunkSizePx * chunkSizePx * 4);
             for (let i = 0; i < chunkCanvas.length; i += 4) {
               chunkCanvas[i + 3] = 255;
             }
 
-            const deltaX = firstChunk.position[1] - TILE_SIZE;
-            const deltaY = firstChunk.position[0] - TILE_SIZE;
-
             let bakeChunkID = 0;
-            let bakedChunkIndex = 0;
-            progress?.setLabel(`Tile ${this.tileID}, baking textures`, 0, 256);
-            for (let x = 0; x < 16; x++) {
-              for (let y = 0; y < 16; y++) {
-                progress?.setLabel(`Tile ${this.tileID}, baking textures`, bakedChunkIndex + 1, 256);
-                bakedChunkIndex++;
-                const ofsX = -deltaX - (CHUNK_SIZE * 7.5) + (y * CHUNK_SIZE);
-                const ofsY = -deltaY - (CHUNK_SIZE * 7.5) + (x * CHUNK_SIZE);
+            for (let jobIndex = 0; jobIndex < chunkJobs.length; jobIndex++) {
+              progress?.setLabel(`Tile ${this.tileID}, baking textures`, jobIndex + 1, 256);
+              const job = chunkJobs[jobIndex];
 
-                const chunkIndex = (x * 16) + y;
-                const texChunk = texAdt.texChunks[chunkIndex];
-                const indices = chunkMeshes[chunkIndex];
+              const layerMats = job.layerMaterialIndices.map(
+                (idx) => (idx !== undefined ? materials[idx] : undefined),
+              );
 
-                const alphaLayersRaw = texChunk.alphaLayers || [];
+              bakeChunk({
+                canvas: chunkCanvas,
+                canvasSize: chunkSizePx,
+                indices: job.indices,
+                vertices,
+                uvsBake,
+                vertexColors,
+                translation: job.translation,
+                tileSize: job.tileSize,
+                zoom: job.zoom,
+                layers: layerMats,
+                alphaLayers: job.alphaLayers,
+              });
 
-                // If MCNK do_not_fix_alpha_map flag is not set, duplicate last
-                // row/column for 63x63 alpha maps to avoid seams (Noggit behavior).
-                const fixAlphaMap = !(rootAdt.chunks[chunkIndex].flags & (1 << 15));
-
-                const alphaLayers = new Array<number[] | Uint8Array | undefined>(alphaLayersRaw.length);
-                for (let i = 1; i < alphaLayersRaw.length; i++) {
-                  let source: number[] | Uint8Array = alphaLayersRaw[i];
-                  if (fixAlphaMap && source && source.length === 64 * 64) {
-                    const fixed = new Uint8Array(64 * 64);
-                    for (let j = 0; j < 64 * 64; j++) {
-                      const isLastColumn = (j % 64) === 63;
-                      const isLastRow = j >= 63 * 64;
-                      if (isLastColumn && !isLastRow) {
-                        fixed[j] = source[j - 1];
-                      } else if (isLastRow) {
-                        fixed[j] = source[j - 64];
-                      } else {
-                        fixed[j] = source[j];
-                      }
-                    }
-                    source = fixed;
-                  }
-                  alphaLayers[i] = source;
-                }
-
-                // Map texture layers to bake materials (slots 0-3).
-                const texLayers = texChunk.layers ?? [];
-                const layerMats = new Array<BakeMaterial | undefined>(4);
-                for (let i = 0, n = texLayers.length; i < n; i++) {
-                  const mat = materials[texLayers[i].textureId];
-                  if (mat === undefined) continue;
-                  if (i < 4) layerMats[i] = mat;
-                }
-
-                bakeChunk({
-                  canvas: chunkCanvas,
-                  canvasSize: chunkSizePx,
-                  indices,
-                  vertices,
-                  uvsBake,
-                  vertexColors,
-                  translation: [ofsX, ofsY],
-                  tileSize: TILE_SIZE,
-                  zoom: 0.0625,
-                  layers: layerMats,
-                  alphaLayers,
-                });
-
-                const rotated = rotate180(chunkCanvas, chunkSizePx);
-
-                if (isSplittingTextures) {
-                  // Save this individual chunk.
-                  const tilePath = path.join(dir, `tex_${this.tileID}_${bakeChunkID++}.png`);
-
-                  if (config.overwriteFiles || !await outputFileExists(tilePath)) {
-                    await writePNG(tilePath, rotated, chunkSizePx, chunkSizePx);
-                  }
-                } else {
-                  // Store as part of a larger composite.
-                  const chunkX = chunkIndex % 16;
-                  const chunkY = Math.floor(chunkIndex / 16);
-
-                  for (let row = 0; row < chunkSizePx; row++) {
-                    const srcOfs = row * chunkSizePx * 4;
-                    const dstOfs = ((chunkY * chunkSizePx + row) * quality + chunkX * chunkSizePx) * 4;
-                    composite!.set(rotated.subarray(srcOfs, srcOfs + chunkSizePx * 4), dstOfs);
-                  }
-                }
-              }
+              const rotated = rotate180(chunkCanvas, chunkSizePx);
+              const bakeChunkIDRef = { value: bakeChunkID };
+              await applyRotatedChunk(job.chunkIndex, rotated, bakeChunkIDRef);
+              bakeChunkID = bakeChunkIDRef.value;
             }
 
             // Save the completed composite tile.
@@ -788,6 +797,8 @@ export class ADTExporter {
               progress?.setLabel(`Tile ${this.tileID}, saving terrain texture`);
               await writePNG(tileOutPath, composite!, quality, quality);
             }
+
+            clearBakeTextureCache();
           }
         }
         progress?.advance();
@@ -1021,8 +1032,6 @@ export class ADTExporter {
               worldModelIndex++;
             }
           }
-
-          WMOExporter.clearCache();
         }
 
         await csv.write();
@@ -1163,12 +1172,14 @@ export class ADTExporter {
     }
 
     progress?.syncTileComplete();
+    releaseAdtExportTileMemory();
     return out;
   }
 
   /** Clear internal tile-loading cache. */
   static clearCache(): void {
     wdtCache.clear();
+    clearFoliageTables();
   }
 }
 

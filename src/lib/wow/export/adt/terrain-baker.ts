@@ -11,6 +11,7 @@
  */
 import { getCasc } from '@/lib/wow/server/runtime';
 
+import { BLTEReader } from '../../archive/casc/blte-reader';
 import { BLPImage } from '../../formats/blp/blp';
 
 export interface CPUMipTexture {
@@ -27,10 +28,51 @@ export interface BakeMaterial {
 }
 
 /** Load a texture from CASC, decode and build a mip chain (mirrors loadTexture + generateMipmap). */
+const bakeTextureCache = new Map<number, CPUMipTexture>();
+
 export async function loadBakeTexture(fileDataID: number): Promise<CPUMipTexture> {
-  const blp = new BLPImage(await getCasc().getFile(fileDataID));
+  const cached = bakeTextureCache.get(fileDataID);
+  if (cached) return cached;
+
+  const wrapper = await getCasc().getFile(fileDataID);
+  if (wrapper instanceof BLTEReader) wrapper.processAllBlocks();
+
+  const blp = new BLPImage(wrapper);
   const base = blp.toUInt8Array(0);
-  return { mips: buildMipChain(base, blp.scaledWidth, blp.scaledHeight) };
+  const tex = { mips: buildMipChain(base, blp.scaledWidth, blp.scaledHeight) };
+  bakeTextureCache.set(fileDataID, tex);
+  return tex;
+}
+
+export function clearBakeTextureCache(): void {
+  bakeTextureCache.clear();
+}
+
+export function fixChunkAlphaLayers(
+  alphaLayersRaw: (number[] | Uint8Array | undefined)[],
+  fixAlphaMap: boolean,
+): (Uint8Array | number[] | undefined)[] {
+  const alphaLayers = new Array<number[] | Uint8Array | undefined>(alphaLayersRaw.length);
+  for (let i = 1; i < alphaLayersRaw.length; i++) {
+    let source: number[] | Uint8Array | undefined = alphaLayersRaw[i];
+    if (fixAlphaMap && source && source.length === 64 * 64) {
+      const fixed = new Uint8Array(64 * 64);
+      for (let j = 0; j < 64 * 64; j++) {
+        const isLastColumn = (j % 64) === 63;
+        const isLastRow = j >= 63 * 64;
+        if (isLastColumn && !isLastRow) {
+          fixed[j] = source[j - 1];
+        } else if (isLastRow) {
+          fixed[j] = source[j - 64];
+        } else {
+          fixed[j] = source[j];
+        }
+      }
+      source = fixed;
+    }
+    alphaLayers[i] = source;
+  }
+  return alphaLayers;
 }
 
 /** Build a box-filtered mip chain like GL generateMipmap. */

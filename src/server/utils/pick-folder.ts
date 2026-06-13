@@ -77,7 +77,7 @@ function pickFolderLinux(title: string, initialDirectory?: string): string | nul
 }
 
 /** Open a native folder picker on the machine running the Express server. */
-export function pickNativeFolder(title = 'Select folder', initialDirectory?: string): string | null {
+export function pickNativeFolder(title = 'Select folder', initialDirectory: string | undefined = undefined): string | null {
   const initial = resolveInitialDirectory(initialDirectory);
   const platform = os.platform();
   if (platform === 'win32') return pickFolderWindows(title, initial);

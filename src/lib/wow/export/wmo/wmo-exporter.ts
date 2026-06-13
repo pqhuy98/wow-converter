@@ -316,14 +316,12 @@ export class WMOExporter {
    * Export the WMO model as a WaveFront OBJ.
    */
   async exportAsOBJ(out: string, fileManifest?: FileManifestEntry[], progress: ExportProgress | undefined = undefined): Promise<void> {
-    const casc = getCasc();
     const obj = new OBJWriter(out);
     const mtl = new MTLWriter(replaceExtension(out, '.mtl'));
 
     const config = wowConfig;
 
     const groupMask = this.groupMask;
-    const doodadSetMask = this.doodadSetMask;
 
     const wmoName = path.basename(out, '.obj');
     obj.setName(wmoName);

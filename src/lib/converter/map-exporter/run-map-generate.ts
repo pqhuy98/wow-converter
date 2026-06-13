@@ -49,7 +49,7 @@ export async function runMapGenerateConversion(
     mapExportConfig,
     mapSaveName: rawSaveName,
     freshExport,
-    autoClampPercent = false,
+    autoClampPercent = true,
     creatureScaleUp,
     onConvertStepsKnown,
     onProgress,
@@ -130,7 +130,7 @@ export async function runMapGenerateConversion(
   convertCompleted = convertSteps;
   report('Complete');
 
-  return { outputDir, mapSaveName, convertSteps };
+  return { outputDir: path.resolve(outputDir), mapSaveName, convertSteps };
 }
 
 export function buildMapExportConfig(params: {

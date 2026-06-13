@@ -10,6 +10,10 @@ import { wowConfig, WowReaderConfig } from '../../server/config';
 // Cache for GameObjects.db2/GameObjectDisplayInfo.db2 mapping by mapID.
 let gameObjectsDB2: Map<number, Set<DB2Row>> | null = null;
 
+export function clearGameObjectsCache(): void {
+  gameObjectsDB2 = null;
+}
+
 /** Normalized ADT export options (overrides > base config > defaults). */
 export interface ADTExportOptions {
   mapsExportRaw: boolean;

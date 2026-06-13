@@ -1,5 +1,6 @@
 'use client';
 
+import { Copy } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -14,6 +15,9 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
+import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
+import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
 import type { GenerateWc3FormValues, MapGenerateJobStatus } from '@/lib/models/map-generate.model';
 import {
   clearStoredGenerateJob,
@@ -73,6 +77,7 @@ export default function MapViewer() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [pendingScrollToMapName, setPendingScrollToMapName] = useState<string | null>(null);
   const [viewportHeight, setViewportHeight] = useState(400);
   const [scrollTop, setScrollTop] = useState(0);
   const ROW_HEIGHT = 32;
@@ -140,12 +145,60 @@ export default function MapViewer() {
     return () => clearTimeout(t);
   }, [query]);
 
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    el.scrollTop = 0;
-    setScrollTop(0);
-  }, [debouncedQuery]);
+  const filteredMaps = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    if (!q) return maps;
+    const words = q.split(/ +/).filter(Boolean);
+    return maps.filter((m) => words.every((w) => (
+      m.name?.toLowerCase().includes(w) || String(m.dir).toLowerCase().includes(w)
+    )));
+  }, [maps, debouncedQuery]);
+
+  const selectedMapName = useMemo(
+    () => maps.find((m) => m.dir === selectedMapDir)?.name ?? null,
+    [maps, selectedMapDir],
+  );
+
+  const resetMapsUrlState = useCallback(() => {
+    setQuery('');
+    setDebouncedQuery('');
+    setSelectedMapDir(null);
+    setMapInfo(null);
+    setSelectedTiles([]);
+    setPendingScrollToMapName(null);
+  }, []);
+
+  const selectedPathForUrl = selectedMapDir == null
+    ? null
+    : (selectedMapName ?? undefined);
+
+  useSearchSelectUrlSync({
+    basePath: '/maps',
+    search: query,
+    setSearch: setQuery,
+    setDebouncedSearch: setDebouncedQuery,
+    selectedPath: selectedPathForUrl,
+    pendingScrollPath: pendingScrollToMapName,
+    setPendingScrollPath: setPendingScrollToMapName,
+    resetLocalState: resetMapsUrlState,
+  });
+
+  useScrollResetOnSearchChange({
+    containerRef: listRef,
+    search: debouncedQuery,
+    isPending: !!pendingScrollToMapName,
+  });
+
+  usePendingScrollToItem<MapResponse>({
+    items: filteredMaps,
+    containerRef: listRef,
+    getRowHeight: () => ROW_HEIGHT,
+    contentPadding: 0,
+    matchKey: (m) => m.name,
+    pendingKey: pendingScrollToMapName,
+    setPendingKey: setPendingScrollToMapName,
+    onSelect: (m) => setSelectedMapDir(m.dir),
+  });
 
   useEffect(() => {
     const el = listRef.current;
@@ -162,15 +215,6 @@ export default function MapViewer() {
     const t = setInterval(() => setClockNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [isGenerating]);
-
-  const filteredMaps = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return maps;
-    const words = q.split(/ +/).filter(Boolean);
-    return maps.filter((m) => words.every((w) => (
-      m.name?.toLowerCase().includes(w) || String(m.dir).toLowerCase().includes(w)
-    )));
-  }, [maps, debouncedQuery]);
 
   const total = filteredMaps.length;
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
@@ -454,14 +498,38 @@ export default function MapViewer() {
                     </div>
                   )}
                   {generateJob?.status === 'done' && generateJob.result && (
-                    <p className="text-xs text-green-600 pt-2">
-                      Generated {generateJob.result.mapSaveName} in {formatElapsedDuration(
+                    <div className="pt-2 space-y-2">
+                      <p className="text-xs text-green-600">
+                        Generated {generateJob.result.mapSaveName} in {formatElapsedDuration(
                         (generateJob.finishedAt ?? clockNow) - generateJob.submittedAt,
                       )} — exported {generateJob.result.succeeded.length}/{generateJob.result.total} tiles
-                      {generateJob.result.failed.length > 0
-                        ? ` (${generateJob.result.failed.length} tile export failures)`
-                        : ''}
-                    </p>
+                        {generateJob.result.failed.length > 0
+                          ? ` (${generateJob.result.failed.length} tile export failures)`
+                          : ''}
+                      </p>
+                      {generateJob.result.outputDir && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0 h-7 w-7"
+                            title="Copy map path"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(generateJob.result!.outputDir);
+                            }}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                          <span
+                            className="text-xs font-mono select-all break-all text-muted-foreground"
+                            title={generateJob.result.outputDir}
+                          >
+                            {generateJob.result.outputDir}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {generateJob?.status === 'failed' && (
                     <p className="text-xs text-destructive pt-2">{generateJob.error ?? 'Generation failed'}</p>

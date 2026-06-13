@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { GenerateWc3FormValues } from '@/lib/models/map-generate.model';
 import { defaultGenerateWc3FormValues } from '@/lib/models/map-generate.model';
+import { cn } from '@/lib/utils/css';
 
 interface GenerateWc3DialogProps {
   open: boolean;
@@ -122,33 +123,48 @@ export default function GenerateWc3Dialog({
                   creatures: { ...v.creatures, enable: checked === true },
                 }))}
               />
-              Enable creature export
+              Export creatures
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={values.creatures.allAreDoodads}
-                disabled={!values.creatures.enable}
-                onCheckedChange={(checked) => setValues((v) => ({
-                  ...v,
-                  creatures: { ...v.creatures, allAreDoodads: checked === true },
-                }))}
-              />
-              All creatures as doodads
-            </label>
-            <div className="space-y-2">
-              <Label htmlFor="creatureScaleUp">Creature scale up</Label>
-              <Input
-                id="creatureScaleUp"
-                type="number"
-                min={0.1}
-                step={0.1}
-                disabled={!values.creatures.enable}
-                value={values.creatures.scaleUp}
-                onChange={(e) => setValues((v) => ({
-                  ...v,
-                  creatures: { ...v.creatures, scaleUp: parseFloat(e.target.value) || 1 },
-                }))}
-              />
+            <div
+              className={cn(
+                'grid transition-[grid-template-rows] duration-300 ease-in-out',
+                values.creatures.enable ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div
+                  className={cn(
+                    'space-y-3 pt-3 transition-opacity duration-300',
+                    values.creatures.enable ? 'opacity-100' : 'pointer-events-none opacity-0',
+                  )}
+                  aria-hidden={!values.creatures.enable}
+                >
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={values.creatures.allAreDoodads}
+                      onCheckedChange={(checked) => setValues((v) => ({
+                        ...v,
+                        creatures: { ...v.creatures, allAreDoodads: checked === true },
+                      }))}
+                    />
+                    All creatures as doodads
+                  </label>
+                  <div className="space-y-2">
+                    <Label htmlFor="creatureScaleUp">Creature scale up</Label>
+                    <Input
+                      id="creatureScaleUp"
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={values.creatures.scaleUp}
+                      onChange={(e) => setValues((v) => ({
+                        ...v,
+                        creatures: { ...v.creatures, scaleUp: parseFloat(e.target.value) || 1 },
+                      }))}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </fieldset>
 

@@ -7,11 +7,13 @@ interface UseSearchSelectUrlSyncOptions {
   readonly search: string;
   readonly setSearch: (s: string) => void;
   readonly setDebouncedSearch: (s: string) => void;
-  readonly selectedPath?: string | undefined;
+  /** Map name/path for `c`. `undefined` = leave URL unchanged, `null` = clear `c`. */
+  readonly selectedPath?: string | null;
   readonly pendingScrollPath: string | null;
   readonly setPendingScrollPath: (s: string | null) => void;
   readonly resetLocalState: () => void;
 }
+
 export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
   const {
     basePath,
@@ -26,8 +28,14 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
 
   const hasInitFromUrlRef = useRef(false);
   const readyToSyncRef = useRef(false);
+  const searchRef = useRef(search);
+  const selectedPathRef = useRef(selectedPath);
+  const resetLocalStateRef = useRef(resetLocalState);
 
-  // Update the URL query string without triggering a rerender (history.replaceState)
+  searchRef.current = search;
+  selectedPathRef.current = selectedPath;
+  resetLocalStateRef.current = resetLocalState;
+
   const updateUrlQuery = useCallback((next: { s?: string | null; c?: string | null }) => {
     if (typeof window === 'undefined') return;
     const current = new URL(window.location.href);
@@ -48,7 +56,6 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
     }
   }, []);
 
-  // Initial parse once: adopt s/c from URL
   useEffect(() => {
     if (hasInitFromUrlRef.current) return;
     if (typeof window === 'undefined') return;
@@ -69,19 +76,15 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
       setPendingScrollPath(c);
     }
     hasInitFromUrlRef.current = true;
-    // Defer enabling URL sync until after state updates have flushed
     if (s || c) {
-      if (typeof window !== 'undefined') {
-        requestAnimationFrame(() => {
-          readyToSyncRef.current = true;
-        });
-      }
+      requestAnimationFrame(() => {
+        readyToSyncRef.current = true;
+      });
     } else {
       readyToSyncRef.current = true;
     }
   }, [basePath, setSearch, setDebouncedSearch, setPendingScrollPath]);
 
-  // State -> URL sync
   useEffect(() => {
     if (!hasInitFromUrlRef.current) return;
     if (!readyToSyncRef.current) return;
@@ -89,12 +92,13 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
       updateUrlQuery({ s: search });
       return;
     }
-    updateUrlQuery({ s: search, c: selectedPath ?? null });
+    if (selectedPath === undefined) {
+      updateUrlQuery({ s: search });
+      return;
+    }
+    updateUrlQuery({ s: search, c: selectedPath });
   }, [search, selectedPath, pendingScrollPath, updateUrlQuery]);
 
-  // Robust URL listener: listen to history changes (pushState/replaceState/popstate)
-  // - If navigating to basePath with no params, clear local state
-  // - If navigating to basePath with s/c, adopt them into local state
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const onLocationChange = () => {
@@ -103,21 +107,21 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
       const hasS = params.has('s');
       const hasC = params.has('c');
       if (!hasS && !hasC) {
-        resetLocalState();
+        resetLocalStateRef.current();
         return;
       }
       const sRaw = params.get('s') ?? '';
       const sNext = sRaw.replace(/\+/g, ' ');
       const cNext = params.get('c');
-      if (sNext !== search) {
+      if (sNext !== searchRef.current) {
         setSearch(sNext);
         setDebouncedSearch(sNext);
       }
-      if (cNext && cNext !== selectedPath) {
+      if (cNext && cNext !== selectedPathRef.current) {
         setPendingScrollPath(cNext);
       }
     };
-    // Patch history methods to emit a custom event
+
     const originalPushState: History['pushState'] = window.history.pushState.bind(window.history);
     const originalReplaceState: History['replaceState'] = window.history.replaceState.bind(window.history);
     const emit = () => window.dispatchEvent(new Event('_locationchange'));
@@ -132,15 +136,12 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
 
     window.addEventListener('popstate', onLocationChange);
     window.addEventListener('_locationchange', onLocationChange);
-    // Run once at mount to catch initial state
-    onLocationChange();
 
-    const cleanup = () => {
+    return () => {
       window.history.pushState = originalPushState;
       window.history.replaceState = originalReplaceState;
       window.removeEventListener('popstate', onLocationChange);
       window.removeEventListener('_locationchange', onLocationChange);
     };
-    return cleanup;
-  }, [basePath, search, selectedPath, setSearch, setDebouncedSearch, setPendingScrollPath, resetLocalState]);
+  }, [basePath, setSearch, setDebouncedSearch, setPendingScrollPath]);
 }

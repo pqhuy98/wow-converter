@@ -76,7 +76,7 @@ export const defaultGenerateWc3FormValues: GenerateWc3FormValues = {
   mapAngleDeg: 0,
   freshExport: false,
   creatures: {
-    enable: true,
+    enable: false,
     allAreDoodads: true,
     scaleUp: 2,
   },

@@ -115,7 +115,7 @@ export default function BrowseModelPage() {
     search: query,
     setSearch: setQuery,
     setDebouncedSearch: setDebouncedQuery,
-    selectedPath: selected?.fileName,
+    selectedPath: selected?.fileName ?? null,
     pendingScrollPath: pendingScrollToPath,
     setPendingScrollPath: setPendingScrollToPath,
     resetLocalState: () => {

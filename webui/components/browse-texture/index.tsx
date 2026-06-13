@@ -220,7 +220,7 @@ export default function BrowseTexturePage() {
     search: query,
     setSearch: setQuery,
     setDebouncedSearch: setDebouncedQuery,
-    selectedPath: selectedTexturePath,
+    selectedPath: selectedTexturePath ?? null,
     pendingScrollPath: pendingScrollToPath,
     setPendingScrollPath: setPendingScrollToPath,
     resetLocalState,

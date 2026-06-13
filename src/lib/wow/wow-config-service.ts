@@ -6,7 +6,6 @@ import type {
 } from './wow-config-state';
 import {
   getEffectiveWowConfig,
-  getEnvWowConfig,
   getMemoryWowConfig,
   getWowConfigError,
   isEnvWowConfigured,
@@ -105,8 +104,6 @@ function findBuildIndex(builds: CascBuildSummary[], product: string): number {
   return idx;
 }
 
-/** If env is configured but CASC is not loaded yet, attempt apply once at startup. */
-let envApplyAttempted = false;
 /** If UI saved a config but wow-data-server restarted, attempt apply once. */
 let memoryApplyAttempted = false;
 /** User reset or applied a config via UI — do not re-apply .env at runtime. */
@@ -164,18 +161,12 @@ export async function applyWowConfig(
 }
 
 export async function ensureEnvWowConfigLoaded(): Promise<void> {
-  if (runtimeConfigOverride || !isEnvWowConfigured() || envApplyAttempted) return;
-  envApplyAttempted = true;
+  if (runtimeConfigOverride || !isEnvWowConfigured()) return;
 
-  if (await fetchCascInfo()) return;
-
-  const envConfig = getEnvWowConfig();
-  if (!envConfig) return;
-  try {
-    await applyWowConfig(envConfig, { persist: false });
-  } catch (e) {
-    setWowConfigError((e as Error).message);
+  if (await fetchCascInfo()) {
+    setWowConfigError(null);
   }
+  // wow-data-server auto-loads CASC from .env on its own; Express only polls status.
 }
 
 /** Re-load CASC from the last UI config after wow-data-server restart. */
@@ -183,7 +174,10 @@ export async function ensureMemoryWowConfigLoaded(): Promise<void> {
   if (memoryApplyAttempted) return;
   const config = getMemoryWowConfig();
   if (!config) return;
-  if (await fetchCascInfo()) return;
+  if (await fetchCascInfo()) {
+    setWowConfigError(null);
+    return;
+  }
   memoryApplyAttempted = true;
   try {
     await applyWowConfig(config);
@@ -254,6 +248,10 @@ export async function getWowConfigStatus(): Promise<WowConfigStatus> {
   cascLoaded = cascInfo !== null;
   prevCascLoaded = cascLoaded;
 
+  if (cascLoaded) {
+    setWowConfigError(null);
+  }
+
   const configuredFromEnv = isEnvWowConfigured();
   const config = getEffectiveWowConfig();
   const cascLoading = isWowConfigApplyInFlight();
@@ -268,7 +266,7 @@ export async function getWowConfigStatus(): Promise<WowConfigStatus> {
     wowDataServerReachable: reachable,
     config,
     cascInfo,
-    error: getWowConfigError(),
+    error: cascLoaded ? null : getWowConfigError(),
     products: constants.PRODUCTS,
     regions: [...constants.PATCH.REGIONS],
   };
