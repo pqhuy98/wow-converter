@@ -36,6 +36,7 @@ export const ExporCharacterRequestSchema = z.object({
   format: z.enum(['mdx', 'mdl']),
   formatVersion: z.enum(['800', '1000']).optional(),
   isBrowse: z.boolean().optional(),
+  skinId: z.string().optional(),
 });
 
 export type ExportCharacterRequest = z.infer<typeof ExporCharacterRequestSchema>;
@@ -122,7 +123,9 @@ export async function ControllerExportCharacter(router: express.Router) {
     logs = [];
 
     await wowDataClient.syncConfig();
-    await ce.exportCharacter(request.character, request.outputFileName);
+    await ce.exportCharacter(request.character, request.outputFileName, {
+      localModelSkinId: request.skinId,
+    });
 
     ce.models.forEach(([mdl]) => {
       if (request.optimization?.sortSequences) {

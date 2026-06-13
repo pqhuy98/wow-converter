@@ -17,6 +17,8 @@ export interface VirtualListBoxProps<T> {
   readonly containerClassName?: string;
   readonly containerStyle?: ReactCSS;
   readonly contentPadding?: number; // top and bottom padding inside the relative container
+  /** When this changes, internal scroll position resets (e.g. search query). */
+  readonly listKey?: string;
 }
 
 /**
@@ -39,6 +41,7 @@ export function VirtualListBox<T>({
   containerClassName,
   containerStyle,
   contentPadding = 0,
+  listKey,
 }: VirtualListBoxProps<T>) {
   // internal ref if external not provided
   const internalRef = useRef<HTMLDivElement | null>(null);
@@ -46,6 +49,12 @@ export function VirtualListBox<T>({
 
   const [viewportHeight, setViewportHeight] = useState(400);
   const [scrollTop, setScrollTop] = useState(0);
+
+  useEffect(() => {
+    setScrollTop(0);
+    const el = listRef.current;
+    if (el) el.scrollTop = 0;
+  }, [listKey, listRef]);
 
   // Track viewport height
   useEffect(() => {

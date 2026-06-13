@@ -14,8 +14,8 @@ import { BufferWrapper } from '@/lib/wow/formats/buffer';
 import { ModelSkin, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { AssetManager } from '../common/asset-manager';
-import { localModelBasename, normalizeLocalModelRef } from '../local-model-path';
 import { Model } from '../common/models';
+import { localModelBasename, normalizeLocalModelRef } from '../local-model-path';
 
 export interface ExportContext {
   assetManager: AssetManager;
@@ -24,6 +24,8 @@ export interface ExportContext {
   weaponInventoryTypes: [undefined | number, undefined | number];
   forceSheathed?: boolean;
   withCollision?: boolean;
+  /** Explicit DB2 skin id for local model refs (browse tab). */
+  localModelSkinId?: string;
 }
 
 export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: number, guessSkin: {
@@ -102,15 +104,19 @@ export async function exportLocalModelAsMdl(
   assetManager: AssetManager,
   config: Config,
   filePath: string,
-  withCollision = false,
+  options?: { withCollision?: boolean; skinIdOverride?: string },
 ): Promise<{ model: Model; collision?: MDL }> {
+  const withCollision = options?.withCollision ?? false;
+  const skinIdOverride = options?.skinIdOverride;
   const fileName = normalizeLocalModelRef(filePath);
   const file = await searchModelWithSkin(fileName);
   if (!file) {
     throw new Error(`File ${fileName} not found in WoW assets`);
   }
   const skins = await wowDataClient.getModelSkins(file.fileDataID);
-  const skin = pickLocalModelSkin(filePath, file.fileName, skins);
+  const skin = skinIdOverride
+    ? skins.find((s) => s.id === skinIdOverride) ?? pickLocalModelSkin(filePath, file.fileName, skins)
+    : pickLocalModelSkin(filePath, file.fileName, skins);
 
   const model = await assetManager.parseDirect({ fileDataID: file.fileDataID, skinName: skin?.id });
   let collision: MDL | undefined;
@@ -135,6 +141,51 @@ async function searchModelWithSkin(fileWithSkin: string) {
 
 function toLocalRefPath(dir: string, name: string): string {
   return path.join(dir, name).replace(/\//g, '\\');
+}
+
+export interface LocalModelSkinOption {
+  id: string;
+  label: string;
+  localRef: string;
+}
+
+function localRefForSkin(dir: string, modelBase: string, skin: ModelSkin, isDefault: boolean): string {
+  const skinBase = skin.id.split(',')[0]!;
+  if (isDefault) return toLocalRefPath(dir, modelBase);
+  if (skinBase.startsWith(modelBase)) return toLocalRefPath(dir, skinBase);
+  if (skinBase === modelBase) return toLocalRefPath(dir, modelBase);
+  return toLocalRefPath(dir, `${modelBase}_${skinBase}`);
+}
+
+/** Skin variants for a listfile model (browse UI / local ref validation). */
+export async function getModelSkinOptions(
+  fileDataID: number,
+  listfilePath: string,
+  skins?: ModelSkin[],
+): Promise<LocalModelSkinOption[]> {
+  await wowDataClient.waitUntilReady();
+  const resolvedSkins = skins ?? await wowDataClient.getModelSkins(fileDataID);
+  const baseRef = normalizeLocalModelRef(listfilePath);
+  const dir = path.dirname(baseRef);
+  const modelBase = path.basename(baseRef);
+
+  if (resolvedSkins.length === 0) {
+    return [{ id: '', label: 'default', localRef: toLocalRefPath(dir, modelBase) }];
+  }
+
+  const options = resolvedSkins.map((skin, index) => ({
+    id: skin.id,
+    label: skin.label,
+    localRef: localRefForSkin(dir, modelBase, skin, index === 0),
+  }));
+
+  const byLabel = new Map<string, LocalModelSkinOption>();
+  for (const option of options) {
+    if (!byLabel.has(option.label)) {
+      byLabel.set(option.label, option);
+    }
+  }
+  return [...byLabel.values()];
 }
 
 function buildLocalRefVariants(listfilePath: string, skins: ModelSkin[]): string[] {

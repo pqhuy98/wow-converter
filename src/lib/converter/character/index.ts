@@ -106,7 +106,7 @@ export class CharacterExporter {
     return this.models.at(-1)!;
   }
 
-  async exportCharacter(char: Character, outputFile: string): Promise<MDL> {
+  async exportCharacter(char: Character, outputFile: string, options?: { localModelSkinId?: string }): Promise<MDL> {
     await wowDataClient.waitUntilReady();
 
     console.log('Exporting character', char.base.value);
@@ -114,7 +114,7 @@ export class CharacterExporter {
     const start = performance.now();
 
     if (char.mount && char.mount.path.value !== '') {
-      return (await this.exportCharacterWithMount(char, outputFile)).mountMdl;
+      return (await this.exportCharacterWithMount(char, outputFile, options)).mountMdl;
     }
 
     const ctx: ExportContext = {
@@ -124,6 +124,7 @@ export class CharacterExporter {
       weaponInventoryTypes: [undefined, undefined],
       forceSheathed: char.forceSheathed,
       withCollision: char.withCollision,
+      localModelSkinId: options?.localModelSkinId,
     };
 
     const model = await this.exportBaseMdl(ctx, char);
@@ -259,7 +260,12 @@ export class CharacterExporter {
 
   private async exportBaseMdl(ctx: ExportContext, char: Character): Promise<MDL> {
     if (char.base.type === 'local') {
-      const { model, collision } = await exportLocalModelAsMdl(this.assetManager, this.config, char.base.value, ctx.withCollision);
+      const { model, collision } = await exportLocalModelAsMdl(
+        this.assetManager,
+        this.config,
+        char.base.value,
+        { withCollision: ctx.withCollision, skinIdOverride: ctx.localModelSkinId },
+      );
       const base = model.mdl;
       if (collision) {
         base.geosets.push(...collision.geosets);
@@ -355,7 +361,11 @@ export class CharacterExporter {
     throw new Error('Unknown item type');
   }
 
-  private async exportCharacterWithMount(char: Character, outputFile: string): Promise<{charMdl: MDL, mountMdl: MDL}> {
+  private async exportCharacterWithMount(
+    char: Character,
+    outputFile: string,
+    _options?: { localModelSkinId?: string },
+  ): Promise<{charMdl: MDL, mountMdl: MDL}> {
     if (!char.mount) throw new Error('Mount is required');
 
     const debug = false;

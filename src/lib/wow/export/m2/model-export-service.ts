@@ -27,48 +27,66 @@ export function getModelDisplays(fileDataID: number): ModelDisplay[] {
   return displays ?? [];
 }
 
-function getSkinForDisplay(modelName: string, display: ModelDisplay): ModelSkin {
+/** Unique visual variant: primary skin texture + enabled geosets. */
+function skinVariantKey(display: ModelDisplay): string {
+  const geosets = (display.extraGeosets ?? []).slice().sort((a, b) => a - b).join(',');
+  return `${display.textures[0]}|${geosets}`;
+}
+
+function getSkinForDisplay(display: ModelDisplay): ModelSkin {
   const texture = display.textures[0];
 
-  let cleanSkinName = '';
   let skinName = listfile.getByID(texture);
   if (skinName !== undefined) {
-    // Display the texture name without path/extension.
     skinName = path.basename(skinName, '.blp');
-    cleanSkinName = skinName.replace(modelName, '').replace('_', '');
   } else {
-    // Handle unknown textures.
     skinName = `unknown_${texture}`;
   }
 
-  if (cleanSkinName.length === 0) cleanSkinName = 'base';
-
-  if (display.extraGeosets && display.extraGeosets.length > 0) skinName += display.extraGeosets.join(',');
-
-  cleanSkinName += ` (${display.ID})`;
+  let label = skinName;
+  if (display.extraGeosets && display.extraGeosets.length > 0) {
+    skinName += display.extraGeosets.join(',');
+    label += ` [${display.extraGeosets.join(', ')}]`;
+  }
 
   return {
     id: skinName,
-    label: cleanSkinName,
+    label,
     displayID: display.ID,
     extraGeosets: display.extraGeosets,
     textures: display.textures,
   };
 }
 
-export function getAllSkinsForModel(fileDataID: number): ModelSkin[] {
-  let modelName = listfile.getByID(fileDataID)!;
-  modelName = path.basename(modelName, 'm2');
+/** Prefer the display row with the richest texture override list. */
+function preferSkin(a: ModelSkin, b: ModelSkin): ModelSkin {
+  if (b.textures.length !== a.textures.length) {
+    return b.textures.length > a.textures.length ? b : a;
+  }
+  const aTexKey = a.textures.join(',');
+  const bTexKey = b.textures.join(',');
+  if (aTexKey !== bTexKey) {
+    return bTexKey.localeCompare(aTexKey) > 0 ? b : a;
+  }
+  return b.displayID > a.displayID ? b : a;
+}
 
+export function getAllSkinsForModel(fileDataID: number): ModelSkin[] {
   const displays = getModelDisplays(fileDataID);
   if (!displays) return [];
-  const skinList: ModelSkin[] = [];
+
+  const byVariant = new Map<string, ModelSkin>();
   for (const display of displays) {
     if (display.textures.length === 0) continue;
 
-    skinList.push(getSkinForDisplay(modelName, display));
+    const key = skinVariantKey(display);
+    const skin = getSkinForDisplay(display);
+    const existing = byVariant.get(key);
+    byVariant.set(key, existing ? preferSkin(existing, skin) : skin);
   }
 
+  const skinList = [...byVariant.values()];
+  skinList.sort((a, b) => a.label.localeCompare(b.label));
   return skinList;
 }
 

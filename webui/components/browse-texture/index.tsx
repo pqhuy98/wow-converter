@@ -3,7 +3,6 @@
 import { SearchIcon } from 'lucide-react';
 import {
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -79,15 +78,11 @@ export default function BrowseTexturePage() {
     return out;
   }, [allFiles, debouncedQuery]);
 
-  // Defer expensive calculations to avoid blocking the UI
-  const deferredFiltered = useDeferredValue(filtered);
-
-  // words used for highlighting (non-debounced for immediate feedback)
   const queryWords = useMemo(() => {
-    const q = query.trim();
+    const q = debouncedQuery.trim();
     if (!q) return [] as string[];
     return q.split(/ +/).filter(Boolean);
-  }, [query]);
+  }, [debouncedQuery]);
 
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -152,7 +147,7 @@ export default function BrowseTexturePage() {
 
   // Generic pending scroll + select using shared hook
   usePendingScrollToItem<FileEntry>({
-    items: deferredFiltered,
+    items: filtered,
     containerRef: listRef,
     getRowHeight: (file, _i) => (isIcon(file.fileName) ? FileRowWithThumbnail.ROW_HEIGHT : FileRow.ROW_HEIGHT),
     contentPadding: CONTAINER_PADDING,
@@ -177,7 +172,7 @@ export default function BrowseTexturePage() {
     const baseDir = texturePath.substring(0, texturePath.lastIndexOf('/') + 1);
 
     // Check if the texture is already in the current filtered results
-    const foundFile = deferredFiltered.find((f) => f.fileName === texturePath);
+    const foundFile = filtered.find((f) => f.fileName === texturePath);
 
     if (!foundFile) {
       // Need to update search query first, then scroll to texture
@@ -187,7 +182,7 @@ export default function BrowseTexturePage() {
     }
     // In both cases, let the shared pending-scroll hook do the scroll+select
     setPendingScrollToPath(texturePath);
-  }, [deferredFiltered]);
+  }, [filtered]);
 
   const isBusy = isImageLoading;
 
@@ -278,7 +273,8 @@ export default function BrowseTexturePage() {
                   </div>
                 </div>
                 <VirtualListBox<FileEntry>
-                  items={deferredFiltered}
+                  items={filtered}
+                  listKey={debouncedQuery}
                   containerRef={listRef}
                   containerClassName="overflow-y-scroll overflow-x-auto border rounded-md bg-background flex-1"
                   contentPadding={CONTAINER_PADDING}

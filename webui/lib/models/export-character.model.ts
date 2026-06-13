@@ -55,6 +55,7 @@ export interface ExportRequest {
   format?: ModelFormat
   formatVersion?: ModelFormatVersion
   isBrowse?: boolean
+  skinId?: string
 }
 
 export interface ExportCharacterResponse {

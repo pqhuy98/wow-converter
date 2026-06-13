@@ -1,6 +1,7 @@
 import express from 'express';
 
-import { FileEntry } from '@/lib/wow-data-client/wow-data-client';
+import { getModelSkinOptions } from '@/lib/converter/character/utils';
+import { FileEntry, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { getListFiles } from './shared';
 
@@ -50,6 +51,29 @@ export function ControllerBrowse(router: express.Router) {
       }
 
       return res.header('Cache-Control', 'public, max-age=60').json(result);
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  router.get('/browse/model-skins', async (req, res) => {
+    try {
+      const fileDataID = Number(req.query.fileDataID);
+      if (!Number.isFinite(fileDataID) || fileDataID <= 0) {
+        return res.status(400).json({ error: 'fileDataID is required' });
+      }
+      if (!allFiles) {
+        await fetchAllFiles();
+      }
+      const fileName = (modelFiles ?? allFiles ?? []).find((f) => f.fileDataID === fileDataID)?.fileName;
+      if (!fileName) {
+        return res.status(404).json({ error: 'Model not found' });
+      }
+      await wowDataClient.waitUntilReady();
+      await wowDataClient.initModelCaches();
+      const skins = await wowDataClient.getModelSkins(fileDataID);
+      const options = await getModelSkinOptions(fileDataID, fileName, skins);
+      return res.header('Cache-Control', 'no-store').json({ fileDataID, fileName, skins: options });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

@@ -3,7 +3,6 @@
 import { SearchIcon } from 'lucide-react';
 import React, {
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -11,6 +10,7 @@ import React, {
 } from 'react';
 
 import { SettingsDialogButton } from '@/components/browse-model/settings-dialog';
+import { ModelSkinOption, SkinPicker, skinPanelHeight } from '@/components/browse-model/skin-picker';
 import { FileRow, VirtualListBox } from '@/components/common/listbox';
 import ModelViewerUi from '@/components/common/model-viewer/model-viewer';
 import { Terminal } from '@/components/common/terminal';
@@ -63,6 +63,10 @@ export default function BrowseModelPage() {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selected, setSelected] = useState<FileEntry | null>(null);
+  const [skins, setSkins] = useState<ModelSkinOption[]>([]);
+  const [selectedSkinId, setSelectedSkinId] = useState<string | null>(null);
+  const [skinsLoading, setSkinsLoading] = useState(false);
+  const [skinsError, setSkinsError] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | undefined>(undefined);
   const [modelPath, setModelPath] = useState<string | undefined>(undefined);
   const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(null);
@@ -83,15 +87,12 @@ export default function BrowseModelPage() {
     });
   }, [allFiles, debouncedQuery]);
 
-  // Defer expensive calculations to avoid blocking the UI
-  const deferredFiltered = useDeferredValue(filtered);
-
-  // words used for highlighting (non-debounced for immediate feedback)
+  // Highlight the active filter terms (same debounced query as the list).
   const queryWords = useMemo(() => {
-    const q = query.trim();
+    const q = debouncedQuery.trim();
     if (!q) return [] as string[];
     return q.split(/ +/).filter(Boolean);
-  }, [query]);
+  }, [debouncedQuery]);
 
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -122,6 +123,8 @@ export default function BrowseModelPage() {
       setQuery('');
       setDebouncedQuery('');
       setSelected(null);
+      setSkins([]);
+      setSelectedSkinId(null);
       setJob(undefined);
       setModelPath(undefined);
       setPendingScrollToPath(null);
@@ -141,7 +144,7 @@ export default function BrowseModelPage() {
 
   // Generic pending scroll + export using shared hook
   usePendingScrollToItem<FileEntry>({
-    items: deferredFiltered,
+    items: filtered,
     containerRef: listRef,
     getRowHeight: () => FileRow.ROW_HEIGHT,
     contentPadding: 0,
@@ -174,6 +177,47 @@ export default function BrowseModelPage() {
     });
     return () => cancelAnimationFrame(id);
   }, [selected]);
+
+  useEffect(() => {
+    if (!selected) {
+      setSkins([]);
+      setSelectedSkinId(null);
+      setSkinsLoading(false);
+      setSkinsError(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setSkinsLoading(true);
+    setSkinsError(null);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/browse/model-skins?fileDataID=${selected.fileDataID}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          setSkinsError(body.error ?? `Failed to load skins (${res.status})`);
+          setSkins([]);
+          return;
+        }
+        const data = await res.json() as { skins: ModelSkinOption[] };
+        if (cancelled) return;
+        setSkins(data.skins ?? []);
+        setSelectedSkinId((prev) => {
+          if (prev && data.skins.some((s) => s.id === prev)) return prev;
+          return data.skins[0]?.id ?? null;
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setSkinsError(err instanceof Error ? err.message : 'Failed to load skins');
+          setSkins([]);
+          setSelectedSkinId(null);
+        }
+      } finally {
+        if (!cancelled) setSkinsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selected?.fileDataID]);
 
   // poll job status
   useEffect(() => {
@@ -214,13 +258,18 @@ export default function BrowseModelPage() {
   });
   const isBusy = isExporting || job?.status === 'pending' || job?.status === 'processing';
 
-  const triggerExport = async (file: FileEntry) => {
+  const triggerExport = useCallback(async (file: FileEntry, skinId?: string | null) => {
     if (isExporting) {
       console.log('Please wait for the current export to finish.');
       return;
     }
     setSelected(file);
-    // Output file name: m2 path with / and \ replaced by _
+    if (skinId !== undefined) {
+      setSelectedSkinId(skinId);
+    }
+    setModelPath(undefined);
+    setJob(undefined);
+
     const guessedName = file.fileName.replace(/[\\/]/g, '_').replace(/\.m2$/i, '');
     setOutputFileName(guessedName);
     const localBase = { type: 'local', value: file.fileName.replace(/\.m2$/i, '') } as const;
@@ -230,6 +279,8 @@ export default function BrowseModelPage() {
       base: localBase,
       attackTag: character.attackTag === undefined ? '' : character.attackTag,
     };
+    const isSameFile = selected?.fileDataID === file.fileDataID && selected?.fileName === file.fileName;
+    const effectiveSkinId = skinId !== undefined ? skinId : (isSameFile ? selectedSkinId : undefined);
     const request = {
       character: exportCharacter,
       outputFileName: guessedName,
@@ -237,6 +288,7 @@ export default function BrowseModelPage() {
       format,
       formatVersion,
       isBrowse: true,
+      skinId: effectiveSkinId || undefined,
     };
 
     setIsExporting(true);
@@ -248,29 +300,51 @@ export default function BrowseModelPage() {
     setIsExporting(false);
     const js = (await res.json()) as JobStatus;
     setJob(js);
-  };
+  }, [isExporting, character, optimization, format, formatVersion, selectedSkinId]);
+
+  const getRowHeight = useCallback((file: FileEntry) => {
+    if (selected?.fileDataID !== file.fileDataID || selected?.fileName !== file.fileName) {
+      return FileRow.ROW_HEIGHT;
+    }
+    if (skinsLoading || skinsError) {
+      return FileRow.ROW_HEIGHT + skinPanelHeight(2);
+    }
+    return FileRow.ROW_HEIGHT + skinPanelHeight(skins.length);
+  }, [selected, skins.length, skinsLoading, skinsError]);
 
   const renderRow = useCallback((file: FileEntry, index: number, style: React.CSSProperties) => {
-    const isSelected = selected === file;
+    const isSelected = selected?.fileDataID === file.fileDataID && selected?.fileName === file.fileName;
     return (
-      <FileRow
-        file={file}
-        index={index}
-        isSelected={isSelected}
-        isBusy={isBusy}
-        highlightRegex={highlightRegex}
-        lowerWordsSet={lowerWordsSet}
-        copyBtnRef={isSelected ? copyBtnRef : undefined}
-        onClick={(f) => { void triggerExport(f); }}
-        style={style}
-        disabledHover={isExporting}
-        copyTooltip={{
-          copied: 'Copied, you can now paste it in local file input field in Character Export',
-          default: 'Copy path for local file export',
-        }}
-      />
+      <div style={style} className="min-w-full w-max">
+        <FileRow
+          file={file}
+          index={index}
+          isSelected={isSelected}
+          isBusy={isBusy}
+          highlightRegex={highlightRegex}
+          lowerWordsSet={lowerWordsSet}
+          copyBtnRef={isSelected ? copyBtnRef : undefined}
+          onClick={(f) => { void triggerExport(f); }}
+          style={{ height: FileRow.ROW_HEIGHT }}
+          disabledHover={isExporting}
+          copyTooltip={{
+            copied: 'Copied, you can now paste it in local file input field in Character Export',
+            default: 'Copy path for local file export',
+          }}
+        />
+        {isSelected ? (
+          <SkinPicker
+            skins={skins}
+            selectedSkinId={selectedSkinId}
+            isBusy={isBusy}
+            loading={skinsLoading}
+            error={skinsError}
+            onSelect={(skin) => { void triggerExport(file, skin.id); }}
+          />
+        ) : null}
+      </div>
     );
-  }, [selected, isBusy, isExporting, highlightRegex, lowerWordsSet, triggerExport]);
+  }, [selected, isBusy, isExporting, highlightRegex, lowerWordsSet, triggerExport, skins, selectedSkinId, skinsLoading, skinsError]);
 
   const suggestions = ['creature/', 'spells/', 'doodads/', 'wmo/'] as const;
   const applySuggestion = (s: typeof suggestions[number]) => {
@@ -349,10 +423,11 @@ export default function BrowseModelPage() {
                   </div>
                 </div>
                 <VirtualListBox
-                  items={deferredFiltered}
+                  items={filtered}
+                  listKey={debouncedQuery}
                   getRowKey={(file) => file.fileDataID + file.fileName}
                   renderRow={renderRow}
-                  fixedRowHeight={FileRow.ROW_HEIGHT}
+                  getRowHeight={getRowHeight}
                   overscan={OVERSCAN}
                   containerRef={listRef}
                   containerClassName="overflow-y-scroll overflow-x-auto border rounded-md bg-background flex-1"
