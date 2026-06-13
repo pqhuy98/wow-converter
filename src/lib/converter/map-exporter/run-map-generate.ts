@@ -3,6 +3,7 @@ import path from 'path';
 
 import { Config } from '@/lib/global-config';
 import { assertWowCascReady } from '@/lib/wow/wow-config-service';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import {
   defaultMapExportConfig,
@@ -26,7 +27,7 @@ export interface MapGenerateConversionOptions {
   mapSaveName: string;
   freshExport: boolean;
   autoClampPercent?: boolean;
-  creatureScaleUp: number;
+  unitScale: number;
   onConvertStepsKnown?: (convertSteps: number) => void;
   onProgress?: (
     convertCompletedSteps: number,
@@ -50,7 +51,7 @@ export async function runMapGenerateConversion(
     mapSaveName: rawSaveName,
     freshExport,
     autoClampPercent = true,
-    creatureScaleUp,
+    unitScale,
     onConvertStepsKnown,
     onProgress,
   } = options;
@@ -92,7 +93,7 @@ export async function runMapGenerateConversion(
   pruneDepth(mapExporter, DEFAULT_PRUNE_DEPTH);
 
   if (autoClampPercent) {
-    autoChooseClampPercent(mapExporter, mapExportConfig, creatureScaleUp);
+    autoChooseClampPercent(mapExporter, mapExportConfig, unitScale);
   }
 
   convertCompleted = 1;
@@ -112,6 +113,9 @@ export async function runMapGenerateConversion(
   report('Saved terrain and doodads');
 
   if (mapExportConfig.creatures.enable && creatureExportSteps > 0) {
+    logMapGeneratePhase('Loading creature model databases');
+    report('Loading creature model databases');
+    await wowDataClient.initModelCaches();
     logMapGeneratePhase('Exporting creatures');
     report('Exporting creatures', { completed: 0, total: uniqueCreatureCount });
     await mapExporter.exportCreatures(outputDir, {
@@ -141,6 +145,7 @@ export function buildMapExportConfig(params: {
   mapAngleDeg: number;
   clampLower: number;
   clampUpper: number;
+  unitScale: number;
   creatures: MapExportConfig['creatures'];
 }): MapExportConfig {
   return {
@@ -156,6 +161,7 @@ export function buildMapExportConfig(params: {
         upper: params.clampUpper,
       },
     },
+    unitScale: params.unitScale,
     creatures: params.creatures,
   };
 }

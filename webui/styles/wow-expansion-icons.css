@@ -1,0 +1,21 @@
+.expansion-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+.expansion-icon[data-expansion="0"] { background-image: url(/expansion-icons/0.png); }
+.expansion-icon[data-expansion="1"] { background-image: url(/expansion-icons/1.png); }
+.expansion-icon[data-expansion="2"] { background-image: url(/expansion-icons/2.png); }
+.expansion-icon[data-expansion="3"] { background-image: url(/expansion-icons/3.png); }
+.expansion-icon[data-expansion="4"] { background-image: url(/expansion-icons/4.png); }
+.expansion-icon[data-expansion="5"] { background-image: url(/expansion-icons/5.png); }
+.expansion-icon[data-expansion="6"] { background-image: url(/expansion-icons/6.png); }
+.expansion-icon[data-expansion="7"] { background-image: url(/expansion-icons/7.png); }
+.expansion-icon[data-expansion="8"] { background-image: url(/expansion-icons/8.png); }
+.expansion-icon[data-expansion="9"] { background-image: url(/expansion-icons/9.png); }
+.expansion-icon[data-expansion="10"] { background-image: url(/expansion-icons/10.png); }
+.expansion-icon[data-expansion="11"] { background-image: url(/expansion-icons/11.png); }

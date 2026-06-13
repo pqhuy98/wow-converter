@@ -11,15 +11,14 @@ import path from 'path';
 
 import { ExportContext } from '@/lib/converter/character/utils';
 import { DirectDataTexture } from '@/lib/converter/wow-model/direct/m2/textures';
-import { profileScope } from '@/lib/export-profile';
 import { ensureConverterCasc } from '@/lib/wow/archive/client/remote-casc';
 import { CharMaterialRenderer } from '@/lib/wow/character/char-material-renderer';
 import type { GeosetMaskEntry } from '@/lib/wow/export/m2/m2-exporter';
 import { replaceExtension } from '@/lib/wow/export/writers/export-helper';
 import { Skin } from '@/lib/wow/formats/m2/skin';
 import {
-  CharacterMetaResponse, ExportCharacterParams, wowExportClient,
-} from '@/lib/wowexport-client/wowexport-client';
+  CharacterMetaResponse, ExportCharacterParams, wowDataClient,
+} from '@/lib/wow-data-client/wow-data-client';
 
 import { Model } from '../../common/models';
 
@@ -146,7 +145,7 @@ async function bakeCharacterMaterials(
 
 /** Mirror of the export path naming in exportCharacterModelHeadless + rest-server suffix. */
 function resolveCharacterExportPath(exportRoot: string, fileName: string, exportSuffix: string): string {
-  let exportPath = replaceExtension(path.normalize(path.join(exportRoot, fileName.replace(/\s/g, ''))), '.obj');
+  let exportPath = replaceExtension(path.normalize(path.join(exportRoot, fileName.replace(/\s/g, ''))), '.m2');
   if (exportSuffix) {
     const dir = path.dirname(exportPath);
     const base = path.basename(exportPath, path.extname(exportPath));
@@ -157,14 +156,14 @@ function resolveCharacterExportPath(exportRoot: string, fileName: string, export
 }
 
 /**
- * Direct replacement for wowExportClient.exportCharacter + OBJ parse.
+ * Direct replacement for wowDataClient.exportCharacter + OBJ parse.
  * `body` must be the exact object the legacy RPC would have posted — the
  * export suffix (part of the model name) is derived from its JSON form.
  */
 export async function exportCharacterDirectAsModel(ctx: ExportContext, body: ExportCharacterParams): Promise<Model> {
   ensureConverterCasc();
 
-  const meta = await wowExportClient.getCharMeta({
+  const meta = await wowDataClient.getCharMeta({
     race: body.race,
     gender: body.gender,
     fileDataIdOverride: body.fileDataIdOverride,
@@ -178,14 +177,14 @@ export async function exportCharacterDirectAsModel(ctx: ExportContext, body: Exp
     bakeCache.delete(cacheKey);
     bakeCache.set(cacheKey, dataTextures);
   } else {
-    dataTextures = await profileScope('bakeMaterials', () => bakeCharacterMaterials(meta, body));
+    dataTextures = await bakeCharacterMaterials(meta, body);
     bakeCache.set(cacheKey, dataTextures);
     if (bakeCache.size > BAKE_CACHE_MAX) bakeCache.delete(bakeCache.keys().next().value!);
   }
 
   // Same suffix the server derives from the RPC body (md5 of its JSON).
   const suffix = createHash('md5').update(JSON.stringify(body || {})).digest('hex').slice(0, 8);
-  const exportPath = resolveCharacterExportPath(ctx.config.wowExportAssetDir, meta.fileName, suffix);
+  const exportPath = resolveCharacterExportPath(ctx.config.exportAssetDir, meta.fileName, suffix);
 
   return ctx.assetManager.parseDirect({
     fileDataID: meta.fileDataID,

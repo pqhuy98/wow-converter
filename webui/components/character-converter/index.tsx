@@ -475,7 +475,7 @@ function guessOutputFileWowhead(url: string) {
 }
 
 function guessOutputFileLocalPath(path: string) {
-  // extract item name from creature\druidcat2\druidcat2_artifact3_green.obj
+  // extract item name from creature\druidcat2\druidcat2_artifact3_green
   return path.split('\\').pop()?.split('.')[0];
 }
 

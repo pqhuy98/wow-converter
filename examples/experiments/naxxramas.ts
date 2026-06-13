@@ -25,7 +25,7 @@ import { calculateTriangleSlope } from '@/lib/math/geometry';
     min: [0, 0],
     max: [1, 1],
     mapAngleDeg: 90,
-    wmoSet: ['world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.obj'],
+    wmoSet: ['world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.wmo'],
     terrain: {
       clampPercent: {
         lower: 0.2,
@@ -36,8 +36,8 @@ import { calculateTriangleSlope } from '@/lib/math/geometry';
     creatures: {
       enable: false,
       allAreDoodads: false,
-      scaleUp: 2,
     },
+    unitScale: 2,
   };
 
   const mapDir = './maps/naxxramas.w3x';
@@ -87,7 +87,7 @@ import { calculateTriangleSlope } from '@/lib/math/geometry';
 });
 
 async function buildUndercityLower(assetManager: AssetManager, outputPath: string) {
-  const model = (await assetManager.parse('world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.obj', true)).mdl;
+  const model = (await assetManager.parse('world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.wmo', true)).mdl;
   model.modify.deleteVerticesInsideBox([-99999, -99999, -791.26], [99999, 18062.16, 99999]);
 
   const floor = cloneDeep(model).modify.deleteFacesIf((f) => {

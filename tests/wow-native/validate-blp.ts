@@ -1,7 +1,7 @@
 /**
- * Phase 2 validation: native BLP decoder vs live wow.export PNG exports.
+ * Phase 2 validation: native BLP decoder vs live wow-data-server PNG exports.
  *
- * Exports a set of BLP textures through the running wow.export instance
+ * Exports a set of BLP textures through the running wow-data-server instance
  * (REST /rest/exportTextures), decodes the produced PNGs with sharp, and
  * compares them pixel-for-pixel with the native decoder's output.
  *
@@ -21,7 +21,7 @@ import { write } from '../../src/lib/wow/log';
 
 const WOW_DIR = getArg('--wow-dir') ?? process.env.CASC_LOCAL_WOW ?? 'D:\\Programs\\Blizzard Games\\World of Warcraft';
 const PRODUCT = getArg('--product') ?? 'wow';
-const WOWEXPORT_URL = process.env.WOWEXPORT_URL ?? 'http://127.0.0.1:17752';
+const WOW_DATA_SERVER_URL = process.env.WOW_DATA_SERVER_URL ?? 'http://127.0.0.1:17753';
 
 // Mix of encodings: DXT1/3/5 (encoding 2), palette (1), BGRA (3).
 const TEST_TEXTURES = [
@@ -55,12 +55,12 @@ async function decodePNG(input: Buffer | string): Promise<{ data: Buffer; width:
 }
 
 async function main() {
-  // --- Get wow.export config (export directory) ---
-  const cfgRes = await fetch(`${WOWEXPORT_URL}/rest/getConfig`);
-  if (!cfgRes.ok) throw new Error(`wow.export REST unavailable: HTTP ${cfgRes.status}`);
+  // --- Get wow-data-server config (export directory) ---
+  const cfgRes = await fetch(`${WOW_DATA_SERVER_URL}/rest/getConfig`);
+  if (!cfgRes.ok) throw new Error(`wow-data-server REST unavailable: HTTP ${cfgRes.status}`);
   const cfg = (await cfgRes.json() as { config: Record<string, unknown> }).config;
   const exportDir = String(cfg.exportDirectory);
-  console.log(`wow.export exportDirectory: ${exportDir}`);
+  console.log(`wow-data-server exportDirectory: ${exportDir}`);
 
   // --- Load native CASC ---
   const preloadPromise = listfile.preload();
@@ -82,8 +82,8 @@ async function main() {
       continue;
     }
 
-    // wow.export REST export
-    const expRes = await fetch(`${WOWEXPORT_URL}/rest/exportTextures`, {
+    // wow-data-server REST export
+    const expRes = await fetch(`${WOW_DATA_SERVER_URL}/rest/exportTextures`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileDataID: [fdid] }),
@@ -91,7 +91,7 @@ async function main() {
     const expJson = await expRes.json() as { succeeded?: { fileDataID: number; file: string }[] };
     const exported = expJson.succeeded?.[0];
     if (!exported) {
-      check('wow.export export succeeded', false, JSON.stringify(expJson).slice(0, 200));
+      check('wow-data-server export succeeded', false, JSON.stringify(expJson).slice(0, 200));
       continue;
     }
 

@@ -10,11 +10,11 @@ import { Agent as HttpAgent } from 'http';
 import { Agent as HttpsAgent } from 'https';
 import path from 'path';
 
-import {
-  ExportProfileSnapshot, getExportProfile, profileScope,
-} from '@/lib/export-profile';
 import { waitUntil } from '@/lib/utils';
 import { clearConverterRuntimeCaches } from '@/lib/wow/clear-runtime-caches';
+import {
+  getDataServerHttpOrigin, getDataServerSocketPath,
+} from '@/lib/wow-data-server/transport';
 
 interface CASCInfo {
   type: string;
@@ -52,11 +52,6 @@ export interface ExportFile {
   file: string;
 }
 
-interface ExportResult {
-  fileDataID: number;
-  files: ExportFile[];
-}
-
 export interface ConfigResponse {
   [key: string]: unknown;
 }
@@ -80,12 +75,6 @@ export interface ExportCharacterParams {
   include_animations: boolean;
   include_base_clothing: boolean;
   excludeAnimationIds?: number[];
-}
-
-export type ExportCharacterResult = {
-  exportPath: string;
-  fileName: string;
-  fileManifest: ExportFile[];
 }
 
 export interface CharacterMetaRequest {
@@ -132,7 +121,6 @@ export interface ExportADTParams {
   tileX: number;
   tileY: number;
   quality?: number;
-  exportRaw?: boolean;
   includeM2?: boolean;
   includeWMO?: boolean;
   includeWMOSets?: boolean;
@@ -174,7 +162,7 @@ export interface ExportADTResult {
   mainFile: string | null;
 }
 
-export class WowExportRestClient {
+export class WowDataClient {
   private readonly http: AxiosInstance;
 
   private assetDir = '';
@@ -185,6 +173,8 @@ export class WowExportRestClient {
 
   private readonly cacheDir = path.resolve('.cache');
 
+  private readonly socketPath?: string;
+
   public status = {
     connected: false,
     configLoaded: false,
@@ -193,25 +183,27 @@ export class WowExportRestClient {
 
   cascInfo: CASCInfo | null = null;
 
-  constructor(private baseURL = 'http://127.0.0.1:17752') {
-    this.isRemote = !/^(http(s)?:\/\/)?(127\.0\.0\.1|localhost)/.test(baseURL);
+  constructor(baseURL = getDataServerHttpOrigin(), socketPath = getDataServerSocketPath()) {
+    this.socketPath = socketPath;
+    this.isRemote = !socketPath && !/^(http(s)?:\/\/)?(127\.0\.0\.1|localhost)/.test(baseURL);
     if (this.isRemote) {
       ensureDirSync(this.cacheDir);
     }
 
-    // Keep TCP connections alive to avoid handshake overhead and reduce resets.
     const httpAgent = new HttpAgent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15000 });
     const httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15000 });
 
     this.http = axios.create({
       baseURL,
-      // Some wow.export model exports (e.g. shaboss.m2) take ~10 minutes.
       timeout: 1200000,
       httpAgent,
       httpsAgent,
     });
     const debug = false;
     this.http.interceptors.request.use((config) => {
+      if (this.socketPath) {
+        config.socketPath = this.socketPath;
+      }
       if (config.url?.includes('/getCascInfo') || config.url?.includes('/searchFiles')) return config;
       debug && console.log('request', config.method, config.url, config.data);
       return config;
@@ -273,8 +265,6 @@ export class WowExportRestClient {
       : this.remoteAssetDir;
     return this.assetDir;
   }
-
-  // ===== HIGH-LEVEL API METHODS (public) =====
 
   public async syncConfig(): Promise<void> {
     const config = await this.getConfig();
@@ -374,6 +364,13 @@ export class WowExportRestClient {
     throw new Error('Failed to get model skins');
   }
 
+  /** Pre-load creature/item DB2 skin caches (call before bulk creature export). */
+  public async initModelCaches(): Promise<void> {
+    const json = await this.getJSON('/rest/initModelCaches');
+    if (json.id === 'MODEL_CACHES_READY') return;
+    throw new Error('Failed to initialize model caches');
+  }
+
   /** Download a raw (BLTE-decoded) CASC file by fileDataID. */
   public async downloadCascFile(fileDataID: number): Promise<Buffer> {
     const res = await this.http.request<ArrayBuffer | Buffer>({
@@ -396,88 +393,14 @@ export class WowExportRestClient {
     return buf;
   }
 
-  /** Legacy pipeline only: served by the wow.export electron app (not the native wow-data-server). */
-  public async exportModels(models: { fileDataID: number; skinName?: string }[]): Promise<ExportResult[]> {
-    if (models.length === 0) return [];
-    return profileScope('client/exportModels', async () => {
-      const { status, data: json } = await profileScope('restPOST', () => this.postJSONAllowError('/rest/exportModels', { models }));
-      if (status === 200 && json.id === 'EXPORT_RESULT') {
-        getExportProfile()?.merge(json.profile as ExportProfileSnapshot | undefined, 'server');
-        await this.getAssetDir();
-        const results = json.succeeded as ExportResult[];
-        await profileScope('prefetch', () => Promise.all(results.map(async (result: ExportResult) => {
-          await this.prefetchFiles(result.files);
-          result.files.forEach((_, i) => {
-            result.files[i].file = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.files[i].file));
-          });
-        })));
-        return results;
-      }
-      if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
-      if (status === 400) throw new Error('Invalid parameters for model export');
-      if (status === 422) throw new Error('Model export failed for all files');
-      if (status >= 500) throw new Error(`Server error during model export: ${json?.message ?? 'unknown'}`);
-      throw new Error('Unexpected response for model export');
-    });
-  }
-
-  /** Legacy pipeline only: served by the wow.export electron app (not the native wow-data-server). */
-  public async exportTextures(fileDataIDs: number[]): Promise<ExportFile[]> {
-    if (fileDataIDs.length === 0) return [];
-    const { status, data: json } = await this.postJSONAllowError('/rest/exportTextures', { fileDataID: fileDataIDs });
-    if (status === 200 && json.id === 'EXPORT_RESULT') {
-      await this.getAssetDir();
-      const results = json.succeeded as ExportFile[];
-      await this.prefetchFiles(results);
-      results.forEach((_, i) => {
-        results[i].file = path.join(this.assetDir, path.relative(this.remoteAssetDir, results[i].file));
-      });
-      return results;
-    }
-    if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
-    if (status === 400) throw new Error('Invalid parameters for texture export');
-    if (status === 422) throw new Error('Texture export failed for all files');
-    if (status >= 500) throw new Error(`Server error during texture export: ${json?.message ?? 'unknown'}`);
-    throw new Error('Unexpected response for texture export');
-  }
-
-  /** Legacy pipeline only: served by the wow.export electron app (not the native wow-data-server). */
-  public async exportCharacter(data: ExportCharacterParams): Promise<ExportCharacterResult> {
-    return profileScope('client/exportCharacter', async () => {
-      const { status, data: json } = await profileScope('restPOST', () => this.postJSONAllowError('/rest/exportCharacter', data));
-      if (status === 200 && json.id === 'EXPORT_RESULT') {
-        getExportProfile()?.merge(json.profile as ExportProfileSnapshot | undefined, 'server');
-        await this.getAssetDir();
-        const result = json as ExportCharacterResult;
-        // Never reuse cached PNGs here: baked character textures are named
-        // after the base skin file, so the same path holds different pixels
-        // for different characters. Other manifest files (obj/skin/anim/json)
-        // are content-stable per path and safe to reuse.
-        const allowCache = (file: string) => !file.endsWith('.png');
-        await profileScope('prefetch', () => this.prefetchFiles(result.fileManifest, allowCache));
-        result.exportPath = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.exportPath));
-        result.fileManifest.forEach((_, i) => {
-          result.fileManifest[i].file = path.join(this.assetDir, path.relative(this.remoteAssetDir, result.fileManifest[i].file));
-        });
-        return result;
-      }
-      if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
-      if (status === 400) throw new Error('Invalid parameters for character export');
-      if (status >= 500) throw new Error(`Server error during character export: ${json?.message ?? 'unknown'}`);
-      throw new Error('Unexpected response for character export');
-    });
-  }
-
-  /** Character metadata (model fileDataID, geosets, bake layers) for the direct pipeline. */
+  /** Character metadata (model fileDataID, geosets, bake layers) for in-process conversion. */
   public async getCharMeta(params: CharacterMetaRequest): Promise<CharacterMetaResponse> {
-    return profileScope('client/charMeta', async () => {
-      const { status, data: json } = await this.postJSONAllowError('/rest/charMeta', params);
-      if (status === 200 && json.id === 'CHAR_META') return json as unknown as CharacterMetaResponse;
-      if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
-      if (status === 400) throw new Error('Invalid parameters for character metadata');
-      if (status >= 500) throw new Error(`Server error during character metadata lookup: ${json?.message ?? 'unknown'}`);
-      throw new Error('Unexpected response for character metadata');
-    });
+    const { status, data: json } = await this.postJSONAllowError('/rest/charMeta', params);
+    if (status === 200 && json.id === 'CHAR_META') return json as unknown as CharacterMetaResponse;
+    if (status === 409 || json?.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    if (status === 400) throw new Error('Invalid parameters for character metadata');
+    if (status >= 500) throw new Error(`Server error during character metadata lookup: ${json?.message ?? 'unknown'}`);
+    throw new Error('Unexpected response for character metadata');
   }
 
   public async exportADT(params: ExportADTParams): Promise<ExportADTResult> {
@@ -529,19 +452,14 @@ export class WowExportRestClient {
     }
   }
 
-  // ===== HELPERS (private) =====
-
   private bootPromise: Promise<void> | null = null;
 
   private logWarnedBootstrap = false;
-
-  private logWarnedConnected = false;
 
   private async bootstrap(): Promise<void> {
     if (this.bootPromise) return this.bootPromise;
     this.bootPromise = (async () => {
       try {
-        // Connected if REST server responds to any request.
         await this.getConfig();
         this.status.connected = true;
         this.status.configLoaded = true;
@@ -552,23 +470,21 @@ export class WowExportRestClient {
           console.log(chalk.green('✅ WoW data ready:'), info.build.Product, info.buildName);
           this.logWarnedCASC = false;
         } catch {
-          // CASC is loaded by wow-data-server startup (.env) or the web UI (/setup).
           if (!this.logWarnedCASC) {
-            console.log(chalk.gray('WoW data not loaded yet — use the web UI (/setup) or set CASC_* in .env'));
+            const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+            const setupUrl = `http://127.0.0.1:${port}/setup`;
+            console.log(chalk.gray('WoW data not loaded yet, open'), chalk.blue(setupUrl));
             this.logWarnedCASC = true;
           }
         }
-
-        this.logWarnedConnected = true;
-      } catch (e) {
+      } catch {
         if (!this.logWarnedBootstrap) {
-          console.error(chalk.yellow(`⏳ Cannot connect to wow-data-server at ${this.baseURL}. Is it running?`));
+          console.error(chalk.yellow(`⏳ Cannot connect to wow-data-server at ${this.socketPath}. Is it running?`));
           this.logWarnedBootstrap = true;
         }
         this.status.connected = false;
         this.status.configLoaded = false;
         this.status.cascLoaded = false;
-        this.logWarnedConnected = false;
       }
     })().finally(() => {
       this.bootPromise = null;
@@ -576,7 +492,6 @@ export class WowExportRestClient {
     return this.bootPromise;
   }
 
-  /** Poll for CASC without re-running full bootstrap (avoids log spam while waiting for /setup). */
   private async pollCascReady(): Promise<void> {
     if (this.status.cascLoaded) return;
     try {
@@ -607,9 +522,8 @@ export class WowExportRestClient {
           }
           this.applyCascInfo(res.json as unknown as CASCInfo);
         });
-      } catch (e) {
+      } catch {
         this.status.connected = false;
-        this.logWarnedConnected = false;
       }
     };
     setInterval(tick, 500);
@@ -651,12 +565,10 @@ export class WowExportRestClient {
         validateStatus: () => true,
       });
       return { ok: res.status >= 200 && res.status < 300, json: res.data };
-    } catch (e) {
+    } catch {
       return { ok: false, json: null };
     }
   }
-
-  // ===== FILE TRANSFER (remote mode) =====
 
   private normalizeRelative(p: string) {
     return p.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -665,10 +577,10 @@ export class WowExportRestClient {
   private async prefetchFiles(files: ExportFile[], allowCache: (file: string) => boolean = () => true): Promise<void> {
     if (!this.isRemote || files.length === 0) return;
     await this.getAssetDir();
-    await Promise.all(files.map(async (file) => profileScope('download', () => this.fetchFile(
+    await Promise.all(files.map(async (file) => this.fetchFile(
       path.relative(this.remoteAssetDir, file.file),
       allowCache,
-    ), { file: path.basename(file.file) })));
+    )));
   }
 
   private async fetchFile(relativePath: string, allowCache: (file: string) => boolean): Promise<string> {
@@ -682,7 +594,7 @@ export class WowExportRestClient {
     const dir = path.dirname(dest);
     await ensureDir(dir);
 
-    console.log('Fetch file from remote wow.export', relativePath, this.isRemote);
+    console.log('Fetch file from remote wow-data-server', relativePath);
     const res = await this.http.request<ArrayBuffer | Buffer>({
       method: 'GET',
       url: '/rest/download',
@@ -702,19 +614,23 @@ export class WowExportRestClient {
   }
 }
 
-/**
- * WOW_READER selects the backing data server:
- *  - 'rest' (default): live wow.export instance on port 17752
- *  - 'native': the native wow-data-server process on port 17753
- * WOW_EXPORT_BASE_URL overrides either.
- */
-const defaultBaseURL = process.env.WOW_READER === 'native'
-  ? `http://127.0.0.1:${process.env.WOW_DATA_SERVER_PORT || 17753}`
-  : 'http://127.0.0.1:17752';
+let _wowDataClient: WowDataClient | undefined;
 
-export const wowExportClient = new WowExportRestClient(
-  process.env.WOW_EXPORT_BASE_URL || defaultBaseURL,
-);
+export function getWowDataClient(): WowDataClient {
+  if (!_wowDataClient) {
+    _wowDataClient = new WowDataClient();
+  }
+  return _wowDataClient;
+}
+
+/** Lazy singleton so bundled transport env is applied before the client is created. */
+export const wowDataClient: WowDataClient = new Proxy({} as WowDataClient, {
+  get(_target, prop) {
+    const client = getWowDataClient();
+    const value = Reflect.get(client, prop, client) as unknown;
+    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+  },
+});
 
 const desiredConfig = {
   copyMode: 'FULL',
@@ -741,5 +657,3 @@ const desiredConfig = {
   modelsExportAnimations: true,
   modelsExportCollision: true,
 };
-
-// backoff helper removed; no request-level retries used.

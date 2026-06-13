@@ -10,7 +10,7 @@ import path from 'path';
 
 import { registerTextureSource, TextureSource } from '@/lib/converter/common/texture-source';
 import type { ObjMaterial } from '@/lib/converter/wow-model/bundle/mtl';
-import { putExportAsset } from '@/lib/export-asset-store';
+import { writeExportAsset } from '@/lib/export-asset-store';
 import { getFileNameByID } from '@/lib/wow/archive/client/name-client';
 import { getRawWowFile } from '@/lib/wow/archive/client/raw-client';
 import type { TextureManifestEntry, VariantTexture } from '@/lib/wow/export/m2/m2-exporter';
@@ -40,7 +40,7 @@ function virtualExportPath(exportRoot: string, file: string): string {
  * legacy exporter (writeMeta and the mesh builder depend on this patching).
  *
  * @param outDir directory of the virtual OBJ output (under exportRoot)
- * @param exportRoot converter-side export root (config.wowExportAssetDir)
+ * @param exportRoot converter-side export root (config.exportAssetDir)
  */
 export async function resolveTextures(
   m2: M2Loader,
@@ -88,7 +88,7 @@ export async function resolveTextures(
     registerSource(texPath, source);
     // Mirror the legacy server writing the baked PNG file: body-texture
     // compositing reads it from the export-asset store.
-    if (source.kind === 'png') putExportAsset(texPath, source.png);
+    if (source.kind === 'png') await writeExportAsset(texPath, source.png);
 
     addMaterial(matName, texFile);
     validTextures.set(`data-${textureType}`, {

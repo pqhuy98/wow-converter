@@ -291,7 +291,7 @@ export class Wc3Converter {
 
       const creatureModel = `creature-${c.model.CreatureDisplayID}.mdx`;
       const creatureName = c.template.name || c.template.subname;
-      const creatureScale = scale * c.model.DisplayScale * mapConfig.creatures.scaleUp;
+      const creatureScale = scale * c.model.DisplayScale * mapConfig.unitScale;
       const creatureFacingRadians = objAbsolute.rotation[2];
       const position: Vector3 = [inGameX, inGameY, inGameZ];
 
@@ -336,7 +336,7 @@ export class Wc3Converter {
           templateIdToUnitType.set(c.template.entry, mapManager.addUnitType('unit', 'hfoo', [
             { id: 'unam', type: ModificationType.string, value: creatureName },
             // { id: 'upro', type: ModificationType.string, value: c.template.name || c.template.subname },
-            { id: 'unsf', type: ModificationType.string, value: `guid=${c.creature.guid} template.entry=${c.template.entry} displayId=${c.model.CreatureDisplayID} phaseMask=${c.creature.phaseMask}` },
+            { id: 'unsf', type: ModificationType.string, value: `guid=${c.creature.guid} template.entry=${c.template.entry} displayId=${c.model.CreatureDisplayID} phaseMask=${c.creature.phaseMask >>> 0}` },
             { id: 'umdl', type: ModificationType.string, value: creatureModel },
             { id: 'uabi', type: ModificationType.string, value: '' },
             { id: 'usca', type: ModificationType.real, value: creatureScale },

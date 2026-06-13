@@ -223,7 +223,7 @@ export default function BrowseModelPage() {
     // Output file name: m2 path with / and \ replaced by _
     const guessedName = file.fileName.replace(/[\\/]/g, '_').replace(/\.m2$/i, '');
     setOutputFileName(guessedName);
-    const localBase = { type: 'local', value: file.fileName.replace(/\.m2$/i, '.obj') } as const;
+    const localBase = { type: 'local', value: file.fileName.replace(/\.m2$/i, '') } as const;
 
     const exportCharacter: Character = {
       ...character,

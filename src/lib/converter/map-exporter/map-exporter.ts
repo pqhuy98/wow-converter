@@ -12,6 +12,7 @@ import { Wc3Converter } from '@/lib/converter/map-exporter/wc3-converter';
 import { Config } from '@/lib/global-config';
 import { Vector2 } from '@/lib/math/common';
 import { radians } from '@/lib/math/rotation';
+import { bundledAppRoot } from '@/lib/wow-data-server/transport';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 
@@ -38,9 +39,10 @@ export interface MapExportConfig {
   creatures: {
     enable: boolean
     allAreDoodads: boolean;
-    scaleUp: number
   },
 
+  /** Unit size on the map; also drives terrain height auto-clamp. */
+  unitScale: number,
 }
 
 export const defaultMapExportConfig: Omit<MapExportConfig, 'mapId' | 'wowExportFolder' | 'outputPath' | 'min' | 'max' | 'mapAngleDeg' > = {
@@ -64,8 +66,8 @@ export const defaultMapExportConfig: Omit<MapExportConfig, 'mapId' | 'wowExportF
   creatures: {
     enable: true,
     allAreDoodads: false,
-    scaleUp: 1,
   },
+  unitScale: 1,
 };
 
 export class MapExporter {
@@ -194,7 +196,7 @@ export class MapExporter {
 
   public saveWar3mapFiles(outputDir: string) {
     // Save map
-    const templateEmptyDir = 'maps/template-empty.w3x';
+    const templateEmptyDir = resolveTemplateEmptyDir();
     if (!existsSync(outputDir)) {
       fsExtra.copySync(templateEmptyDir, outputDir);
     } else {
@@ -214,6 +216,19 @@ export class MapExporter {
       // ignore
     }
   }
+}
+
+function resolveTemplateEmptyDir(): string {
+  const candidates = [
+    path.join(bundledAppRoot(), 'maps', 'template-empty.w3x'),
+    path.join(process.cwd(), 'maps', 'template-empty.w3x'),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(
+    `Missing WC3 map template (maps/template-empty.w3x). Checked: ${candidates.join(', ')}`,
+  );
 }
 
 function buildPaths(prefix: string, min: Vector2, max: Vector2) {

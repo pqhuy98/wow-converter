@@ -1,11 +1,10 @@
 /**
- * Constants for the native WoW reader, ported from wow.export (src/js/constants.js).
- * Cache paths are rooted in the wow-converter project (.cache/wow) instead of
- * the NW.js user-data directory.
+ * Constants for the native WoW reader (wow-data-server).
+ * Cache paths are rooted in the wow-converter project (.cache/wow).
  */
 import path from 'path';
 
-const DATA_PATH = process.env.WOW_READER_DATA_PATH || path.resolve('.cache', 'wow');
+const DATA_PATH = process.env.WOW_DATA_PATH || path.resolve('.cache', 'wow');
 
 /** Default directory for exported OBJ/PNG/etc. (overridable via WOW_EXPORT_DIR). */
 export const EXPORT_PATH = process.env.WOW_EXPORT_DIR || path.resolve('.cache', 'wow-export');
@@ -19,8 +18,7 @@ export interface ProductInfo {
 export const constants = {
   DATA_PATH,
 
-  // Version stamped into export artifacts (e.g. OBJ headers). Mirrors the
-  // wow.export build wow-converter ran against, for byte-identical output.
+  // Version stamped into export artifacts (e.g. OBJ headers).
   VERSION: '0.2.1',
 
   // User-agent used for HTTP/HTTPs requests.

@@ -13,8 +13,7 @@ alwaysApply: false
   - Organize complex methods into clear phases with comments (e.g., "1) Discover X", "2) Process Y", "3) Compute Z").
   - Prefer local helper functions over repeated inline logic; extract when logic appears 2+ times.
   - Only store shared state as class properties; move method-local data into local variables.
-- Run the app with `npm run dev` as background daemon emitting logs to `log.txt`. Tail the log file, when the message `Serving UI web interface at http://127.0.0.1:3001/` appears means server started successfully. Always kill the old server on port 3000 and 3001 before starting a new one. Server `npm run dev` has hot-reload, so no need to kill every code change.
-- Only when running as background agent mode on Cursor's cloud Docker container, wow.export is included only for code reference, never try to run it locally and do not modify its code from this repository. When not in background agent mode, e.g. in IDE mode, wow.export code can be modified.
+- Run the app with `npm run dev` as background daemon emitting logs to `log.txt`. Tail the log file, when the message `Serving UI web interface at http://127.0.0.1:3001/` appears means server started successfully. Always kill the old server on port 3000, 3001, and 17753 before starting a new one. Server `npm run dev` has hot-reload (includes wow-data-server), so no need to kill every code change.
 - Commit hygiene: squash commits before merging to `main`.
   ```bash
   git fetch origin

@@ -1,5 +1,6 @@
 import { constants } from '@/lib/wow/formats/constants';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
+import { dataServerGetJson, dataServerPostJson } from '@/lib/wow-data-server/http-request';
 
 import type {
   CascBuildSummary, CascInfoSummary, WowConfig, WowConfigStatus,
@@ -15,32 +16,14 @@ import {
   setWowConfigError,
 } from './wow-config-state';
 
-function wowDataServerBase(): string {
-  return `http://127.0.0.1:${process.env.WOW_DATA_SERVER_PORT || 17753}`;
-}
-
 async function getJson(path: string): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
-  try {
-    const res = await fetch(`${wowDataServerBase()}${path}`);
-    const json = await res.json() as Record<string, unknown>;
-    return { ok: res.ok, status: res.status, json };
-  } catch (e) {
-    return { ok: false, status: 0, json: { id: 'ERR_UNREACHABLE', message: (e as Error).message } };
-  }
+  const res = await dataServerGetJson(path);
+  return { ok: res.ok, status: res.status, json: res.json };
 }
 
 async function postJson(path: string, body: unknown): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
-  try {
-    const res = await fetch(`${wowDataServerBase()}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body ?? {}),
-    });
-    const json = await res.json() as Record<string, unknown>;
-    return { ok: res.ok, status: res.status, json };
-  } catch (e) {
-    return { ok: false, status: 0, json: { id: 'ERR_UNREACHABLE', message: (e as Error).message } };
-  }
+  const res = await dataServerPostJson(path, body);
+  return { ok: res.ok, status: res.status, json: res.json };
 }
 
 function summarizeCascInfo(json: Record<string, unknown>): CascInfoSummary {
@@ -206,19 +189,19 @@ export async function resetWowConfig(): Promise<void> {
     throw new Error(`Failed to reset WoW data (${String(json.id ?? status)})`);
   }
   resetWowConfigSession();
-  wowExportClient.clearRuntimeCaches();
+  wowDataClient.clearRuntimeCaches();
 }
 
 /** Block until CASC is ready, or throw with a actionable message (CLI/scripts). */
 export async function assertWowCascReady(timeoutMs = 5000): Promise<void> {
   await ensureEnvWowConfigLoaded();
   await ensureMemoryWowConfigLoaded();
-  const { wowExportClient } = await import('@/lib/wowexport-client/wowexport-client');
-  if (wowExportClient.isReady) return;
+  const { wowDataClient } = await import('@/lib/wow-data-client/wow-data-client');
+  if (wowDataClient.isReady) return;
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (wowExportClient.isReady) return;
+    if (wowDataClient.isReady) return;
     await new Promise((r) => { setTimeout(r, 200); });
   }
 

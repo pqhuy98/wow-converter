@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
+import { TooltipHelp } from '@/components/common/tooltip-help';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -16,7 +17,33 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { GenerateWc3FormValues } from '@/lib/models/map-generate.model';
 import { defaultGenerateWc3FormValues } from '@/lib/models/map-generate.model';
-import { cn } from '@/lib/utils/css';
+
+import { TerrainClampSlider } from './terrain-clamp-slider';
+
+const tooltips = {
+  terrainClamp: 'Maps a slice of WoW elevation onto WC3 terrain height. In steep areas with tall mountains, narrow the range to scale the map up—high ground outside the slice is left out of the converted terrain.',
+  unitScale: 'Size multiplier for NPC units placed on the map. Also affects automatic terrain height clamp.',
+  exportNpcs: 'Export WoW NPC models from the selected area and place them on the WC3 map.',
+  allNpcsAsDoodads: 'Place all NPCs as destructible doodads instead of units.',
+  freshExport: 'Delete the existing map folder before converting. Unchecked reuses cached models and textures.',
+};
+
+function FieldLabelRow({
+  htmlFor,
+  children,
+  tooltip,
+}: {
+  htmlFor?: string;
+  children: ReactNode;
+  tooltip?: string;
+}) {
+  return (
+    <div className="flex min-h-5 items-center gap-2">
+      <Label htmlFor={htmlFor} className="text-sm">{children}</Label>
+      {tooltip ? <TooltipHelp tooltips={tooltip} /> : <span className="size-4 shrink-0" aria-hidden />}
+    </div>
+  );
+}
 
 interface GenerateWc3DialogProps {
   open: boolean;
@@ -43,7 +70,6 @@ export default function GenerateWc3Dialog({
     });
   }, [open, defaultMapSaveName]);
 
-  const clampInvalid = values.clampUpper < values.clampLower;
   const nameInvalid = values.mapSaveName.trim().length === 0;
 
   return (
@@ -52,7 +78,7 @@ export default function GenerateWc3Dialog({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (clampInvalid || nameInvalid) return;
+            if (nameInvalid) return;
             onConfirm(values);
             onOpenChange(false);
           }}
@@ -75,46 +101,48 @@ export default function GenerateWc3Dialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="clampLower">Lower clamp %</Label>
-              <Input
-                id="clampLower"
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={values.clampLower}
-                onChange={(e) => setValues((v) => ({ ...v, clampLower: parseFloat(e.target.value) || 0 }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="clampUpper">Upper clamp %</Label>
-              <Input
-                id="clampUpper"
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={values.clampUpper}
-                onChange={(e) => setValues((v) => ({ ...v, clampUpper: parseFloat(e.target.value) || 0 }))}
-              />
-            </div>
-          </div>
-
           <div className="space-y-2">
-            <Label htmlFor="mapAngleDeg">Map angle (degrees)</Label>
-            <Input
-              id="mapAngleDeg"
-              type="number"
-              step={1}
-              value={values.mapAngleDeg}
-              onChange={(e) => setValues((v) => ({ ...v, mapAngleDeg: parseFloat(e.target.value) || 0 }))}
+            <FieldLabelRow tooltip={tooltips.terrainClamp}>Terrain height clamp</FieldLabelRow>
+            <TerrainClampSlider
+              lower={values.clampLower}
+              upper={values.clampUpper}
+              onChange={(clampLower, clampUpper) => setValues((v) => ({
+                ...v,
+                clampLower,
+                clampUpper,
+              }))}
             />
           </div>
 
-          <fieldset className="space-y-3 rounded-md border p-3">
-            <legend className="px-1 text-sm font-medium">Creatures</legend>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <FieldLabelRow htmlFor="mapAngleDeg">Map angle (°)</FieldLabelRow>
+              <Input
+                id="mapAngleDeg"
+                type="number"
+                step={1}
+                value={values.mapAngleDeg}
+                onChange={(e) => setValues((v) => ({ ...v, mapAngleDeg: parseFloat(e.target.value) || 0 }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabelRow htmlFor="unitScale" tooltip={tooltips.unitScale}>Unit scale</FieldLabelRow>
+              <Input
+                id="unitScale"
+                type="number"
+                min={0.1}
+                step={0.1}
+                value={values.unitScale}
+                onChange={(e) => setValues((v) => ({
+                  ...v,
+                  unitScale: parseFloat(e.target.value) || 1,
+                }))}
+              />
+            </div>
+          </div>
+
+          <fieldset className="rounded-md border px-3 py-2">
+            <legend className="px-1 text-sm font-medium">NPC</legend>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={values.creatures.enable}
@@ -123,62 +151,31 @@ export default function GenerateWc3Dialog({
                   creatures: { ...v.creatures, enable: checked === true },
                 }))}
               />
-              Export creatures
+              Export NPCs
+              <TooltipHelp tooltips={tooltips.exportNpcs} />
             </label>
-            <div
-              className={cn(
-                'grid transition-[grid-template-rows] duration-300 ease-in-out',
-                values.creatures.enable ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-              )}
-            >
-              <div className="min-h-0 overflow-hidden">
-                <div
-                  className={cn(
-                    'space-y-3 pt-3 transition-opacity duration-300',
-                    values.creatures.enable ? 'opacity-100' : 'pointer-events-none opacity-0',
-                  )}
-                  aria-hidden={!values.creatures.enable}
-                >
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={values.creatures.allAreDoodads}
-                      onCheckedChange={(checked) => setValues((v) => ({
-                        ...v,
-                        creatures: { ...v.creatures, allAreDoodads: checked === true },
-                      }))}
-                    />
-                    All creatures as doodads
-                  </label>
-                  <div className="space-y-2">
-                    <Label htmlFor="creatureScaleUp">Creature scale up</Label>
-                    <Input
-                      id="creatureScaleUp"
-                      type="number"
-                      min={0.1}
-                      step={0.1}
-                      value={values.creatures.scaleUp}
-                      onChange={(e) => setValues((v) => ({
-                        ...v,
-                        creatures: { ...v.creatures, scaleUp: parseFloat(e.target.value) || 1 },
-                      }))}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+            {values.creatures.enable && (
+              <label className="mt-2 flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={values.creatures.allAreDoodads}
+                  onCheckedChange={(checked) => setValues((v) => ({
+                    ...v,
+                    creatures: { ...v.creatures, allAreDoodads: checked === true },
+                  }))}
+                />
+                All NPCs as doodads
+                <TooltipHelp tooltips={tooltips.allNpcsAsDoodads} />
+              </label>
+            )}
           </fieldset>
 
-          <label className="flex items-start gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={values.freshExport}
               onCheckedChange={(checked) => setValues((v) => ({ ...v, freshExport: checked === true }))}
             />
-            <span>
-              Fresh export
-              <span className="block text-muted-foreground text-xs mt-0.5">
-                Delete the existing map folder before converting. Unchecked reuses cached models and textures.
-              </span>
-            </span>
+            Fresh export
+            <TooltipHelp tooltips={tooltips.freshExport} />
           </label>
         </div>
 
@@ -186,7 +183,7 @@ export default function GenerateWc3Dialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             type="submit"
-            disabled={clampInvalid || nameInvalid}
+            disabled={nameInvalid}
           >
             Generate
           </Button>

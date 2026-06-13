@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 
-import { profileSync } from '@/lib/export-profile';
 
 import { Animation } from '../components/animation';
 import { GlobalSequence } from '../components/global-sequence';
@@ -107,7 +106,6 @@ export function removeCinematicSequences(this: MDLModify) {
 }
 
 export function optimizeKeyFrames(this: MDLModify) {
-  return profileSync('optimizeKeyFrames/prune', () => {
   // Pre-compute sequence intervals once so every key-frame test is O(1)
     const seqIntervals = this.mdl.sequences
       .map((s) => [s.interval[0], s.interval[1]] as const)
@@ -236,5 +234,4 @@ export function optimizeKeyFrames(this: MDLModify) {
     this.mdl.lights = this.mdl.lights.filter((e) => !neverVisible(e));
 
     return this;
-  }, { geosets: this.mdl.geosets.length });
 }

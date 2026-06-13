@@ -31,7 +31,7 @@ const testCases: TestCaseTuple[] = [ // [base, weaponR, weaponL, size][]
   ],
   ['https://www.wowhead.com/npc=114895/nightbane#modelviewer', '', '', 'hero'],
   ['https://www.wowhead.com/mop-classic/npc=64986/heavenly-onyx-cloud-serpent', '', '', 'hero'],
-  ['local::creature\\protodragonshadowflame\\protodragonshadowflame_body.obj', '', '', 'hero'],
+  ['local::creature\\protodragonshadowflame\\protodragonshadowflame_body', '', '', 'hero'],
   [
     'https://www.wowhead.com/npc=87607/sever-frostsprocket',
     'https://www.wowhead.com/item=141376/icy-ebon-warsword?bonus=4790',
@@ -62,7 +62,7 @@ const testCases: TestCaseTuple[] = [ // [base, weaponR, weaponL, size][]
   ['https://www.wowhead.com/npc=16867/shattered-hand-grunt'],
   ['https://www.wowhead.com/npc=37007/deathbound-ward'],
   ['https://www.wowhead.com/mop-classic/item=87777/reins-of-the-astral-cloud-serpent#modelviewer'],
-  ['local::creature\\ragnaros2\\ragnaros2.obj', '', '', 'giant'],
+  ['local::creature\\ragnaros2\\ragnaros2', '', '', 'giant'],
   ['https://www.wowhead.com/object=531961/untethered-xybucha'],
   ['https://www.wowhead.com/dressing-room?ninja-turtle#fM80z0zN89c8G8ol8u8MPd8I8o28N8kq8A8kI8fo8M1r8rb8MKS8zYh8dAn8Mx4808rr8MPI8fk8M1A8rL8MQg8fV8M1o8fm8M1M8rf8MPj8rw8MPt8ri8MPE8L8ke877ozqXd87czbRH808MTC808zqgi87cwLU87czm5q808zqyd808zqhM808zbgk87MzbSq87o'],
   ['https://www.wowhead.com/dressing-room?marauder#fl80z0zN89c8ko86y8V586h8oM86C8oc86Q8om8638fb8M2k8fa8M1O8zY48dTo8MtC808fr8M2w8ff8M2N8fd8M2b8oV8zzV877hSXK8082My8082N38MzG87mSXX808SXQ808SXS8082AM8MzG8SXW8082bB87M2bB87o'],

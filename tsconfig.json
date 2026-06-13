@@ -23,6 +23,6 @@
     "resolveFullPaths": true,
     "verbose": false
   },
-  "include": ["src", "examples", "bin", "tests"],
+  "include": ["src", "examples", "bin", "tests", "scripts", "bun-env.d.ts"],
   "exclude": ["webui"]
 }

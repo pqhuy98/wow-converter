@@ -26,12 +26,23 @@ import {
   persistGenerateJobFromStatus,
   readStoredGenerateJob,
 } from '@/lib/models/map-generate.model';
+import {
+  expansionsPresentInMaps,
+  WOW_EXPANSION_ALL,
+} from '@/lib/wow-expansions';
 
 import { useServerConfig } from '../server-config';
+import { ExpansionFilterBar } from './expansion-filter-bar';
+import { ExpansionIcon } from './expansion-icon';
 import GenerateWc3Dialog from './generate-wc3-dialog';
 import MinimapViewer, { MapInfo } from './minimap-viewer';
 
-interface MapResponse { id: number | string; name: string; dir: string }
+interface MapResponse {
+  id: number | string;
+  name: string;
+  dir: string;
+  expansionID?: number;
+}
 
 type TextureResolution = '0' | '512' | '1024' | '4096' | '8192' | '16384'
 
@@ -57,7 +68,7 @@ function isActiveJob(job: MapGenerateJobStatus | undefined): job is MapGenerateJ
 }
 
 export default function MapViewer() {
-  const { isDev } = useServerConfig();
+  const { isSharedHosting } = useServerConfig();
   const [maps, setMaps] = useState<MapResponse[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [selectedMapDir, setSelectedMapDir] = useState<string | null>(null);
@@ -77,6 +88,7 @@ export default function MapViewer() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [expansionFilter, setExpansionFilter] = useState<number>(WOW_EXPANSION_ALL);
   const [pendingScrollToMapName, setPendingScrollToMapName] = useState<string | null>(null);
   const [viewportHeight, setViewportHeight] = useState(400);
   const [scrollTop, setScrollTop] = useState(0);
@@ -100,8 +112,13 @@ export default function MapViewer() {
         setMapsError('No maps available');
         return;
       }
-      type MapsApiItem = { id: number | string; name: string; dir?: string };
-      setMaps((data as MapsApiItem[]).map((m) => ({ id: m.id, name: m.name, dir: m.dir ?? String(m.id) })));
+      type MapsApiItem = { id: number | string; name: string; dir?: string; expansionID?: number };
+      setMaps((data as MapsApiItem[]).map((m) => ({
+        id: m.id,
+        name: m.name,
+        dir: m.dir ?? String(m.id),
+        expansionID: typeof m.expansionID === 'number' ? m.expansionID : undefined,
+      })));
     })();
   }, []);
 
@@ -146,13 +163,22 @@ export default function MapViewer() {
   }, [query]);
 
   const filteredMaps = useMemo(() => {
+    let list = maps;
+    if (expansionFilter !== WOW_EXPANSION_ALL) {
+      list = list.filter((m) => m.expansionID === expansionFilter);
+    }
     const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return maps;
+    if (!q) return list;
     const words = q.split(/ +/).filter(Boolean);
-    return maps.filter((m) => words.every((w) => (
+    return list.filter((m) => words.every((w) => (
       m.name?.toLowerCase().includes(w) || String(m.dir).toLowerCase().includes(w)
     )));
-  }, [maps, debouncedQuery]);
+  }, [maps, debouncedQuery, expansionFilter]);
+
+  const expansionFilterOptions = useMemo(
+    () => expansionsPresentInMaps(maps),
+    [maps],
+  );
 
   const selectedMapName = useMemo(
     () => maps.find((m) => m.dir === selectedMapDir)?.name ?? null,
@@ -188,6 +214,11 @@ export default function MapViewer() {
     search: debouncedQuery,
     isPending: !!pendingScrollToMapName,
   });
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+    setScrollTop(0);
+  }, [expansionFilter]);
 
   usePendingScrollToItem<MapResponse>({
     items: filteredMaps,
@@ -273,6 +304,7 @@ export default function MapViewer() {
         clampLower: form.clampLower,
         clampUpper: form.clampUpper,
         mapAngleDeg: form.mapAngleDeg,
+        unitScale: form.unitScale,
         freshExport: form.freshExport,
         creatures: form.creatures,
       };
@@ -407,11 +439,19 @@ export default function MapViewer() {
                 <CardTitle className="text-lg">Maps</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 flex flex-col min-h-0 flex-1 overflow-hidden p-3 min-w-0">
-                <Input
-                  placeholder="Search maps..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    className="flex-1 min-w-0"
+                    placeholder="Search maps..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  <ExpansionFilterBar
+                    expansions={expansionFilterOptions}
+                    value={expansionFilter}
+                    onChange={setExpansionFilter}
+                  />
+                </div>
                 <div
                   ref={listRef}
                   className="mt-2 flex-1 min-h-0 overflow-y-auto border rounded-md bg-background"
@@ -437,6 +477,9 @@ export default function MapViewer() {
                               onClick={() => setSelectedMapDir(m.dir)}
                               title={m.dir}
                             >
+                              {typeof m.expansionID === 'number' && (
+                                <ExpansionIcon expansionID={m.expansionID} />
+                              )}
                               <span>[<span className="text-yellow-600">{m.id}</span>]</span>
                               <span className="text-foreground/80">{m.name}</span>
                               <span className="text-muted-foreground/60">({m.dir})</span>
@@ -449,7 +492,7 @@ export default function MapViewer() {
                     <div className="text-destructive text-sm p-2">{mapsError}</div>
                   )}
                 </div>
-                {isDev && showMapExport && <div>
+                {!isSharedHosting && showMapExport && <div>
                   <div className="flex items-center gap-2 pt-2 mt-auto">
                     <label className="text-sm text-muted-foreground whitespace-nowrap">Terrain texture size</label>
                     <select className="border rounded px-2 py-1 bg-background" value={texSize} onChange={(e) => setTexSize(e.target.value as TextureResolution)}>

@@ -1,8 +1,8 @@
 /**
- * Phase 1 validation: native CASC reader vs live wow.export instance.
+ * Phase 1 validation: native CASC reader vs live wow-data-server instance.
  *
- * Loads the local WoW installation through src/lib/wow (no wow.export),
- * verifies build info against the running wow.export REST server, and
+ * Loads the local WoW installation through src/lib/wow,
+ * verifies build info against the running wow-data-server REST server, and
  * sanity-checks raw file reads (magic numbers, listfile lookups).
  *
  * Usage: bun tests/wow-native/validate-casc.ts [--wow-dir <path>] [--product wow]
@@ -15,7 +15,7 @@ import { write } from '../../src/lib/wow/log';
 // Note: the install root is the directory containing .build.info and Data/.
 const WOW_DIR = getArg('--wow-dir') ?? process.env.CASC_LOCAL_WOW ?? 'D:\\Programs\\Blizzard Games\\World of Warcraft';
 const PRODUCT = getArg('--product') ?? 'wow';
-const WOWEXPORT_URL = process.env.WOWEXPORT_URL ?? 'http://127.0.0.1:17752';
+const WOW_DATA_SERVER_URL = process.env.WOW_DATA_SERVER_URL ?? 'http://127.0.0.1:17753';
 
 function getArg(name: string): string | undefined {
   const idx = process.argv.indexOf(name);
@@ -55,19 +55,19 @@ async function main() {
   console.log(`\nNative CASC loaded in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   console.log(`Build: ${casc.getBuildName()} (${casc.getBuildKey()})`);
 
-  // --- Compare build info with live wow.export ---
+  // --- Compare build info with live wow-data-server ---
   try {
-    const res = await fetch(`${WOWEXPORT_URL}/rest/getCascInfo`);
+    const res = await fetch(`${WOW_DATA_SERVER_URL}/rest/getCascInfo`);
     if (res.ok) {
       const info = await res.json() as { buildName: string; buildKey: string };
-      console.log('\n[vs wow.export]');
+      console.log('\n[vs wow-data-server]');
       check('buildName matches', info.buildName === casc.getBuildName(), `${info.buildName} vs ${casc.getBuildName()}`);
       check('buildKey matches', info.buildKey === casc.getBuildKey(), `${info.buildKey} vs ${casc.getBuildKey()}`);
     } else {
-      console.log(`\nwow.export REST not ready (HTTP ${res.status}), skipping build comparison.`);
+      console.log(`\nwow-data-server REST not ready (HTTP ${res.status}), skipping build comparison.`);
     }
   } catch (e) {
-    console.log('\nwow.export REST unreachable, skipping build comparison.');
+    console.log('\nwow-data-server REST unreachable, skipping build comparison.');
   }
 
   // --- Listfile sanity ---

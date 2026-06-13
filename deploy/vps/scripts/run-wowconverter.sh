@@ -3,9 +3,11 @@ set -euo pipefail
 
 export PATH="/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+WOW_DATA_PORT="${WOW_DATA_SERVER_PORT:-17753}"
+
 for ((i = 1; i <= 90; i++)); do
-  curl -sf http://127.0.0.1:17752/rest/getConfig >/dev/null 2>&1 && break
-  [[ "${i}" == "90" ]] && { echo "wow.export REST not ready" >&2; exit 1; }
+  curl -sf "http://127.0.0.1:${WOW_DATA_PORT}/rest/getConfig" >/dev/null 2>&1 && break
+  [[ "${i}" == "90" ]] && { echo "wow-data-server REST not ready" >&2; exit 1; }
   sleep 2
 done
 

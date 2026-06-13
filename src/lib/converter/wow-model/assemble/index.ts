@@ -3,8 +3,8 @@ import _ from 'lodash';
 import path from 'path';
 
 import { hasTextureSource } from '@/lib/converter/common/texture-source';
-import { exportAssetExistsSync } from '@/lib/export-asset-store';
-import { profileSync } from '@/lib/export-profile';
+import { exportAssetExists } from '@/lib/export-asset-store';
+import { stripModelReferenceExt } from '@/lib/wow/export/model-reference-path';
 import {
   Geoset, GeosetVertex, Matrix, SkinWeight,
 } from '@/lib/formats/mdl/components/geoset';
@@ -38,8 +38,8 @@ export interface WowModelInputs {
   metadata: M2MetadataFile;
 }
 
-/** Shared assembly core: parsed structs -> MDL. Used by both legacy and direct pipelines. */
-export function assembleWowModel(inputs: WowModelInputs, config: Config): { mdl: MDL; texturePaths: Set<string> } {
+/** Shared assembly core: parsed structs -> MDL. */
+export async function assembleWowModel(inputs: WowModelInputs, config: Config): Promise<{ mdl: MDL; texturePaths: Set<string> }> {
   const {
     objFilePath, obj, mtl, animation, metadata,
   } = inputs;
@@ -47,7 +47,10 @@ export function assembleWowModel(inputs: WowModelInputs, config: Config): { mdl:
 
   const mdl = new MDL({
     formatVersion: 1000,
-    name: path.join(config.assetPrefix, path.relative(config.wowExportAssetDir, objFilePath).replace('.obj', '')),
+    name: path.join(
+      config.assetPrefix,
+      path.relative(config.exportAssetDir, stripModelReferenceExt(objFilePath)),
+    ),
   });
   metadata.bindMdl(mdl);
 
@@ -93,22 +96,22 @@ export function assembleWowModel(inputs: WowModelInputs, config: Config): { mdl:
   } = metadata.extractMDLTexturesMaterials();
   mdl.textures = [];
   mdl.materials = [];
-  metadata.textures.forEach((tex) => {
-    if (!tex.fileNameExternal) return;
+  for (const tex of metadata.textures) {
+    if (!tex.fileNameExternal) continue;
     const absPath = path.join(parentDir, tex.fileNameExternal);
-    if (!exportAssetExistsSync(absPath) && !hasTextureSource(path.relative(config.wowExportAssetDir, absPath))) {
+    if (!await exportAssetExists(absPath) && !hasTextureSource(path.relative(config.exportAssetDir, absPath))) {
       console.warn('Skipping texture not found', absPath, 'for model', objFilePath);
-      return;
+      continue;
     }
-    const textureRelativePath = path.relative(config.wowExportAssetDir, absPath);
+    const textureRelativePath = path.relative(config.exportAssetDir, absPath);
     texturePaths.add(textureRelativePath);
-  });
+  }
 
   const mtlNameMap = new Map<string, Material>();
 
   const resolveGeosetMaterial = (submeshId: number, matName: string): MDL['materials'][number] => {
     const mtlMaterial = mtl.materials.find((m) => m.name === matName);
-    const textureRelativePath = mtlMaterial ? path.relative(config.wowExportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : undefined;
+    const textureRelativePath = mtlMaterial ? path.relative(config.exportAssetDir, path.join(parentDir, mtlMaterial.map_Kd!)) : undefined;
     textureRelativePath && texturePaths.add(textureRelativePath);
 
     const protoMat = submeshIdToMat.get(submeshId);
@@ -313,18 +316,14 @@ export function assembleWowModel(inputs: WowModelInputs, config: Config): { mdl:
   mdl.modify.addDoodadDeathAnimation();
   renameEffectWowAnimations(mdl);
 
-  profileSync('recomputeNormals', () => {
-    if (isAdtModel) mdl.modify.recomputeNormals();
-  });
-  profileSync('optimizeKeyFrames', () => { mdl.modify.optimizeKeyFrames(); });
-  profileSync('computeWalkMovespeed', () => { mdl.modify.computeWalkMovespeed(); });
-  profileSync('scale', () => {
-    mdl.modify.scale(config.rawModelScaleUp);
-    mdl.accumScale = 1;
-  });
-  profileSync('addCollisionShapes', () => { mdl.modify.addCollisionShapes(); });
-  profileSync('sync', () => { mdl.sync(); });
-  profileSync('addWc3AttachmentPoint', () => { mdl.modify.addWc3AttachmentPoint(); });
+  if (isAdtModel) mdl.modify.recomputeNormals();
+  mdl.modify.optimizeKeyFrames();
+  mdl.modify.computeWalkMovespeed();
+  mdl.modify.scale(config.rawModelScaleUp);
+  mdl.accumScale = 1;
+  mdl.modify.addCollisionShapes();
+  mdl.sync();
+  mdl.modify.addWc3AttachmentPoint();
 
   !config.isBulkExport && console.log(chalk.green('Converted:'), objFilePath, '\n');
 

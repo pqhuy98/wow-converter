@@ -12,8 +12,8 @@ async function muradin() {
     attackTag: '1H',
     size: 'hero',
     attachItems: {
-      [WoWAttachmentID.HandRight]: { path: local('item/objectcomponents/weapon/mace_1h_alliancecovenant_d_01_blue.obj'), scale: 1 },
-      [WoWAttachmentID.HandLeft]: { path: local('item/objectcomponents/weapon/axe_1h_pvealliance_d_01.obj'), scale: 1 },
+      [WoWAttachmentID.HandRight]: { path: local('item/objectcomponents/weapon/mace_1h_alliancecovenant_d_01_blue'), scale: 1 },
+      [WoWAttachmentID.HandLeft]: { path: local('item/objectcomponents/weapon/axe_1h_pvealliance_d_01'), scale: 1 },
     },
     portraitCameraSequenceName: 'Stand Ready',
     inGameMovespeed: 270,
@@ -36,7 +36,7 @@ async function muradin2() {
     attackTag: '2H',
     size: 'hero',
     attachItems: {
-      [WoWAttachmentID.HandRight]: { path: local('item/objectcomponents/weapon/mace_1h_alliancecovenant_d_01_blue.obj'), scale: 1 },
+      [WoWAttachmentID.HandRight]: { path: local('item/objectcomponents/weapon/mace_1h_alliancecovenant_d_01_blue'), scale: 1 },
     },
     portraitCameraSequenceName: 'Stand Ready',
     inGameMovespeed: 270,

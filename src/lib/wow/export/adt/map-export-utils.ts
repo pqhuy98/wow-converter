@@ -16,7 +16,6 @@ export function clearGameObjectsCache(): void {
 
 /** Normalized ADT export options (overrides > base config > defaults). */
 export interface ADTExportOptions {
-  mapsExportRaw: boolean;
   pathFormat: string;
   enableSharedTextures: boolean;
   overwriteFiles: boolean;
@@ -33,8 +32,6 @@ export interface ADTExportOptions {
   mapsIncludeFoliage: boolean;
   mapsIncludeLiquid: boolean;
   mapsIncludeGameObjects: boolean;
-  /** When true, ADT export writes placement CSV only for M2/WMO (no OBJ/MTL/BLP). */
-  mapsDirectModels: boolean;
 }
 
 /**
@@ -45,7 +42,6 @@ export function buildADTExportOptions(baseConfig: Partial<WowReaderConfig> = wow
   const base = baseConfig as Record<string, unknown>;
   const pick = (key: string, def: unknown): unknown => (overrides[key] !== undefined ? overrides[key] : (base[key] !== undefined ? base[key] : def));
   return {
-    mapsExportRaw: !!pick('mapsExportRaw', false),
     pathFormat: String(pick('pathFormat', 'win32')),
     enableSharedTextures: !!pick('enableSharedTextures', false),
     overwriteFiles: !!pick('overwriteFiles', true),
@@ -62,7 +58,6 @@ export function buildADTExportOptions(baseConfig: Partial<WowReaderConfig> = wow
     mapsIncludeFoliage: !!pick('mapsIncludeFoliage', false),
     mapsIncludeLiquid: !!pick('mapsIncludeLiquid', true),
     mapsIncludeGameObjects: !!pick('mapsIncludeGameObjects', false),
-    mapsDirectModels: !!pick('mapsDirectModels', true),
   };
 }
 
@@ -115,5 +110,3 @@ export async function collectGameObjects(mapID: number, filter?: (row: DB2Row) =
   }
   return result;
 }
-
-export default { buildADTExportOptions, getTileBounds, collectGameObjects };

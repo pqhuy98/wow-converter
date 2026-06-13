@@ -30,51 +30,54 @@ Prefer working offline, fast, without waiting queue, and no constant ZIP downloa
 
 ### 1. Get the tools
 
-Download the latest release ZIP here: https://github.com/pqhuy98/wow-converter/releases and extract it. You will see the two main files among many other files:
+Download the latest release ZIP here: https://github.com/pqhuy98/wow-converter/releases and extract it. You will see the main executables among many other files:
 
 | File | Purpose |
 |------|---------|
-| `wow.export.exe` | Talks to your WoW client / data files. This is forked of https://github.com/Kruithne/wow.export with extra enhacements |
-| `wow-converter.exe` | Serves the web UI & does the export  |
+| `wow-converter.exe` | Native WoW reader + web UI + MDX/MDL conversion (single process) |
 
-### 2. Start **wow.export**
+### 2. Start **wow-converter**
 
-This is my fork of Kruithne's https://github.com/Kruithne/wow.export with the required enhanced capabilities. You will need to keep it open and turn on its RCP server functionality.
-
-1. Open `wow.export.exe`.
-2. Select **Open Local Installation** and your local WoW installation, or **Use Blizzard CDN** if you don't have one. Wait for it to load.
-
-![wow.export.exe](https://github.com/pqhuy98/wow-converter/blob/main/docs/screenshots/wow.export-1.jpg?raw=true)
-
-
-### 3. Start **wow-converter**
-
-1. Run `wow-converter.exe`. A command line window will open displaying all app messages.
-2. Wait for the message:
+1. Run `wow-converter.exe`. A command line window opens and loads WoW data from your local install or Blizzard CDN (configure via `.env` or the web UI `/setup` wizard).
+2. Wait until you see:
   ```
-  ✅ Retrieved wow.export WoW installation: ___
-  ✅ Connected to wow.export: http://127.0.0.1:17752
+  ✅ WoW data ready: ...
   Serving UI web interface at http://127.0.0.1:3001
   ```
 
-### 4. Export your model
+### 3. Export your model
 
 1. Open **http://127.0.0.1:3001/** in your browser.
 2. Use the app similarly to **https://wow.quangdel.com/**
-3. All exported assets will be stored in the `exported-assets` directory inside the folder where you extracted the app. This is better than hosted version because you won't need to download or extract any ZIP file. 
+3. All exported assets will be stored in the `exported-assets` directory inside the folder where you extracted the app. This is better than hosted version because you won't need to download or extract any ZIP file.
 
 ---
 
 ## Building From Source (Optional)
 This section is for experienced programmers who want to build the app from source code. Requires [**Bun**](https://bun.com/) and [**Git**](https://git-scm.com/downloads).
 
-Clone this repository and its wow.export submodule:
+Clone this repository:
 ```
-git clone --recursive https://github.com/pqhuy98/wow-converter
+git clone https://github.com/pqhuy98/wow-converter
 cd wow-converter
 bun install
-bun run build   # outputs the same binaries found in the release ZIP into the `dist` folder
+bun run build   # outputs wow-converter.exe into the `dist` folder
 ```
+
+For development, run all three processes:
+```
+bun run dev   # starts wow-converter, web UI, and wow-data-server (TCP :17753) with hot reload
+```
+
+Map exports use a bundled SQLite copy of AzerothCore world data (`bin/azerothcore-world.sqlite`) — no live MySQL/PostgreSQL is required at runtime. To refresh that file from your AzerothCore world database:
+
+```
+bun run generate:acore-sqlite   # reads ACORE_SOURCE_DATABASE_URL, writes bin/azerothcore-world.sqlite
+```
+
+Table list for the export lives in `scripts/acore-sqlite-tables.ts`. After adding tables there, rerun the command above and `bun run prisma:generate` if the Prisma schema changed.
+
+The release binary embeds wow-data-server and talks to it over a local unix socket (not exposed on a second port). Only the web UI/API listens on `:3001`.
 
 
 ---
@@ -82,7 +85,7 @@ bun run build   # outputs the same binaries found in the release ZIP into the `d
 ## Credits
 
 - Built by me - *Warcraft Sandbox* (<https://www.youtube.com/@wc3-sandbox>).<br>
-- wow.export is forked from the amazing work of **Kruithne**: https://github.com/Kruithne/wow.export
+- WoW data reading originally inspired by **Kruithne**'s wow.export: https://github.com/Kruithne/wow.export
 - Exported assets are from World of Warcraft, Blizzard Entertainment.
 - https://github.com/flowtsohg/mdx-m3-viewer
 - https://github.com/Deamon87/WebWowViewerCpp

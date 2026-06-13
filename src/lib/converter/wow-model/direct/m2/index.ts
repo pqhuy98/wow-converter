@@ -1,12 +1,8 @@
 /**
  * Direct M2 -> MDL conversion (no OBJ/PNG intermediates, no server export).
  *
- * Mirrors the legacy wow.export pipeline exactly:
- *   wow.export: exportFilesWithSkins -> M2Exporter.exportAsOBJ (OBJ/MTL/JSON files)
- *   converter: convertWowExportModel (parse files -> assemble MDL)
- * by constructing the same in-memory structures the file parsers would have
- * produced, then running the shared MDL assembly core. Output is
- * byte-identical to the legacy path.
+ * Constructs the same in-memory structures the file parsers would have
+ * produced, then runs the shared MDL assembly core.
  */
 import path from 'path';
 
@@ -16,7 +12,6 @@ import { M2MetadataFile } from '@/lib/converter/wow-model/bundle/metadata';
 import { buildCollisionObjResult, buildMeshes, buildObjResult } from '@/lib/converter/wow-model/direct/m2/geometry';
 import { normalizeJsonValues } from '@/lib/converter/wow-model/direct/m2/json-normalize';
 import { convertWmoToMdl } from '@/lib/converter/wow-model/direct/wmo';
-import { profileScope } from '@/lib/export-profile';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
 import { getFileNameByID } from '@/lib/wow/archive/client/name-client';
@@ -28,7 +23,7 @@ import { BufferWrapper } from '@/lib/wow/formats/buffer';
 import { constants } from '@/lib/wow/formats/constants';
 import { M2Loader } from '@/lib/wow/formats/m2/m2-loader';
 import { Skin } from '@/lib/wow/formats/m2/skin';
-import { ModelSkin, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { ModelSkin, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { buildBonesData } from './bones';
 import { buildMetadataObject } from './metadata';
@@ -97,130 +92,121 @@ function resolveExportPath(exportRoot: string, fileName: string, selectedSkinNam
     exportPath = virtualExportPath(exportRoot, fileName);
   }
 
-  return replaceExtension(exportPath, '.obj');
+  return exportPath;
 }
 
 export async function convertM2ToMdl(config: Config, opts: ConvertM2Options): Promise<{ mdl: MDL; texturePaths: Set<string> }> {
-  return profileScope('converter/m2ToMdx', async () => {
-    ensureConverterCasc();
+  ensureConverterCasc();
 
-    const { fileDataID } = opts;
-    const exportRoot = config.wowExportAssetDir;
+  const { fileDataID } = opts;
+  const exportRoot = config.exportAssetDir;
 
-    const raw = await profileScope('rawM2', () => getRawWowFile(fileDataID));
+  const raw = await getRawWowFile(fileDataID);
 
-    // Resolve the listfile name (or synthesize an unknown/ name from magic).
-    let fileName = await getFileNameByID(fileDataID);
-    let isM2: boolean;
-    if (fileName === undefined) {
-      const magic = new BufferWrapper(raw).readUInt32LE();
-      isM2 = magic === constants.MAGIC.MD20 || magic === constants.MAGIC.MD21;
-      fileName = `unknown/${fileDataID}${isM2 ? '.m2' : '.wmo'}`;
-    } else {
-      isM2 = fileName.toLowerCase().endsWith('.m2');
-    }
-    if (!isM2) {
-      // WMO branch (M3 still unsupported; WMOLoader rejects it like the server does).
-      return convertWmoToMdl(config, {
-        fileDataID, fileName, raw, exportPathOverride: opts.exportPathOverride,
-      });
-    }
+  // Resolve the listfile name (or synthesize an unknown/ name from magic).
+  let fileName = await getFileNameByID(fileDataID);
+  let isM2: boolean;
+  if (fileName === undefined) {
+    const magic = new BufferWrapper(raw).readUInt32LE();
+    isM2 = magic === constants.MAGIC.MD20 || magic === constants.MAGIC.MD21;
+    fileName = `unknown/${fileDataID}${isM2 ? '.m2' : '.wmo'}`;
+  } else {
+    isM2 = fileName.toLowerCase().endsWith('.m2');
+  }
+  if (!isM2) {
+    return convertWmoToMdl(config, {
+      fileDataID, fileName, raw, exportPathOverride: opts.exportPathOverride,
+    });
+  }
 
-    const m2 = new M2Loader(new BufferWrapper(raw));
-    await profileScope('m2.load', () => m2.load());
-    const skin0 = await profileScope('m2.getSkin', () => m2.getSkin(0));
-    skin0.fileName = (await getFileNameByID(skin0.fileDataID)) ?? skin0.fileName;
+  const m2 = new M2Loader(new BufferWrapper(raw));
+  await m2.load();
+  const skin0 = await m2.getSkin(0);
+  skin0.fileName = (await getFileNameByID(skin0.fileDataID)) ?? skin0.fileName;
 
-    // Skin selection mirrors exportFilesWithSkins.
-    let variantTextures: VariantTexture[];
-    let selectedSkinName: string | null = null;
-    let selectedSkin: ModelSkin | undefined;
+  let variantTextures: VariantTexture[];
+  let selectedSkinName: string | null = null;
+  let selectedSkin: ModelSkin | undefined;
 
-    if (opts.variantTextures) {
-      variantTextures = opts.variantTextures;
-      selectedSkinName = opts.skinName ?? null;
-    } else if (opts.skinName) {
-      const skins = await profileScope('getModelSkins', () => wowExportClient.getModelSkins(fileDataID));
-      selectedSkin = skins.find((s) => s.id === opts.skinName);
-      variantTextures = selectedSkin?.textures ?? [];
-      selectedSkinName = opts.skinName;
-    } else {
-      // Default display fallback (first skin = first display with textures).
-      const skins = await profileScope('getModelSkins', () => wowExportClient.getModelSkins(fileDataID));
-      variantTextures = skins[0]?.textures ?? [];
-      selectedSkinName = null;
-    }
+  if (opts.variantTextures) {
+    variantTextures = opts.variantTextures;
+    selectedSkinName = opts.skinName ?? null;
+  } else if (opts.skinName) {
+    const skins = await wowDataClient.getModelSkins(fileDataID);
+    selectedSkin = skins.find((s) => s.id === opts.skinName);
+    variantTextures = selectedSkin?.textures ?? [];
+    selectedSkinName = opts.skinName;
+  } else {
+    variantTextures = [];
+    selectedSkinName = null;
+  }
 
-    const exportPath = opts.exportPathOverride ?? resolveExportPath(exportRoot, fileName, selectedSkinName);
-    const outDir = path.dirname(exportPath);
+  const exportPath = opts.exportPathOverride ?? resolveExportPath(exportRoot, fileName, selectedSkinName);
+  const outDir = path.dirname(exportPath);
 
-    // Geoset mask: explicit (character) or skin-based (legacy parity: only when a skin name was requested).
-    const geosetMask = opts.geosetMask
-      ?? (opts.geosetMaskBuilder ? opts.geosetMaskBuilder(skin0) : undefined)
-      ?? (opts.skinName && !opts.variantTextures
-        ? buildGeosetMaskForSkin(skin0, selectedSkin)
-        : undefined);
+  const geosetMask = opts.geosetMask
+    ?? (opts.geosetMaskBuilder ? opts.geosetMaskBuilder(skin0) : undefined)
+    ?? (opts.skinName && !opts.variantTextures
+      ? buildGeosetMaskForSkin(skin0, selectedSkin)
+      : undefined);
 
-    const dataTextures = opts.dataTextures ?? new Map<number, DirectDataTexture>();
+  const dataTextures = opts.dataTextures ?? new Map<number, DirectDataTexture>();
 
-    // Order matters for parity: textures (variant patching) -> bones -> meta -> meshes.
-    const { validTextures, mtlMaterials } = await profileScope('resolveTextures', () => resolveTextures(m2, variantTextures, dataTextures, outDir, exportRoot));
+  const { validTextures, mtlMaterials } = await resolveTextures(m2, variantTextures, dataTextures, outDir, exportRoot);
 
-    // No JSON round-trip: bones data is normalized inside buildBonesData
-    // (cached per skeleton), the metadata object is normalized in place.
-    const bonesData = await profileScope('buildBones', () => buildBonesData(m2, new Set(opts.excludeAnimIds ?? []), fileDataID));
-    const animation = new AnimationFile(replaceExtension(exportPath, '_bones.json'), config)
-      .loadFromData(bonesData as never);
+  const bonesData = await buildBonesData(m2, new Set(opts.excludeAnimIds ?? []), fileDataID);
+  const animation = new AnimationFile(replaceExtension(exportPath, '_bones.json'), config)
+    .loadFromData(bonesData as never);
 
-    const metaObject = await profileScope('buildMeta', () => buildMetadataObject(m2, skin0, fileDataID, fileName, geosetMask, validTextures, new Set(dataTextures.keys())));
-    const metadata = new M2MetadataFile(replaceExtension(exportPath, '.json'), config, animation)
-      .loadFromData(normalizeJsonValues(metaObject));
+  const metaObject = await buildMetadataObject(m2, skin0, fileDataID, fileName, geosetMask, validTextures, new Set(dataTextures.keys()));
+  const metadata = new M2MetadataFile(replaceExtension(exportPath, '.json'), config, animation)
+    .loadFromData(normalizeJsonValues(metaObject));
 
-    const meshes = buildMeshes(m2, skin0, geosetMask, validTextures, new Set(dataTextures.keys()));
-    const obj = buildObjResult(m2, meshes, path.basename(exportPath, '.obj'), mtlMaterials.length > 0 ? path.basename(replaceExtension(exportPath, '.mtl')) : undefined);
+  const meshes = buildMeshes(m2, skin0, geosetMask, validTextures, new Set(dataTextures.keys()));
+  const obj = buildObjResult(
+    m2,
+    meshes,
+    path.basename(exportPath, path.extname(exportPath)),
+    mtlMaterials.length > 0 ? path.basename(replaceExtension(exportPath, '.mtl')) : undefined,
+  );
 
-    return assembleWowModel({
-      objFilePath: exportPath,
-      obj,
-      mtl: { materials: mtlMaterials },
-      animation,
-      metadata,
-    }, config);
-  });
+  return assembleWowModel({
+    objFilePath: exportPath,
+    obj,
+    mtl: { materials: mtlMaterials },
+    animation,
+    metadata,
+  }, config);
 }
 
 /**
- * Direct equivalent of parsing the legacy `.phys.obj` collision bundle:
- * collision geometry from the M2, no MTL/bones/metadata (unloaded parsers).
+ * Direct equivalent of parsing legacy collision geometry:
+ * collision mesh from the M2, no MTL/bones/metadata (unloaded parsers).
  */
 export async function convertM2CollisionToMdl(
   config: Config,
   opts: Pick<ConvertM2Options, 'fileDataID' | 'skinName'>,
 ): Promise<{ mdl: MDL; texturePaths: Set<string> }> {
-  return profileScope('converter/m2CollisionToMdx', async () => {
-    ensureConverterCasc();
-    const { fileDataID } = opts;
-    const exportRoot = config.wowExportAssetDir;
+  ensureConverterCasc();
+  const { fileDataID } = opts;
+  const exportRoot = config.exportAssetDir;
 
-    const raw = await getRawWowFile(fileDataID);
-    const fileName = (await getFileNameByID(fileDataID)) ?? `unknown/${fileDataID}.m2`;
+  const raw = await getRawWowFile(fileDataID);
+  const fileName = (await getFileNameByID(fileDataID)) ?? `unknown/${fileDataID}.m2`;
 
-    const m2 = new M2Loader(new BufferWrapper(raw));
-    await m2.load();
+  const m2 = new M2Loader(new BufferWrapper(raw));
+  await m2.load();
 
-    const modelPath = resolveExportPath(exportRoot, fileName, opts.skinName ?? null);
-    const physPath = replaceExtension(modelPath, '.phys.obj');
+  const modelPath = resolveExportPath(exportRoot, fileName, opts.skinName ?? null);
+  const physPath = replaceExtension(modelPath, '.phys.m2');
 
-    const obj = buildCollisionObjResult(m2, 'Mesh');
-    // Animation/metadata stay unloaded, like the legacy phys.obj parse
-    // (its sibling _bones.json/.json files never exist).
-    const animation = new AnimationFile(physPath.replace(/\.obj$/, '_bones.json'), config);
-    return assembleWowModel({
-      objFilePath: physPath,
-      obj,
-      mtl: { materials: [] },
-      animation,
-      metadata: new M2MetadataFile(physPath.replace(/\.obj$/, '.json'), config, animation),
-    }, config);
-  });
+  const obj = buildCollisionObjResult(m2, 'Mesh');
+  const animation = new AnimationFile(replaceExtension(physPath, '_bones.json'), config);
+  return assembleWowModel({
+    objFilePath: physPath,
+    obj,
+    mtl: { materials: [] },
+    animation,
+    metadata: new M2MetadataFile(replaceExtension(physPath, '.json'), config, animation),
+  }, config);
 }

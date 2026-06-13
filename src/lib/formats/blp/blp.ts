@@ -54,10 +54,10 @@ async function resolveItemInput(item: BlpConvertItem): Promise<{ data: Buffer, k
 
 // Batch processing with true parallelism
 export async function pngsToBlps(items: BlpConvertItem[]): Promise<void> {
-  // Inline fallback (BLP_WORKERS=0): convert on the main thread, bypassing
-  // worker_threads entirely. Workaround for Bun crashing in worker threads
-  // on Windows; output bytes are identical to the worker path.
-  if (process.env.BLP_WORKERS === '0') {
+  const useInline = process.env.BLP_WORKERS === '0'
+    || (process.env.WOW_CONVERTER_BUNDLE === '1' && process.env.BLP_WORKERS !== '1');
+
+  if (useInline) {
     console.log(`Converting ${chalk.yellow(items.length)} textures to BLPs (inline, no workers)`);
     const { convertTextureToBlp } = await import('./blp.convert');
     for (const item of items) {

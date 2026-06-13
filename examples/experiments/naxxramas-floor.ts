@@ -9,7 +9,7 @@ import { calculateTriangleSlope } from '@/lib/math/geometry';
 const outputPath = '../wow-converter/exported-assets';
 const assetManager = new AssetManager(await getDefaultConfig());
 
-const model = (await assetManager.parse('world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.obj', true)).mdl;
+const model = (await assetManager.parse('world\\wmo\\dungeon\\ld_stratholme\\stratholme_raid_set0.wmo', true)).mdl;
 write({ naxxramas_full: model.modify });
 
 const floor = model.modify.deleteFacesIf((f, geoset) => {

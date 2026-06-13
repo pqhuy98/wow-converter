@@ -79,7 +79,7 @@ const testCases: {
 function getName(value: string) {
   let name = '';
   if (value.startsWith('local::')) {
-    name = `local-${value.split('\\').pop()!.replace('.obj', '')}`;
+    name = `local-${value.split('\\').pop()!.replace(/\.(m2|wmo|obj)$/i, '')}`;
   } else if (value.includes('npc=')) {
     const npcId = value.split('npc=').pop()?.split('/').shift();
     const npcName = value.split('/').pop()!.split('#')[0];

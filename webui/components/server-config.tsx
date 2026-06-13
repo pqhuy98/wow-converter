@@ -5,14 +5,14 @@ import {
 } from 'react';
 
 type ServerConfig = {
-  wowExportAssetDir: string
+  exportAssetDir: string
   isSharedHosting: boolean
   isDev: boolean
   isClassic: boolean
 };
 
 const defaultConfig: ServerConfig = {
-  wowExportAssetDir: '',
+  exportAssetDir: '',
   isSharedHosting: false,
   isDev: false,
   isClassic: false,
@@ -47,7 +47,7 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
         // Only update state if config actually changed
         setConfig((prevConfig) => {
           if (
-            prevConfig.wowExportAssetDir === newConfig.wowExportAssetDir
+            prevConfig.exportAssetDir === newConfig.exportAssetDir
             && prevConfig.isSharedHosting === newConfig.isSharedHosting
             && prevConfig.isDev === newConfig.isDev
             && prevConfig.isClassic === newConfig.isClassic

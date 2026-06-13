@@ -1,6 +1,6 @@
 import express from 'express';
 
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { isDev, isSharedHosting } from '../config';
 import { getCeConfig } from './export-character';
@@ -8,10 +8,10 @@ import { getCeConfig } from './export-character';
 export function ControllerGetConfig(router: express.Router) {
   router.get('/get-config', (req, res) => {
     res.json({
-      wowExportAssetDir: getCeConfig().wowExportAssetDir,
+      exportAssetDir: getCeConfig().exportAssetDir,
       isSharedHosting,
       isDev,
-      isClassic: wowExportClient.isClassic(),
+      isClassic: wowDataClient.isClassic(),
     });
   });
 }

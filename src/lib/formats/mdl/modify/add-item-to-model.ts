@@ -1,6 +1,5 @@
 import path from 'path';
 
-import { profileSync } from '@/lib/export-profile';
 import { V3 } from '@/lib/math/vector';
 
 import { Bone } from '../components/node/node';
@@ -12,26 +11,22 @@ const debug = false;
 export function addMdlItemToBone(this: MDLModify, item: MDL, bone: Bone) {
   debug && console.log(`Attaching item "${path.basename(item.model.name)}" to bone "${bone.name}"...`);
 
-  return profileSync(`mergeBone/${path.basename(item.model.name)}`, () => {
-    // TODO: add animation blending for bow models with extra "Pull", "Release" animations during attack
-    item.sequences = [item.sequences.find((s) => s.name === 'Stand')!];
-    profileSync('optimizeKeyFrames', () => { item.modify.optimizeKeyFrames(); });
+  // TODO: add animation blending for bow models with extra "Pull", "Release" animations during attack
+  item.sequences = [item.sequences.find((s) => s.name === 'Stand')!];
+  item.modify.optimizeKeyFrames();
 
-    profileSync('reparentToBone', () => {
-      item.getNodes().forEach((b) => {
-        if (!b.parent) {
-          b.parent = bone;
-        }
-        b.pivotPoint = V3.sum(b.pivotPoint, bone.pivotPoint);
-      });
-      item.geosets.forEach((geoset) => geoset.vertices.forEach((v) => {
-        v.position = V3.sum(v.position, bone.pivotPoint);
-      }));
-    });
+  item.getNodes().forEach((b) => {
+    if (!b.parent) {
+      b.parent = bone;
+    }
+    b.pivotPoint = V3.sum(b.pivotPoint, bone.pivotPoint);
+  });
+  item.geosets.forEach((geoset) => geoset.vertices.forEach((v) => {
+    v.position = V3.sum(v.position, bone.pivotPoint);
+  }));
 
-    profileSync('mergeItemObjects', () => { mergeItemObjects(this.mdl, item); });
-    return this;
-  }, { bone: bone.name });
+  mergeItemObjects(this.mdl, item);
+  return this;
 }
 
 export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone, keepRatio: boolean = true) {
@@ -57,40 +52,34 @@ export function addItemPathToBone(this: MDLModify, itemPath: string, bone: Bone,
 export function addMdlCollectionItemToModel(this: MDLModify, item: MDL) {
   debug && console.log(`Attaching item "${path.basename(item.model.name)}" as collection...`);
 
-  return profileSync(`mergeCollection/${path.basename(item.model.name)}`, () => {
-    item.sequences = [item.sequences[0]];
-    // Item bones are remapped then discarded; final optimize runs on the character MDL.
-    profileSync('remapBones', () => {
-      const boneMap = new Map<string, Bone>(this.mdl.bones.map((b) => [b.name, b]));
-      const getMainBone = (bone: Bone) => {
-        const mainBone = boneMap.get(bone.name);
-        if (!mainBone) {
-          throw new Error(`Cannot merge item "${path.basename(item.model.name)}" to model because bone "${bone.name}" is missing.`);
-        }
-        return mainBone;
-      };
+  item.sequences = [item.sequences[0]];
+  const boneMap = new Map<string, Bone>(this.mdl.bones.map((b) => [b.name, b]));
+  const getMainBone = (bone: Bone) => {
+    const mainBone = boneMap.get(bone.name);
+    if (!mainBone) {
+      throw new Error(`Cannot merge item "${path.basename(item.model.name)}" to model because bone "${bone.name}" is missing.`);
+    }
+    return mainBone;
+  };
 
-      // Replace item bones with main model bones
-      item.geosets.forEach((geoset) => {
-        geoset.matrices.forEach((matrix) => {
-          matrix.bones.forEach((bone, i) => {
-            matrix.bones[i] = getMainBone(bone);
-          });
-        });
-        geoset.vertices.forEach((vertex) => {
-          if (vertex.skinWeights) {
-            vertex.skinWeights.forEach((weight) => {
-              weight.bone = getMainBone(weight.bone);
-            });
-          }
-        });
+  item.geosets.forEach((geoset) => {
+    geoset.matrices.forEach((matrix) => {
+      matrix.bones.forEach((bone, i) => {
+        matrix.bones[i] = getMainBone(bone);
       });
-      item.bones = [];
     });
+    geoset.vertices.forEach((vertex) => {
+      if (vertex.skinWeights) {
+        vertex.skinWeights.forEach((weight) => {
+          weight.bone = getMainBone(weight.bone);
+        });
+      }
+    });
+  });
+  item.bones = [];
 
-    profileSync('mergeItemObjects', () => { mergeItemObjects(this.mdl, item); });
-    return this;
-  }, { geosets: item.geosets.length });
+  mergeItemObjects(this.mdl, item);
+  return this;
 }
 
 export function canAddMdlCollectionItemToModel(main: MDL, item: MDL) {
@@ -103,34 +92,28 @@ export function canAddMdlCollectionItemToModel(main: MDL, item: MDL) {
 }
 
 function mergeItemObjects(main: MDL, item: MDL) {
-  profileSync('mergeItemObjects/pushArrays', () => {
-    item.geosets.forEach((geoset) => {
-      geoset.name = `item_${geoset.name}`;
-    });
-
-    main.globalSequences.push(...item.globalSequences);
-
-    main.textures.push(...item.textures);
-    main.textureAnims.push(...item.textureAnims);
-    main.materials.push(...item.materials);
-
-    main.geosets.push(...item.geosets);
-    main.geosetAnims.push(...item.geosetAnims);
-
-    main.bones.push(...item.bones);
-    main.attachments.push(...item.attachments);
-    item.attachments.forEach((a) => {
-      a.name = `item_Wow:${a.data?.wowAttachment.wowAttachmentId}`;
-    });
-    main.eventObjects.push(...item.eventObjects);
-    // main.collisionShapes.push(...item.collisionShapes);
-    main.lights.push(...item.lights);
-    main.ribbonEmitters.push(...item.ribbonEmitters);
-    main.particleEmitter2s.push(...item.particleEmitter2s);
-    main.helpers.push(...item.helpers);
-    main.cameras.push(...item.cameras);
-  }, {
-    itemGeosets: item.geosets.length,
-    mainGeosets: main.geosets.length,
+  item.geosets.forEach((geoset) => {
+    geoset.name = `item_${geoset.name}`;
   });
+
+  main.globalSequences.push(...item.globalSequences);
+
+  main.textures.push(...item.textures);
+  main.textureAnims.push(...item.textureAnims);
+  main.materials.push(...item.materials);
+
+  main.geosets.push(...item.geosets);
+  main.geosetAnims.push(...item.geosetAnims);
+
+  main.bones.push(...item.bones);
+  main.attachments.push(...item.attachments);
+  item.attachments.forEach((a) => {
+    a.name = `item_Wow:${a.data?.wowAttachment.wowAttachmentId}`;
+  });
+  main.eventObjects.push(...item.eventObjects);
+  main.lights.push(...item.lights);
+  main.ribbonEmitters.push(...item.ribbonEmitters);
+  main.particleEmitter2s.push(...item.particleEmitter2s);
+  main.helpers.push(...item.helpers);
+  main.cameras.push(...item.cameras);
 }

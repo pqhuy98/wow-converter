@@ -121,8 +121,8 @@ const mapExportConfig: MapExportConfig = {
   creatures: {
     enable: true,
     allAreDoodads: true,
-    scaleUp: creatureScaleUp,
   },
+  unitScale: creatureScaleUp,
 };
 
 const depth = 3; // 1: adt only, 2: adt + wmo + top m2, 3: adt + wmo + top m2 + wmo interiors

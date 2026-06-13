@@ -30,11 +30,12 @@ import { wowConfig } from '@/lib/wow/server/config';
 import { collectMemoryDiagnostics, formatMemoryDiagnostics } from '@/lib/wow/server/memory-diagnostics';
 import { runtimeState } from '@/lib/wow/server/runtime';
 import { registerWowDataServerClearHook } from '@/lib/wow/wow-data-server-hooks';
+import { prepareSocketPath } from '@/lib/wow-data-server/transport';
 
 import {
   CharacterMetaParams, getCharacterMeta,
 } from '../lib/wow/character/headless-character';
-import { initModelCaches } from '../lib/wow/db/caches/init-cache';
+import { ensureModelCachesInitialized } from '../lib/wow/db/caches/init-cache';
 import { DB2Row, WDCReader } from '../lib/wow/db/wdc-reader';
 import { write } from '../lib/wow/log';
 import { autoLoadCascFromEnv } from './auto-load-env';
@@ -54,7 +55,7 @@ export class WowDataServer {
 
   private _pendingCASC: CASC | null = null;
 
-  // Response cache for export endpoints (10s TTL), mirrors wow.export.
+  // Response cache for export endpoints (10s TTL).
   private _responseCache = new Map<string, { ts: number; status: number; obj: JSONValue }>();
 
   private _responseCacheTTL = 10 * 1000;
@@ -84,6 +85,8 @@ export class WowDataServer {
         return this.getFileByName(query, res);
       case '/rest/getModelSkins':
         return this.getModelSkins(query, res);
+      case '/rest/initModelCaches':
+        return this.initModelCaches(res);
       case '/rest/cascFile':
         return this.cascFile(query, res);
       case '/rest/download':
@@ -344,9 +347,18 @@ export class WowDataServer {
     }
 
     try {
-      await Promise.all(initModelCaches());
+      await ensureModelCachesInitialized();
       const skins = getAllSkinsForModel(fileDataID);
       this.sendJSON(res, 200, { id: 'MODEL_SKINS', fileDataID, skins });
+    } catch (e) {
+      this.sendJSON(res, 500, { id: 'ERR_INTERNAL', message: (e as Error).message });
+    }
+  }
+
+  async initModelCaches(res: http.ServerResponse): Promise<void> {
+    try {
+      await ensureModelCachesInitialized();
+      this.sendJSON(res, 200, { id: 'MODEL_CACHES_READY' });
     } catch (e) {
       this.sendJSON(res, 500, { id: 'ERR_INTERNAL', message: (e as Error).message });
     }
@@ -548,7 +560,6 @@ export class WowDataServer {
           tileX: 'number (0-63)',
           tileY: 'number (0-63)',
           quality: 'number (optional, -1=alpha, 0=no tex, 1-512=minimap, 513+=baked, default 4096)',
-          exportRaw: 'boolean (optional, default false)',
           includeM2: 'boolean (optional, default true)',
           includeWMO: 'boolean (optional, default true)',
           includeWMOSets: 'boolean (optional, default true)',
@@ -574,7 +585,6 @@ export class WowDataServer {
 
     // Build request-specific options without mutating global config.
     const requestOptions = buildADTExportOptions(wowConfig, {
-      mapsExportRaw: body.exportRaw,
       mapsIncludeM2: body.includeM2,
       mapsIncludeWMO: body.includeWMO,
       mapsIncludeWMOSets: body.includeWMOSets,
@@ -638,7 +648,7 @@ export class WowDataServer {
         tileY,
         tileIndex,
         exportPath: baseDir,
-        exportType: result.type,
+        exportType: 'ADT_OBJ',
         mainFile: result.path ? path.relative(wowConfig.exportDirectory, result.path) : null,
       };
       if (progressKey) {
@@ -689,7 +699,7 @@ export class WowDataServer {
 
   // --------------- internals ---------------
 
-  load(): void {
+  load(options?: { socketPath?: string; port?: number }): void {
     if (this.isRunning) throw new Error('WoW data server is already running');
 
     registerWowDataServerClearHook(() => this._responseCache.clear());
@@ -715,10 +725,21 @@ export class WowDataServer {
       })();
     });
 
-    this.server.listen(this.port, () => {
-      write('wow-data-server listening for REST requests on port %d', this.port);
-      console.log(`wow-data-server listening on http://127.0.0.1:${this.port}`);
-    });
+    const socketPath = options?.socketPath;
+    const port = options?.port ?? this.port;
+
+    if (socketPath) {
+      prepareSocketPath(socketPath);
+      this.server.listen(socketPath, () => {
+        write('wow-data-server listening on unix socket %s', socketPath);
+        console.log(`wow-data-server listening on unix socket ${socketPath}`);
+      });
+    } else {
+      this.server.listen(port, () => {
+        write('wow-data-server listening for REST requests on port %d', port);
+        console.log(`wow-data-server listening on http://127.0.0.1:${port}`);
+      });
+    }
 
     this._responseCacheTimer = setInterval(() => this._pruneResponseCache(), this._responseCacheTTL);
     this._responseCacheTimer.unref?.();

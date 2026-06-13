@@ -1,7 +1,7 @@
 [Unit]
 Description=wow-converter (Bun)
-After=network-online.target wow-export.service
-Requires=wow-export.service
+After=network-online.target wow-data-server.service
+Requires=wow-data-server.service
 
 [Service]
 Type=simple

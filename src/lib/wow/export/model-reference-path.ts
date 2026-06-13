@@ -22,12 +22,12 @@ export function modelReferencePath(
   return fileName;
 }
 
-/** Strip export extensions from a CSV ModelFile value. */
+/** Strip export extensions from a model reference path. */
 export function stripModelReferenceExt(modelFile: string): string {
-  return modelFile.replace(/\.(obj|m2|wmo)$/i, '');
+  return modelFile.replace(/\.phys\.(obj|m2)$/i, '').replace(/\.(obj|m2|wmo)$/i, '');
 }
 
-/** Placement CSV path for a model reference (virtual .obj/.wmo/.m2 path). */
+/** Placement CSV path for a model reference (.m2 / .wmo listfile path). */
 export function placementCsvPath(modelPath: string): string {
   return modelPath.replace(/\.(obj|m2|wmo)$/i, '_ModelPlacementInformation.csv');
 }

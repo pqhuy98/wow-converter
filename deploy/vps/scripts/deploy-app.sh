@@ -6,6 +6,7 @@ export PATH="/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/s
 REPO="${WOW_CONVERTER_REPO:-/root/wow-converter}"
 LOCK_FILE="/tmp/wow-converter-deploy.lock"
 BUN="/root/.bun/bin/bun"
+WOW_DATA_PORT="${WOW_DATA_SERVER_PORT:-17753}"
 
 log() { echo "[$(date -Is)] deploy-app: $*"; }
 
@@ -22,25 +23,18 @@ if [[ "${LOCAL}" == "${REMOTE}" && "${FORCE_DEPLOY:-}" != "1" ]]; then
   exit 0
 fi
 
-WOW_EXPORT_OLD="$(git rev-parse HEAD:wow.export 2>/dev/null || true)"
 log "updating ${LOCAL} → ${REMOTE}"
 git reset --hard origin/main
-git submodule update --init --recursive
 
 bash "${REPO}/deploy/vps/sync-from-repo.sh"
 
 "${BUN}" install
 "${BUN}" run build:server
 
-if [[ "$(git rev-parse HEAD:wow.export)" != "${WOW_EXPORT_OLD}" ]]; then
-  log "rebuilding wow.export linux-x64"
-  ( cd "${REPO}/wow.export" && "${BUN}" install && "${BUN}" run build-linux )
-fi
-
-systemctl restart wow-export.service
+systemctl restart wow-data-server.service
 for ((i = 1; i <= 120; i++)); do
-  curl -sf http://127.0.0.1:17752/rest/getConfig >/dev/null 2>&1 && break
-  [[ "${i}" == "120" ]] && { log "wow.export REST not ready" >&2; exit 1; }
+  curl -sf "http://127.0.0.1:${WOW_DATA_PORT}/rest/getConfig" >/dev/null 2>&1 && break
+  [[ "${i}" == "120" ]] && { log "wow-data-server REST not ready" >&2; exit 1; }
   sleep 2
 done
 

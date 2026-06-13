@@ -10,7 +10,7 @@ import { pngsToBlps } from '@/lib/formats/blp/blp';
 import { getPngDimensions } from '@/lib/formats/png';
 import { getDefaultConfig } from '@/lib/global-config';
 import { waitUntil } from '@/lib/utils';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { getListFiles } from '../../../server/controllers/shared';
 import { AiResizer } from './ai-resizer';
@@ -41,9 +41,9 @@ export class IconExporter {
   private async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    await waitUntil(() => wowExportClient.isReady);
+    await waitUntil(() => wowDataClient.isReady);
     const config = await getDefaultConfig();
-    this.assetDir = config.wowExportAssetDir;
+    this.assetDir = config.exportAssetDir;
 
     const listFiles = await getListFiles();
     for (const file of listFiles) {

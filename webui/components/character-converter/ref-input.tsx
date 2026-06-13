@@ -7,6 +7,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { RefSchema, RefType } from '@/lib/models/export-character.model';
+import { normalizeLocalModelRef } from '@/lib/local-model-path';
 
 import { TooltipHelp } from '../common/tooltip-help';
 import { getServerConfig, useServerConfig } from '../server-config';
@@ -66,7 +67,7 @@ export function RefInput({
   const otherSkins = serverValidationResult?.similarFiles.filter((file) => file !== currentValues.local.value) ?? [];
   const hasOtherSkins = serverValidationResult && value.type === 'local'
     && otherSkins.length > 0
-    && otherSkins.every((file) => file.startsWith(currentValues.local.value.replaceAll('.obj', '').replaceAll('/', '\\')));
+    && otherSkins.every((file) => file.startsWith(normalizeLocalModelRef(currentValues.local.value).replaceAll('/', '\\')));
 
   return (
     <div className="space-y-2">
@@ -97,7 +98,7 @@ export function RefInput({
           <Input
             placeholder={
               value.type === 'local'
-                ? 'Enter relative OBJ file name...'
+                ? 'Enter listfile model path (e.g. creature\\foo\\foo)...'
                 : value.type === 'wowhead'
                   ? `https://www.wowhead.com/${category === 'mount' ? 'item' : category}=12345/...`
                   : 'Enter Display ID number...'
@@ -207,7 +208,7 @@ const predictRefTypeFromText = (
   const lower = trimmed.toLowerCase();
   const isUrlLike = lower.startsWith('http://') || lower.startsWith('https://');
   const hasPathSeparator = trimmed.includes('\\') || trimmed.includes('/');
-  const hasKnownExt = /\.(obj|m2|wmo)$/i.test(trimmed);
+  const hasKnownExt = /\.(m2|wmo)$/i.test(trimmed);
   const isWindowsAbsolute = /^[a-zA-Z]:[\\/]/.test(trimmed) || trimmed.startsWith('\\\\');
   const isQuoted = trimmed.startsWith('"') || trimmed.endsWith('"');
   const likelyLocal = !isUrlLike && (hasKnownExt || hasPathSeparator || isWindowsAbsolute || isQuoted);
@@ -233,14 +234,12 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
       if (ref.value.startsWith('"')) ref.value = ref.value.slice(1);
       if (ref.value.endsWith('"')) ref.value = ref.value.slice(0, -1);
       const serverConfig = getServerConfig();
-      if (serverConfig?.wowExportAssetDir && ref.value.startsWith(serverConfig.wowExportAssetDir)) {
-        ref.value = ref.value.slice(serverConfig.wowExportAssetDir.length);
+      if (serverConfig?.exportAssetDir && ref.value.startsWith(serverConfig.exportAssetDir)) {
+        ref.value = ref.value.slice(serverConfig.exportAssetDir.length);
       }
       if (ref.value.startsWith('/') || ref.value.startsWith('\\')) ref.value = ref.value.slice(1);
       if (/( )?\[[0-9]+\]/.test(ref.value)) ref.value = ref.value.replace(/( )?\[[0-9]+\]/, '');
-      if (ref.value.endsWith('.m2')) ref.value = ref.value.replace('.m2', '.obj');
-      if (ref.value.endsWith('.wmo')) ref.value = ref.value.replace('.wmo', '.obj');
-      if (!ref.value.endsWith('.obj')) ref.value += '.obj';
+      ref.value = normalizeLocalModelRef(ref.value);
       if (ref.value.includes('/')) ref.value = ref.value.replaceAll('/', '\\');
     }
     if (!isLocalRef(ref.value)) {
@@ -253,7 +252,7 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
   return null;
 };
 
-const localRefPattern = /^[a-zA-Z0-9_\-/\\,.]+(\.obj)?$/;
+const localRefPattern = /^[a-zA-Z0-9_\-/\\,.]+(\.(m2|wmo))?$/i;
 
 export function isLocalRef(val: string) {
   if (!localRefPattern.test(val)) return false;

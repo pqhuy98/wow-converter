@@ -11,6 +11,8 @@ import path from 'path';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 
+import { bundledAppRoot } from '@/lib/wow-data-server/transport';
+
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,13 +29,9 @@ export function loadBlpNativeBinding(): any {
   try {
     const candidateDirs: string[] = [];
 
-    // 1) Original behavior: resolve relative to current working directory
     candidateDirs.push(path.join(process.cwd(), 'bin/blp-preview'));
-
-    // 2) Dist / exe layout: worker in dist root and bindings in dist/bin
+    candidateDirs.push(path.join(bundledAppRoot(), 'bin/blp-preview'));
     candidateDirs.push(path.join(__dirname, 'bin/blp-preview'));
-
-    // 3) Source / node_modules layout: worker in src/lib/formats/blp and bindings in package-root/bin
     candidateDirs.push(path.resolve(__dirname, '../../../../bin/blp-preview'));
 
     // 4) Installed as dependency: resolve package root via its own package.json

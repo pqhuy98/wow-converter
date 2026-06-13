@@ -2,7 +2,7 @@
  * Cached fileDataID -> listfile name lookups via the data server.
  * Mirrors server-side listfile.getByID semantics (undefined when unknown).
  */
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 const cache = new Map<number, string | undefined>();
 const inFlight = new Map<number, Promise<string | undefined>>();
@@ -24,7 +24,7 @@ export async function getFileNameByID(fileDataID: number): Promise<string | unde
   if (pending) return pending;
 
   const promise = (async () => {
-    const entry = await wowExportClient.getFileByID(fileDataID);
+    const entry = await wowDataClient.getFileByID(fileDataID);
     const name = entry.fileName || undefined;
     cache.set(fileDataID, name);
     return name;
@@ -44,7 +44,7 @@ export async function getFileIDByName(fileName: string): Promise<number | undefi
   const promise = (async () => {
     let id: number | undefined;
     try {
-      const entry = await wowExportClient.getFileByName(fileName);
+      const entry = await wowDataClient.getFileByName(fileName);
       id = entry.fileDataID || undefined;
     } catch {
       id = undefined;

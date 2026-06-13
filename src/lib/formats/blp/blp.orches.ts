@@ -1,6 +1,10 @@
 import fs from 'fs';
 import { cpus } from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { Worker } from 'worker_threads';
+
+import { bundledAppRoot } from '@/lib/wow-data-server/transport';
 
 export type BlpTaskInput = {
   data: Buffer,
@@ -51,9 +55,22 @@ const defaultPoolSize = (() => {
 })();
 
 function resolveWorkerPath(): string {
-  let workerPath = './blp.worker.ts';
-  workerPath = fs.existsSync(workerPath) ? workerPath : new URL(workerPath, import.meta.url).href;
-  return workerPath;
+  const candidates = [
+    path.join(process.cwd(), 'blp.worker.js'),
+    path.join(bundledAppRoot(), 'blp.worker.js'),
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'blp.worker.js'),
+    path.join(process.cwd(), 'blp.worker.ts'),
+    path.join(bundledAppRoot(), 'blp.worker.ts'),
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'blp.worker.ts'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return path.join(bundledAppRoot(), 'blp.worker.js');
 }
 
 export class BlpWorkerPool {

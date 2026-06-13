@@ -1,7 +1,7 @@
 /**
- * Phase 7 validation: native ADT export vs live wow.export instance.
+ * Phase 7 validation: native ADT export vs live wow-data-server instance.
  *
- * Exports a map tile through the live wow.export REST API and through the
+ * Exports a map tile through the live wow-data-server REST API and through the
  * native ADTExporter, then compares artifacts:
  *  - OBJ/MTL/CSV/JSON: byte-identical
  *  - tex_*.png terrain bakes: pixel tolerance (GL vs CPU rasterizer)
@@ -26,7 +26,7 @@ import { runtimeState } from '../../src/lib/wow/server/runtime';
 
 const WOW_DIR = getArg('--wow-dir') ?? process.env.CASC_LOCAL_WOW ?? 'D:\\Programs\\Blizzard Games\\World of Warcraft';
 const PRODUCT = getArg('--product') ?? 'wow';
-const WOWEXPORT_URL = process.env.WOWEXPORT_URL ?? 'http://127.0.0.1:17752';
+const WOW_DATA_SERVER_URL = process.env.WOW_DATA_SERVER_URL ?? 'http://127.0.0.1:17753';
 const NATIVE_OUT = path.resolve(__dirname, 'out', 'adt-native');
 
 const MAP_DIR = getArg('--map') ?? 'azeroth';
@@ -91,9 +91,9 @@ async function main() {
   // tileID = floor(tileIndex / 64) + '_' + (tileIndex % 64) = TILE_X_TILE_Y.
   const tileID = `${TILE_X}_${TILE_Y}`;
 
-  // --- Mirror the live wow.export export-shaping config ---
-  const cfgRes = await fetch(`${WOWEXPORT_URL}/rest/getConfig`);
-  if (!cfgRes.ok) throw new Error(`wow.export REST unreachable (HTTP ${cfgRes.status})`);
+  // --- Mirror the live wow-data-server export-shaping config ---
+  const cfgRes = await fetch(`${WOW_DATA_SERVER_URL}/rest/getConfig`);
+  if (!cfgRes.ok) throw new Error(`wow-data-server REST unreachable (HTTP ${cfgRes.status})`);
   const remoteConfig = ((await cfgRes.json()) as { config: Record<string, unknown> }).config;
 
   const mirrorKeys = [
@@ -106,7 +106,7 @@ async function main() {
     if (remoteConfig[key] !== undefined) (wowConfig as unknown as Record<string, unknown>)[key] = remoteConfig[key];
   }
   const refExportDir = String(remoteConfig.exportDirectory).replace(/\//g, path.sep);
-  console.log('wow.export exportDirectory:', refExportDir);
+  console.log('wow-data-server exportDirectory:', refExportDir);
 
   const requestBody = {
     mapID: MAP_ID,
@@ -126,7 +126,7 @@ async function main() {
   // --- REST export (reference) ---
   console.log(`=== REST exportADT ${MAP_DIR} ${tileID} q=${QUALITY} models=${INCLUDE_MODELS} ===`);
   const tRest = Date.now();
-  const restRes = await fetch(`${WOWEXPORT_URL}/rest/exportADT`, {
+  const restRes = await fetch(`${WOW_DATA_SERVER_URL}/rest/exportADT`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody),
@@ -162,8 +162,6 @@ async function main() {
     mapsIncludeLiquid: requestBody.includeLiquid,
     mapsIncludeFoliage: requestBody.includeFoliage,
     mapsIncludeHoles: requestBody.includeHoles,
-    // wow.export REST still exports OBJ/MTL/BLP for models; disable direct mode for parity checks.
-    mapsDirectModels: false,
   });
   const baseDir = getExportPath(path.join('maps', MAP_DIR));
   const tileIndex = TILE_X * 64 + TILE_Y;

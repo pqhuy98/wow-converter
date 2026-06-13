@@ -1,12 +1,11 @@
 /**
  * Registry mapping texture relative paths (as referenced by MDL materials,
- * relative to wowExportAssetDir, .png extension) to their pixel source in the
+ * relative to exportAssetDir, .png extension) to their pixel source in the
  * direct M2->MDX pipeline:
  *  - blp: raw WoW BLP fetched via the raw-file layer (fileDataID)
  *  - png: composited PNG bytes (character bakes, body compositing)
  *
- * The legacy OBJ pipeline does not use this registry (PNG files exist on
- * disk / in the export-asset store instead).
+ * ADT terrain uses PNG files on disk; direct M2/WMO use the texture-source registry.
  */
 import path from 'path';
 

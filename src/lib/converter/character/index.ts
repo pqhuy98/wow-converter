@@ -7,14 +7,13 @@ import { z } from 'zod';
 import { AssetManager } from '@/lib/converter/common/asset-manager';
 import { AttackTagSchema } from '@/lib/converter/wow-model/animation/animation-mapper';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
-import { profileSync } from '@/lib/export-profile';
 import { Sequence } from '@/lib/formats/mdl/components/sequence';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
 import { Config } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import { decodeDressingRoom } from '@/lib/wowhead-client/dressing-room';
 import { CharacterData, fetchNpcMeta, fetchObjectMeta } from '@/lib/wowhead-client/objects';
 import { getZamUrlFromWowheadUrl, ZamUrl } from '@/lib/wowhead-client/zam-url';
@@ -108,7 +107,7 @@ export class CharacterExporter {
   }
 
   async exportCharacter(char: Character, outputFile: string): Promise<MDL> {
-    await wowExportClient.waitUntilReady();
+    await wowDataClient.waitUntilReady();
 
     console.log('Exporting character', char.base.value);
 
@@ -252,8 +251,8 @@ export class CharacterExporter {
       model.modify.concatenateSequences(attacks, 'Attack');
       model.sequences = model.sequences.filter((seq) => !attacks.includes(seq));
     });
-    profileSync('recomputeNormals', () => { model.modify.recomputeNormals(); });
-    profileSync('optimizeKeyFrames', () => { model.modify.optimizeKeyFrames(); });
+    model.modify.recomputeNormals();
+    model.modify.optimizeKeyFrames();
     console.log('Total character export took', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
     return model;
   }
@@ -287,7 +286,7 @@ export class CharacterExporter {
           npcMeta = await fetchNpcMeta({
             ...baseZam,
             type: 'npc',
-            expansion: wowExportClient.isClassic()
+            expansion: wowDataClient.isClassic()
               ? baseZam.expansion
               : 'latest-available', // in latest wow installation, classic models are not available
           });
@@ -296,7 +295,7 @@ export class CharacterExporter {
           npcMeta = await fetchNpcMeta({
             ...baseZam,
             type: 'npc',
-            expansion: wowExportClient.isClassic()
+            expansion: wowDataClient.isClassic()
               ? baseZam.expansion
               : 'latest-available', // in latest wow installation, classic models are not available
           });
@@ -305,7 +304,7 @@ export class CharacterExporter {
           npcMeta = await fetchObjectMeta({
             ...baseZam,
             type: 'object',
-            expansion: wowExportClient.isClassic()
+            expansion: wowDataClient.isClassic()
               ? baseZam.expansion
               : 'latest-available', // in latest wow installation, classic models are not available
           });

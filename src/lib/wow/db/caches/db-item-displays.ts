@@ -6,7 +6,7 @@ import { write } from '@/lib/wow/log';
 import { doOnce } from '../../formats/generics';
 import { WDCReader } from '../wdc-reader';
 import type { ModelDisplay } from './db-creatures';
-import { getModelFileDataID } from './db-model-file-data';
+import { getModelFileDataID, initializeModelFileData } from './db-model-file-data';
 import { ensureInitialized, getTextureFDIDsByMatID } from './db-texture-file-data';
 
 const itemDisplays = new Map<number, ModelDisplay[]>();
@@ -14,6 +14,7 @@ const itemDisplays = new Map<number, ModelDisplay[]>();
 /** Initialize item displays from ItemDisplayInfo.db2 */
 export const initializeItemDisplays = doOnce('initializeItemDisplays', async () => {
   if (itemDisplays.size > 0) return;
+  await initializeModelFileData();
   await ensureInitialized();
 
   write('Loading item textures...');

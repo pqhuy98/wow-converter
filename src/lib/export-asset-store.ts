@@ -1,23 +1,14 @@
 /**
- * Read/write helpers for wow.export / wow-data-server artifacts on disk.
+ * Read/write helpers for wow-data-server export artifacts on disk.
  */
 import {
-  mkdir, readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile,
+  access, mkdir, readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile,
 } from 'fs/promises';
-import { existsSync, mkdirSync, writeFileSync } from 'fs-extra';
 import path from 'path';
 import sharp from 'sharp';
 
 function normalizeKey(filePath: string): string {
   return path.normalize(filePath);
-}
-
-/** Write a generated export artifact to disk (sync — hot paths during M2 conversion). */
-export function putExportAsset(absPath: string, data: Buffer): void {
-  if (data.length === 0) return;
-  const key = normalizeKey(absPath);
-  mkdirSync(path.dirname(key), { recursive: true });
-  writeFileSync(key, data);
 }
 
 export async function writeExportAsset(absPath: string, data: Buffer | Uint8Array): Promise<void> {
@@ -26,12 +17,13 @@ export async function writeExportAsset(absPath: string, data: Buffer | Uint8Arra
   await fsWriteFile(key, Buffer.from(data));
 }
 
-export function exportAssetExistsSync(absPath: string): boolean {
-  return existsSync(normalizeKey(absPath));
-}
-
-export function exportAssetExists(absPath: string): Promise<boolean> {
-  return Promise.resolve(exportAssetExistsSync(absPath));
+export async function exportAssetExists(absPath: string): Promise<boolean> {
+  try {
+    await access(normalizeKey(absPath));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function readExportAsset(absPath: string): Promise<Buffer> {

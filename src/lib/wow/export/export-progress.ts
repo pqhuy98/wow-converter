@@ -4,9 +4,6 @@
  */
 import type { ADTExportOptions } from './adt/map-export-utils';
 
-/** Legacy OBJ export still advances per model; keep a generous cap. */
-export const MODEL_STEP_BUDGET = 512;
-
 export const FIXED_OVERHEAD_STEPS = 2;
 
 export interface ExportProgressSnapshot {
@@ -27,17 +24,11 @@ export interface ExportProgress {
   syncTileComplete(): void;
 }
 
-/**
- * Fixed phase budget per tile for a uniform tiles × stepsPerTile progress bar.
- * Direct mode uses coarse phases (typically 6 steps/tile); legacy OBJ export
- * keeps the per-model step budget.
- */
+/** Fixed phase budget per tile for a uniform tiles × stepsPerTile progress bar. */
 export function computeStepsPerTile(quality: number, options: ADTExportOptions): number {
   let steps = FIXED_OVERHEAD_STEPS;
   if (quality !== 0) steps += 1;
-  if (options.mapsIncludeM2 || options.mapsIncludeWMO || options.mapsIncludeGameObjects) {
-    steps += options.mapsDirectModels ? 1 : MODEL_STEP_BUDGET;
-  }
+  if (options.mapsIncludeM2 || options.mapsIncludeWMO || options.mapsIncludeGameObjects) steps += 1;
   if (options.mapsIncludeLiquid) steps += 1;
   if (options.mapsIncludeFoliage) steps += 1;
   return steps;

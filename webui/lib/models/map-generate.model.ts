@@ -61,11 +61,12 @@ export interface GenerateWc3FormValues {
   clampLower: number;
   clampUpper: number;
   mapAngleDeg: number;
+  /** Unit size on the map; also drives terrain height auto-clamp. */
+  unitScale: number;
   freshExport: boolean;
   creatures: {
     enable: boolean;
     allAreDoodads: boolean;
-    scaleUp: number;
   };
 }
 
@@ -74,11 +75,11 @@ export const defaultGenerateWc3FormValues: GenerateWc3FormValues = {
   clampLower: 0,
   clampUpper: 1,
   mapAngleDeg: 0,
+  unitScale: 2,
   freshExport: false,
   creatures: {
     enable: false,
-    allAreDoodads: true,
-    scaleUp: 2,
+    allAreDoodads: false,
   },
 };
 

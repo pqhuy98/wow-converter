@@ -1,7 +1,7 @@
-import { wowExportClient } from './wowexport-client/wowexport-client';
+import { wowDataClient } from './wow-data-client/wow-data-client';
 
 export interface Config {
-  wowExportAssetDir: string
+  exportAssetDir: string
   assetPrefix: string
   rawModelScaleUp: number
   overrideModels: boolean
@@ -20,6 +20,6 @@ export async function getDefaultConfig(): Promise<Config> {
     rawModelScaleUp: 56,
     overrideModels: true,
     overrideTextures: false,
-    wowExportAssetDir: await wowExportClient.getAssetDir(),
+    exportAssetDir: await wowDataClient.getAssetDir(),
   };
 }

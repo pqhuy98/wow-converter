@@ -8,7 +8,7 @@
  *
  * Concurrent requests for the same fileDataID are coalesced.
  */
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { readRawCachedFile, writeRawCachedFile } from './raw-cache';
 
@@ -23,8 +23,8 @@ function inFlightKey(buildKey: string, fileDataID: number): string {
 }
 
 async function currentBuildKey(): Promise<string> {
-  await wowExportClient.waitUntilReady();
-  const buildKey = wowExportClient.cascInfo?.buildKey;
+  await wowDataClient.waitUntilReady();
+  const buildKey = wowDataClient.cascInfo?.buildKey;
   if (!buildKey) throw new Error('No CASC build key available from data server');
   return buildKey;
 }
@@ -44,7 +44,7 @@ export async function getRawWowFile(fileDataID: number): Promise<Buffer> {
   if (pending) return pending;
 
   const promise = (async () => {
-    const buf = await wowExportClient.downloadCascFile(fileDataID);
+    const buf = await wowDataClient.downloadCascFile(fileDataID);
     await writeRawCachedFile(buildKey, fileDataID, buf);
     return buf;
   })().finally(() => inFlight.delete(flightKey));

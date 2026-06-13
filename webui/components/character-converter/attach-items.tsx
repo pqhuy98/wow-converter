@@ -18,7 +18,7 @@ import { AttachmentSelector } from './attachment-selector';
 import { RefInput } from './ref-input';
 
 const tooltips = {
-  itemReference: 'The item to attach - can be a Wowhead URL, local file inside wow.export folder, or Display ID.',
+  itemReference: 'The item to attach - can be a Wowhead URL, local file inside the export assets folder, or Display ID.',
   itemRemove: 'Remove the item',
   attachmentPoint: 'Where on the character model this item will be attached',
   itemScale: 'Additional scale multiplier for this specific item (1.0 = no change). Firstly the item will be scaled to match the character, then this multiplier will be applied.',

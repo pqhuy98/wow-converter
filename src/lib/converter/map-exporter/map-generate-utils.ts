@@ -43,7 +43,7 @@ export function countUniqueUnitExportsFromManager(wowObjectManager: WowObjectMan
 export function autoChooseClampPercent(
   mapExporter: MapExporter,
   mapExportConfig: MapExportConfig,
-  creatureScaleUp: number,
+  unitScale: number,
 ): void {
   const unitPos: Vector3[] = [];
   mapExporter.wowObjectManager.iterateObjects((obj, abs) => {
@@ -60,7 +60,7 @@ export function autoChooseClampPercent(
   }
   unitPos.sort((a, b) => a[2] - b[2]);
   const { ratio, min, max } = computeRecommendedTerrainClampPercent(mapExporter.wowObjectManager.roots);
-  let clampDiff = ratio * creatureScaleUp;
+  let clampDiff = ratio * unitScale;
 
   const size = V3.sub(max, min);
   const ratioZ = maxGameHeightDiff / (size[2] * clampDiff);

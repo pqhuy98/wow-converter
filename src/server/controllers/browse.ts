@@ -1,6 +1,6 @@
 import express from 'express';
 
-import { FileEntry } from '@/lib/wowexport-client/wowexport-client';
+import { FileEntry } from '@/lib/wow-data-client/wow-data-client';
 
 import { getListFiles } from './shared';
 
@@ -28,7 +28,7 @@ export function ControllerBrowse(router: express.Router) {
   }
   void fetchAllFiles();
 
-  // Search files in wow.export listfile; default to all m2 if no search
+  // Search files in the WoW listfile; default to all m2 if no search
   router.get('/browse', async (req, res) => {
     try {
       if (!allFiles) {

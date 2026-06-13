@@ -573,7 +573,7 @@ export class M2MetadataFile {
 
       const textures: Texture[] = (this.textures ?? []).map((tex) => {
         const pngPath = tex.fileNameExternal
-          ? relative(this.config.wowExportAssetDir, join(dir, tex.fileNameExternal))
+          ? relative(this.config.exportAssetDir, join(dir, tex.fileNameExternal))
           : '';
         return {
           id: 0,
@@ -656,7 +656,7 @@ export class M2MetadataFile {
     const textures: Texture[] = this.textures.map((tex, i) => {
       const dir = dirname(normalize(this.filePath.replaceAll('\\', '/')));
       const pngPath = tex.fileNameExternal
-        ? relative(this.config.wowExportAssetDir, join(dir, tex.fileNameExternal))
+        ? relative(this.config.exportAssetDir, join(dir, tex.fileNameExternal))
         : '';
 
       return {

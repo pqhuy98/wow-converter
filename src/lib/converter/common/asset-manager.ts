@@ -8,7 +8,6 @@ import { maxConcurrency } from '@/lib/constants';
 import {
   exportAssetExists, sharpFromExportAsset,
 } from '@/lib/export-asset-store';
-import { profileScope } from '@/lib/export-profile';
 import { BlpConvertItem, pngsToBlps, readBlpSizeSync } from '@/lib/formats/blp/blp';
 import { Config } from '@/lib/global-config';
 import { EulerRotation, Vector3 } from '@/lib/math/common';
@@ -17,8 +16,9 @@ import { getRawWowFile } from '@/lib/wow/archive/client/raw-client';
 
 import { calculateChildAbsoluteEulerRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
+import { convertAdtTerrainObjToMdl } from '../wow-model/adt-terrain';
+import { cachePathForLocalRef, normalizeLocalModelRef } from '../local-model-path';
 import { ConvertM2Options, convertM2ToMdl } from '../wow-model/direct/m2';
-import { convertWowExportModel } from '../wow-model/legacy';
 import { Model, WowObject, WowObjectType } from './models';
 import { getTextureSource, TextureSource } from './texture-source';
 
@@ -36,7 +36,7 @@ export class AssetManager {
     return this.resolveModel(objectPath, undefined, 'm2', noCache);
   }
 
-  /** Load a model from OBJ cache or directly from CASC when using the direct pipeline. */
+  /** Load a model: ADT terrain from exported OBJ, M2/WMO/gobj directly from CASC. */
   async resolveModel(
     objectPath: string,
     fileDataID: number | undefined,
@@ -47,43 +47,42 @@ export class AssetManager {
       return this.models.get(objectPath)!;
     }
 
-    const objRelativePath = objectPath.endsWith('.obj') ? objectPath : `${objectPath}.obj`;
-    const objFullPath = path.join(this.config.wowExportAssetDir, objRelativePath);
-
-    if (type === 'adt' || await exportAssetExists(objFullPath)) {
-      return profileScope(`assetManager.parse/${path.basename(objectPath, '.obj')}`, async () => {
-        const { mdl, texturePaths } = await convertWowExportModel(objFullPath, this.config);
-        const model: Model = {
-          relativePath: mdl.model.name,
-          mdl,
-        };
-        if (!noCache) this.models.set(objectPath, model);
-        texturePaths.forEach((p) => this.textures.add(p));
-        return model;
-      });
-    }
-
-    if (fileDataID && fileDataID > 0 && (type === 'm2' || type === 'wmo' || type === 'gobj')) {
-      const exportPathOverride = path.join(this.config.wowExportAssetDir, objRelativePath);
-      const model = await this.parseDirect({ fileDataID, exportPathOverride });
-      if (!noCache) this.models.set(objectPath, model);
-      return model;
-    }
-
-    throw new Error(`Model not found: ${objectPath}${fileDataID ? ` (fileDataID ${fileDataID})` : ''}`);
-  }
-
-  /** Direct M2/WMO -> MDL conversion (no server OBJ export). */
-  async parseDirect(opts: ConvertM2Options): Promise<Model> {
-    return profileScope(`assetManager.parseDirect/${opts.fileDataID}`, async () => {
-      const { mdl, texturePaths } = await convertM2ToMdl(this.config, opts);
+    if (type === 'adt') {
+      const objRelativePath = `${normalizeLocalModelRef(objectPath)}.obj`;
+      const objFullPath = path.join(this.config.exportAssetDir, objRelativePath);
+      const { mdl, texturePaths } = await convertAdtTerrainObjToMdl(objFullPath, this.config);
       const model: Model = {
         relativePath: mdl.model.name,
         mdl,
       };
+      if (!noCache) this.models.set(objectPath, model);
       texturePaths.forEach((p) => this.textures.add(p));
       return model;
-    });
+    }
+
+    if (!fileDataID || fileDataID <= 0) {
+      throw new Error(`Model not found: ${objectPath} (missing fileDataID for ${type})`);
+    }
+
+    const exportPathOverride = cachePathForLocalRef(
+      this.config.exportAssetDir,
+      objectPath,
+      type === 'wmo' ? '.wmo' : '.m2',
+    );
+    const model = await this.parseDirect({ fileDataID, exportPathOverride });
+    if (!noCache) this.models.set(objectPath, model);
+    return model;
+  }
+
+  /** Direct M2/WMO -> MDL conversion (no server OBJ export). */
+  async parseDirect(opts: ConvertM2Options): Promise<Model> {
+    const { mdl, texturePaths } = await convertM2ToMdl(this.config, opts);
+    const model: Model = {
+      relativePath: mdl.model.name,
+      mdl,
+    };
+    texturePaths.forEach((p) => this.textures.add(p));
+    return model;
   }
 
   async exportModels(assetPath: string) {
@@ -144,7 +143,7 @@ export class AssetManager {
     const collected = await workerPool(
       maxConcurrency,
       Array.from(this.textures).map((texturePath) => async (): Promise<{ exportedPath: string, item?: BlpConvertItem } | undefined> => {
-        const fromPath = path.join(this.config.wowExportAssetDir, texturePath);
+        const fromPath = path.join(this.config.exportAssetDir, texturePath);
         // Direct pipeline: pixel data comes from the texture-source registry
         // (raw WoW BLP via raw-client, or composited PNG bytes) instead of an
         // exported PNG file.
@@ -202,8 +201,7 @@ export class AssetManager {
           // Copy so transferring the buffer to a worker doesn't detach the registry's copy.
           return { exportedPath: blpPath, item: { png: Buffer.from(source.png), resizeTo, blpPath } };
         }
-        // Legacy file path: the file bytes are read on the main thread by
-        // pngsToBlps, and the resize (if any) runs inside the BLP worker.
+        // ADT terrain textures are PNG files on disk under exportAssetDir.
         return { exportedPath: blpPath, item: { png: fromPath, resizeTo, blpPath } };
       }),
     );

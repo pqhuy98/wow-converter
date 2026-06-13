@@ -16,7 +16,7 @@ import { M2Loader } from '@/lib/wow/formats/m2/m2-loader';
 import type { M2Animation, M2Attachment } from '@/lib/wow/formats/m2/m2-types';
 import { SKELLoader } from '@/lib/wow/formats/m2/skel-loader';
 import { getCasc } from '@/lib/wow/server/runtime';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 export interface BonesData {
   bones: unknown;
@@ -42,8 +42,8 @@ export function clearSkeletonGraphCache(): void {
 }
 
 async function currentBuildKey(): Promise<string> {
-  await wowExportClient.waitUntilReady();
-  const buildKey = wowExportClient.cascInfo?.buildKey;
+  await wowDataClient.waitUntilReady();
+  const buildKey = wowDataClient.cascInfo?.buildKey;
   if (!buildKey) throw new Error('No CASC build key available from data server');
   return buildKey;
 }

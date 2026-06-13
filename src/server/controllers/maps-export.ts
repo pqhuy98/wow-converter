@@ -6,7 +6,7 @@ import { buildADTExportOptions } from '@/lib/wow/export/adt/map-export-utils';
 import {
   computeStepsPerTile,
 } from '@/lib/wow/export/export-progress';
-import { ExportADTResult, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { ExportADTResult, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import { Job, JobQueue } from '@/server/utils/job-queue';
 
 const tileSchema = z.object({
@@ -116,7 +116,7 @@ const mapExportQueue = new JobQueue<MapExportJobRequest, MapExportJobResult>(
     const tileCount = orderedTiles.length;
     const progressKey = job.id;
 
-    await wowExportClient.waitUntilReady();
+    await wowDataClient.waitUntilReady();
 
     const succeeded: MapExportTileSuccess[] = [];
     const failed: MapExportTileFailure[] = [];
@@ -124,7 +124,7 @@ const mapExportQueue = new JobQueue<MapExportJobRequest, MapExportJobResult>(
     for (let tileIndex = 0; tileIndex < orderedTiles.length; tileIndex++) {
       const { x: tileX, y: tileY } = orderedTiles[tileIndex];
       try {
-        const result = await wowExportClient.exportADT({
+        const result = await wowDataClient.exportADT({
           mapID,
           mapDir,
           tileX,
@@ -148,7 +148,7 @@ const mapExportQueue = new JobQueue<MapExportJobRequest, MapExportJobResult>(
       }
     }
 
-    await wowExportClient.finalizeExportProgress(progressKey);
+    await wowDataClient.finalizeExportProgress(progressKey);
 
     if (failed.length === orderedTiles.length) {
       throw new Error(failed[0]?.error ?? 'All tiles failed to export');
@@ -184,7 +184,7 @@ async function buildJobStatus(jobId: string): Promise<MapExportJobStatus | undef
   };
 
   if (base.status === 'processing') {
-    const snap = await wowExportClient.getExportProgress(jobId);
+    const snap = await wowDataClient.getExportProgress(jobId);
     if (snap) {
       status.progress = {
         completedSteps: snap.completedSteps,

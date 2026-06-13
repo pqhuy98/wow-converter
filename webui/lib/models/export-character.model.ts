@@ -1,5 +1,5 @@
 export interface Config {
-  wowExportAssetDir: string
+  exportAssetDir: string
   isSharedHosting: boolean
 }
 

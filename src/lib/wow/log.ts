@@ -4,7 +4,7 @@
  */
 import util from 'util';
 
-const enabled = process.env.WOW_READER_LOG !== '0';
+const enabled = process.env.WOW_DATA_LOG !== '0';
 
 export function write(...args: unknown[]): void {
   if (!enabled) return;

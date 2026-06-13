@@ -10,7 +10,7 @@ import { getDefaultConfig } from '@/lib/global-config';
 import { Vector2 } from '@/lib/math/common';
 import { buildADTExportOptions } from '@/lib/wow/export/adt/map-export-utils';
 import { computeStepsPerTile } from '@/lib/wow/export/export-progress';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import {
   advanceMapGenerateProgress,
   clearMapGenerateProgress,
@@ -48,11 +48,11 @@ export const generateWc3BodySchema = z.object({
   clampLower: z.number().min(0).max(1),
   clampUpper: z.number().min(0).max(1),
   mapAngleDeg: z.number(),
+  unitScale: z.number().positive(),
   freshExport: z.boolean(),
   creatures: z.object({
     enable: z.boolean(),
     allAreDoodads: z.boolean(),
-    scaleUp: z.number().positive(),
   }),
 }).strict().refine((d) => d.clampUpper >= d.clampLower, {
   message: 'clampUpper must be >= clampLower',
@@ -131,7 +131,7 @@ async function pollAdtProgress(
   until: () => boolean,
 ): Promise<void> {
   while (!until()) {
-    const snap = await wowExportClient.getExportProgress(jobId);
+    const snap = await wowDataClient.getExportProgress(jobId);
     if (snap) {
       syncAdtProgress(jobId, {
         completedSteps: Math.min(snap.completedSteps, adtTotalSteps),
@@ -179,7 +179,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
       stepsPerTile,
     });
 
-    await wowExportClient.waitUntilReady();
+    await wowDataClient.waitUntilReady();
 
     const succeeded: MapExportTileSuccess[] = [];
     const failed: MapExportTileFailure[] = [];
@@ -190,7 +190,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
       const pollPromise = pollAdtProgress(progressKey, adtTotalSteps, () => pollDone);
 
       try {
-        const result = await wowExportClient.exportADT({
+        const result = await wowDataClient.exportADT({
           mapID,
           mapDir,
           tileX,
@@ -225,7 +225,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
       }
     }
 
-    await wowExportClient.finalizeExportProgress(progressKey);
+    await wowDataClient.finalizeExportProgress(progressKey);
 
     if (failed.length === orderedTiles.length) {
       clearMapGenerateProgress(progressKey);
@@ -250,6 +250,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
       mapAngleDeg: body.mapAngleDeg,
       clampLower: body.clampLower,
       clampUpper: body.clampUpper,
+      unitScale: body.unitScale,
       creatures: body.creatures,
     });
 
@@ -259,7 +260,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
       mapExportConfig,
       mapSaveName: body.mapSaveName,
       freshExport: body.freshExport,
-      creatureScaleUp: body.creatures.scaleUp,
+      unitScale: body.unitScale,
       onConvertStepsKnown: (steps) => {
         convertSteps = steps;
         updateMapGenerateTotalSteps(progressKey, convertSteps, adtTotalSteps);
@@ -339,7 +340,7 @@ async function buildJobStatus(jobId: string): Promise<MapGenerateJobStatus | und
     if (getMapGenerateProgress(jobId)) {
       status.progress = buildProgressStatus(jobId);
     } else {
-      const adtSnap = await wowExportClient.getExportProgress(jobId);
+      const adtSnap = await wowDataClient.getExportProgress(jobId);
       if (adtSnap) {
         status.progress = {
           completedSteps: adtSnap.completedSteps,

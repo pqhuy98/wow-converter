@@ -1,10 +1,9 @@
 /**
- * Configuration for the native WoW reader, mirroring the wow.export config keys
- * that the headless read/export pipeline depends on (src/default_config.jsonc).
+ * Configuration for the native WoW reader (wow-data-server), mirroring the
+ * config keys that the headless read/export pipeline depends on.
  *
  * Export-shaping values are fixed to the configuration wow-converter always
- * pushed to wow.export via syncConfig() (see wowexport-client.ts desiredConfig),
- * so native exports match the REST pipeline's artifacts exactly.
+ * pushes via syncConfig() (see wow-data-client.ts desiredConfig).
  */
 import { EXPORT_PATH } from '@/lib/wow/formats/constants';
 
@@ -23,7 +22,7 @@ export interface WowReaderConfig {
   cascLocale: number;
   enableUnknownFiles: boolean;
 
-  // Export shaping (matches wowexport-client desiredConfig + defaults)
+  // Export shaping (matches wow-data-client desiredConfig + defaults)
   copyMode: string;
   listfileSortByID: boolean;
   listfileShowFileDataIDs: boolean;
@@ -65,8 +64,6 @@ export interface WowReaderConfig {
   mapsIncludeLiquid: boolean;
   mapsIncludeGameObjects: boolean;
   mapsIncludeHoles: boolean;
-  mapsDirectModels: boolean;
-  mapsExportRaw: boolean;
   exportMapQuality: number;
   splitLargeTerrainBakes: boolean;
   splitAlphaMaps: boolean;
@@ -81,7 +78,7 @@ export interface WowReaderConfig {
 }
 
 /**
- * Mutable singleton config, analogous to wow.export's core.view.config.
+ * Mutable singleton config, analogous to wow-data-server's runtime config.
  * Values mirror default_config.jsonc overridden by wow-converter's desiredConfig.
  */
 export const wowConfig: WowReaderConfig = {
@@ -137,8 +134,6 @@ export const wowConfig: WowReaderConfig = {
   mapsIncludeLiquid: false,
   mapsIncludeGameObjects: true,
   mapsIncludeHoles: true,
-  mapsDirectModels: true,
-  mapsExportRaw: false,
   exportMapQuality: 4096,
   splitLargeTerrainBakes: true,
   splitAlphaMaps: true,

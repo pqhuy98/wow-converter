@@ -1,5 +1,5 @@
 import { waitUntil } from '@/lib/utils';
-import { FileEntry, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { FileEntry, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 let listFiles: FileEntry[] | null = null;
 let pending = false;
@@ -11,7 +11,7 @@ export async function getListFiles(): Promise<FileEntry[]> {
     return listFiles!;
   }
   pending = true;
-  await wowExportClient.waitUntilReady();
-  listFiles = await wowExportClient.searchFiles('');
+  await wowDataClient.waitUntilReady();
+  listFiles = await wowDataClient.searchFiles('');
   return listFiles;
 }

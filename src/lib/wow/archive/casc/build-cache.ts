@@ -14,6 +14,7 @@ import { wowConfig } from '../../server/config';
 
 let cacheIntegrity: Record<string, string> | null = null;
 let integrityInitPromise: Promise<void> | null = null;
+let integritySaveChain: Promise<void> = Promise.resolve();
 
 /** Initialize the cache integrity system (lazy, once). */
 async function ensureCacheIntegrity(): Promise<Record<string, string>> {
@@ -132,10 +133,16 @@ export class BuildCache {
     await this.saveCacheIntegrity();
   }
 
-  /** Save the cache integrity to disk. */
+  /** Save the cache integrity to disk (serialized to avoid concurrent write races). */
   async saveCacheIntegrity(): Promise<void> {
     await createDirectory(path.dirname(constants.CACHE.INTEGRITY_FILE));
-    await fsp.writeFile(constants.CACHE.INTEGRITY_FILE, JSON.stringify(cacheIntegrity), 'utf8');
+    const snapshot = { ...cacheIntegrity };
+    integritySaveChain = integritySaveChain.then(() => fsp.writeFile(
+      constants.CACHE.INTEGRITY_FILE,
+      JSON.stringify(snapshot),
+      'utf8',
+    ));
+    await integritySaveChain;
   }
 
   /** Save the manifest for this build cache. */

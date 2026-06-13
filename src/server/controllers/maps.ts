@@ -4,7 +4,7 @@ import fsExtra from 'fs-extra';
 import path from 'path';
 
 import { exportTexture } from '@/lib/converter/character/utils';
-import { FileEntry, MapListItem, wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { FileEntry, MapListItem, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { isDev } from '../config';
 import { registerMapExportRoutes } from './maps-export';
@@ -22,11 +22,11 @@ const mapsByDir = new Map<string, MapWithTiles>(); // dir(lowercased) -> map wit
 const fileNameToEntry = new Map<string, FileEntry>(); // normalized lowercased path -> entry
 
 async function buildMapsIndex(): Promise<void> {
-  await wowExportClient.waitUntilReady();
+  await wowDataClient.waitUntilReady();
 
   let baseMaps: MapListItem[] = [];
   try {
-    baseMaps = await wowExportClient.getMapList();
+    baseMaps = await wowDataClient.getMapList();
   } catch {
     baseMaps = [];
   }
@@ -157,14 +157,14 @@ export function ControllerMaps(router: express.Router) {
         return res.status(400).json({ error: 'x and y must be within 0..63' });
       }
 
-      await wowExportClient.waitUntilReady();
+      await wowDataClient.waitUntilReady();
 
       // Normalize directory and coordinates to match Blizzard naming
       const mapDir = String(map).toLowerCase();
       const xs = x.toString().padStart(2, '0');
       const ys = y.toString().padStart(2, '0');
 
-      const buildKey = wowExportClient.cascInfo?.buildKey || '';
+      const buildKey = wowDataClient.cascInfo?.buildKey || '';
       const etagSeed = `${buildKey}|${map}|${x}|${y}`;
       const etag = crypto.createHash('md5').update(etagSeed).digest('hex');
 
@@ -172,8 +172,8 @@ export function ControllerMaps(router: express.Router) {
         return res.status(304).end();
       }
 
-      // If PNG already exists in the wow.export asset directory, serve it directly.
-      const assetDir = await wowExportClient.getAssetDir();
+      // If PNG already exists in the export asset directory, serve it directly.
+      const assetDir = await wowDataClient.getAssetDir();
       const preexistingPng = path.join(assetDir, 'world', 'minimaps', mapDir, `map${xs}_${ys}.png`);
       if (fsExtra.existsSync(preexistingPng)) {
         res.setHeader('Content-Type', 'image/png');

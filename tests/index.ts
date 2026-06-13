@@ -8,21 +8,21 @@ import { distancePerTile } from '@/lib/constants';
 import {
   AttachItem, CharacterExporter, local, Size, wowhead,
 } from '@/lib/converter/character';
+import { AttackTag } from '@/lib/converter/wow-model/animation/animation-mapper';
+import { WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config, getDefaultConfig } from '@/lib/global-config';
 import { Vector3 } from '@/lib/math/common';
-import { AttackTag } from '@/lib/converter/wow-model/animation/animation-mapper';
-import { WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import { ModificationType } from '@/vendors/wc3maptranslator/data';
 import { MapManager } from '@/vendors/wc3maptranslator/extra/map-manager';
 
 import { testConfigClassic } from './classic';
 import { testConfigRetail } from './retail';
 
-await wowExportClient.waitUntilReady();
+await wowDataClient.waitUntilReady();
 
-const testConfig = wowExportClient.isClassic() ? testConfigClassic : testConfigRetail;
+const testConfig = wowDataClient.isClassic() ? testConfigClassic : testConfigRetail;
 const mapDir = testConfig.map;
 const testLimit = Number(process.env.TEST_LIMIT || 0);
 const testCases = testLimit > 0 ? testConfig.testCases.slice(0, testLimit) : testConfig.testCases;
@@ -71,7 +71,7 @@ async function exportTestCases() {
 
     let name = '';
     if (base.startsWith('local::')) {
-      name = `local-${base.split('\\').pop()!.replace('.obj', '')}`;
+      name = `local-${base.split('\\').pop()!.replace(/\.(m2|wmo|obj)$/i, '')}`;
     } else if (base.includes('npc=')) {
       const npcId = base.split('npc=').pop()?.split('/').shift();
       const npcName = base.split('/').pop()!.split('#')[0];

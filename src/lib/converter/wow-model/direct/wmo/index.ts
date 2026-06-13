@@ -3,7 +3,7 @@
  *
  * Mirrors the legacy wow.export pipeline exactly:
  *   wow.export: exportFilesWithSkins -> WMOExporter.exportAsOBJ (OBJ/MTL/JSON files)
- *   converter: convertWowExportModel (parse files -> assemble MDL)
+ *   converter: convertObjBundleToMdl (parse files -> assemble MDL)
  * by constructing the same in-memory structures the file parsers would have
  * produced, then running the shared MDL assembly core. Headless behaviour
  * matches wow.export's ignoreViewerState: all groups, no doodad sets.
@@ -18,7 +18,6 @@ import type { ObjMaterial } from '@/lib/converter/wow-model/bundle/mtl';
 import type { IResult } from '@/lib/converter/wow-model/bundle/obj';
 import { buildRawObjResult, ObjMesh } from '@/lib/converter/wow-model/direct/m2/geometry';
 import { normalizeJsonValues } from '@/lib/converter/wow-model/direct/m2/json-normalize';
-import { profileScope } from '@/lib/export-profile';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
 import { getFileIDByName, getFileNameByID } from '@/lib/wow/archive/client/name-client';
@@ -300,42 +299,44 @@ async function buildWmoMetadataObject(
 }
 
 export async function convertWmoToMdl(config: Config, opts: ConvertWmoOptions): Promise<{ mdl: MDL; texturePaths: Set<string> }> {
-  return profileScope('converter/wmoToMdx', async () => {
-    ensureConverterCasc();
+  ensureConverterCasc();
 
-    const { fileDataID } = opts;
-    const exportRoot = config.wowExportAssetDir;
+  const { fileDataID } = opts;
+  const exportRoot = config.exportAssetDir;
 
-    const raw = opts.raw ?? await profileScope('rawWmo', () => getRawWowFile(fileDataID));
-    const listfileName = opts.fileName ?? await getFileNameByID(fileDataID);
-    const fileName = listfileName ?? `unknown/${fileDataID}.wmo`;
+  const raw = opts.raw ?? await getRawWowFile(fileDataID);
+  const listfileName = opts.fileName ?? await getFileNameByID(fileDataID);
+  const fileName = listfileName ?? `unknown/${fileDataID}.wmo`;
 
-    const exportPath = opts.exportPathOverride
-      ?? replaceExtension(virtualExportPath(exportRoot, fileName), '.obj');
-    const outDir = path.dirname(exportPath);
+  const exportPath = opts.exportPathOverride
+    ?? virtualExportPath(exportRoot, fileName);
+  const outDir = path.dirname(exportPath);
 
-    const wmo = new WMOLoader(new BufferWrapper(raw), fileDataID);
-    await profileScope('wmo.load', () => Promise.resolve(wmo.load()));
-    const allGroups = await profileScope('wmo.loadGroups', () => loadGroups(wmo, fileName));
+  const wmo = new WMOLoader(new BufferWrapper(raw), fileDataID);
+  wmo.load();
+  const allGroups = await loadGroups(wmo, fileName);
 
-    const { textureMap, materialMap, mtlMaterials } = await profileScope('resolveTextures', () => resolveWmoTextures(wmo, outDir, exportRoot));
+  const { textureMap, materialMap, mtlMaterials } = await resolveWmoTextures(wmo, outDir, exportRoot);
 
-    // WMOs have no skeleton: _bones.json was never written by the legacy
-    // pipeline, so the animation parser stays unloaded (bone_default + Stand).
-    const animation = new AnimationFile(replaceExtension(exportPath, '_bones.json'), config);
+  const animation = new AnimationFile(replaceExtension(exportPath, '_bones.json'), config);
 
-    const metaObject = await profileScope('buildMeta', () => buildWmoMetadataObject(wmo, fileDataID, listfileName, textureMap));
-    const metadata = new M2MetadataFile(replaceExtension(exportPath, '.json'), config, animation)
-      .loadFromData(normalizeJsonValues(metaObject));
+  const metaObject = await buildWmoMetadataObject(wmo, fileDataID, listfileName, textureMap);
+  const metadata = new M2MetadataFile(replaceExtension(exportPath, '.json'), config, animation)
+    .loadFromData(normalizeJsonValues(metaObject));
 
-    const obj = buildWmoObjResult(wmo, allGroups, materialMap, path.basename(exportPath, '.obj'), mtlMaterials.length > 0 ? path.basename(replaceExtension(exportPath, '.mtl')) : undefined);
+  const obj = buildWmoObjResult(
+    wmo,
+    allGroups,
+    materialMap,
+    path.basename(exportPath, path.extname(exportPath)),
+    mtlMaterials.length > 0 ? path.basename(replaceExtension(exportPath, '.mtl')) : undefined,
+  );
 
-    return assembleWowModel({
-      objFilePath: exportPath,
-      obj,
-      mtl: { materials: mtlMaterials },
-      animation,
-      metadata,
-    }, config);
-  });
+  return assembleWowModel({
+    objFilePath: exportPath,
+    obj,
+    mtl: { materials: mtlMaterials },
+    animation,
+    metadata,
+  }, config);
 }

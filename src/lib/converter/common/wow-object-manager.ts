@@ -13,7 +13,7 @@ import {
 import { Config } from '@/lib/global-config';
 import { EulerRotation, Vector3 } from '@/lib/math/common';
 import { stripModelReferenceExt } from '@/lib/wow/export/model-reference-path';
-import { wowExportClient } from '@/lib/wowexport-client/wowexport-client';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { calculateChildAbsoluteEulerRotation, quaternionToEuler, radians } from '../../math/rotation';
 import { V3 } from '../../math/vector';
@@ -57,13 +57,13 @@ export class WowObjectManager {
   }
 
   async readTerrainsDoodads(patterns: string[], filter?: (fileName: string, type: WowObjectType) => boolean) {
-    await wowExportClient.waitUntilReady();
+    await wowDataClient.waitUntilReady();
 
     const start = performance.now();
 
-    const globPatterns = patterns.map((p) => path.join(this.config.wowExportAssetDir, p).replaceAll(path.sep, '/'));
+    const globPatterns = patterns.map((p) => path.join(this.config.exportAssetDir, p).replaceAll(path.sep, '/'));
     const files = glob.sync(globPatterns, {
-      cwd: this.config.wowExportAssetDir,
+      cwd: this.config.exportAssetDir,
       absolute: true,
     }).map((f) => f.replaceAll(path.sep, '/'));
     console.log('Parsing root files', files);
@@ -73,7 +73,7 @@ export class WowObjectManager {
     await Promise.all(files.map(async (file) => {
       const type = file.includes('adt') ? 'adt' : 'wmo';
       if (filter && !filter(file, type)) return;
-      const fileName = this.relative(file).replaceAll('.obj', '');
+      const fileName = stripModelReferenceExt(this.relative(file));
       const root: WowObject = {
         id: fileName,
         model: undefined,
@@ -164,11 +164,11 @@ export class WowObjectManager {
   }
 
   private relative(fullPath: string) {
-    return path.relative(this.config.wowExportAssetDir, fullPath);
+    return path.relative(this.config.exportAssetDir, fullPath);
   }
 
   private full(relativePath: string) {
-    return path.join(this.config.wowExportAssetDir, relativePath);
+    return path.join(this.config.exportAssetDir, relativePath);
   }
 
   private async parseRecursive(objectPath: string, current: WowObject, filter?: (fileName: string, type: WowObjectType) => boolean) {

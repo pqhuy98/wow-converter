@@ -8,13 +8,24 @@ import { join } from 'path';
 
 import { Config } from '@/lib/global-config';
 import { toMap, workerPool } from '@/lib/utils';
+import { bundledAppRoot } from '@/lib/wow-data-server/transport';
 
 import {
   Character, CharacterExporter, displayID, wowhead,
 } from '../converter/character';
 import { guessAttackTag, inventoryTypeToEquipmentSlot } from '../converter/character/item-mapper';
 
-const prismaClient = new PrismaClient();
+function resolveAcoreDatabaseUrl(): string {
+  const configured = process.env.DATABASE_URL?.match(/^file:(.+)$/)?.[1];
+  if (configured && configured.startsWith('/')) {
+    return `file:${configured}`;
+  }
+  return `file:${join(bundledAppRoot(), 'bin', 'azerothcore-world.sqlite')}`;
+}
+
+const prismaClient = new PrismaClient({
+  datasourceUrl: resolveAcoreDatabaseUrl(),
+});
 
 export interface Equipment {
   item1?: item_template;
@@ -34,13 +45,6 @@ export async function getCreaturesInTile(
   tileXy: [number, number],
   extraConditions: Prisma.creatureWhereInput = {},
 ): Promise<Creature[]> {
-  try {
-    await prismaClient.$connect();
-  } catch (error) {
-    console.error('Cannot connect to database, skipping creatures data:', error);
-    return [];
-  }
-
   const [tileX, tileY] = tileXy;
 
   const tileSize = 533.3333333; // yards per ADT tile

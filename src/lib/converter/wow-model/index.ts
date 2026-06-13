@@ -1,5 +1,5 @@
 export { assembleWowModel, type WowModelInputs } from './assemble';
-export { convertWowExportModel } from './legacy';
+export { convertAdtTerrainObjToMdl } from './adt-terrain';
 export {
   convertM2CollisionToMdl, convertM2ToMdl, buildGeosetMaskForSkin,
 } from './direct/m2';

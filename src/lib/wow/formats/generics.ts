@@ -87,21 +87,20 @@ export async function batchWork<T>(
 }
 
 /** Format a number (bytes) to a displayable file size. */
-const doOnceCache = new Map<string, { status: 'pending' | 'complete'; result?: unknown }>();
+const doOnceCache = new Map<string, Promise<unknown>>();
 
 /** Wrap an async function so it only ever runs once; concurrent callers await the first run. */
 export function doOnce<T>(key: string, func: () => Promise<T>): () => Promise<T> {
-  return async () => {
-    if (!doOnceCache.has(key)) {
-      doOnceCache.set(key, { status: 'pending' });
-      const result = await func();
-      doOnceCache.set(key, { result, status: 'complete' });
-      return result;
+  return () => {
+    let pending = doOnceCache.get(key) as Promise<T> | undefined;
+    if (!pending) {
+      pending = func().catch((err) => {
+        doOnceCache.delete(key);
+        throw err;
+      });
+      doOnceCache.set(key, pending);
     }
-    while (doOnceCache.get(key)!.status !== 'complete') {
-      await new Promise((resolve) => { setTimeout(resolve, 100); });
-    }
-    return doOnceCache.get(key)!.result as T;
+    return pending;
   };
 }
 

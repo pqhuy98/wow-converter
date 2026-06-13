@@ -18,8 +18,8 @@ import { TooltipHelp } from '../common/tooltip-help';
 import { RefInput } from './ref-input';
 
 const tooltips = {
-  baseModel: 'The base character model to use. Can be a Wowhead URL, local file inside wow.export folder, or Display ID number.',
-  mount: 'The mount model to use, can be a Wowhead URL, local file inside wow.export folder, or Display ID number. The mount model must have attachment point "Shield" - WoW uses it to attach the rider; and the character must have mount animation.',
+  baseModel: 'The base character model to use. Can be a Wowhead URL, local file inside the export assets folder, or Display ID number.',
+  mount: 'The mount model to use, can be a Wowhead URL, local file inside the export assets folder, or Display ID number. The mount model must have attachment point "Shield" - WoW uses it to attach the rider; and the character must have mount animation.',
   mountRemove: 'Remove the mount',
   mountScale: 'Additional scale multiplier of the mount model. Firstly the mount model is scaled equivalently to the character model, then this multiplier is applied. E.g. 1.0 = no change, 0.5 = half size, 2.0 = double size.',
   mountType: <span>
