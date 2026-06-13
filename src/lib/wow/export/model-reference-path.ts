@@ -9,7 +9,7 @@ export function modelReferencePath(
   kind: 'm2' | 'wmo',
   wmoSet?: number,
 ): string {
-  let fileName = listfile.getByID(fileDataID);
+  const fileName = listfile.getByID(fileDataID);
   if (fileName === undefined) {
     return listfile.formatUnknownFile(fileDataID, kind === 'm2' ? '.m2' : '.wmo');
   }

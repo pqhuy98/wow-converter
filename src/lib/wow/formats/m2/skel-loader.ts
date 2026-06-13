@@ -2,7 +2,6 @@
  * .skel file loader, ported from wow.export (src/js/3D/loaders/SKELLoader.js).
  * See: https://wowdev.wiki/M2/.skel
  */
-import { write } from '@/lib/wow/log';
 import { getCasc } from '@/lib/wow/server/runtime';
 
 import { BufferWrapper } from '../buffer';
@@ -264,7 +263,7 @@ export class SKELLoader {
 
         entries[i] = attachment;
       }
-      write('[SKEL] Parsed %d attachments from SKA1', attachmentCount);
+      // write('[SKEL] Parsed %d attachments from SKA1', attachmentCount);
     }
 
     if (lookupCount > 0 && lookupOfs > 0) {

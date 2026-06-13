@@ -165,7 +165,10 @@ export class MapExporter {
     await am.exportModels(outputDir);
   }
 
-  public async exportCreatures(outputDir: string) {
+  public async exportCreatures(
+    outputDir: string,
+    options?: { onCreatureProgress?: (completed: number, total: number) => void },
+  ) {
     const mapConfig = this.mapExportConfig;
 
     // Place creatures as Units or Doodads
@@ -178,7 +181,12 @@ export class MapExporter {
       // Export creature assets
       const start = performance.now();
       units.sort((a, b) => a.creature.model.CreatureDisplayID - b.creature.model.CreatureDisplayID);
-      await exportCreatureModels(units.map((u) => u.creature), outputDir, this.config);
+      await exportCreatureModels(
+        units.map((u) => u.creature),
+        outputDir,
+        this.config,
+        options?.onCreatureProgress,
+      );
       console.log('Exported all unit assets in', chalk.yellow(((performance.now() - start) / 1000).toFixed(2)), 's');
       console.log('Done');
     }

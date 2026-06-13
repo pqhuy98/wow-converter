@@ -15,8 +15,8 @@ import { ControllerExportCharacter } from './controllers/export-character';
 import { ControllerExportTexture } from './controllers/export-texture';
 import { ControllerGetConfig } from './controllers/get-config';
 import { ControllerMaps } from './controllers/maps';
-import { ControllerWowConfig } from './controllers/wow-config';
 import { attachDevWebsocketProxy, ControllerWebUi } from './controllers/webui';
+import { ControllerWowConfig } from './controllers/wow-config';
 
 printLogo();
 const app = express();

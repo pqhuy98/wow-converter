@@ -133,6 +133,7 @@ export async function exportCreatureModels(
   allCreatures: Creature[],
   outputPath: string,
   config: Config,
+  onCreatureProgress?: (completed: number, total: number) => void,
 ) {
   const debug = false;
   let cnt = 0;
@@ -152,6 +153,13 @@ export async function exportCreatureModels(
   }));
 
   const batchSize = 5;
+  const total = creatures.length;
+  let completed = 0;
+  const markCreatureDone = () => {
+    completed++;
+    onCreatureProgress?.(completed, total);
+  };
+
   await workerPool(
     batchSize,
     creatures.map((c) => async () => {
@@ -165,6 +173,7 @@ export async function exportCreatureModels(
       const fileNameFull = `${fileName}.${config.mdx ? 'mdx' : 'mdl'}`;
       if (await exists(join(outputPath, fileNameFull)) && !config.overrideModels) {
         debug && console.log('Skipping file already exists', chalk.yellow(fileNameFull));
+        markCreatureDone();
         return;
       }
 
@@ -219,6 +228,7 @@ export async function exportCreatureModels(
 
       const end = performance.now();
       console.log(chalk.green(`=> Exported creature ${c.template.name} in ${chalk.yellow(((end - start0) / 1000).toFixed(2))}s`));
+      markCreatureDone();
     }),
   );
 }

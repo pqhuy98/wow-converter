@@ -8,6 +8,7 @@ import { FileEntry, MapListItem, wowExportClient } from '@/lib/wowexport-client/
 
 import { isDev } from '../config';
 import { registerMapExportRoutes } from './maps-export';
+import { registerMapGenerateRoutes } from './maps-generate';
 import { getListFiles } from './shared';
 
 type TileInfo = { x: number; y: number; hasTexture: boolean };
@@ -110,6 +111,11 @@ export function ControllerMaps(router: express.Router) {
   void buildMapsIndex();
 
   registerMapExportRoutes(router, (key) => {
+    const entry = mapsByDir.get(key);
+    return entry ? { id: entry.id, dir: entry.dir } : undefined;
+  });
+
+  registerMapGenerateRoutes(router, (key) => {
     const entry = mapsByDir.get(key);
     return entry ? { id: entry.id, dir: entry.dir } : undefined;
   });

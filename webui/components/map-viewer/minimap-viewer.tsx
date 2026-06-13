@@ -120,7 +120,7 @@ export default function MinimapViewer({
     // bump version to invalidate any late responses and clear selection
     s.tilesData.version += 1;
     scheduleRender();
-  }, [mapInfo, canvas]);
+  }, [mapInfo.mapId, canvas]);
 
   return (
     <canvas

@@ -2,19 +2,17 @@ import 'dotenv/config';
 
 import chalk from 'chalk';
 
-import { distancePerTile, maxGameHeightDiff } from '@/lib/constants';
-import { isWowUnit, WowAdt, WowObject } from '@/lib/converter/common/models';
 import {
   defaultMapExportConfig, gameZToPercent, MapExportConfig, MapExporter,
 } from '@/lib/converter/map-exporter/map-exporter';
-import { computeRecommendedTerrainClampPercent } from '@/lib/converter/map-exporter/wc3-converter';
-import { Vector2, Vector3 } from '@/lib/math/common';
-import { V3 } from '@/lib/math/vector';
+import {
+  autoChooseClampPercent,
+  pruneDepth,
+} from '@/lib/converter/map-exporter/map-generate-utils';
+import { Vector2 } from '@/lib/math/common';
 import { assertWowCascReady } from '@/lib/wow/wow-config-service';
 
 import { Config, getDefaultConfig } from '../src/lib/global-config';
-
-gameZToPercent;
 
 type WowMap = {
   id: number;
@@ -139,7 +137,7 @@ const depth = 3; // 1: adt only, 2: adt + wmo + top m2, 3: adt + wmo + top m2 + 
   pruneDepth(mapExporter, depth);
 
   if (autoChoseClampPercent) {
-    autoChooseClampPercent(mapExporter, mapExportConfig);
+    autoChooseClampPercent(mapExporter, mapExportConfig, creatureScaleUp);
   }
 
   await mapExporter.exportTerrainsDoodads(mapOutputDir);
@@ -153,137 +151,4 @@ const depth = 3; // 1: adt only, 2: adt + wmo + top m2, 3: adt + wmo + top m2 + 
     process.exit(1);
   });
 
-function autoChooseClampPercent(mapConverter: MapExporter, mapExportConfig: MapExportConfig) {
-  const unitPos: Vector3[] = [];
-  mapConverter.wowObjectManager.iterateObjects((obj, abs) => {
-    if (!isWowUnit(obj)) return;
-    unitPos.push(abs.position);
-  });
-  if (unitPos.length === 0) {
-    console.log('No units found, cannot auto choose clamp percent. Defaulting to', mapExportConfig.terrain.clampPercent.lower, mapExportConfig.terrain.clampPercent.upper);
-    return;
-  }
-  unitPos.sort((a, b) => a[2] - b[2]);
-  const { ratio, min, max } = computeRecommendedTerrainClampPercent(mapConverter.wowObjectManager.roots);
-  let clampDiff = ratio * creatureScaleUp;
-
-  const size = V3.sub(max, min);
-  const ratioZ = maxGameHeightDiff / (size[2] * clampDiff);
-  const width = size[0] * ratioZ / distancePerTile;
-  const height = size[1] * ratioZ / distancePerTile;
-
-  const w4 = Math.ceil(width / 4) * 4;
-  const h4 = Math.ceil(height / 4) * 4;
-  clampDiff *= Math.max(1, w4 / 480, h4 / 480);
-
-  const unitPosRatio = unitPos.map((pos) => (pos[2] - min[2]) / (max[2] - min[2]));
-
-  // find [lower percent, upper percent = lower percent + ratio) so that maximize the number of unitPosRatio that are within the range
-  let bestLowerPercent = 0;
-  let bestUpperPercent = ratio;
-  let maxCount = 0;
-  const lower = mapExportConfig.terrain.clampPercent.lower;
-  const upper = mapExportConfig.terrain.clampPercent.upper;
-  if (upper - lower <= clampDiff) {
-    console.log('Map terrain clamp is already within the recommended range, skipping auto choose.');
-    return;
-  }
-
-  for (let lowerPercent = lower; lowerPercent <= upper - clampDiff; lowerPercent += 0.01) {
-    const upperPercent = lowerPercent + clampDiff;
-    const count = unitPosRatio.filter((ratio) => ratio >= lowerPercent && ratio <= upperPercent).length;
-    if (count > maxCount) {
-      maxCount = count;
-      bestLowerPercent = lowerPercent;
-      bestUpperPercent = upperPercent;
-    }
-  }
-  mapExportConfig.terrain.clampPercent.lower = bestLowerPercent;
-  mapExportConfig.terrain.clampPercent.upper = bestUpperPercent;
-  const leftOutBelow = unitPosRatio.filter((ratio) => ratio < bestLowerPercent).length;
-  const leftOutAbove = unitPosRatio.filter((ratio) => ratio > bestUpperPercent).length;
-  const leftOut = leftOutBelow + leftOutAbove;
-  const remaining = unitPosRatio.length - leftOut;
-  console.log(`Chosen clamp percent: ${bestLowerPercent} - ${bestUpperPercent} (${remaining} units remaining)`);
-  console.log(`Left out units: ${leftOut} (${leftOutBelow} below, ${leftOutAbove} above)`);
-}
-
-function pruneDepth(mapExporter: MapExporter, depth: number) {
-  const wowObjectManager = mapExporter.wowObjectManager;
-  if (!wowObjectManager) {
-    return;
-  }
-
-  if (depth >= 3) {
-    // Full detail, no pruning needed.
-    return;
-  }
-
-  const nextRoots: WowObject[] = [];
-  const nextObjects = new Map<string, WowObject>();
-  const nextDoodads: WowObject[] = [];
-  const nextTerrains: WowAdt[] = [];
-
-  const visit = (obj: WowObject, hasWmoAncestor: boolean): WowObject | null => {
-    const currentHasWmoAncestor = hasWmoAncestor || obj.type === 'wmo';
-
-    let keep = true;
-    if (depth === 1) {
-      // Keep only terrain (ADT) and creatures; drop all doodads and WMOs.
-      keep = obj.type === 'adt' || obj.type === 'unit';
-    } else if (depth === 2) {
-      if (obj.type === 'm2' || obj.type === 'gobj') {
-        // Treat M2 / GOBJ under any WMO as interior decorations and drop them.
-        keep = !currentHasWmoAncestor;
-      }
-    }
-
-    if (!keep) {
-      return null;
-    }
-
-    const clone: WowObject = {
-      ...obj,
-      children: [],
-    };
-
-    nextObjects.set(clone.id, clone);
-
-    if (clone.type === 'adt') {
-      nextTerrains.push(clone as WowAdt);
-    } else if (clone.type !== 'unit') {
-      nextDoodads.push(clone);
-    }
-
-    for (const child of obj.children) {
-      const prunedChild = visit(child, currentHasWmoAncestor);
-      if (prunedChild) {
-        clone.children.push(prunedChild);
-      }
-    }
-
-    return clone;
-  };
-
-  for (const root of wowObjectManager.roots) {
-    const newRoot = visit(root, false);
-    if (newRoot) {
-      nextRoots.push(newRoot);
-    }
-  }
-
-  if (depth === 1) {
-    const hasAdtRoot = nextRoots.some((root) => root.type === 'adt');
-    wowObjectManager.roots = hasAdtRoot
-      ? nextRoots.filter((root) => root.type === 'adt')
-      : nextRoots;
-  } else {
-    wowObjectManager.roots = nextRoots;
-  }
-
-  wowObjectManager.objects = nextObjects;
-  wowObjectManager.doodads = nextDoodads;
-  if (nextTerrains.length > 0) {
-    wowObjectManager.terrains = nextTerrains;
-  }
-}
+gameZToPercent;

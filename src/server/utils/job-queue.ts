@@ -87,7 +87,28 @@ export class JobQueue<T, V> {
 
   public getJobPosition(jobId: string) {
     const index = this.pendingIndexMap.get(jobId);
-    return index ? index - this.queueHead + 1 : undefined;
+    return index !== undefined ? index - this.queueHead + 1 : undefined;
+  }
+
+  public getQueueSnapshot(): { pendingCount: number; processingCount: number } {
+    return {
+      pendingCount: Math.max(0, this.pendingQueue.length - this.queueHead),
+      processingCount: this.activeJobs,
+    };
+  }
+
+  public listActiveJobIds(): string[] {
+    const ids: string[] = [];
+    for (const job of this.jobsMap.values()) {
+      if (job.status === 'pending' || job.status === 'processing') {
+        ids.push(job.id);
+      }
+    }
+    return ids.sort((a, b) => {
+      const ja = this.jobsMap.get(a)!;
+      const jb = this.jobsMap.get(b)!;
+      return ja.submittedAt - jb.submittedAt;
+    });
   }
 
   private tryProcessQueue() {

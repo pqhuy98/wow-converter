@@ -16,8 +16,8 @@ import { WMOLoader } from '../../formats/wmo/wmo-loader';
 import { wowConfig } from '../../server/config';
 import type { ADTExportOptions } from '../adt/map-export-utils';
 import type { ExportProgress } from '../export-progress';
-import { modelReferencePath, placementCsvPath } from '../model-reference-path';
 import { FileManifestEntry, M2Exporter } from '../m2/m2-exporter';
+import { modelReferencePath, placementCsvPath } from '../model-reference-path';
 import { CSVWriter } from '../writers/csv-writer';
 import {
   getExportPath, replaceExtension, replaceFile, win32ToPosix,
