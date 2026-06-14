@@ -19,9 +19,25 @@ import {
   allAttachments,
   AttachItem, Character, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, Optimization, RefSchema,
 } from '@/lib/models/export-character.model';
-import { formatFileSize } from '@/lib/utils/format.utils';
 
 import { useServerConfig } from '../server-config';
+
+function formatFileSize(size: number): string {
+  const MAX_B = 1024;
+  const MAX_KB = MAX_B * MAX_B;
+  const MAX_MB = MAX_KB * MAX_B;
+
+  if (size < MAX_B) {
+    return `${size}B`;
+  }
+  if (size < MAX_KB) {
+    return `${(size / MAX_B).toFixed(2)}KB`;
+  }
+  if (size < MAX_MB) {
+    return `${(size / MAX_KB).toFixed(2)}MB`;
+  }
+  return `${(size / MAX_MB).toFixed(2)}GB`;
+}
 
 const defaultCharacter = {
   base: { type: 'wowhead', value: 'https://www.wowhead.com/wotlk/npc=36597/the-lich-king' },

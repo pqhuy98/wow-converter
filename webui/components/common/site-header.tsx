@@ -9,8 +9,8 @@ import { usePathname } from 'next/navigation';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { useServerConfig } from '../server-config';
-import { ThemeToggle } from './theme-toggle';
 import { WowConfigHeaderButton } from '../wow-config/wow-config-header-button';
+import { ThemeToggle } from './theme-toggle';
 
 type ActiveTab = 'export' | 'browse' | 'browse-texture' | 'recents' | 'maps';
 

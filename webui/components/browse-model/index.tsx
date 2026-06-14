@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 
 import { SettingsDialogButton } from '@/components/browse-model/settings-dialog';
-import { ModelSkinOption, SkinPicker, skinPanelHeight } from '@/components/browse-model/skin-picker';
+import { ModelSkinOption, skinPanelHeight, SkinPicker } from '@/components/browse-model/skin-picker';
 import { FileRow, VirtualListBox } from '@/components/common/listbox';
 import ModelViewerUi from '@/components/common/model-viewer/model-viewer';
 import { Terminal } from '@/components/common/terminal';
@@ -28,7 +28,18 @@ import {
   ModelFormatVersion,
   Optimization,
 } from '@/lib/models/export-character.model';
-import { formatDocumentTitle, getBrowsePageTitle } from '@/lib/utils/browse-page-title';
+import { formatDocumentTitle } from '@/lib/utils/browse-page-title';
+
+function getBrowsePageTitle(search?: string | null, selectedPath?: string | null): string {
+  if (selectedPath) {
+    return selectedPath.split(/[/\\]/).pop() ?? 'Browse Models';
+  }
+
+  const trimmed = search?.trim();
+  if (trimmed) return trimmed;
+
+  return 'Browse Models';
+}
 
 type FileEntry = { fileDataID: number; fileName: string };
 

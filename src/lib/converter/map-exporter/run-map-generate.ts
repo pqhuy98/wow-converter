@@ -2,6 +2,7 @@ import { rmSync } from 'fs';
 import path from 'path';
 
 import { Config } from '@/lib/global-config';
+import { normalizeMapSaveName } from '@/lib/map-save-name';
 import { assertWowCascReady } from '@/lib/wow/wow-config-service';
 import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
@@ -15,7 +16,6 @@ import {
   computeCreatureExportSteps,
   countUniqueUnitExportsFromManager,
   logMapGeneratePhase,
-  normalizeMapSaveName,
   pruneDepth,
 } from './map-generate-utils';
 

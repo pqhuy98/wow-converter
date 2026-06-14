@@ -5,6 +5,7 @@ alwaysApply: false
 - Avoid using `any` or `as` casting in TypeScript unless absolutely necessary. Avoid unncessary `instanceof` when developing in TypeScript, trust TypeScript static type.
 - Follow code best practices like DRY, YAGNI, SOLID, Clean Code. Avoid unnecessary complexity and overengineering.
 - Do not export functions, types, or constants that are not used outside their module/directory. Only export what is needed by external consumers.
+- Do not extract helpers into separate util files when they have a single caller — keep them in the caller file as unexported functions.
 - Code organization: In files, export exported functions/types first, then unexported/internal functions. For classes, order methods as: public/no modifier → protected → private.
 - Refactoring patterns:
   - Consolidate multiple related properties into unified data structures (e.g., single `Asset[]` array instead of separate `usedImportPaths`, `unusedTextures`, etc.).

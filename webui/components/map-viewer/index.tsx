@@ -20,16 +20,10 @@ import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-se
 import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
 import type { GenerateWc3FormValues, MapGenerateJobStatus } from '@/lib/models/map-generate.model';
 import {
-  clearStoredGenerateJob,
-  formatElapsedDuration,
-  formatProgressLabel,
-  persistGenerateJobFromStatus,
-  readStoredGenerateJob,
-} from '@/lib/models/map-generate.model';
-import {
-  expansionsPresentInMaps,
   WOW_EXPANSION_ALL,
-} from '@/lib/wow-expansions';
+  WOW_EXPANSIONS,
+  type WowExpansion,
+} from '@/lib/utils/wow-expansions';
 
 import { useServerConfig } from '../server-config';
 import { ExpansionFilterBar } from './expansion-filter-bar';
@@ -48,20 +42,6 @@ type TextureResolution = '0' | '512' | '1024' | '4096' | '8192' | '16384'
 
 const showMapExport = true;
 const POLL_INTERVAL_MS = 500;
-
-function defaultMapSaveName(mapDir: string, tiles: { x: number; y: number }[]): string {
-  if (tiles.length === 0) return `${mapDir}.w3x`;
-  const xs = tiles.map((t) => t.x);
-  const ys = tiles.map((t) => t.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const suffix = minX === maxX && minY === maxY
-    ? `${minX}_${minY}`
-    : `${minX}_${minY}-${maxX}_${maxY}`;
-  return `${mapDir}-${suffix}.w3x`;
-}
 
 function isActiveJob(job: MapGenerateJobStatus | undefined): job is MapGenerateJobStatus {
   return job?.status === 'pending' || job?.status === 'processing';
@@ -411,7 +391,7 @@ export default function MapViewer() {
   }, [generateJob?.id, generateJob?.status, generateJob?.submittedAt, applyJobUpdate]);
 
   const suggestedMapName = mapInfo
-    ? defaultMapSaveName(String(mapInfo.mapId), selectedTiles)
+    ? buildDefaultMapSaveName(String(mapInfo.mapId), selectedTiles)
     : '';
 
   const elapsedMs = generateJob
@@ -615,4 +595,128 @@ export default function MapViewer() {
       </div>
     </div>
   );
+}
+
+const WC3_GENERATE_STORAGE_KEY = 'wow-converter-wc3-generate';
+
+interface StoredGenerateJob {
+  jobId: string;
+  mapSaveName: string;
+  mapDir: string;
+}
+
+function readStoredGenerateJob(): StoredGenerateJob | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = localStorage.getItem(WC3_GENERATE_STORAGE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as StoredGenerateJob;
+    if (!parsed.jobId) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeStoredGenerateJob(job: StoredGenerateJob): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(WC3_GENERATE_STORAGE_KEY, JSON.stringify(job));
+}
+
+function clearStoredGenerateJob(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(WC3_GENERATE_STORAGE_KEY);
+}
+
+function formatElapsedDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatProgressLabel(job: MapGenerateJobStatus): string {
+  if (job.status === 'pending') {
+    if (job.position != null && job.position > 1) {
+      const waiting = job.queuePending != null && job.queuePending > 0
+        ? ` · ${job.queuePending} waiting in queue`
+        : '';
+      return `Queued (position ${job.position})${waiting}`;
+    }
+    if (job.queuePending != null && job.queuePending > 0) {
+      return `Queued · ${job.queuePending} waiting in queue`;
+    }
+    return 'Queued…';
+  }
+
+  const p = job.progress;
+  if (!p) return 'Starting…';
+
+  const step = `Step ${p.completedSteps} / ${p.totalSteps}`;
+  if (p.creatureTotal != null && p.creatureCompleted != null) {
+    return `${step} · Exporting creatures (${p.creatureCompleted}/${p.creatureTotal})`;
+  }
+  if (p.phase === 'adt' && p.tileCount != null && p.tileIndex != null) {
+    const tile = p.currentTile
+      ? ` (${p.currentTile.x}, ${p.currentTile.y})`
+      : '';
+    return `${step} · tile ${p.tileIndex + 1}/${p.tileCount}${tile}${
+      p.taskName ? ` · ${p.taskName}` : ''}`;
+  }
+  return `${step}${p.taskName ? ` · ${p.taskName}` : ''}`;
+}
+
+function persistGenerateJobFromStatus(job: MapGenerateJobStatus): void {
+  if (!job.id || job.status === 'done' || job.status === 'failed') {
+    clearStoredGenerateJob();
+    return;
+  }
+  writeStoredGenerateJob({
+    jobId: job.id,
+    mapSaveName: job.mapSaveName ?? job.result?.mapSaveName ?? '',
+    mapDir: job.mapDir ?? job.result?.map ?? '',
+  });
+}
+
+function expansionsPresentInMaps(maps: { expansionID?: number }[]): WowExpansion[] {
+  const ids = new Set<number>();
+  for (const m of maps) {
+    if (typeof m.expansionID === 'number' && m.expansionID >= 0) ids.add(m.expansionID);
+  }
+  return WOW_EXPANSIONS.filter((e) => ids.has(e.id));
+}
+
+function sanitizeMapSaveNameBase(name: string): string {
+  return name
+    .trim()
+    .replace(/\.w3x$/i, '')
+    .replace(/[^a-zA-Z0-9_.-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_.-]+|[_.-]+$/g, '');
+}
+
+function buildDefaultMapSaveName(
+  mapDir: string,
+  tiles: { x: number; y: number }[],
+): string {
+  if (tiles.length === 0) {
+    const base = sanitizeMapSaveNameBase(mapDir);
+    if (!base) throw new Error('Map save name is required');
+    return `${base}.w3x`;
+  }
+  const xs = tiles.map((t) => t.x);
+  const ys = tiles.map((t) => t.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const suffix = minX === maxX && minY === maxY
+    ? `${minX}_${minY}`
+    : `${minX}_${minY}-${maxX}_${maxY}`;
+  const base = sanitizeMapSaveNameBase(mapDir) || 'map';
+  return `${base}-${suffix}.w3x`;
 }

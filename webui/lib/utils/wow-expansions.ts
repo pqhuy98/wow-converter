@@ -21,16 +21,3 @@ export const WOW_EXPANSIONS: WowExpansion[] = [
   { id: 10, name: 'The War Within', shortName: 'TWW' },
   { id: 11, name: 'Midnight', shortName: 'Midnight' },
 ];
-
-export function getWowExpansion(id: number): WowExpansion | undefined {
-  return WOW_EXPANSIONS.find((e) => e.id === id);
-}
-
-/** Expansions that appear in the current map list (for a compact filter bar). */
-export function expansionsPresentInMaps(maps: { expansionID?: number }[]): WowExpansion[] {
-  const ids = new Set<number>();
-  for (const m of maps) {
-    if (typeof m.expansionID === 'number' && m.expansionID >= 0) ids.add(m.expansionID);
-  }
-  return WOW_EXPANSIONS.filter((e) => ids.has(e.id));
-}

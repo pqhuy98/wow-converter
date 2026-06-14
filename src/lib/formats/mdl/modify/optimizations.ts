@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 
-
 import { Animation } from '../components/animation';
 import { GlobalSequence } from '../components/global-sequence';
 import { Material } from '../components/material';
@@ -107,131 +106,131 @@ export function removeCinematicSequences(this: MDLModify) {
 
 export function optimizeKeyFrames(this: MDLModify) {
   // Pre-compute sequence intervals once so every key-frame test is O(1)
-    const seqIntervals = this.mdl.sequences
-      .map((s) => [s.interval[0], s.interval[1]] as const)
-      .sort((a, b) => a[0] - b[0]);
+  const seqIntervals = this.mdl.sequences
+    .map((s) => [s.interval[0], s.interval[1]] as const)
+    .sort((a, b) => a[0] - b[0]);
 
-    // Cursor-based helper – much cheaper than Array.some/Array.find each time.
-    const inSequence = (anim: Animation<unknown>, timestamp: number, cursor: { idx: number }): boolean => {
-      if (anim.globalSeq) {
-        return timestamp < anim.globalSeq.duration;
-      }
-      let i = cursor.idx;
-      while (i < seqIntervals.length && seqIntervals[i][1] < timestamp) i++;
-      cursor.idx = i;
-      return i < seqIntervals.length && seqIntervals[i][0] <= timestamp;
-    };
+  // Cursor-based helper – much cheaper than Array.some/Array.find each time.
+  const inSequence = (anim: Animation<unknown>, timestamp: number, cursor: { idx: number }): boolean => {
+    if (anim.globalSeq) {
+      return timestamp < anim.globalSeq.duration;
+    }
+    let i = cursor.idx;
+    while (i < seqIntervals.length && seqIntervals[i][1] < timestamp) i++;
+    cursor.idx = i;
+    return i < seqIntervals.length && seqIntervals[i][0] <= timestamp;
+  };
 
-    const thresholds = {
-      translation: 0.005,
-      rotation: 0.001,
-      scaling: 0.01,
-      alpha: 0.01,
-      color: 0.01,
-      tvertex: 0.01,
-      tvertexAnim: 0.01,
-      default: 0.01,
-    } as const;
+  const thresholds = {
+    translation: 0.005,
+    rotation: 0.001,
+    scaling: 0.01,
+    alpha: 0.01,
+    color: 0.01,
+    tvertex: 0.01,
+    tvertexAnim: 0.01,
+    default: 0.01,
+  } as const;
 
-    const diffBetween = (a: number | number[], b: number | number[]): number => {
-      if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b);
-      if (Array.isArray(a) && Array.isArray(b)) {
-        let acc = 0;
-        for (let i = 0; i < a.length; i++) acc += Math.abs(a[i] - b[i]);
-        return acc;
-      }
-      return Number.POSITIVE_INFINITY;
-    };
+  const diffBetween = (a: number | number[], b: number | number[]): number => {
+    if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b);
+    if (Array.isArray(a) && Array.isArray(b)) {
+      let acc = 0;
+      for (let i = 0; i < a.length; i++) acc += Math.abs(a[i] - b[i]);
+      return acc;
+    }
+    return Number.POSITIVE_INFINITY;
+  };
 
-    let initialKfCount = 0;
-    let deletedKfCount = 0;
+  let initialKfCount = 0;
+  let deletedKfCount = 0;
 
-    const optimiseAnim = <T extends number[] | number>(anim: Animation<T>, threshold: number) => {
-      initialKfCount += anim.keyFrames.size;
-      if (!anim || anim.keyFrames.size <= 2) return; // nothing to prune
+  const optimiseAnim = <T extends number[] | number>(anim: Animation<T>, threshold: number) => {
+    initialKfCount += anim.keyFrames.size;
+    if (!anim || anim.keyFrames.size <= 2) return; // nothing to prune
 
-      const times = Array.from(anim.keyFrames.keys()).sort((a, b) => a - b);
-      let t0 = times[0];
-      const cursor = { idx: 0 };
+    const times = Array.from(anim.keyFrames.keys()).sort((a, b) => a - b);
+    let t0 = times[0];
+    const cursor = { idx: 0 };
 
-      for (let k = 1; k < times.length; k++) {
-        const v0 = anim.keyFrames.get(t0)!;
-        const t1 = times[k];
-        const v1 = anim.keyFrames.get(t1)!;
-        const t2 = times[k + 1];
-        const v2 = anim.keyFrames.get(t2);
+    for (let k = 1; k < times.length; k++) {
+      const v0 = anim.keyFrames.get(t0)!;
+      const t1 = times[k];
+      const v1 = anim.keyFrames.get(t1)!;
+      const t2 = times[k + 1];
+      const v2 = anim.keyFrames.get(t2);
 
-        const inside = inSequence(anim, t1, cursor);
-        if (!inside) { // always drop keys that sit in no sequence
-          anim.keyFrames.delete(t1);
-          deletedKfCount++;
-          continue;
-        }
-
-        if (k < times.length - 1) {
-          if (diffBetween(v0, v1) >= threshold) {
-            t0 = t1;
-            continue; // keep – movement above threshold
-          }
-        }
-
-        let firstFrame = false;
-        for (let sIdx = 0; sIdx < seqIntervals.length; sIdx++) {
-          const sStart = seqIntervals[sIdx][0];
-          if (t0 < sStart && sStart <= t1) { firstFrame = true; break; }
-        }
-
-        const nextT = k + 1 < times.length ? times[k + 1] : Number.POSITIVE_INFINITY;
-        let lastFrame = k === times.length - 1;
-        if (!lastFrame) {
-          for (let sIdx = 0; sIdx < seqIntervals.length; sIdx++) {
-            const sEnd = seqIntervals[sIdx][1];
-            if (t1 <= sEnd && sEnd < nextT) { lastFrame = true; break; }
-          }
-        }
-
-        if ((!inside || (!firstFrame && !lastFrame)) && v2 && diffBetween(v0, v2) < threshold) {
-          anim.keyFrames.delete(t1);
-          deletedKfCount++;
-          continue;
-        }
-
-        // keep – important boundary frame
-        t0 = t1;
-      }
-
-      if (!inSequence(anim, times[0], { idx: 0 })) {
-        anim.keyFrames.delete(times[0]);
+      const inside = inSequence(anim, t1, cursor);
+      if (!inside) { // always drop keys that sit in no sequence
+        anim.keyFrames.delete(t1);
         deletedKfCount++;
-      }
-    };
-
-    const usedGlobalSequences = new Set<GlobalSequence>();
-
-    this.mdl.getAnimated().forEach((anim) => {
-      if (anim.globalSeq) {
-        usedGlobalSequences.add(anim.globalSeq);
+        continue;
       }
 
-      const threshold = thresholds[anim.type] ?? thresholds.default;
-      optimiseAnim(anim, threshold);
-    });
+      if (k < times.length - 1) {
+        if (diffBetween(v0, v1) >= threshold) {
+          t0 = t1;
+          continue; // keep – movement above threshold
+        }
+      }
 
-    const debug = false;
-    const reduction = deletedKfCount / Math.max(1, initialKfCount);
-    debug && console.log(chalk.green(`Reduced key frames by ${(reduction * 100).toFixed(2)}% `
+      let firstFrame = false;
+      for (let sIdx = 0; sIdx < seqIntervals.length; sIdx++) {
+        const sStart = seqIntervals[sIdx][0];
+        if (t0 < sStart && sStart <= t1) { firstFrame = true; break; }
+      }
+
+      const nextT = k + 1 < times.length ? times[k + 1] : Number.POSITIVE_INFINITY;
+      let lastFrame = k === times.length - 1;
+      if (!lastFrame) {
+        for (let sIdx = 0; sIdx < seqIntervals.length; sIdx++) {
+          const sEnd = seqIntervals[sIdx][1];
+          if (t1 <= sEnd && sEnd < nextT) { lastFrame = true; break; }
+        }
+      }
+
+      if ((!inside || (!firstFrame && !lastFrame)) && v2 && diffBetween(v0, v2) < threshold) {
+        anim.keyFrames.delete(t1);
+        deletedKfCount++;
+        continue;
+      }
+
+      // keep – important boundary frame
+      t0 = t1;
+    }
+
+    if (!inSequence(anim, times[0], { idx: 0 })) {
+      anim.keyFrames.delete(times[0]);
+      deletedKfCount++;
+    }
+  };
+
+  const usedGlobalSequences = new Set<GlobalSequence>();
+
+  this.mdl.getAnimated().forEach((anim) => {
+    if (anim.globalSeq) {
+      usedGlobalSequences.add(anim.globalSeq);
+    }
+
+    const threshold = thresholds[anim.type] ?? thresholds.default;
+    optimiseAnim(anim, threshold);
+  });
+
+  const debug = false;
+  const reduction = deletedKfCount / Math.max(1, initialKfCount);
+  debug && console.log(chalk.green(`Reduced key frames by ${(reduction * 100).toFixed(2)}% `
   + `after deleting ${deletedKfCount}/${initialKfCount} key frames`));
 
-    this.mdl.globalSequences = this.mdl.globalSequences.filter((gs) => usedGlobalSequences.has(gs))
-      .sort((a, b) => a.duration - b.duration);
+  this.mdl.globalSequences = this.mdl.globalSequences.filter((gs) => usedGlobalSequences.has(gs))
+    .sort((a, b) => a.duration - b.duration);
 
-    const neverVisible = (obj: {name: string, visibility?: Animation<number>}) => {
-      const visibility = [...(obj.visibility?.keyFrames.values() ?? [])];
-      return visibility.length > 0 && visibility.every((v) => !v);
-    };
-    this.mdl.particleEmitter2s = this.mdl.particleEmitter2s.filter((e) => !neverVisible(e));
-    this.mdl.ribbonEmitters = this.mdl.ribbonEmitters.filter((e) => !neverVisible(e));
-    this.mdl.lights = this.mdl.lights.filter((e) => !neverVisible(e));
+  const neverVisible = (obj: {name: string, visibility?: Animation<number>}) => {
+    const visibility = [...(obj.visibility?.keyFrames.values() ?? [])];
+    return visibility.length > 0 && visibility.every((v) => !v);
+  };
+  this.mdl.particleEmitter2s = this.mdl.particleEmitter2s.filter((e) => !neverVisible(e));
+  this.mdl.ribbonEmitters = this.mdl.ribbonEmitters.filter((e) => !neverVisible(e));
+  this.mdl.lights = this.mdl.lights.filter((e) => !neverVisible(e));
 
-    return this;
+  return this;
 }

@@ -8,7 +8,9 @@ import { cn } from '@/lib/utils/css';
 const Slider = React.forwardRef<
   React.ElementRef<typeof SliderPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root>
->(({ className, value, defaultValue, ...props }, ref) => {
+>(({
+  className, value, defaultValue, ...props
+}, ref) => {
   const thumbCount = React.useMemo(() => {
     if (Array.isArray(value)) return value.length;
     if (Array.isArray(defaultValue)) return defaultValue.length;

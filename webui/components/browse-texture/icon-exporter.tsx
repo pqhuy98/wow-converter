@@ -18,7 +18,6 @@ import {
 import {
   IconFrame, IconResizeMode, IconSize, IconStyle,
 } from '@/lib/models/icon-export.model';
-import { getWc3Path } from '@/lib/utils/wc3.utils';
 
 import { useServerConfig } from '../server-config';
 import BorderStyleSelector from './border-style-selector';
@@ -26,7 +25,7 @@ import IconPairBlock, { type IconVariant } from './icon-pair-block';
 import ResizeSelector from './resize-selector';
 import SelectionIconItem from './selection-icon-item';
 import { loadSettings, saveSettings } from './settings';
-import { getDefaultOutputName } from './utils';
+import { getDefaultOutputName, getWc3Path } from './utils';
 
 export interface SelectionItem {
   texturePath: string;

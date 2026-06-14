@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils/css';
-import { getWowExpansion } from '@/lib/wow-expansions';
+import { WOW_EXPANSIONS } from '@/lib/utils/wow-expansions';
 
 export function ExpansionIcon({
   expansionID,
@@ -8,7 +8,7 @@ export function ExpansionIcon({
   expansionID: number;
   className?: string;
 }) {
-  const expansion = getWowExpansion(expansionID);
+  const expansion = WOW_EXPANSIONS.find((e) => e.id === expansionID);
   return (
     <span
       className={cn('expansion-icon', className)}

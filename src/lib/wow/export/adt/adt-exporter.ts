@@ -815,10 +815,10 @@ export class ADTExporter {
           }
         };
 
-        if (config.mapsIncludeGameObjects === true && gameObjects !== undefined && gameObjects.size > 0) await exportObjects('game objects', gameObjects, 'gobj');
+        if (config.mapsIncludeGameObjects === true && gameObjects !== undefined && gameObjects.size > 0) exportObjects('game objects', gameObjects, 'gobj');
 
         if (config.mapsIncludeM2) {
-          await exportObjects('doodads', objAdt.models ?? [], 'm2');
+          exportObjects('doodads', objAdt.models ?? [], 'm2');
         }
 
         if (config.mapsIncludeWMO) {

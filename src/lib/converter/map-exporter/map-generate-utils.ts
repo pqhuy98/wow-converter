@@ -165,12 +165,6 @@ export function pruneDepth(mapExporter: MapExporter, depth: number): void {
   }
 }
 
-export function normalizeMapSaveName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) throw new Error('Map save name is required');
-  return trimmed.toLowerCase().endsWith('.w3x') ? trimmed : `${trimmed}.w3x`;
-}
-
 export function logMapGeneratePhase(label: string): void {
   console.log(chalk.cyan(`[map-generate] ${label}`));
 }

@@ -9,6 +9,7 @@ import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 
+import { useServerConfig } from '@/components/server-config';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +23,6 @@ import {
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@/components/ui/tabs';
-import { useServerConfig } from '@/components/server-config';
 
 import type { CascBuildSummary, WowConfigStatus } from './wow-config-context';
 import { useWowConfig } from './wow-config-context';

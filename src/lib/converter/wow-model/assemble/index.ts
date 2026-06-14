@@ -4,7 +4,6 @@ import path from 'path';
 
 import { hasTextureSource } from '@/lib/converter/common/texture-source';
 import { exportAssetExists } from '@/lib/export-asset-store';
-import { stripModelReferenceExt } from '@/lib/wow/export/model-reference-path';
 import {
   Geoset, GeosetVertex, Matrix, SkinWeight,
 } from '@/lib/formats/mdl/components/geoset';
@@ -12,6 +11,7 @@ import { Material } from '@/lib/formats/mdl/components/material';
 import { Texture } from '@/lib/formats/mdl/components/texture';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
+import { stripModelReferenceExt } from '@/lib/wow/export/model-reference-path';
 
 import { AnimationFile } from '../bundle/animation';
 import { M2MetadataFile } from '../bundle/metadata';

@@ -7,9 +7,11 @@ import {
   runMapGenerateConversion,
 } from '@/lib/converter/map-exporter/run-map-generate';
 import { getDefaultConfig } from '@/lib/global-config';
+import { normalizeMapSaveName } from '@/lib/map-save-name';
 import { Vector2 } from '@/lib/math/common';
 import { buildADTExportOptions } from '@/lib/wow/export/adt/map-export-utils';
 import { computeStepsPerTile } from '@/lib/wow/export/export-progress';
+import { wowConfig } from '@/lib/wow/server/config';
 import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import {
   advanceMapGenerateProgress,
@@ -43,8 +45,17 @@ const qualitySchema = z.union([
 export const generateWc3BodySchema = z.object({
   tiles: z.array(tileSchema).min(1),
   quality: qualitySchema,
-  mapSaveName: z.string().trim().min(1).max(128)
-    .regex(/^[a-zA-Z0-9_.-]+(\.w3x)?$/i),
+  mapSaveName: z.preprocess(
+    (val) => {
+      if (typeof val !== 'string') return '';
+      try {
+        return normalizeMapSaveName(val);
+      } catch {
+        return '';
+      }
+    },
+    z.string().min(1).max(128).regex(/^[a-zA-Z0-9_.-]+\.w3x$/i),
+  ),
   clampLower: z.number().min(0).max(1),
   clampUpper: z.number().min(0).max(1),
   mapAngleDeg: z.number(),
@@ -244,7 +255,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
     const config = await getDefaultConfig();
     const mapExportConfig = buildMapExportConfig({
       mapId: mapID,
-      wowExportFolder: mapDir.toLowerCase(),
+      wowExportFolder: wowConfig.removePathSpaces ? mapDir.replace(/\s/g, '') : mapDir,
       min: tileBounds.min,
       max: tileBounds.max,
       mapAngleDeg: body.mapAngleDeg,

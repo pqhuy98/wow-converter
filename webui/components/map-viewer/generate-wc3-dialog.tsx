@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { TooltipHelp } from '@/components/common/tooltip-help';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { GenerateWc3FormValues } from '@/lib/models/map-generate.model';
-import { defaultGenerateWc3FormValues } from '@/lib/models/map-generate.model';
+import { defaultGenerateWc3FormValues, MAP_SAVE_NAME_REGEX } from '@/lib/models/map-generate.model';
 
 import { TerrainClampSlider } from './terrain-clamp-slider';
 
@@ -70,7 +70,8 @@ export default function GenerateWc3Dialog({
     });
   }, [open, defaultMapSaveName]);
 
-  const nameInvalid = values.mapSaveName.trim().length === 0;
+  const trimmedName = values.mapSaveName.trim();
+  const nameInvalid = trimmedName.length === 0 || !MAP_SAVE_NAME_REGEX.test(trimmedName);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,6 +100,11 @@ export default function GenerateWc3Dialog({
               onChange={(e) => setValues((v) => ({ ...v, mapSaveName: e.target.value }))}
               placeholder="my-map.w3x"
             />
+            {nameInvalid && trimmedName.length > 0 ? (
+              <p className="text-xs text-destructive">
+                Use letters, numbers, underscores, dots, and hyphens only (optional .w3x suffix).
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">

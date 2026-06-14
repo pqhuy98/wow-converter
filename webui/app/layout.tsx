@@ -5,8 +5,8 @@ import type { Metadata } from 'next';
 import SiteHeader from '@/components/common/site-header';
 import { ServerConfigProvider } from '@/components/server-config';
 import { ThemeProvider } from '@/components/theme-provider';
-import { WowConfigGate } from '@/components/wow-config/wow-config-gate';
 import { WowConfigProvider } from '@/components/wow-config/wow-config-context';
+import { WowConfigGate } from '@/components/wow-config/wow-config-gate';
 
 export const metadata: Metadata = {
   title: {

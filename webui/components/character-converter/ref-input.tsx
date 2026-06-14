@@ -7,7 +7,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { RefSchema, RefType } from '@/lib/models/export-character.model';
-import { normalizeLocalModelRef } from '@/lib/local-model-path';
 
 import { TooltipHelp } from '../common/tooltip-help';
 import { getServerConfig, useServerConfig } from '../server-config';
@@ -253,6 +252,13 @@ export const validateRef = (ref: RefSchema, category: RefCategory, fix: boolean)
 };
 
 const localRefPattern = /^[a-zA-Z0-9_\-/\\,.]+(\.(m2|wmo))?$/i;
+
+function normalizeLocalModelRef(ref: string): string {
+  return ref
+    .replace(/\\/g, '/')
+    .replace(/\.phys\.(obj|m2)$/i, '')
+    .replace(/\.(m2|wmo|obj)$/i, '');
+}
 
 export function isLocalRef(val: string) {
   if (!localRefPattern.test(val)) return false;

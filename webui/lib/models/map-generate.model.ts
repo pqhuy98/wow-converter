@@ -1,3 +1,6 @@
+/** Matches maps-generate API validation (alphanumeric, _, ., -, optional .w3x). */
+export const MAP_SAVE_NAME_REGEX = /^[a-zA-Z0-9_.-]+(\.w3x)?$/i;
+
 export interface MapGenerateTileSuccess {
   tileX: number;
   tileY: number;
@@ -82,88 +85,3 @@ export const defaultGenerateWc3FormValues: GenerateWc3FormValues = {
     allAreDoodads: false,
   },
 };
-
-export const WC3_GENERATE_STORAGE_KEY = 'wow-converter-wc3-generate';
-
-export interface StoredGenerateJob {
-  jobId: string;
-  mapSaveName: string;
-  mapDir: string;
-}
-
-export function readStoredGenerateJob(): StoredGenerateJob | undefined {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    const raw = localStorage.getItem(WC3_GENERATE_STORAGE_KEY);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as StoredGenerateJob;
-    if (!parsed.jobId) return undefined;
-    return parsed;
-  } catch {
-    return undefined;
-  }
-}
-
-export function writeStoredGenerateJob(job: StoredGenerateJob): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(WC3_GENERATE_STORAGE_KEY, JSON.stringify(job));
-}
-
-export function clearStoredGenerateJob(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(WC3_GENERATE_STORAGE_KEY);
-}
-
-export function formatElapsedDuration(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
-export function formatProgressLabel(job: MapGenerateJobStatus): string {
-  if (job.status === 'pending') {
-    if (job.position != null && job.position > 1) {
-      const waiting = job.queuePending != null && job.queuePending > 0
-        ? ` · ${job.queuePending} waiting in queue`
-        : '';
-      return `Queued (position ${job.position})${waiting}`;
-    }
-    if (job.queuePending != null && job.queuePending > 0) {
-      return `Queued · ${job.queuePending} waiting in queue`;
-    }
-    return 'Queued…';
-  }
-
-  const p = job.progress;
-  if (!p) return 'Starting…';
-
-  const step = `Step ${p.completedSteps} / ${p.totalSteps}`;
-  if (p.creatureTotal != null && p.creatureCompleted != null) {
-    return `${step} · Exporting creatures (${p.creatureCompleted}/${p.creatureTotal})`;
-  }
-  if (p.phase === 'adt' && p.tileCount != null && p.tileIndex != null) {
-    const tile = p.currentTile
-      ? ` (${p.currentTile.x}, ${p.currentTile.y})`
-      : '';
-    return `${step} · tile ${p.tileIndex + 1}/${p.tileCount}${tile}`
-      + (p.taskName ? ` · ${p.taskName}` : '');
-  }
-  return `${step}${p.taskName ? ` · ${p.taskName}` : ''}`;
-}
-
-export function persistGenerateJobFromStatus(job: MapGenerateJobStatus): void {
-  if (!job.id || job.status === 'done' || job.status === 'failed') {
-    clearStoredGenerateJob();
-    return;
-  }
-  writeStoredGenerateJob({
-    jobId: job.id,
-    mapSaveName: job.mapSaveName ?? job.result?.mapSaveName ?? '',
-    mapDir: job.mapDir ?? job.result?.map ?? '',
-  });
-}

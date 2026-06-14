@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils/css';
 import {
   WOW_EXPANSION_ALL,
   type WowExpansion,
-} from '@/lib/wow-expansions';
+} from '@/lib/utils/wow-expansions';
 
 import { ExpansionIcon } from './expansion-icon';
 

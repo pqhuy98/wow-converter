@@ -16,8 +16,8 @@ import { getRawWowFile } from '@/lib/wow/archive/client/raw-client';
 
 import { calculateChildAbsoluteEulerRotation } from '../../math/rotation';
 import { V3 } from '../../math/vector';
-import { convertAdtTerrainObjToMdl } from '../wow-model/adt-terrain';
 import { cachePathForLocalRef, normalizeLocalModelRef } from '../local-model-path';
+import { convertAdtTerrainObjToMdl } from '../wow-model/adt-terrain';
 import { ConvertM2Options, convertM2ToMdl } from '../wow-model/direct/m2';
 import { Model, WowObject, WowObjectType } from './models';
 import { getTextureSource, TextureSource } from './texture-source';
