@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import express from 'express';
 import { z } from 'zod';
 
+import { assertDesktopOnly, desktopOnlyStatus } from '@/server/shared-hosting';
+
 import {
   buildMapExportConfig,
   runMapGenerateConversion,
@@ -25,7 +27,20 @@ import {
 } from '@/server/map-generate-progress';
 import { Job, JobQueue } from '@/server/utils/job-queue';
 
-import type { MapExportTileFailure, MapExportTileSuccess } from './maps-export';
+export interface MapExportTileSuccess {
+  tileX: number;
+  tileY: number;
+  result: {
+    exportType: string;
+    mainFile: string | null;
+  };
+}
+
+export interface MapExportTileFailure {
+  tileX: number;
+  tileY: number;
+  error: string;
+}
 
 const tileSchema = z.object({
   x: z.number().int().min(0).max(63),
@@ -58,8 +73,10 @@ export const generateWc3BodySchema = z.object({
   ),
   clampLower: z.number().min(0).max(1),
   clampUpper: z.number().min(0).max(1),
+  autoClampPercent: z.boolean().default(true),
   mapAngleDeg: z.number(),
   unitScale: z.number().positive(),
+  includeBuildingInteriors: z.boolean().default(true),
   freshExport: z.boolean(),
   creatures: z.object({
     enable: z.boolean(),
@@ -170,10 +187,11 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
     } = job.request;
     const progressKey = job.id;
 
+    const includeInteriors = body.includeBuildingInteriors;
     const exportOptions = buildADTExportOptions(undefined, {
       mapsIncludeM2: true,
       mapsIncludeWMO: true,
-      mapsIncludeWMOSets: true,
+      mapsIncludeWMOSets: includeInteriors,
       mapsIncludeGameObjects: true,
       mapsIncludeLiquid: true,
       mapsIncludeFoliage: true,
@@ -209,7 +227,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
           quality: body.quality,
           includeM2: true,
           includeWMO: true,
-          includeWMOSets: true,
+          includeWMOSets: includeInteriors,
           includeGameObjects: true,
           includeLiquid: true,
           includeFoliage: true,
@@ -271,6 +289,8 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
       mapExportConfig,
       mapSaveName: body.mapSaveName,
       freshExport: body.freshExport,
+      includeBuildingInteriors: includeInteriors,
+      autoClampPercent: body.autoClampPercent,
       unitScale: body.unitScale,
       onConvertStepsKnown: (steps) => {
         convertSteps = steps;
@@ -390,6 +410,7 @@ export function registerMapGenerateRoutes(
 ): void {
   router.post('/maps/:map/generate-wc3', (req, res) => {
     try {
+      assertDesktopOnly();
       const key = String(req.params.map).toLowerCase();
       const entry = resolveMap(key);
       if (!entry) return res.status(404).json({ error: 'Unknown map' });
@@ -427,11 +448,23 @@ export function registerMapGenerateRoutes(
       });
       return undefined;
     } catch (e) {
-      return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+      const err = e as Error;
+      const status = desktopOnlyStatus(err);
+      if (status === 403) {
+        return res.status(403).json({ error: err.message });
+      }
+      return res.status(500).json({ error: err.message });
     }
   });
 
   router.get('/maps/generate-wc3/status/:jobId', (req, res) => {
+    try {
+      assertDesktopOnly();
+    } catch (e) {
+      const err = e as Error;
+      res.status(desktopOnlyStatus(err)).json({ error: err.message });
+      return;
+    }
     void (async () => {
       const status = await buildJobStatus(req.params.jobId);
       if (!status) {
@@ -443,6 +476,13 @@ export function registerMapGenerateRoutes(
   });
 
   router.get('/maps/generate-wc3/active', (_req, res) => {
+    try {
+      assertDesktopOnly();
+    } catch (e) {
+      const err = e as Error;
+      res.status(desktopOnlyStatus(err)).json({ error: err.message });
+      return;
+    }
     void (async () => {
       const ids = mapGenerateQueue.listActiveJobIds();
       const jobs = await Promise.all(ids.map((id) => buildJobStatus(id)));

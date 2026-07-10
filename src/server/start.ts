@@ -17,6 +17,12 @@ import { ControllerGetConfig } from './controllers/get-config';
 import { ControllerMaps } from './controllers/maps';
 import { attachDevWebsocketProxy, ControllerWebUi } from './controllers/webui';
 import { ControllerWowConfig } from './controllers/wow-config';
+import { isAllowedCorsOrigin } from './utils/cors';
+
+function listenHost(): string {
+  if (process.env.HOST) return process.env.HOST;
+  return isSharedHosting ? '0.0.0.0' : '127.0.0.1';
+}
 
 function resolveUiDir(): string {
   if (isBundledApp()) {
@@ -41,12 +47,18 @@ export async function startConverterServer(): Promise<void> {
 
   if (!isSharedHosting || isDev) {
     app.use(cors({
-      origin: '*',
+      origin(origin, callback) {
+        if (!origin || isAllowedCorsOrigin(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(null, false);
+      },
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     }));
   }
 
-  app.use(express.json());
+  app.use(express.json({ limit: '4mb' }));
 
   const router = express.Router();
   const uiRouter = express.Router();
@@ -73,7 +85,8 @@ export async function startConverterServer(): Promise<void> {
   });
 
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
-  const server = app.listen(port, () => {
+  const host = listenHost();
+  const server = app.listen(port, host, () => {
     if (isWithUI) {
       console.log(`Serving UI web interface at ${chalk.blue(`http://127.0.0.1:${port}/`)}`);
     } else {

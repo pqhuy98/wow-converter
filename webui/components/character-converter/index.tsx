@@ -91,7 +91,7 @@ export function CharacterConverter() {
       const res = await fetch('/api/export/character/demos');
       const jobs = (await res.json()) as JobStatus[];
       if (jobs.length > 0) {
-        setViewerModelPath(jobs[0].result?.exportedModels[0].path);
+        setViewerModelPath(jobs[0].result?.exportedModels?.[0]?.path);
       }
     };
     void checkExportResult();
@@ -243,7 +243,7 @@ export function CharacterConverter() {
           // do nothing
         } else if (data.status === 'done' && data.result) {
           setDoneCount(doneCount + 1);
-          setViewerModelPath(data.result.exportedModels[0].path);
+          setViewerModelPath(data.result.exportedModels?.[0]?.path);
           clearInterval(interval);
         } else if (data.status === 'failed') {
           clearInterval(interval);

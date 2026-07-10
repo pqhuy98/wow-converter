@@ -1,3 +1,37 @@
+const allowedFetchHosts = new Set([
+  'wowhead.com',
+  'www.wowhead.com',
+  'wow.zamimg.com',
+  'nether.wowhead.com',
+]);
+
+function isAllowedFetchHost(host: string): boolean {
+  const normalized = host.toLowerCase();
+  if (allowedFetchHosts.has(normalized)) {
+    return true;
+  }
+  return normalized.endsWith('.wowhead.com');
+}
+
+export function validateFetchUrl(raw: string): URL {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('Unsupported URL scheme');
+  }
+  if (url.username || url.password) {
+    throw new Error('Invalid URL');
+  }
+  if (!isAllowedFetchHost(url.hostname)) {
+    throw new Error('URL host not allowed');
+  }
+  return url;
+}
+
 /** Headers that CloudFront/WAF often expect for document-style HTML fetches (matches real Chrome navigation). */
 const defaultBrowserHeaders: Record<string, string> = {
   Accept:
@@ -19,11 +53,13 @@ const defaultBrowserHeaders: Record<string, string> = {
 };
 
 export function customFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  validateFetchUrl(url);
   return fetch(url, {
     ...options,
     headers: {
       ...options.headers,
       ...defaultBrowserHeaders,
     },
+    redirect: 'follow',
   });
 }

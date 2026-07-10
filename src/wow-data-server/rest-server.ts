@@ -5,7 +5,7 @@
  * CASC/listfile/DB2 data stays warm. ADT terrain tiles are still exported
  * server-side (OBJ/MTL/CSV + textures) — there is no direct ADT pipeline.
  */
-import fs from 'fs';
+import fs, { promises as fsp } from 'fs';
 import http from 'http';
 import path from 'path';
 import url from 'url';
@@ -25,10 +25,12 @@ import {
 } from '@/lib/wow/export/export-progress';
 import { getAllSkinsForModel } from '@/lib/wow/export/m2/model-export-service';
 import { getExportPath } from '@/lib/wow/export/writers/export-helper';
+import { safeRegexPattern } from '@/lib/wow/formats/regex-safe';
 import { normalizeInstallDirectory } from '@/lib/wow/normalize-install-directory';
-import { wowConfig } from '@/lib/wow/server/config';
+import { wowConfig, type WowReaderConfig } from '@/lib/wow/server/config';
 import { collectMemoryDiagnostics, formatMemoryDiagnostics } from '@/lib/wow/server/memory-diagnostics';
 import { runtimeState } from '@/lib/wow/server/runtime';
+import { isSettableConfigKey } from '@/lib/wow/server/settable-config';
 import { registerWowDataServerClearHook } from '@/lib/wow/wow-data-server-hooks';
 import { prepareSocketPath } from '@/lib/wow-data-server/transport';
 
@@ -38,6 +40,7 @@ import {
 import { ensureModelCachesInitialized } from '../lib/wow/db/caches/init-cache';
 import { DB2Row, WDCReader } from '../lib/wow/db/wdc-reader';
 import { write } from '../lib/wow/log';
+import { authorizeDataServerRequest } from './auth';
 import { autoLoadCascFromEnv } from './auto-load-env';
 import {
   awaitCascLoad, isCascLoaded, isCascLoading, loadCascBuildSingleFlight,
@@ -71,7 +74,7 @@ export class WowDataServer {
 
   // ---------------- routing ----------------
 
-  async handleGet(pathname: string, query: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
+  async handleGet(req: http.IncomingMessage, pathname: string, query: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
     switch (pathname) {
       case '/rest/getCascInfo':
         return this.getCascInfo(res);
@@ -79,6 +82,8 @@ export class WowDataServer {
         return this.getConfig(query, res);
       case '/rest/searchFiles':
         return this.searchFiles(query, res);
+      case '/rest/collectBrowseFileIndex':
+        return this.collectBrowseFileIndex(res);
       case '/rest/getFileById':
         return this.getFileById(query, res);
       case '/rest/getFileByName':
@@ -92,6 +97,9 @@ export class WowDataServer {
       case '/rest/download':
         return this.download(query, res);
       case '/rest/debugMemory':
+        if (!authorizeDataServerRequest(req)) {
+          return this.sendJSON(res, 403, { id: 'ERR_FORBIDDEN', message: 'missing or invalid data server token' });
+        }
         return this.debugMemory(res);
       case '/rest/getMapList':
         return this.getMapList(res);
@@ -102,7 +110,10 @@ export class WowDataServer {
     }
   }
 
-  async handlePost(pathname: string, body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
+  async handlePost(req: http.IncomingMessage, pathname: string, body: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
+    if (!authorizeDataServerRequest(req)) {
+      return this.sendJSON(res, 403, { id: 'ERR_FORBIDDEN', message: 'missing or invalid data server token' });
+    }
     switch (pathname) {
       case '/rest/loadCascLocal':
         return this.loadCascLocal(body, res);
@@ -195,7 +206,7 @@ export class WowDataServer {
   /**
    * Securely download a file under the configured export directory.
    */
-  download(query: Record<string, unknown>, res: http.ServerResponse): void {
+  async download(query: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
     const exportDir = wowConfig.exportDirectory;
     if (typeof exportDir !== 'string' || exportDir.length === 0) {
       this.sendJSON(res, 503, { id: 'ERR_EXPORT_DIR_UNAVAILABLE' });
@@ -222,20 +233,31 @@ export class WowDataServer {
       return;
     }
 
+    let resolved: string;
+    try {
+      resolved = await fsp.realpath(abs);
+    } catch {
+      this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
+      return;
+    }
+    if (!resolved.startsWith(base + path.sep) && resolved !== base) {
+      this.sendJSON(res, 403, { id: 'ERR_FORBIDDEN' });
+      return;
+    }
+
+    const stat = await fsp.lstat(resolved);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
+      return;
+    }
+
     const contentType = WowDataServer.contentTypeForExt(ext);
 
-    fs.stat(abs, (err, stat) => {
-      if (err || !stat.isFile()) {
-        this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
-        return;
-      }
-
-      res.statusCode = 200;
-      res.setHeader('Content-Type', contentType);
-      const stream = fs.createReadStream(abs);
-      stream.on('error', () => this.sendJSON(res, 500, { id: 'ERR_INTERNAL', message: 'Failed to read file' }));
-      stream.pipe(res);
-    });
+    res.statusCode = 200;
+    res.setHeader('Content-Type', contentType);
+    const stream = fs.createReadStream(resolved);
+    stream.on('error', () => this.sendJSON(res, 500, { id: 'ERR_INTERNAL', message: 'Failed to read file' }));
+    stream.pipe(res);
   }
 
   debugMemory(res: http.ServerResponse): void {
@@ -294,9 +316,13 @@ export class WowDataServer {
       this.sendJSON(res, 400, { id: 'ERR_INVALID_PARAMETERS', required: { key: 'string', value: 'any' } });
       return;
     }
+    if (!isSettableConfigKey(body.key)) {
+      this.sendJSON(res, 400, { id: 'ERR_FORBIDDEN_CONFIG_KEY', message: 'config key is not writable over HTTP' });
+      return;
+    }
 
-    (wowConfig as unknown as Record<string, unknown>)[body.key] = body.value;
-    this.sendJSON(res, 200, { id: 'CONFIG_SET_DONE', key: body.key, value: (wowConfig as unknown as Record<string, unknown>)[body.key] });
+    (wowConfig as WowReaderConfig)[body.key] = body.value as WowReaderConfig[typeof body.key];
+    this.sendJSON(res, 200, { id: 'CONFIG_SET_DONE', key: body.key, value: wowConfig[body.key] });
   }
 
   searchFiles(query: Record<string, unknown>, res: http.ServerResponse): void {
@@ -307,8 +333,20 @@ export class WowDataServer {
 
     const search = String(query.search || '');
     const useRegularExpression = String(query.useRegularExpression || '0') === '1';
-    const filter = useRegularExpression ? new RegExp(search, 'i') : search;
+    const safePattern = useRegularExpression ? safeRegexPattern(search) : search;
+    const filter = useRegularExpression
+      ? (safePattern ? new RegExp(safePattern, 'i') : /$^/)
+      : search;
     this.sendJSON(res, 200, { id: 'LISTFILE_SEARCH_RESULT', entries: listfile.getFilteredEntries(filter) });
+  }
+
+  collectBrowseFileIndex(res: http.ServerResponse): void {
+    if (!listfile.isLoaded()) {
+      this.sendJSON(res, 409, { id: 'ERR_LISTFILE_NOT_LOADED' });
+      return;
+    }
+    const { models, textures } = listfile.collectBrowseFileIndex();
+    this.sendJSON(res, 200, { id: 'BROWSE_FILE_INDEX', models, textures });
   }
 
   getFileById(query: Record<string, unknown>, res: http.ServerResponse): void {
@@ -709,12 +747,12 @@ export class WowDataServer {
         try {
           const { pathname, query } = url.parse(req.url || '', true);
           if (req.method === 'GET') {
-            await this.handleGet(pathname || '', query as Record<string, unknown>, res);
+            await this.handleGet(req, pathname || '', query as Record<string, unknown>, res);
             return;
           }
           if (req.method === 'POST') {
             const body = await this.readJSONBody(req);
-            await this.handlePost(pathname || '', body, res);
+            await this.handlePost(req, pathname || '', body, res);
             return;
           }
           this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
@@ -732,12 +770,11 @@ export class WowDataServer {
       prepareSocketPath(socketPath);
       this.server.listen(socketPath, () => {
         write('wow-data-server listening on unix socket %s', socketPath);
-        console.log(`wow-data-server listening on unix socket ${socketPath}`);
       });
     } else {
-      this.server.listen(port, () => {
-        write('wow-data-server listening for REST requests on port %d', port);
-        console.log(`wow-data-server listening on http://127.0.0.1:${port}`);
+      const host = process.env.WOW_DATA_SERVER_HOST ?? '127.0.0.1';
+      this.server.listen(port, host, () => {
+        write('wow-data-server listening for REST requests on %s:%d', host, port);
       });
     }
 

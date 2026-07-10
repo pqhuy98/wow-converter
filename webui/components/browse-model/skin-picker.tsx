@@ -13,7 +13,7 @@ const SKIN_HEADER_HEIGHT = 20;
 const SKIN_PANEL_PADDING = 4;
 
 export function skinPanelHeight(skinCount: number): number {
-  if (skinCount <= 1) return SKIN_HEADER_HEIGHT + SKIN_PANEL_PADDING + SKIN_ROW_HEIGHT;
+  if (skinCount <= 1) return 0;
   return SKIN_HEADER_HEIGHT + (skinCount * SKIN_ROW_HEIGHT) + SKIN_PANEL_PADDING;
 }
 
@@ -34,7 +34,9 @@ export const SkinPicker = memo(({
   error = null,
   onSelect,
 }: SkinPickerProps) => {
-  const showList = skins.length > 1;
+  if (!loading && !error && skins.length <= 1) {
+    return null;
+  }
 
   return (
     <div className="border-t border-border/60 bg-muted/30 px-2 py-1">
@@ -47,12 +49,7 @@ export const SkinPicker = memo(({
       {error ? (
         <div className="pl-14 pr-2 text-xs text-destructive py-1">{error}</div>
       ) : null}
-      {!loading && !error && !showList ? (
-        <div className="pl-14 pr-2 text-xs text-muted-foreground py-1">
-          {skins.length === 1 ? skins[0]!.label : 'No variants'}
-        </div>
-      ) : null}
-      {!loading && !error && showList
+      {!loading && !error
         ? skins.map((skin) => {
           const isActive = selectedSkinId === skin.id;
           return (

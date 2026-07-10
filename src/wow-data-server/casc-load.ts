@@ -47,7 +47,6 @@ async function finalizeCascLoad(casc: CASC, buildIndex: number): Promise<CASC> {
   const buildName = casc.getBuildName();
   const seconds = ((Date.now() - t0) / 1000).toFixed(1);
   write('CASC loaded (%s) in %ss', buildName, seconds);
-  console.log(`CASC loaded (${buildName}) in ${seconds}s`);
   return casc;
 }
 

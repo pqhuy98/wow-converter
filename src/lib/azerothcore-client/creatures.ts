@@ -9,6 +9,7 @@ import { join } from 'path';
 import { Config } from '@/lib/global-config';
 import { toMap, workerPool } from '@/lib/utils';
 import { bundledAppRoot } from '@/lib/wow-data-server/transport';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import {
   Character, CharacterExporter, displayID, wowhead,
@@ -139,6 +140,8 @@ export async function exportCreatureModels(
   config: Config,
   onCreatureProgress?: (completed: number, total: number) => void,
 ) {
+  await wowDataClient.initModelCaches();
+
   const debug = false;
   let cnt = 0;
 

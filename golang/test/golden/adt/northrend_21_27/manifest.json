@@ -1,0 +1,18 @@
+{
+  "root": "placeholder — populate after TS export of northrend tile 21_27",
+  "createdAt": "1970-01-01T00:00:00Z",
+  "files": {
+    "21_27.obj": {
+      "size": 0,
+      "sha256": "placeholder"
+    },
+    "21_27.mtl": {
+      "size": 0,
+      "sha256": "placeholder"
+    },
+    "21_27.csv": {
+      "size": 0,
+      "sha256": "placeholder"
+    }
+  }
+}

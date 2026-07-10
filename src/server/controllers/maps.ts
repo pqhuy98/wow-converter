@@ -3,11 +3,12 @@ import express from 'express';
 import fsExtra from 'fs-extra';
 import path from 'path';
 
+import { getCreaturesInTile } from '@/lib/azerothcore-client/creatures';
 import { exportTexture } from '@/lib/converter/character/utils';
 import { FileEntry, MapListItem, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
+import { assertDesktopOnly, desktopOnlyStatus } from '@/server/shared-hosting';
 
 import { isDev } from '../config';
-import { registerMapExportRoutes } from './maps-export';
 import { registerMapGenerateRoutes } from './maps-generate';
 import { getListFiles } from './shared';
 
@@ -110,11 +111,6 @@ async function buildMapsIndex(): Promise<void> {
 export function ControllerMaps(router: express.Router) {
   void buildMapsIndex();
 
-  registerMapExportRoutes(router, (key) => {
-    const entry = mapsByDir.get(key);
-    return entry ? { id: entry.id, dir: entry.dir } : undefined;
-  });
-
   registerMapGenerateRoutes(router, (key) => {
     const entry = mapsByDir.get(key);
     return entry ? { id: entry.id, dir: entry.dir } : undefined;
@@ -142,6 +138,61 @@ export function ControllerMaps(router: express.Router) {
       return res.json({ map: req.params.map, size: 64, tiles });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // POST /api/maps/:map/creatures-check -> count creatures in selected tiles only
+  router.post('/maps/:map/creatures-check', async (req, res) => {
+    try {
+      assertDesktopOnly();
+      const key = String(req.params.map).toLowerCase();
+      const entry = mapsByDir.get(key);
+      if (!entry) {
+        return res.status(404).json({ error: 'Unknown map' });
+      }
+
+      const tiles = req.body?.tiles;
+      if (!Array.isArray(tiles) || tiles.length === 0) {
+        return res.status(400).json({ error: 'Invalid request body' });
+      }
+
+      const seen = new Set<string>();
+      const checkedTiles: { x: number; y: number }[] = [];
+      let creatureCount = 0;
+      for (const tile of tiles) {
+        const x = Number(tile?.x);
+        const y = Number(tile?.y);
+        if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= 64 || y < 0 || y >= 64) {
+          return res.status(400).json({ error: 'Tile coordinates must be within 0..63' });
+        }
+        const tileKey = `${x},${y}`;
+        if (seen.has(tileKey)) continue;
+        seen.add(tileKey);
+        checkedTiles.push({ x, y });
+        const creatures = await getCreaturesInTile(entry.id, [x, y]);
+        creatureCount += creatures.length;
+      }
+
+      if (checkedTiles.length === 0) {
+        return res.status(400).json({ error: 'No valid tiles provided' });
+      }
+
+      return res.json({
+        hasCreatures: creatureCount > 0,
+        creatureCount,
+        checkedTiles,
+      });
+    } catch (e) {
+      const err = e as Error;
+      const status = desktopOnlyStatus(err);
+      if (status === 403) {
+        return res.status(403).json({ error: err.message });
+      }
+      const message = err.message;
+      if (message.includes('azerothcore database not found') || message.includes('ENOENT')) {
+        return res.json({ hasCreatures: false, creatureCount: 0, checkedTiles: [] });
+      }
+      return res.status(500).json({ error: message });
     }
   });
 

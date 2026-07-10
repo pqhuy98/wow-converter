@@ -262,16 +262,26 @@ export class CASCLocal extends CASC {
       const local = await this.getDataFile(key);
 
       if (!BLTEReader.check(local)) throw new Error('Local data file is not a valid BLTE');
+      validateBLTEData(local, key);
 
       return local;
     } catch (e) {
+      const localError = (e as Error).message;
+
       // Attempt 2: Load from cache from previous fallback.
-      write('Local data file %s does not exist, falling back to cache...', key);
+      write('Local data file %s could not be used (%s), falling back to cache...', key, localError);
       const cached = await this.cache.getFile(key, constants.CACHE.DIR_DATA);
-      if (cached !== null) return cached;
+      if (cached !== null) {
+        try {
+          validateBLTEData(cached, key);
+          return cached;
+        } catch (cacheError) {
+          write('Cached data file %s is invalid (%s), falling back to CDN...', key, (cacheError as Error).message);
+        }
+      }
 
       // Attempt 3: Download from CDN.
-      write('Local data file %s not cached, falling back to CDN...', key);
+      write('Local data file %s not cached or cache invalid, falling back to CDN...', key);
       if (!this.remote) await this.initializeRemoteCASC();
 
       const remote = this.remote!;
@@ -287,6 +297,7 @@ export class CASCLocal extends CASC {
         data = await remote.getDataFile(remote.formatCDNKey(key));
       }
 
+      validateBLTEData(data, key);
       void this.cache.storeFile(key, data, constants.CACHE.DIR_DATA);
       return data;
     }
@@ -355,6 +366,11 @@ export class CASCLocal extends CASC {
   getBuildKey(): string {
     return this.build.BuildKey;
   }
+}
+
+function validateBLTEData(data: BufferWrapper, key: string): void {
+  new BLTEReader(data, key);
+  data.seek(0);
 }
 
 export default CASCLocal;

@@ -6,6 +6,7 @@ alwaysApply: false
 - Follow code best practices like DRY, YAGNI, SOLID, Clean Code. Avoid unnecessary complexity and overengineering.
 - Do not export functions, types, or constants that are not used outside their module/directory. Only export what is needed by external consumers.
 - Do not extract helpers into separate util files when they have a single caller — keep them in the caller file as unexported functions.
+- **Go colocation:** keep helpers next to their caller/owner. Do not put domain logic in generic packages (`config/constants`, shared `util`, etc.). If multiple packages need it, export from the canonical owner file and have consumers import that package (e.g. API → `mapexporter` for ADT tile concurrency). Reserve `config` for real configuration constants only. Tiny helpers used by one primitive (e.g. `WorkerPool`, `Queue`) stay unexported in that primitive's file; duplicate at most one other primitive boundary instead of centralizing.
 - Code organization: In files, export exported functions/types first, then unexported/internal functions. For classes, order methods as: public/no modifier → protected → private.
 - Refactoring patterns:
   - Consolidate multiple related properties into unified data structures (e.g., single `Asset[]` array instead of separate `usedImportPaths`, `unusedTextures`, etc.).
@@ -26,3 +27,6 @@ alwaysApply: false
 - When taking screenshot of the exported model, click `⛶` to expand, `setViewport(1440, 900)`.
 - Documentation updates: before raising PR, always incorporate maintainer feedback into this file promptly. Keep it extremely compact and high-signal (short bullets over long prose).
 - Agentic loop: when running temporary Bun scripts, remember to put process.exit(0) so that the background process terminates instead of hanging indefinitely.
+- When describing tooling or workflows, avoid referencing removed/legacy scripts or past decisions.
+- **Prose economy:** mention a detail only when it is relevant. Negatives are fine when they answer a real question. Do not bring up a concern nobody had and then explain it does not apply. Say "we don't do X" only when readers would reasonably expect X.
+- **Go copy-vs-reference:** see `.cursor/rules/golang-mutable-state.mdc` when adding mutable runtime config, factory methods, or slice copies of structs with pointer fields.

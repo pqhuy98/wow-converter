@@ -12,6 +12,7 @@ import { constants } from '@/lib/wow/formats/constants';
 import { write } from '@/lib/wow/log';
 
 import { BufferWrapper } from './buffer';
+import { validateFetchUrl } from './url-allowlist';
 
 /** Prefer IPv4 + HTTP/1.1 ALPN for Blizzard TACT/CDN; avoids flaky HTTP/2 + Range on some edges. */
 const blizzardHttpsAgent = new https.Agent({ keepAlive: true, family: 4, maxSockets: 64 });
@@ -34,6 +35,7 @@ export async function get(url: string | string[]): Promise<Response> {
 
   while ((res === null || !res.ok) && urlStack.length > 0) {
     const currentUrl = urlStack.shift()!;
+    validateFetchUrl(currentUrl);
     res = await fetch(currentUrl, fetchOptions);
     write(`get -> [${index++}][${res.status}] ${currentUrl}`);
   }
@@ -155,6 +157,7 @@ function isBlizzardCdnHost(hostname: string): boolean {
  * Blizzard hosts: IPv4 + ALPN http/1.1 + dedicated agent.
  */
 function requestDataSingleHop(url: string, partialOfs: number, partialLen: number): Promise<Buffer> {
+  validateFetchUrl(url);
   return new Promise((resolve, reject) => {
     let parsed: URL;
     try {
@@ -198,7 +201,7 @@ function requestDataSingleHop(url: string, partialOfs: number, partialLen: numbe
         }
         write(`Got redirect to ${loc}`);
         res.resume();
-        resolve(requestData(new URL(loc, url).href, partialOfs, partialLen));
+        resolve(requestData(validateFetchUrl(new URL(loc, url).href).href, partialOfs, partialLen));
         return;
       }
 

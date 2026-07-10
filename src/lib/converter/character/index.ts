@@ -22,7 +22,7 @@ import { Model } from '../common/models';
 import { guessAttackTag, InventoryType } from './item-mapper';
 import { ExportContext, exportLocalModelAsMdl } from './utils';
 import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
-import { exportCreatureNpcAsMdl } from './wowhead-exporter/creature-model';
+import { exportCreatureNpcAsMdl, mergeNpcMeta, resolveNpcMetaFromDB } from './wowhead-exporter/creature-model';
 import { exportZamItemAsMdl, getEquipmentSlotName } from './wowhead-exporter/item-model';
 
 // Local file path must be a relative path and must not contain ".." or start with a slash.
@@ -87,6 +87,7 @@ const wantedZPerSize = {
   medium: 104,
   large: 150,
   hero: 175,
+  'semi-giant': 262,
   giant: 350,
 };
 
@@ -322,8 +323,20 @@ export class CharacterExporter {
           throw new Error(`Unallowed base zam type: ${baseZam.type}`);
       }
 
-      if (npcMeta.Model) {
-        return exportCreatureNpcAsMdl(ctx, npcMeta);
+      let charMeta = npcMeta;
+      if (!charMeta.Model && baseZam.type === 'npc') {
+        const dbMeta = await resolveNpcMetaFromDB(baseZam.displayId);
+        if (dbMeta) {
+          charMeta = mergeNpcMeta(npcMeta, dbMeta);
+        }
+      }
+
+      if (charMeta.Model) {
+        return exportCreatureNpcAsMdl(ctx, charMeta);
+      }
+
+      if (baseZam.type === 'npc' && !charMeta.Character) {
+        throw new Error(`creature display ${baseZam.displayId}: no model from wowhead or CASC DB2`);
       }
 
       return exportCharacterAsMdl({

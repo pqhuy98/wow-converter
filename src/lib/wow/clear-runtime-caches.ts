@@ -4,6 +4,7 @@
  */
 import { clearCharacterBakeCache } from '@/lib/converter/character/wowhead-exporter/character-direct';
 import { clearSkeletonGraphCache } from '@/lib/converter/wow-model/direct/m2/bones';
+import { resetCharacterLookupsCache } from '@/lib/wow/character/headless-character';
 import { cdnResolver } from '@/lib/wow/archive/casc/cdn-resolver';
 import { clearNameClientCache } from '@/lib/wow/archive/client/name-client';
 import { clearRawClientInFlight } from '@/lib/wow/archive/client/raw-client';
@@ -25,6 +26,7 @@ export function clearConverterRuntimeCaches(): void {
 /** In-memory caches owned by wow-data-server after CASC unload / soft restart. */
 export function clearWowDataServerRuntimeCaches(): void {
   resetDoOnceCache();
+  resetCharacterLookupsCache();
   resetDbCaches();
   releaseAdtExportBatchMemory();
   cdnResolver.clearCache();

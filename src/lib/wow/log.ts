@@ -5,13 +5,14 @@
 import util from 'util';
 
 const enabled = process.env.WOW_DATA_LOG !== '0';
+const prefix = process.env.WOW_LOG_PREFIX ?? 'ts';
 
 export function write(...args: unknown[]): void {
   if (!enabled) return;
   const line = args.length > 0 && typeof args[0] === 'string'
     ? util.format(...(args as [string, ...unknown[]]))
     : args.map((a) => util.inspect(a)).join(' ');
-  console.log(`[wow] ${line}`);
+  console.log(`[${prefix}][wow] ${line}`);
 }
 
 /** Stack of timestamps for timeLog/timeEnd pairs (mirrors wow.export timeLog). */

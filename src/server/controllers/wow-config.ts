@@ -8,10 +8,12 @@ import {
   getWowConfigStatus,
   resetWowConfig,
 } from '@/lib/wow/wow-config-service';
+import { clearProjectCacheDir, getProjectCacheDirSize } from '@/lib/wow/clear-project-cache';
 import type { WowConfig } from '@/lib/wow/wow-config-state';
 
 import { isSharedHosting } from '../config';
 import { pickNativeFolder } from '../utils/pick-folder';
+import { assertDesktopOnly, desktopOnlyStatus } from '../shared-hosting';
 
 const WOW_CONFIG_SHARED_HOSTING_LOCKED = 'WoW installation cannot be changed in shared hosting mode.';
 
@@ -63,6 +65,32 @@ export function ControllerWowConfig(router: Router): void {
     } catch (e) {
       const err = e as Error;
       res.status(wowConfigErrorStatus(err)).json({ error: err.message });
+    }
+  });
+
+  router.get('/wow-config/cache-size', async (_req, res, next) => {
+    try {
+      assertDesktopOnly();
+      const bytes = await getProjectCacheDirSize();
+      res.json({ bytes });
+    } catch (e) {
+      const err = e as Error;
+      if (desktopOnlyStatus(err) === 403) {
+        res.status(403).json({ error: err.message });
+        return;
+      }
+      next(e);
+    }
+  });
+
+  router.post('/wow-config/clear-cache', async (_req, res) => {
+    try {
+      assertDesktopOnly();
+      await clearProjectCacheDir();
+      res.json(await getWowConfigStatus());
+    } catch (e) {
+      const err = e as Error;
+      res.status(desktopOnlyStatus(err)).json({ error: err.message });
     }
   });
 

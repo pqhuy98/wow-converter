@@ -314,4 +314,9 @@ export async function getCharacterMeta({
   };
 }
 
-export default { initializeCharacterCaches };
+/** Drop character DB2 lookup maps so they rebuild for the active CASC build. */
+export function resetCharacterLookupsCache(): void {
+  lookupsCache = null;
+}
+
+export default { initializeCharacterCaches, resetCharacterLookupsCache };

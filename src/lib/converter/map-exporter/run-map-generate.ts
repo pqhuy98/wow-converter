@@ -4,7 +4,6 @@ import path from 'path';
 import { Config } from '@/lib/global-config';
 import { normalizeMapSaveName } from '@/lib/map-save-name';
 import { assertWowCascReady } from '@/lib/wow/wow-config-service';
-import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import {
   defaultMapExportConfig,
@@ -19,13 +18,15 @@ import {
   pruneDepth,
 } from './map-generate-utils';
 
-const DEFAULT_PRUNE_DEPTH = 3;
+const DEFAULT_PRUNE_DEPTH_SHELLS = 2;
+const DEFAULT_PRUNE_DEPTH_INTERIORS = 3;
 
 export interface MapGenerateConversionOptions {
   config: Config;
   mapExportConfig: MapExportConfig;
   mapSaveName: string;
   freshExport: boolean;
+  includeBuildingInteriors?: boolean;
   autoClampPercent?: boolean;
   unitScale: number;
   onConvertStepsKnown?: (convertSteps: number) => void;
@@ -50,6 +51,7 @@ export async function runMapGenerateConversion(
     mapExportConfig,
     mapSaveName: rawSaveName,
     freshExport,
+    includeBuildingInteriors = true,
     autoClampPercent = true,
     unitScale,
     onConvertStepsKnown,
@@ -90,7 +92,10 @@ export async function runMapGenerateConversion(
   logMapGeneratePhase('Parsing map objects');
   report('Parsing map data');
   await mapExporter.parseObjects();
-  pruneDepth(mapExporter, DEFAULT_PRUNE_DEPTH);
+  pruneDepth(
+    mapExporter,
+    includeBuildingInteriors ? DEFAULT_PRUNE_DEPTH_INTERIORS : DEFAULT_PRUNE_DEPTH_SHELLS,
+  );
 
   if (autoClampPercent) {
     autoChooseClampPercent(mapExporter, mapExportConfig, unitScale);
@@ -113,24 +118,21 @@ export async function runMapGenerateConversion(
   report('Saved terrain and doodads');
 
   if (mapExportConfig.creatures.enable && creatureExportSteps > 0) {
-    logMapGeneratePhase('Loading creature model databases');
-    report('Loading creature model databases');
-    await wowDataClient.initModelCaches();
-    logMapGeneratePhase('Exporting creatures');
-    report('Exporting creatures', { completed: 0, total: uniqueCreatureCount });
+    logMapGeneratePhase('Exporting creature models');
+    report('Exporting creature models', { completed: 0, total: uniqueCreatureCount });
     await mapExporter.exportCreatures(outputDir, {
       onCreatureProgress: (completed, total) => {
         convertCompleted = 2 + completed;
-        report('Exporting creatures', { completed, total });
+        report('Exporting creature models', { completed, total });
       },
     });
     convertCompleted = 2 + creatureExportSteps;
-    report('Exported creatures');
+    report('Exported creature models');
   }
 
   logMapGeneratePhase('Saving war3map files');
   report('Saving war3map files');
-  mapExporter.saveWar3mapFiles(outputDir);
+  mapExporter.saveWar3mapFiles(outputDir, mapSaveName);
   convertCompleted = convertSteps;
   report('Complete');
 

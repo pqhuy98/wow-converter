@@ -80,10 +80,13 @@ export default function BrowseModelPage() {
   const [skinsError, setSkinsError] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | undefined>(undefined);
   const [modelPath, setModelPath] = useState<string | undefined>(undefined);
+  /** Tied to the displayed model; only updates when export completes (not on row select). */
+  const [viewerSessionKey, setViewerSessionKey] = useState<string | undefined>(undefined);
   const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const copyBtnRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const exportTargetRef = useRef<FileEntry | null>(null);
 
   const OVERSCAN = 8;
 
@@ -138,6 +141,7 @@ export default function BrowseModelPage() {
       setSelectedSkinId(null);
       setJob(undefined);
       setModelPath(undefined);
+      setViewerSessionKey(undefined);
       setPendingScrollToPath(null);
     },
   });
@@ -230,11 +234,21 @@ export default function BrowseModelPage() {
     return () => { cancelled = true; };
   }, [selected?.fileDataID]);
 
+  const applyCompletedExport = useCallback((result: JobStatus['result']) => {
+    const path = result?.exportedModels?.[0]?.path;
+    if (!path) return;
+    setModelPath(path);
+    const file = exportTargetRef.current;
+    if (file) {
+      setViewerSessionKey(`${file.fileDataID}:${file.fileName}`);
+    }
+  }, []);
+
   // poll job status
   useEffect(() => {
     if (!job?.id) return undefined;
     if (job.status === 'done') {
-      setModelPath(job.result?.exportedModels[0]?.path);
+      applyCompletedExport(job.result);
       return undefined;
     }
     const fetchJob = async () => {
@@ -243,7 +257,7 @@ export default function BrowseModelPage() {
       const js = (await r.json()) as JobStatus;
       setJob(js);
       if (js.status === 'done' && js.result) {
-        setModelPath(js.result.exportedModels[0]?.path);
+        applyCompletedExport(js.result);
         clearInterval(interval);
       }
       if (js.status === 'failed') {
@@ -253,7 +267,7 @@ export default function BrowseModelPage() {
     void fetchJob();
     const interval = setInterval(() => void fetchJob(), 500);
     return () => clearInterval(interval);
-  }, [job?.id]);
+  }, [job?.id, applyCompletedExport]);
 
   const [isExporting, setIsExporting] = useState(false);
   // Shared export settings state
@@ -275,10 +289,10 @@ export default function BrowseModelPage() {
       return;
     }
     setSelected(file);
+    exportTargetRef.current = file;
     if (skinId !== undefined) {
       setSelectedSkinId(skinId);
     }
-    setModelPath(undefined);
     setJob(undefined);
 
     const guessedName = file.fileName.replace(/[\\/]/g, '_').replace(/\.m2$/i, '');
@@ -319,6 +333,9 @@ export default function BrowseModelPage() {
     }
     if (skinsLoading || skinsError) {
       return FileRow.ROW_HEIGHT + skinPanelHeight(2);
+    }
+    if (skins.length <= 1) {
+      return FileRow.ROW_HEIGHT;
     }
     return FileRow.ROW_HEIGHT + skinPanelHeight(skins.length);
   }, [selected, skins.length, skinsLoading, skinsError]);
@@ -370,6 +387,9 @@ export default function BrowseModelPage() {
       setTimeout(() => el.setSelectionRange(v.length, v.length), 0);
     }
   };
+
+  const isExportInProgress = isExporting || job?.status === 'pending' || job?.status === 'processing';
+  const hasViewerModel = Boolean(modelPath);
 
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
@@ -450,39 +470,93 @@ export default function BrowseModelPage() {
           {/* Right: viewer */}
           <div className="lg:w-2/3 w-full h-full overflow-hidden min-w-0">
             <div className="p-0 h-full relative overflow-hidden min-w-0">
-              {modelPath && (
-                <ModelViewerUi modelPath={modelPath} source="browse" />
-              )}
-              {job?.status !== 'done' && (
-                <div className="absolute inset-0 bg-secondary flex items-center justify-center z-10">
-                  <div className="text-center text-muted-foreground w-full px-4">
-                    {job?.status === 'processing' || job?.status === 'pending' ? (
-                      <>
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                        <p className="text-lg">{job.status === 'processing' ? 'Exporting...' : `Queue position: ${job.position}`}</p>
+              {modelPath ? (
+                <ModelViewerUi
+                  modelPath={modelPath}
+                  cameraSessionKey={viewerSessionKey}
+                  source="browse"
+                />
+              ) : null}
+
+              {isExportInProgress ? (
+                hasViewerModel ? (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center px-3 pointer-events-none">
+                    <div className="pointer-events-auto mx-auto w-full max-w-xl rounded-lg border border-border bg-background/95 p-4 shadow-lg backdrop-blur-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+                        <p className="text-sm font-medium">
+                          {isExporting && !job?.id
+                            ? 'Starting export…'
+                            : job?.status === 'processing'
+                              ? 'Exporting…'
+                              : `Queue position: ${job?.position ?? '…'}`}
+                        </p>
                       </div>
-                        <div className="mt-4 mx-auto w-full sm:w-3/4 lg:w-1/2 sm:min-w-[75%] sm:max-w-[75%] lg:min-w-[75%] lg:max-w-[75%]">
-                          <Terminal logs={job.logs || []} className="w-full" />
-                        </div>
-                      </>
-                    ) : job?.status === 'failed' ? (
-                      <>
-                        <p className="text-lg mb-2 text-destructive">Export failed</p>
-                        {job?.error && (
-                          <pre className="text-left text-sm text-destructive whitespace-pre-wrap bg-card border border-border rounded p-2 max-w-[90%] mx-auto overflow-x-auto">
-                            {job.error}
-                          </pre>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-lg mb-2">Select a file to export and preview</p>
-                      </>
-                    )}
+                      {(job?.logs?.length ?? 0) > 0 ? (
+                        <Terminal logs={job?.logs ?? []} className="mt-3 max-h-48 w-full" />
+                      ) : null}
+                    </div>
                   </div>
+                ) : (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
+                    <div className="w-full px-4 text-center text-muted-foreground">
+                      <div className="mx-auto flex max-w-xl items-center justify-center gap-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+                        <p className="text-lg">
+                          {isExporting && !job?.id
+                            ? 'Starting export…'
+                            : job?.status === 'processing'
+                              ? 'Exporting…'
+                              : `Queue position: ${job?.position ?? '…'}`}
+                        </p>
+                      </div>
+                      {(job?.logs?.length ?? 0) > 0 ? (
+                        <div className="mx-auto mt-4 w-full max-w-xl">
+                          <Terminal logs={job?.logs ?? []} className="w-full" />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              ) : null}
+
+              {!hasViewerModel && !isExportInProgress && job?.status !== 'failed' ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
+                  <p className="text-lg text-muted-foreground">Select a file to export and preview</p>
                 </div>
-              )}
+              ) : null}
+
+              {job?.status === 'failed' ? (
+                hasViewerModel ? (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center px-3 pointer-events-none">
+                    <div className="pointer-events-auto mx-auto w-full max-w-xl rounded-lg border border-destructive/50 bg-background/95 p-4 shadow-lg backdrop-blur-sm">
+                      <p className="text-sm font-medium text-destructive">Export failed</p>
+                      {job.error ? (
+                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-border bg-card p-2 text-left text-xs text-destructive">
+                          {job.error}
+                        </pre>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
+                    <div className="px-4 text-center text-muted-foreground">
+                      <p className="mb-2 text-lg text-destructive">Export failed</p>
+                      {job.error ? (
+                        <pre className="mx-auto max-w-xl overflow-x-auto whitespace-pre-wrap rounded border border-border bg-card p-2 text-left text-sm text-destructive">
+                          {job.error}
+                        </pre>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              ) : null}
+
+              {job?.status === 'done' && !modelPath ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
+                  <p className="text-lg text-destructive">Export finished but no model was produced</p>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

@@ -1,0 +1,38 @@
+---
+description: Go copy-vs-reference conventions for wow-converter
+alwaysApply: false
+globs: golang/**
+---
+# Go mutable state and copy traps
+
+TypeScript shares object references; Go copies structs by default. Bugs appear when one code path mutates a struct while another still holds an older copy.
+
+## Conventions
+
+- **Immutable snapshot → value type.** Pass `config.Config`, `MapExportConfig` by value only for one-shot read-only use (e.g. `NewWc3Converter(*cfg)` at export time).
+- **Mutable session config → single pointer owner.** If anything may mutate config during a run (`AutoChooseClampPercent`, API overrides), store `*MapExportConfig` on `MapExporter` and pass the same pointer from the caller. Never manually sync copies (`exporter.MapExportConfig = mapCfg`).
+- **Factory methods that callers mutate → return pointers.** Example: `AddDoodadType() *DoodadType`, not a struct value.
+- **Graph nodes (materials, textures, global sequences) → `[]*T` on `mdl.MDL`.** Append shared pointers; wire edges at creation (`storeMaterial`, `storeMdlTexture`, `getGS`). No separate relink fixup passes.
+- **Merge remapping** in `mergeItemObjects` updates pointers when combining graphs — that is required merge logic, not a copy bug workaround.
+
+## Red flags in review
+
+- Constructor takes `T` but a helper takes `*T` and mutates it.
+- `cfg := e.SomeConfig` then later `e.SomeConfig = cfg` to “sync”.
+- `append(slice, *item)` into a struct slice while other code keeps `&item`.
+- Map/slice lookup returns a value, caller mutates fields on the returned struct.
+
+## Prefer
+
+```go
+exporter := NewMapExporter(cfg, &mapCfg, client)
+AutoChooseClampPercent(exporter, unitScale) // mutates exporter.MapExportConfig in place
+```
+
+## Avoid
+
+```go
+exporter := NewMapExporter(cfg, mapCfg, client)
+AutoChooseClampPercent(exporter, &mapCfg, unitScale)
+exporter.MapExportConfig = mapCfg // manual sync = design smell
+```

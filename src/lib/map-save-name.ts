@@ -1,10 +1,16 @@
 /** Matches maps-generate API validation (alphanumeric, _, ., -, optional .w3x). */
 export const MAP_SAVE_NAME_REGEX = /^[a-zA-Z0-9_.-]+(\.w3x)?$/i;
 
+export function stripMapSaveNameExtension(name: string): string {
+  let base = name.trim();
+  while (/\.w3x$/i.test(base)) {
+    base = base.replace(/\.w3x$/i, '');
+  }
+  return base;
+}
+
 export function sanitizeMapSaveNameBase(name: string): string {
-  return name
-    .trim()
-    .replace(/\.w3x$/i, '')
+  return stripMapSaveNameExtension(name)
     .replace(/[^a-zA-Z0-9_.-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^[_.-]+|[_.-]+$/g, '');

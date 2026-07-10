@@ -1,7 +1,7 @@
 import { QuaternionRotation, Vector3 } from '@/lib/math/common';
 
 import { Animation, animationToString } from './animation';
-import { fVector } from './formatter';
+import { f, fVector } from './formatter';
 
 export interface Camera {
   name: string
@@ -21,9 +21,9 @@ export function camerasToString(cameras: Camera[]): string {
   return cameras.map((cam) => `
     Camera "${cam.name}" {
       Position { ${fVector(cam.position)} },
-      FieldOfView ${cam.fieldOfView},
-      FarClip ${cam.farClip},
-      NearClip ${cam.nearClip},
+      FieldOfView ${formatCameraFloat(cam.fieldOfView)},
+      FarClip ${formatCameraClipFloat(cam.farClip)},
+      NearClip ${formatCameraClipFloat(cam.nearClip)},
       Target {
         Position { ${fVector(cam.target.position)} },
       }
@@ -31,4 +31,22 @@ export function camerasToString(cameras: Camera[]): string {
       ${animationToString('Rotation', cam.rotation)}
       ${animationToString('Scaling', cam.scaling)}
     }`).join('\n');
+}
+
+function formatCameraFloat(value: number): string {
+  return f(value);
+}
+
+function formatCameraClipFloat(value: number): string {
+  return formatCameraFloat(nextAfterTowardZero(value));
+}
+
+function nextAfterTowardZero(value: number): number {
+  if (value === 0 || Number.isNaN(value)) return value;
+
+  const view = new DataView(new ArrayBuffer(8));
+  view.setFloat64(0, value, true);
+  const bits = view.getBigUint64(0, true);
+  view.setBigUint64(0, bits - 1n, true);
+  return view.getFloat64(0, true);
 }

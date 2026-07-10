@@ -36,8 +36,13 @@ export function ControllerDownload(router: express.Router) {
 
       for (const relativePath of files) {
         const diskPath = path.resolve(baseDir, relativePath);
-        // Prevent directory-traversal attacks
-        if (!diskPath.startsWith(path.resolve(baseDir))) {
+        const relative = path.relative(path.resolve(baseDir), diskPath);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
+          throw new Error('Invalid path');
+        }
+
+        const stat = fsExtra.lstatSync(diskPath);
+        if (stat.isSymbolicLink() || !stat.isFile()) {
           throw new Error('Invalid path');
         }
 

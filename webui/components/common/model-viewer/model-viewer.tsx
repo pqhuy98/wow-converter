@@ -24,6 +24,8 @@ import { CutBox, cutBoxFromInstanceBounds, CutBoxOrthoView } from './cut-box-vie
 
 interface ModelViewerProps {
   modelPath?: string
+  /** When unchanged across reloads (e.g. skin swap), orbit camera is preserved. */
+  cameraSessionKey?: string
   alwaysFullscreen?: boolean
   source?: 'export' | 'browse'
 }
@@ -32,8 +34,9 @@ interface ModelViewerProps {
 const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 
 const MAX_DISTANCE = 2000000;
+const FAR_CLIP_PLANE = 100_000_000;
 
-export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: ModelViewerProps) {
+export default function ModelViewerUi({ modelPath, cameraSessionKey, alwaysFullscreen, source }: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +61,67 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [currentCamera, setCurrentCamera] = useState<number | null>(null);
   const cutBoxOverlayRef = useRef<MdxModelInstance | null>(null);
+  const orbitCameraRef = useRef({
+    sessionKey: '',
+    horizontalAngle: 0,
+    verticalAngle: Math.PI / 6,
+    distance: 500,
+    target: vec3.create(),
+  });
+  const animationSessionRef = useRef({
+    sessionKey: '',
+    sequenceIndex: 0,
+    sequenceName: '',
+  });
+  const modelCameraSessionRef = useRef({
+    sessionKey: '',
+    cameraIndex: null as number | null,
+    cameraName: '',
+  });
+
+  const applyModelCameraIndex = (idx: number): boolean => {
+    const scene = sceneRef.current;
+    const model = modelRef.current;
+    const canvas = canvasRef.current;
+    if (!scene || !model || !canvas) return false;
+    const cam = model.cameras[idx];
+    if (!cam) return false;
+    const width = canvas.width || canvas.clientWidth || 1;
+    const height = canvas.height || canvas.clientHeight || 1;
+    const aspect = width / Math.max(1, height);
+    try {
+      scene.camera.perspective(
+        cam.fieldOfView,
+        aspect,
+        cam.nearClippingPlane,
+        FAR_CLIP_PLANE,
+      );
+      const from = vec3.fromValues(cam.position[0], cam.position[1], cam.position[2]);
+      const to = vec3.fromValues(cam.targetPosition[0], cam.targetPosition[1], cam.targetPosition[2]);
+      scene.camera.moveToAndFace(from, to, [0, 0, 1]);
+      setCurrentCamera(idx);
+      if (cameraSessionKey) {
+        const mc = modelCameraSessionRef.current;
+        mc.sessionKey = cameraSessionKey;
+        mc.cameraIndex = idx;
+        mc.cameraName = cam.name ?? '';
+      }
+      return true;
+    } catch (e) {
+      console.error('Failed to set camera', e);
+      return false;
+    }
+  };
+
+  const syncOrbitCameraSelection = () => {
+    if (cameraSessionKey) {
+      const mc = modelCameraSessionRef.current;
+      mc.sessionKey = cameraSessionKey;
+      mc.cameraIndex = null;
+      mc.cameraName = '';
+    }
+    setCurrentCamera(null);
+  };
 
   const resizeViewerToCanvas = () => {
     const canvas = canvasRef.current;
@@ -76,9 +140,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
 
     const cam = scene.camera;
     const aspect = width / Math.max(1, height);
-    const far = (cam as unknown as { farClipPlane?: number }).farClipPlane ?? 9999999;
     try {
-      cam.perspective(cam.fov, aspect, cam.nearClipPlane, far);
+      cam.perspective(cam.fov, aspect, cam.nearClipPlane, FAR_CLIP_PLANE);
     } catch {
       // ignore
     }
@@ -201,6 +264,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
     scene.color.fill(0.15);
     const camera = scene.camera;
     sceneRef.current = scene;
+    camera.perspective(camera.fov, camera.aspect, camera.nearClipPlane, FAR_CLIP_PLANE);
     resizeViewerToCanvas();
 
     setLoadedCount(0);
@@ -241,18 +305,33 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       try {
         const cams = model.cameras;
         setCameras(cams);
-        setCurrentCamera(null);
       } catch {
         setCameras([]);
-        setCurrentCamera(null);
       }
 
       if (cancelled || loadRequestIdRef.current !== requestId) return;
       instanceRef.current = modelInstance;
-      modelInstance.setSequence(0);
-      modelInstance.sequenceLoopMode = 2; // always loop
+
+      const anim = animationSessionRef.current;
+      const preserveAnim = Boolean(
+        cameraSessionKey && anim.sessionKey === cameraSessionKey,
+      );
+      let nextSeq = 0;
+      if (preserveAnim) {
+        if (anim.sequenceIndex < model.sequences.length) {
+          nextSeq = anim.sequenceIndex;
+        } else if (anim.sequenceName) {
+          const byName = model.sequences.findIndex((seq) => seq.name === anim.sequenceName);
+          if (byName >= 0) nextSeq = byName;
+        }
+      } else {
+        anim.sessionKey = cameraSessionKey ?? modelPath ?? '';
+        anim.sequenceIndex = 0;
+        anim.sequenceName = model.sequences[0]?.name ?? '';
+      }
+
       setSequences(model.sequences);
-      setCurrentSeq(0);
+      setCurrentSeq(nextSeq);
 
       // Add scene and basic camera, grid setup
       scene.addInstance(modelInstance);
@@ -303,22 +382,49 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       let lastX = 0;
       let lastY = 0;
       let lastDistance = 0;
-      let horizontalAngle = 0;
-      let verticalAngle = Math.PI / 6;
-      let distance = Math.max(200, Math.min(1000, modelInstance.getBounds().r * 5));
-      const target = vec3.fromValues(0, 0, 0);
-      target[0] = modelInstance.getBounds().x;
-      target[1] = modelInstance.getBounds().y;
+      const orbit = orbitCameraRef.current;
+      const preserveOrbit = Boolean(
+        cameraSessionKey && orbit.sessionKey === cameraSessionKey,
+      );
+      if (!preserveOrbit) {
+        orbit.sessionKey = cameraSessionKey ?? modelPath ?? '';
+        orbit.horizontalAngle = 0;
+        orbit.verticalAngle = Math.PI / 6;
+        orbit.distance = Math.max(200, Math.min(1000, modelInstance.getBounds().r * 5));
+        vec3.set(orbit.target, modelInstance.getBounds().x, modelInstance.getBounds().y, 0);
+      }
+
+      const modelCam = modelCameraSessionRef.current;
+      const preserveModelCam = Boolean(
+        cameraSessionKey && modelCam.sessionKey === cameraSessionKey,
+      );
+      let restoredCameraIndex: number | null = null;
+      if (preserveModelCam && modelCam.cameraIndex != null) {
+        if (modelCam.cameraIndex < model.cameras.length) {
+          restoredCameraIndex = modelCam.cameraIndex;
+        } else if (modelCam.cameraName) {
+          const byName = model.cameras.findIndex((c) => c.name === modelCam.cameraName);
+          if (byName >= 0) restoredCameraIndex = byName;
+        }
+      } else if (!preserveModelCam) {
+        modelCam.sessionKey = cameraSessionKey ?? modelPath ?? '';
+        modelCam.cameraIndex = null;
+        modelCam.cameraName = '';
+      }
 
       const updateCamera = () => {
-        const x = distance * Math.cos(verticalAngle) * Math.cos(horizontalAngle);
-        const y = distance * Math.cos(verticalAngle) * Math.sin(horizontalAngle);
-        const z = distance * Math.sin(verticalAngle);
-        const camPos = vec3.fromValues(target[0] + x, target[1] + y, target[2] + z);
-        camera.moveToAndFace(camPos, target, [0, 0, 1]);
-        setCurrentCamera(null);
+        const x = orbit.distance * Math.cos(orbit.verticalAngle) * Math.cos(orbit.horizontalAngle);
+        const y = orbit.distance * Math.cos(orbit.verticalAngle) * Math.sin(orbit.horizontalAngle);
+        const z = orbit.distance * Math.sin(orbit.verticalAngle);
+        const camPos = vec3.fromValues(orbit.target[0] + x, orbit.target[1] + y, orbit.target[2] + z);
+        camera.moveToAndFace(camPos, orbit.target, [0, 0, 1]);
+        syncOrbitCameraSelection();
       };
-      updateCamera();
+      if (restoredCameraIndex != null && !applyModelCameraIndex(restoredCameraIndex)) {
+        updateCamera();
+      } else if (restoredCameraIndex == null) {
+        updateCamera();
+      }
 
       // Mouse & wheel controls
       let isTouch = false;
@@ -365,12 +471,12 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           if (!canvas) return;
           const w = canvas.width;
           const h2 = canvas.height;
-          const sw = -dx / w * distance;
-          const sh = dy / h2 * distance;
+          const sw = -dx / w * orbit.distance;
+          const sh = dy / h2 * orbit.distance;
           // Move target along camera right (directionX) and up (directionY)
           vec3.add(
-            target,
-            target,
+            orbit.target,
+            orbit.target,
             vec3.scale(
               vecHeap,
               vec3.normalize(vecHeap, vec3.set(vecHeap, camera.directionX[0], camera.directionX[1], camera.directionX[2])),
@@ -378,8 +484,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
             ),
           );
           vec3.add(
-            target,
-            target,
+            orbit.target,
+            orbit.target,
             vec3.scale(
               vecHeap,
               vec3.normalize(vecHeap, vec3.set(vecHeap, camera.directionY[0], camera.directionY[1], camera.directionY[2])),
@@ -392,9 +498,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           lastX = e.clientX;
           lastY = e.clientY;
           const ROT_SPEED = Math.PI / 360; // radians per pixel
-          horizontalAngle -= dx * ROT_SPEED;
-          verticalAngle += dy * ROT_SPEED;
-          verticalAngle = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, verticalAngle));
+          orbit.horizontalAngle -= dx * ROT_SPEED;
+          orbit.verticalAngle += dy * ROT_SPEED;
+          orbit.verticalAngle = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, orbit.verticalAngle));
         } else if (rightDown) { // right click to move target along ground plane
           const dx = e.clientX - lastX;
           const dy = e.clientY - lastY;
@@ -406,16 +512,16 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           if (!canvas) return;
           const w = canvas.width;
           const h2 = canvas.height;
-          const sw = -dx / w * distance;
-          const sh = dy / h2 * distance;
+          const sw = -dx / w * orbit.distance;
+          const sh = dy / h2 * orbit.distance;
           vec3.add(
-            target,
-            target,
+            orbit.target,
+            orbit.target,
             vec3.scale(vecHeap, vec3.normalize(vecHeap, vec3.set(vecHeap, dirX[0], dirX[1], 0)), sw),
           );
           vec3.add(
-            target,
-            target,
+            orbit.target,
+            orbit.target,
             vec3.scale(vecHeap, vec3.normalize(vecHeap, vec3.set(vecHeap, dirY[0], dirY[1], 0)), sh),
           );
         }
@@ -438,9 +544,9 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           lastX = e.touches[0].clientX;
           lastY = e.touches[0].clientY;
           const ROT_SPEED = Math.PI / 360; // radians per pixel
-          horizontalAngle -= dx * ROT_SPEED;
-          verticalAngle += dy * ROT_SPEED;
-          verticalAngle = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, verticalAngle));
+          orbit.horizontalAngle -= dx * ROT_SPEED;
+          orbit.verticalAngle += dy * ROT_SPEED;
+          orbit.verticalAngle = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, orbit.verticalAngle));
           updateCamera();
         } else if (e.touches.length === 2) {
           // Pinch to zoom
@@ -451,8 +557,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
           if (lastDistance > 0) {
             const scale = currentDistance / lastDistance;
             const ZOOM_SPEED = -1;
-            distance *= 1 + (scale - 1) * ZOOM_SPEED;
-            distance = Math.max(1, Math.min(MAX_DISTANCE, distance));
+            orbit.distance *= 1 + (scale - 1) * ZOOM_SPEED;
+            orbit.distance = Math.max(1, Math.min(MAX_DISTANCE, orbit.distance));
             updateCamera();
           }
 
@@ -474,8 +580,8 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         const delta = e.deltaY;
         const ZOOM_SPEED = 0.1;
         // adjust distance exponentially for smooth zoom
-        distance *= 1 + (delta > 0 ? ZOOM_SPEED : -ZOOM_SPEED);
-        distance = Math.max(1, Math.min(MAX_DISTANCE, distance));
+        orbit.distance *= 1 + (delta > 0 ? ZOOM_SPEED : -ZOOM_SPEED);
+        orbit.distance = Math.max(1, Math.min(MAX_DISTANCE, orbit.distance));
         updateCamera();
       };
 
@@ -520,7 +626,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
         setCurrentCamera(null);
       }
     };
-  }, [modelPath, canvasRef.current, viewer]);
+  }, [modelPath, cameraSessionKey, canvasRef.current, viewer]);
 
   const [progress, setProgress] = useState(0);
 
@@ -533,7 +639,13 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
       inst.sequenceLoopMode = 0;
       setProgress(0);
     }
-  }, [currentSeq]);
+    if (cameraSessionKey) {
+      const anim = animationSessionRef.current;
+      anim.sessionKey = cameraSessionKey;
+      anim.sequenceIndex = currentSeq;
+      anim.sequenceName = sequences[currentSeq]?.name ?? anim.sequenceName;
+    }
+  }, [currentSeq, cameraSessionKey, sequences]);
 
   // Keep a live progress percentage for the active sequence
   useEffect(() => {
@@ -595,30 +707,7 @@ export default function ModelViewerUi({ modelPath, alwaysFullscreen, source }: M
   };
 
   const handleSelectCamera = (idx: number) => {
-    const scene = sceneRef.current;
-    const model = modelRef.current;
-    const canvas = canvasRef.current;
-    if (!scene || !model || !canvas) return;
-    const cams = model.cameras;
-    const cam = cams[idx];
-    if (!cam) return;
-    const width = canvas.width || canvas.clientWidth || 1;
-    const height = canvas.height || canvas.clientHeight || 1;
-    const aspect = width / Math.max(1, height);
-    try {
-      scene.camera.perspective(
-        cam.fieldOfView,
-        aspect,
-        cam.nearClippingPlane,
-        cam.farClippingPlane,
-      );
-      const from = vec3.fromValues(cam.position[0], cam.position[1], cam.position[2]);
-      const to = vec3.fromValues(cam.targetPosition[0], cam.targetPosition[1], cam.targetPosition[2]);
-      scene.camera.moveToAndFace(from, to, [0, 0, 1]);
-      setCurrentCamera(idx);
-    } catch (e) {
-      console.error('Failed to set camera', e);
-    }
+    applyModelCameraIndex(idx);
   };
 
   const handleDownloadAssets = async () => {

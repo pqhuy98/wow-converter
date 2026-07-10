@@ -20,6 +20,10 @@ import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-se
 import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
 import type { GenerateWc3FormValues, MapGenerateJobStatus } from '@/lib/models/map-generate.model';
 import {
+  buildDefaultMapSaveNameBase,
+  normalizeMapSaveName,
+} from '@/lib/utils/map-save-name';
+import {
   WOW_EXPANSION_ALL,
   WOW_EXPANSIONS,
   type WowExpansion,
@@ -103,6 +107,7 @@ export default function MapViewer() {
   }, []);
 
   useEffect(() => {
+    if (isSharedHosting) return;
     void (async () => {
       const stored = readStoredGenerateJob();
       if (stored?.jobId) {
@@ -135,7 +140,7 @@ export default function MapViewer() {
         // ignore restore errors
       }
     })();
-  }, [applyJobUpdate]);
+  }, [applyJobUpdate, isSharedHosting]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 200);
@@ -162,6 +167,11 @@ export default function MapViewer() {
 
   const selectedMapName = useMemo(
     () => maps.find((m) => m.dir === selectedMapDir)?.name ?? null,
+    [maps, selectedMapDir],
+  );
+
+  const selectedMapExpansionID = useMemo(
+    () => maps.find((m) => m.dir === selectedMapDir)?.expansionID,
     [maps, selectedMapDir],
   );
 
@@ -273,18 +283,20 @@ export default function MapViewer() {
       id: '',
       status: 'pending',
       submittedAt: Date.now(),
-      mapSaveName: form.mapSaveName,
+      mapSaveName: normalizeMapSaveName(form.mapSaveName),
       mapDir: String(mapInfo.mapId),
     });
     try {
       const body = {
         tiles: selectedTiles,
         quality: parseInt(texSize, 10),
-        mapSaveName: form.mapSaveName,
+        mapSaveName: normalizeMapSaveName(form.mapSaveName),
         clampLower: form.clampLower,
         clampUpper: form.clampUpper,
+        autoClampPercent: form.autoClampPercent,
         mapAngleDeg: form.mapAngleDeg,
         unitScale: form.unitScale,
+        includeBuildingInteriors: form.includeBuildingInteriors,
         freshExport: form.freshExport,
         creatures: form.creatures,
       };
@@ -391,7 +403,7 @@ export default function MapViewer() {
   }, [generateJob?.id, generateJob?.status, generateJob?.submittedAt, applyJobUpdate]);
 
   const suggestedMapName = mapInfo
-    ? buildDefaultMapSaveName(String(mapInfo.mapId), selectedTiles)
+    ? buildDefaultMapSaveNameBase(String(mapInfo.mapId), selectedTiles)
     : '';
 
   const elapsedMs = generateJob
@@ -406,8 +418,10 @@ export default function MapViewer() {
       <GenerateWc3Dialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        mapDir={selectedMapDir}
+        expansionID={selectedMapExpansionID}
         defaultMapSaveName={suggestedMapName}
-        tileCount={selectedTiles.length}
+        selectedTiles={selectedTiles}
         onConfirm={(values) => void onGenerateWc3(values)}
       />
       <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
@@ -475,7 +489,12 @@ export default function MapViewer() {
                 {!isSharedHosting && showMapExport && <div>
                   <div className="flex items-center gap-2 pt-2 mt-auto">
                     <label className="text-sm text-muted-foreground whitespace-nowrap">Terrain texture size</label>
-                    <select className="border rounded px-2 py-1 bg-background" value={texSize} onChange={(e) => setTexSize(e.target.value as TextureResolution)}>
+                    <select
+                      className="border rounded px-2 py-1 bg-background disabled:cursor-not-allowed disabled:opacity-50"
+                      value={texSize}
+                      onChange={(e) => setTexSize(e.target.value as TextureResolution)}
+                      disabled={isGenerating}
+                    >
                       <option value="0">None</option>
                       <option value="512">512</option>
                       <option value="1024">1024</option>
@@ -492,10 +511,10 @@ export default function MapViewer() {
                       {isGenerating ? 'Generating…' : `Generate WC3 map (${selectedTiles.length})`}
                     </Button>
                   </div>
-                  {generateJob && generateJob.status !== 'done' && (
-                    <div className="pt-3 space-y-2">
+                  {isGenerating && generateJob && (
+                    <div className="mt-2 space-y-2 rounded-md border border-primary/60 bg-primary/10 px-3 py-2.5 pt-3 ring-1 ring-primary/25 transition-colors duration-200">
                       {displayMapSaveName && (
-                        <p className="text-xs font-medium truncate" title={displayMapSaveName}>
+                        <p className="text-xs font-medium truncate text-foreground" title={displayMapSaveName}>
                           {displayMapSaveName}
                         </p>
                       )}
@@ -504,17 +523,17 @@ export default function MapViewer() {
                           className="flex-1"
                           value={generateJob.progress?.percent ?? (generateJob.status === 'pending' ? 0 : undefined)}
                         />
-                        <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                        <span className="text-xs tabular-nums whitespace-nowrap text-foreground/80">
                           {formatElapsedDuration(elapsedMs)}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-foreground/80">
                         {formatProgressLabel(generateJob)}
                       </p>
                       {generateJob.status === 'processing'
                         && generateJob.queuePending != null
                         && generateJob.queuePending > 0 && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-foreground/70">
                           {generateJob.queuePending} job{generateJob.queuePending === 1 ? '' : 's'} waiting in queue
                         </p>
                       )}
@@ -658,7 +677,7 @@ function formatProgressLabel(job: MapGenerateJobStatus): string {
 
   const step = `Step ${p.completedSteps} / ${p.totalSteps}`;
   if (p.creatureTotal != null && p.creatureCompleted != null) {
-    return `${step} · Exporting creatures (${p.creatureCompleted}/${p.creatureTotal})`;
+    return `${step} · Exporting creature models (${p.creatureCompleted}/${p.creatureTotal})`;
   }
   if (p.phase === 'adt' && p.tileCount != null && p.tileIndex != null) {
     const tile = p.currentTile
@@ -688,35 +707,4 @@ function expansionsPresentInMaps(maps: { expansionID?: number }[]): WowExpansion
     if (typeof m.expansionID === 'number' && m.expansionID >= 0) ids.add(m.expansionID);
   }
   return WOW_EXPANSIONS.filter((e) => ids.has(e.id));
-}
-
-function sanitizeMapSaveNameBase(name: string): string {
-  return name
-    .trim()
-    .replace(/\.w3x$/i, '')
-    .replace(/[^a-zA-Z0-9_.-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^[_.-]+|[_.-]+$/g, '');
-}
-
-function buildDefaultMapSaveName(
-  mapDir: string,
-  tiles: { x: number; y: number }[],
-): string {
-  if (tiles.length === 0) {
-    const base = sanitizeMapSaveNameBase(mapDir);
-    if (!base) throw new Error('Map save name is required');
-    return `${base}.w3x`;
-  }
-  const xs = tiles.map((t) => t.x);
-  const ys = tiles.map((t) => t.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const suffix = minX === maxX && minY === maxY
-    ? `${minX}_${minY}`
-    : `${minX}_${minY}-${maxX}_${maxY}`;
-  const base = sanitizeMapSaveNameBase(mapDir) || 'map';
-  return `${base}-${suffix}.w3x`;
 }

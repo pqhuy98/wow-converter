@@ -2,6 +2,7 @@ import {
   Camera, Doodad, Info, Modification, ObjectModificationTable, Player, Region, Terrain, Unit,
 } from '../data';
 import { MapTranslator } from '../translators';
+import { ensureMapInfo } from './default-info';
 import { FourCCGenerator } from './war3-fourcc';
 
 export const baseDoodadType = 'YOlb'; // Lightning Bolt
@@ -219,6 +220,12 @@ export class MapManager {
     return this.abilities[this.abilities.length - 1];
   }
 
+  /** Fill war3map.w3i metadata when missing (required by World Editor). */
+  ensureMapInfo(mapSaveName = '') {
+    this.info = ensureMapInfo(this.info, this.terrain, mapSaveName);
+    this.players = this.info.players ?? [];
+  }
+
   save(mapDir: string) {
     this.mapData.unitData.custom = {};
     this.unitTypes.forEach((unitType) => {
@@ -255,11 +262,9 @@ export class MapManager {
     // Sync cameras back to translator
     this.mapData.cameras = this.cameras ?? [];
     // Sync info back to translator
-    if (this.info) {
-      // keep players array in sync
-      if (this.players) this.info.players = this.players;
-      this.mapData.info = this.info;
-    }
+    this.ensureMapInfo('');
+    if (this.players) this.info.players = this.players;
+    this.mapData.info = this.info;
     this.mapData.setMapDir(mapDir);
     if (this.mapData.info) this.mapData.save('info');
     this.mapData.save('units');

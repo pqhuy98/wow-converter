@@ -4,7 +4,7 @@ import axios, {
 import chalk from 'chalk';
 import { writeFile } from 'fs/promises';
 import {
-  emptyDirSync, ensureDir, ensureDirSync, exists,
+  ensureDir, ensureDirSync, exists,
 } from 'fs-extra';
 import { Agent as HttpAgent } from 'http';
 import { Agent as HttpsAgent } from 'https';
@@ -15,6 +15,7 @@ import { clearConverterRuntimeCaches } from '@/lib/wow/clear-runtime-caches';
 import {
   getDataServerHttpOrigin, getDataServerSocketPath,
 } from '@/lib/wow-data-server/transport';
+import { DATA_SERVER_TOKEN_HEADER } from '@/wow-data-server/auth';
 
 interface CASCInfo {
   type: string;
@@ -203,6 +204,10 @@ export class WowDataClient {
     this.http.interceptors.request.use((config) => {
       if (this.socketPath) {
         config.socketPath = this.socketPath;
+      }
+      const token = process.env.WOW_DATA_SERVER_TOKEN;
+      if (token) {
+        config.headers.set(DATA_SERVER_TOKEN_HEADER, token);
       }
       if (config.url?.includes('/getCascInfo') || config.url?.includes('/searchFiles')) return config;
       debug && console.log('request', config.method, config.url, config.data);
@@ -444,12 +449,6 @@ export class WowDataClient {
 
   public async resetConnection(): Promise<void> {
     await this.bootstrap();
-  }
-
-  public clearCacheFiles() {
-    if (this.isRemote) {
-      emptyDirSync(this.cacheDir);
-    }
   }
 
   private bootPromise: Promise<void> | null = null;

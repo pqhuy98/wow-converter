@@ -326,8 +326,6 @@ export async function ControllerExportCharacter(router: express.Router) {
     console.log(`Cleared ${path.resolve(outputDir)}`);
     await fsExtra.emptyDir(outputDirBrowse);
     console.log(`Cleared ${path.resolve(outputDirBrowse)}`);
-    wowDataClient.clearCacheFiles();
-    console.log(`Cleared ${path.resolve('.cache')}`);
     return res.json({ message: 'Exported assets cleaned' });
   });
 
@@ -377,7 +375,9 @@ export async function ControllerExportCharacter(router: express.Router) {
       }
 
       const resolved = path.resolve(ceConfig.exportAssetDir, normalizeLocalModelRef(localPath));
-      if (!resolved.startsWith(ceConfig.exportAssetDir)) {
+      const base = path.resolve(ceConfig.exportAssetDir);
+      const relative = path.relative(base, resolved);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
         return res.json({
           ok: false,
           similarFiles: [],

@@ -951,7 +951,6 @@ export class M2MetadataFile {
           return [v1, v2, 1];
         })(),
       };
-
       // Some flags are different than documented in https://wowdev.wiki/M2#Particle_Flags
       // Because it follows the rendering code in the https://github.com/Deamon87/WebWowViewerCpp
       if (p.flags & 0x1) node.flags2.push(ParticleEmitter2Flag.Unshaded);

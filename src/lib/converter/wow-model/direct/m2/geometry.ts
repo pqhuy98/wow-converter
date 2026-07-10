@@ -37,7 +37,10 @@ export function buildMeshes(
 
     const mesh = skin.subMeshes[mI];
     const verts = new Array<number>(mesh.triangleCount);
-    for (let vI = 0; vI < mesh.triangleCount; vI++) verts[vI] = skin.indices[skin.triangles[mesh.triangleStart + vI]];
+    for (let vI = 0; vI < mesh.triangleCount; vI++) {
+      const vert = skin.indices[skin.triangles[mesh.triangleStart + vI]];
+      verts[vI] = vert;
+    }
 
     let texture: { fileDataID: VariantTexture } | null = null;
     const texUnit = skin.textureUnits.find((tex) => tex.skinSectionIndex === mI);

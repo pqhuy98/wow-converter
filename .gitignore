@@ -10,6 +10,7 @@ log.txt
 notes.txt
 target
 dist
+dist-go
 *.zip
 maps/*
 !maps/template-empty.w3x/
@@ -17,6 +18,10 @@ maps/*
 maps/test-*.w3x/*.mdx
 maps/test-*.w3x/wow/**/*.blp
 tests/wow-native/out
+# Go air dev reload
+golang/tmp/
+golang/build-errors.log
+
 # Logs
 logs
 *.log
@@ -24,6 +29,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
+.parity-artifacts
+.parity-verify
+.compare-export
+.compare-export-ts
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

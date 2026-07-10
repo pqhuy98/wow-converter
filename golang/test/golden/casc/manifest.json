@@ -1,0 +1,18 @@
+{
+  "root": "placeholder — populate with: go run ./test/verify/compare.go snapshot <export-dir> --out test/golden/casc/manifest.json",
+  "createdAt": "1970-01-01T00:00:00Z",
+  "files": {
+    "m2:0": {
+      "size": 0,
+      "sha256": "placeholder"
+    },
+    "blp:0": {
+      "size": 0,
+      "sha256": "placeholder"
+    },
+    "db2:0": {
+      "size": 0,
+      "sha256": "placeholder"
+    }
+  }
+}

@@ -194,7 +194,7 @@ export class MapExporter {
     }
   }
 
-  public saveWar3mapFiles(outputDir: string) {
+  public saveWar3mapFiles(outputDir: string, mapSaveName = '') {
     // Save map
     const templateEmptyDir = resolveTemplateEmptyDir();
     if (!existsSync(outputDir)) {
@@ -208,6 +208,7 @@ export class MapExporter {
         }
       }
     }
+    this.mapManager.ensureMapInfo(mapSaveName);
     this.mapManager.save(outputDir);
     try {
       // Remove precomputed shadow file if it exists, since it no longers match objects on the map
@@ -220,14 +221,14 @@ export class MapExporter {
 
 function resolveTemplateEmptyDir(): string {
   const candidates = [
-    path.join(bundledAppRoot(), 'maps', 'template-empty.w3x'),
+    path.join(bundledAppRoot(), 'resources', 'template-empty.w3x'),
     path.join(process.cwd(), 'maps', 'template-empty.w3x'),
   ];
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate;
   }
   throw new Error(
-    `Missing WC3 map template (maps/template-empty.w3x). Checked: ${candidates.join(', ')}`,
+    `Missing WC3 map template (template-empty.w3x). Checked: ${candidates.join(', ')}`,
   );
 }
 

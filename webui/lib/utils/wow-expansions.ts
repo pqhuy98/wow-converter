@@ -21,3 +21,14 @@ export const WOW_EXPANSIONS: WowExpansion[] = [
   { id: 10, name: 'The War Within', shortName: 'TWW' },
   { id: 11, name: 'Midnight', shortName: 'Midnight' },
 ];
+
+/** Last expansion with AzerothCore NPC spawn data (Wrath of the Lich King). */
+export const WOW_EXPANSION_WOTLK_MAX_ID = 2;
+
+export function isMapExpansionWithinWotlk(expansionID: number | undefined): boolean {
+  return expansionID === undefined || expansionID <= WOW_EXPANSION_WOTLK_MAX_ID;
+}
+
+export function isMapExpansionAfterWotlk(expansionID: number | undefined): boolean {
+  return typeof expansionID === 'number' && expansionID > WOW_EXPANSION_WOTLK_MAX_ID;
+}

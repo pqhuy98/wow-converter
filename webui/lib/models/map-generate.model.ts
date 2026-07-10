@@ -1,6 +1,9 @@
 /** Matches maps-generate API validation (alphanumeric, _, ., -, optional .w3x). */
 export const MAP_SAVE_NAME_REGEX = /^[a-zA-Z0-9_.-]+(\.w3x)?$/i;
 
+/** @deprecated Use MAP_SAVE_NAME_BASE_REGEX from map-save-name utils for form validation. */
+export { MAP_SAVE_NAME_BASE_REGEX } from '@/lib/utils/map-save-name';
+
 export interface MapGenerateTileSuccess {
   tileX: number;
   tileY: number;
@@ -60,12 +63,17 @@ export interface MapGenerateJobStatus {
 }
 
 export interface GenerateWc3FormValues {
+  /** Base map filename without .w3x extension. */
   mapSaveName: string;
   clampLower: number;
   clampUpper: number;
+  /** When true, server picks clamp from NPC positions instead of manual slider values. */
+  autoClampPercent: boolean;
   mapAngleDeg: number;
   /** Unit size on the map; also drives terrain height auto-clamp. */
   unitScale: number;
+  /** Export WMO interior doodads (ADT includeWMOSets + convert prune depth 3). */
+  includeBuildingInteriors: boolean;
   freshExport: boolean;
   creatures: {
     enable: boolean;
@@ -77,8 +85,10 @@ export const defaultGenerateWc3FormValues: GenerateWc3FormValues = {
   mapSaveName: '',
   clampLower: 0,
   clampUpper: 1,
+  autoClampPercent: true,
   mapAngleDeg: 0,
   unitScale: 2,
+  includeBuildingInteriors: true,
   freshExport: false,
   creatures: {
     enable: false,

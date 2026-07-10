@@ -10,6 +10,17 @@ import {
 } from 'react';
 
 import { useServerConfig } from '@/components/server-config';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,6 +46,13 @@ import {
 } from './wow-config-settings';
 
 type GameOption = { product: string; label: string };
+
+function formatCacheSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
 
 function gameOptionsFromBuilds(
   builds: CascBuildSummary[],
@@ -81,6 +99,8 @@ export function WowConfigSetup() {
   const [loading, setLoading] = useState(false);
   const [loadSuccess, setLoadSuccess] = useState(false);
   const [changingSource, setChangingSource] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
+  const [cacheSizeBytes, setCacheSizeBytes] = useState<number | null>(null);
   const [pickingFolder, setPickingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,6 +124,18 @@ export function WowConfigSetup() {
     setError(null);
     setLoadSuccess(false);
   }, [status.regions]);
+
+  const refreshCacheSize = useCallback(async () => {
+    try {
+      const res = await fetch('/api/wow-config/cache-size');
+      const json = await res.json();
+      if (res.ok) {
+        setCacheSizeBytes(typeof json.bytes === 'number' ? json.bytes : 0);
+      }
+    } catch {
+      // Size is optional UI polish; ignore fetch failures.
+    }
+  }, []);
 
   const scanBuilds = useCallback(async () => {
     if (status.cascLoaded) return;
@@ -154,6 +186,11 @@ export function WowConfigSetup() {
   useEffect(() => {
     if (status.cascLoaded) setError(null);
   }, [status.cascLoaded]);
+
+  useEffect(() => {
+    if (isSharedHosting || !status.cascLoaded || loadSuccess) return;
+    void refreshCacheSize();
+  }, [isSharedHosting, status.cascLoaded, loadSuccess, refreshCacheSize]);
 
   useEffect(() => {
     writeStoredInstallDirectory(installDirectory);
@@ -250,6 +287,23 @@ export function WowConfigSetup() {
     }
   };
 
+  const clearCache = async () => {
+    setError(null);
+    setClearingCache(true);
+    try {
+      const res = await fetch('/api/wow-config/clear-cache', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Could not clear cache');
+      resetSelectionForm();
+      setCacheSizeBytes(0);
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
   const gamePlaceholder = (() => {
     if (scanning) return 'Looking for games…';
     if (!canAutoScan) {
@@ -295,7 +349,7 @@ export function WowConfigSetup() {
             <div className="rounded-md border p-3 text-sm space-y-1">
               <div className="font-medium">Server source</div>
               {status.config.mode === 'local' ? (
-                <div className="text-muted-foreground break-all">{status.config.installDirectory}</div>
+                <div className="text-muted-foreground break-all">{normalizeInstallDirectory(status.config.installDirectory)}</div>
               ) : (
                 <div className="text-muted-foreground">
                   Online —
@@ -338,7 +392,7 @@ export function WowConfigSetup() {
             <div className="rounded-md border p-3 text-sm space-y-1">
               <div className="font-medium">Current source</div>
               {status.config.mode === 'local' ? (
-                <div className="text-muted-foreground break-all">{status.config.installDirectory}</div>
+                <div className="text-muted-foreground break-all">{normalizeInstallDirectory(status.config.installDirectory)}</div>
               ) : (
                 <div className="text-muted-foreground">
                   Online —
@@ -353,7 +407,7 @@ export function WowConfigSetup() {
               WoW is configured automatically on startup.
             </p>
           )}
-          {error && !status.cascLoaded && (
+          {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
@@ -363,15 +417,51 @@ export function WowConfigSetup() {
               <Link href="/">Back</Link>
             </Button>
             {!isSharedHosting && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => { void changeSource(); }}
-                disabled={changingSource}
-              >
-                {changingSource && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Change installation source
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { void changeSource(); }}
+                  disabled={changingSource || clearingCache}
+                >
+                  {changingSource && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Change installation source
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={changingSource || clearingCache}
+                    >
+                      {clearingCache && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Clear cache
+                      {cacheSizeBytes !== null && ` (${formatCacheSize(cacheSizeBytes)})`}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Clear cache?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {cacheSizeBytes !== null && cacheSizeBytes > 0
+                          ? `This frees about ${formatCacheSize(cacheSizeBytes)} by clearing wow-converter's local cache. `
+                          : 'This clears wow-converter\'s local cache. '}
+                        Cached files will be rebuilt as needed, so the app may feel slower
+                        at first.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => { void clearCache(); }}
+                        disabled={changingSource || clearingCache}
+                      >
+                        Clear cache
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
             )}
           </div>
         </CardContent>

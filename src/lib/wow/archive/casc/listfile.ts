@@ -427,6 +427,42 @@ export function resetForCascUnload(): void {
   nameLookup.clear();
   preloadedIdLookup.clear();
   preloadedNameLookup.clear();
+  browseModels = null;
+  browseTextures = null;
+}
+
+const browseM2WmoRegex = /\.(m2|wmo)$/i;
+const browseBadWmoRegex = /_([0-9]{3}|lod\d)\.wmo$/i;
+const browseTextureRegex = /\.(blp|png|tga|dds)$/i;
+
+let browseModels: ListfileEntry[] | null = null;
+let browseTextures: ListfileEntry[] | null = null;
+
+function buildBrowseFileIndex(): { models: ListfileEntry[]; textures: ListfileEntry[] } {
+  const models: ListfileEntry[] = [];
+  const textures: ListfileEntry[] = [];
+  for (const [fileDataID, fileName] of idLookup.entries()) {
+    if (browseBadWmoRegex.test(fileName)) continue;
+    if (browseM2WmoRegex.test(fileName)) {
+      models.push({ fileDataID, fileName });
+    } else if (browseTextureRegex.test(fileName)) {
+      textures.push({ fileDataID, fileName });
+    }
+  }
+  models.sort((a, b) => a.fileName.localeCompare(b.fileName));
+  textures.sort((a, b) => a.fileName.localeCompare(b.fileName));
+  return { models, textures };
+}
+
+/** Returns cached browse model/texture indexes (mirrors Go CollectBrowseFileIndex). */
+export function collectBrowseFileIndex(): { models: ListfileEntry[]; textures: ListfileEntry[] } {
+  if (browseModels !== null && browseTextures !== null) {
+    return { models: browseModels, textures: browseTextures };
+  }
+  const built = buildBrowseFileIndex();
+  browseModels = built.models;
+  browseTextures = built.textures;
+  return built;
 }
 
 export default {
@@ -449,6 +485,7 @@ export default {
   ingestIdentifiedFiles,
   isLoaded,
   addEntry,
+  collectBrowseFileIndex,
   setUnknownModelProvider,
   setUnknownTextureProvider,
 };
