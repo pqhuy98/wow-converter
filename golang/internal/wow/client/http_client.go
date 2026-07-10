@@ -164,6 +164,19 @@ func (c *HTTPClient) GetCASCInfo(ctx context.Context) (CASCInfo, error) {
 	return CASCInfo{}, errors.New("failed to get CASC info")
 }
 
+func (c *HTTPClient) GetCascLoadProgress(ctx context.Context) (CascLoadProgress, error) {
+	jsonBody, status, err := c.getJSONAllowError(ctx, "/rest/getCascLoadProgress", nil)
+	if err != nil {
+		return CascLoadProgress{}, err
+	}
+	if status < 200 || status >= 300 || jsonBody["id"] != "CASC_LOAD_PROGRESS" {
+		return CascLoadProgress{}, errors.New("failed to get CASC load progress")
+	}
+	loading, _ := jsonBody["loading"].(bool)
+	message, _ := jsonBody["message"].(string)
+	return CascLoadProgress{Loading: loading, Message: message}, nil
+}
+
 func (c *HTTPClient) UnloadCASC(ctx context.Context) error {
 	jsonBody, err := c.postJSON(ctx, "/rest/unloadCasc", map[string]any{})
 	if err != nil {

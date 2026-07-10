@@ -12,6 +12,10 @@ import (
 
 var errRequestBodyTooLarge = errors.New("request body too large")
 
+func setNoStore(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+}
+
 func sendJSON(w http.ResponseWriter, status int, obj any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -187,11 +187,22 @@ func (s *Service) GetStatus(ctx context.Context) Status {
 	}
 
 	errVal := GetError()
+	cascLoading := IsApplyInFlight()
+	cascLoadingMessage := ""
+	if reachable {
+		if progress, err := s.Client.GetCascLoadProgress(ctx); err == nil {
+			if progress.Loading {
+				cascLoading = true
+			}
+			cascLoadingMessage = progress.Message
+		}
+	}
 	status := Status{
 		NeedsSetup:             NeedsSetup(cascLoaded),
 		ConfiguredFromEnv:      IsEnvConfigured(),
 		CascLoaded:             cascLoaded,
-		CascLoading:            IsApplyInFlight(),
+		CascLoading:            cascLoading,
+		CascLoadingMessage:     cascLoadingMessage,
 		WowDataServerReachable: reachable,
 		Config:                 GetEffectiveConfig(),
 		CascInfo:               cascInfo,

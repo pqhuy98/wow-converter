@@ -14,10 +14,12 @@ import { ModelSkinOption, skinPanelHeight, SkinPicker } from '@/components/brows
 import { FileRow, VirtualListBox } from '@/components/common/listbox';
 import ModelViewerUi from '@/components/common/model-viewer/model-viewer';
 import { Terminal } from '@/components/common/terminal';
+import { useServerConfig } from '@/components/server-config';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { withCascBuild } from '@/lib/api/casc-cache';
 import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
 import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
 import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
@@ -51,25 +53,25 @@ const defaultCharacter: Character = {
 };
 
 export default function BrowseModelPage() {
+  const { buildKey } = useServerConfig();
   const [allFiles, setAllFiles] = useState<FileEntry[]>([]);
 
-  async function fetchAllFiles() {
-    if (!allFiles.length) {
-      const res = await fetch('/api/browse?q=model');
-      if (!res.ok) {
-        throw new Error('Failed to fetch m2 list files');
-      }
-      const files = await res.json();
-      if (!files.length) {
-        throw new Error('No m2 list files found');
-      }
-      setAllFiles(files);
+  const fetchAllFiles = useCallback(async () => {
+    const res = await fetch(withCascBuild('/api/browse?q=model', buildKey));
+    if (!res.ok) {
+      throw new Error('Failed to fetch m2 list files');
     }
-  }
+    const files = await res.json();
+    if (!files.length) {
+      throw new Error('No m2 list files found');
+    }
+    setAllFiles(files);
+  }, [buildKey]);
 
   useEffect(() => {
-    void fetchAllFiles();
-  }, []);
+    setAllFiles([]);
+    void fetchAllFiles().catch(() => setAllFiles([]));
+  }, [fetchAllFiles]);
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -206,7 +208,10 @@ export default function BrowseModelPage() {
     setSkinsError(null);
     void (async () => {
       try {
-        const res = await fetch(`/api/browse/model-skins?fileDataID=${selected.fileDataID}`);
+        const res = await fetch(withCascBuild(
+          `/api/browse/model-skins?fileDataID=${selected.fileDataID}`,
+          buildKey,
+        ));
         if (cancelled) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({})) as { error?: string };
@@ -232,7 +237,7 @@ export default function BrowseModelPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selected?.fileDataID]);
+  }, [selected?.fileDataID, buildKey]);
 
   const applyCompletedExport = useCallback((result: JobStatus['result']) => {
     const path = result?.exportedModels?.[0]?.path;

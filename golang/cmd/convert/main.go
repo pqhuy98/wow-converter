@@ -132,6 +132,3 @@ func init() {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(0)
 }
-
-// Reference to match examples/convert.ts side-effect import.
-var _ = mapexporter.GameZToPercent

@@ -9,6 +9,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
 // MapGenerateConversionOptions configures a server-side WC3 conversion run.
@@ -76,7 +77,7 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	}
 
 	mapSaveName := NormalizeMapSaveName(opts.MapSaveName)
-	outputDir := filepath.Join("maps", mapSaveName)
+	outputDir := workspace.ResolveRepoPath(filepath.Join("maps", mapSaveName))
 	if opts.FreshExport {
 		_ = os.RemoveAll(outputDir)
 		LogMapGeneratePhase("Removed existing map folder " + outputDir)

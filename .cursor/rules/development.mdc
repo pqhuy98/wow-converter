@@ -5,7 +5,7 @@ alwaysApply: false
 - Avoid using `any` or `as` casting in TypeScript unless absolutely necessary. Avoid unncessary `instanceof` when developing in TypeScript, trust TypeScript static type.
 - Follow code best practices like DRY, YAGNI, SOLID, Clean Code. Avoid unnecessary complexity and overengineering.
 - Do not export functions, types, or constants that are not used outside their module/directory. Only export what is needed by external consumers.
-- Do not extract helpers into separate util files when they have a single caller — keep them in the caller file as unexported functions.
+- Do not extract helpers into separate util files when they have a single caller **and** the caller file stays small — keep them in the caller file as unexported functions. When the owner module is already large, colocate by **folder** (same package/directory as the owner) rather than inflating a single file.
 - **Go colocation:** keep helpers next to their caller/owner. Do not put domain logic in generic packages (`config/constants`, shared `util`, etc.). If multiple packages need it, export from the canonical owner file and have consumers import that package (e.g. API → `mapexporter` for ADT tile concurrency). Reserve `config` for real configuration constants only. Tiny helpers used by one primitive (e.g. `WorkerPool`, `Queue`) stay unexported in that primitive's file; duplicate at most one other primitive boundary instead of centralizing.
 - Code organization: In files, export exported functions/types first, then unexported/internal functions. For classes, order methods as: public/no modifier → protected → private.
 - Refactoring patterns:

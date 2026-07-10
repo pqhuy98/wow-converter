@@ -20,16 +20,16 @@ const (
 
 // Job is a unit of work in the queue.
 type Job[T, V any] struct {
-	ID          string
-	Request     T
-	Status      JobStatus
-	Result      *V
-	Error       string
-	SubmittedAt int64
-	StartedAt   *int64
-	FinishedAt  *int64
-	AddToRecent bool
-	NoTimeout   bool
+	ID          string    `json:"id"`
+	Request     T         `json:"request"`
+	Status      JobStatus `json:"status"`
+	Result      *V        `json:"result,omitempty"`
+	Error       string    `json:"error,omitempty"`
+	SubmittedAt int64     `json:"submittedAt"`
+	StartedAt   *int64    `json:"startedAt,omitempty"`
+	FinishedAt  *int64    `json:"finishedAt,omitempty"`
+	AddToRecent bool      `json:"addToRecent,omitempty"`
+	NoTimeout   bool      `json:"noTimeout,omitempty"`
 }
 
 // JobStatusView is the public status payload for API responses.

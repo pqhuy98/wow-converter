@@ -73,10 +73,7 @@ func NewServer(d *Deps) *Server {
 }
 
 func resolveUIDir() string {
-	if workspace.IsBundledLayout() {
-		return filepath.Join(workspace.BundledAppRoot(), "webui", "out")
-	}
-	return filepath.Join("webui", "out")
+	return filepath.Join(workspace.AppRoot(), "webui", "out")
 }
 
 // ListenAndServe starts the converter server.

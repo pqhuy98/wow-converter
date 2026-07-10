@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { useServerConfig } from '@/components/server-config';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +22,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -341,7 +341,7 @@ export function WowConfigSetup() {
           <CardDescription>
             {status.cascLoaded
               ? status.cascInfo?.buildName
-              : 'WoW data is managed by the server on shared hosting.'}
+              : status.cascLoadingMessage ?? 'WoW data is managed by the server on shared hosting.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -367,7 +367,7 @@ export function WowConfigSetup() {
               <AlertDescription>{status.error}</AlertDescription>
             </Alert>
           )}
-          <Button asChild>
+          <Button variant="outline" asChild>
             <Link href="/">Back</Link>
           </Button>
         </CardContent>
@@ -412,57 +412,56 @@ export function WowConfigSetup() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="flex flex-wrap gap-2">
-            <Button asChild>
-              <Link href="/">Back</Link>
-            </Button>
+          <div className="flex flex-col items-start gap-5">
             {!isSharedHosting && (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => { void changeSource(); }}
-                  disabled={changingSource || clearingCache}
-                >
-                  {changingSource && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Change installation source
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
+              <Button
+                type="button"
+                onClick={() => { void changeSource(); }}
+                disabled={changingSource || clearingCache}
+              >
+                {changingSource && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Change installation source
+              </Button>
+            )}
+            {!isSharedHosting && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={changingSource || clearingCache}
+                  >
+                    {clearingCache && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Clear cache
+                    {cacheSizeBytes !== null && ` (${formatCacheSize(cacheSizeBytes)})`}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Clear cache?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {cacheSizeBytes !== null && cacheSizeBytes > 0
+                        ? `This frees about ${formatCacheSize(cacheSizeBytes)} by clearing wow-converter's local cache. `
+                        : 'This clears wow-converter\'s local cache. '}
+                      Cached files will be rebuilt as needed, so the app may feel slower
+                      at first.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => { void clearCache(); }}
                       disabled={changingSource || clearingCache}
                     >
-                      {clearingCache && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       Clear cache
-                      {cacheSizeBytes !== null && ` (${formatCacheSize(cacheSizeBytes)})`}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Clear cache?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {cacheSizeBytes !== null && cacheSizeBytes > 0
-                          ? `This frees about ${formatCacheSize(cacheSizeBytes)} by clearing wow-converter's local cache. `
-                          : 'This clears wow-converter\'s local cache. '}
-                        Cached files will be rebuilt as needed, so the app may feel slower
-                        at first.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => { void clearCache(); }}
-                        disabled={changingSource || clearingCache}
-                      >
-                        Clear cache
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </>
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
+            <Button variant="outline" asChild>
+              <Link href="/">Back</Link>
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -575,7 +574,7 @@ export function WowConfigSetup() {
           </Alert>
         )}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="space-y-2">
           <Button
             type="button"
             onClick={() => { void loadWoW(); }}
@@ -590,12 +589,17 @@ export function WowConfigSetup() {
             ) : loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Load
+                Loading...
               </>
             ) : (
               'Load'
             )}
           </Button>
+          {(loading || status.cascLoading) && status.cascLoadingMessage && (
+            <p className="text-sm text-muted-foreground break-words">
+              {status.cascLoadingMessage}
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

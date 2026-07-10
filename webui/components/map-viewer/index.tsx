@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { withCascBuild } from '@/lib/api/casc-cache';
 import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
 import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
 import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
@@ -30,9 +31,11 @@ import {
 } from '@/lib/utils/wow-expansions';
 
 import { useServerConfig } from '../server-config';
+import { MapViewerControlHints } from './control-hints';
 import { ExpansionFilterBar } from './expansion-filter-bar';
 import { ExpansionIcon } from './expansion-icon';
 import GenerateWc3Dialog from './generate-wc3-dialog';
+import type { MapHoverChange } from './controllers/hover';
 import MinimapViewer, { MapInfo } from './minimap-viewer';
 
 interface MapResponse {
@@ -52,12 +55,12 @@ function isActiveJob(job: MapGenerateJobStatus | undefined): job is MapGenerateJ
 }
 
 export default function MapViewer() {
-  const { isSharedHosting } = useServerConfig();
+  const { buildKey, isSharedHosting } = useServerConfig();
   const [maps, setMaps] = useState<MapResponse[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [selectedMapDir, setSelectedMapDir] = useState<string | null>(null);
   const [mapInfo, setMapInfo] = useState<MapInfo | null>(null);
-  const [hover, setHover] = useState<{ tile: { x: number; y: number } | null }>({ tile: null });
+  const [hover, setHover] = useState<MapHoverChange>(null);
   const [selectedTiles, setSelectedTiles] = useState<{ x: number; y: number }[]>([]);
   const [texSize, setTexSize] = useState<TextureResolution>('8192');
   const [generateJob, setGenerateJob] = useState<MapGenerateJobStatus | undefined>(undefined);
@@ -86,7 +89,7 @@ export default function MapViewer() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch('/api/maps', { cache: 'no-store' });
+      const res = await fetch(withCascBuild('/api/maps', buildKey));
       if (!res.ok) {
         setMapsError('Failed to fetch maps');
         return;
@@ -104,7 +107,7 @@ export default function MapViewer() {
         expansionID: typeof m.expansionID === 'number' ? m.expansionID : undefined,
       })));
     })();
-  }, []);
+  }, [buildKey]);
 
   useEffect(() => {
     if (isSharedHosting) return;
@@ -245,7 +248,10 @@ export default function MapViewer() {
   useEffect(() => {
     if (!selectedMapDir) return;
     void (async () => {
-      const res = await fetch(`/api/maps/${encodeURIComponent(selectedMapDir)}/wdt-mask`, { cache: 'no-store' });
+      const res = await fetch(withCascBuild(
+        `/api/maps/${encodeURIComponent(selectedMapDir)}/wdt-mask`,
+        buildKey,
+      ));
       if (!res.ok) {
         setMapInfo(null);
         return;
@@ -267,14 +273,14 @@ export default function MapViewer() {
         textureMask: textureMatrix,
       });
     })();
-  }, [selectedMapDir]);
+  }, [selectedMapDir, buildKey]);
 
   useEffect(() => {
     setSelectedTiles([]);
   }, [selectedMapDir]);
 
   useEffect(() => {
-    setHover({ tile: null });
+    setHover(null);
   }, [mapInfo]);
 
   const onGenerateWc3 = useCallback(async (form: GenerateWc3FormValues) => {
@@ -586,8 +592,9 @@ export default function MapViewer() {
                 {mapInfo && (
                   <MinimapViewer
                     mapInfo={mapInfo}
+                    buildKey={buildKey}
                     className="w-full h-full block"
-                    onHoverChange={(tile) => setHover({ tile })}
+                    onHoverChange={setHover}
                     onSelectionChange={(tiles) => setSelectedTiles(tiles)}
                   />
                 )}
@@ -601,13 +608,17 @@ export default function MapViewer() {
                     Loading...
                   </div>
                 )}
-                <div className="absolute bottom-2 left-2 text-xs text-muted-foreground bg-background/80 rounded px-2 py-1">
-                  {hover.tile ? (
-                    <span>Tile {hover.tile.x},{hover.tile.y}</span>
-                  ) : (
-                    <span>Hover tiles to see coordinates</span>
-                  )}
+                <div className="absolute bottom-2 left-2 z-10">
+                  <MapViewerControlHints />
                 </div>
+                {hover ? (
+                  <div
+                    className="pointer-events-none absolute z-20 whitespace-nowrap text-xs text-foreground drop-shadow"
+                    style={{ left: hover.x + 12, top: hover.y + 12 }}
+                  >
+                    Tile {hover.tile.x},{hover.tile.y}
+                  </div>
+                ) : null}
               </div>
           </div>
         </div>

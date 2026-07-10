@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/pqhuy98/wow-converter/internal/azerothcore"
 	"github.com/pqhuy98/wow-converter/internal/buffer"
+	"github.com/pqhuy98/wow-converter/internal/converter/runtimecache"
 	"github.com/pqhuy98/wow-converter/internal/formats/blp"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
@@ -44,6 +45,20 @@ var (
 	tileBlpRegex = regexp.MustCompile(`^world/minimaps/([^/]+)/map(\d{1,2})_(\d{1,2})\.blp$`)
 	tileAdtRegex = regexp.MustCompile(`(?i)^world/maps/([^/]+)/([^/]+)_(\d{2})_(\d{2})\.adt$`)
 )
+
+func resetMapsFileIndex() {
+	mapsIndexMu.Lock()
+	defer mapsIndexMu.Unlock()
+	mapsMu.Lock()
+	defer mapsMu.Unlock()
+	mapsWithTiles = nil
+	mapsByDir = map[string]*mapWithTiles{}
+	fileNameIndex = map[string]casc.ListfileEntry{}
+}
+
+func init() {
+	runtimecache.RegisterConverterClearHook(resetMapsFileIndex)
+}
 
 func buildMapsIndex(ctx context.Context, d *Deps) error {
 	baseMaps, err := d.Client.GetMapList(ctx)
@@ -154,15 +169,16 @@ func parseTileKey(key string) (int, int) {
 
 func ensureMapsIndex(ctx context.Context, d *Deps) error {
 	mapsIndexMu.Lock()
-	defer mapsIndexMu.Unlock()
-
 	mapsMu.RLock()
 	ready := len(mapsWithTiles) > 0
 	mapsMu.RUnlock()
+	mapsIndexMu.Unlock()
 	if ready {
 		return nil
 	}
 
+	// Do not hold mapsIndexMu across WaitUntilReady: CASC polls call cache-clear
+	// hooks that reset the maps index and would deadlock on the same mutex.
 	if err := d.Client.WaitUntilReady(ctx); err != nil {
 		return err
 	}
@@ -197,9 +213,13 @@ func registerMaps(r Router, d *Deps) {
 			return
 		}
 		mapsMu.RLock()
-		defer mapsMu.RUnlock()
-		if !d.Config.IsDev {
-			w.Header().Set("Cache-Control", "public, max-age=3600")
+		buildKey := d.BuildKey(req.Context())
+		etag := etagFromParts("maps", buildKey, strconv.Itoa(len(mapsWithTiles)))
+		if matchNotModified(req, etag) {
+			mapsMu.RUnlock()
+			applyCascBuildCache(w, req, d.Config, buildKey, etag, false)
+			writeNotModified(w, etag)
+			return
 		}
 		out := make([]map[string]any, 0, len(mapsWithTiles))
 		for _, m := range mapsWithTiles {
@@ -207,10 +227,16 @@ func registerMaps(r Router, d *Deps) {
 				"id": m.ID, "name": m.Name, "dir": m.Dir, "expansionID": m.ExpansionID,
 			})
 		}
+		mapsMu.RUnlock()
+		applyCascBuildCache(w, req, d.Config, buildKey, etag, false)
 		sendJSON(w, http.StatusOK, out)
 	})
 
 	r.Get("/maps/{map}/wdt-mask", func(w http.ResponseWriter, req *http.Request) {
+		if err := ensureMapsIndex(req.Context(), d); err != nil {
+			sendInternalError(w, err)
+			return
+		}
 		mapKey := strings.ToLower(chi.URLParam(req, "map"))
 		mapsMu.RLock()
 		entry := mapsByDir[mapKey]
@@ -218,10 +244,16 @@ func registerMaps(r Router, d *Deps) {
 		if entry != nil {
 			tiles = entry.Tiles
 		}
-		mapsMu.RUnlock()
-		if !d.Config.IsDev {
-			w.Header().Set("Cache-Control", "public, max-age=3600")
+		buildKey := d.BuildKey(req.Context())
+		etag := etagFromParts("wdt-mask", buildKey, mapKey, strconv.Itoa(len(tiles)))
+		if matchNotModified(req, etag) {
+			mapsMu.RUnlock()
+			applyCascBuildCache(w, req, d.Config, buildKey, etag, false)
+			writeNotModified(w, etag)
+			return
 		}
+		mapsMu.RUnlock()
+		applyCascBuildCache(w, req, d.Config, buildKey, etag, false)
 		sendJSON(w, http.StatusOK, map[string]any{
 			"map": chi.URLParam(req, "map"), "size": 64, "tiles": tiles,
 		})
@@ -300,15 +332,17 @@ func registerMaps(r Router, d *Deps) {
 			buildKey = info.BuildKey
 		}
 		etag := md5Hex(buildKey + "|" + mapDir + "|" + strconv.Itoa(x) + "|" + strconv.Itoa(y))
-		if !d.Config.IsDev && req.Header.Get("If-None-Match") == etag {
-			w.WriteHeader(http.StatusNotModified)
+		quotedETag := `"` + etag + `"`
+		if matchNotModified(req, quotedETag) {
+			applyCascBuildCache(w, req, d.Config, buildKey, quotedETag, true)
+			writeNotModified(w, quotedETag)
 			return
 		}
 
 		assetDir := d.ExportAssetDir()
-		preexisting := filepath.Join(assetDir, "world", "minimaps", mapDir, "map"+xs+"_"+ys+".png")
+		preexisting := MinimapPngPath(assetDir, buildKey, mapDir, xs, ys)
 		if data, err := os.ReadFile(preexisting); err == nil {
-			servePNG(w, data, etag, d.Config.IsDev)
+			servePNG(w, req, d.Config, buildKey, data, quotedETag)
 			return
 		}
 
@@ -339,7 +373,7 @@ func registerMaps(r Router, d *Deps) {
 		if err := os.MkdirAll(filepath.Dir(preexisting), 0o755); err == nil {
 			_ = os.WriteFile(preexisting, pngBuf.Raw(), 0o644)
 		}
-		servePNG(w, pngBuf.Raw(), etag, d.Config.IsDev)
+		servePNG(w, req, d.Config, buildKey, pngBuf.Raw(), quotedETag)
 	})
 }
 
@@ -352,12 +386,9 @@ func md5Hex(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func servePNG(w http.ResponseWriter, data []byte, etag string, isDev bool) {
+func servePNG(w http.ResponseWriter, req *http.Request, cfg Config, activeBuild string, data []byte, etag string) {
 	w.Header().Set("Content-Type", "image/png")
-	if !isDev {
-		w.Header().Set("Cache-Control", "public, max-age=86400")
-	}
-	w.Header().Set("ETag", etag)
+	applyCascBuildCache(w, req, cfg, activeBuild, etag, true)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }

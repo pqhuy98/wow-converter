@@ -10,9 +10,9 @@ import { pngsToBlps } from '@/lib/formats/blp/blp';
 import { getPngDimensions } from '@/lib/formats/png';
 import { getDefaultConfig } from '@/lib/global-config';
 import { waitUntil } from '@/lib/utils';
+import { getListFiles } from '@/lib/wow/listfile-cache';
 import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
-import { getListFiles } from '../../../server/controllers/shared';
 import { AiResizer } from './ai-resizer';
 import { processIconImage } from './icon-processor';
 import type { IconConversionOptions, IconFrame, IconSize } from './schemas';

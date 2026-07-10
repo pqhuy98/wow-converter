@@ -7,15 +7,29 @@ import (
 	"strings"
 )
 
-// FindRepoRoot walks upward from cwd looking for the wow-converter repo root.
-func FindRepoRoot() string {
-	wd, err := os.Getwd()
+// ExeDir returns the directory containing the running executable.
+func ExeDir() string {
+	exe, err := os.Executable()
 	if err != nil {
 		return "."
 	}
-	dir := wd
+	return filepath.Dir(exe)
+}
+
+// AppRoot is the base directory for app-relative paths (exports, caches, bin/, resources/).
+// Desktop bundle: exe dir when build-go-app markers sit beside the binary.
+// Dev (dev:go, wow-data-server, CLI): walk up from cwd to package.json + golang/go.mod.
+func AppRoot() string {
+	return resolveAppRoot(ExeDir(), workingDir())
+}
+
+func resolveAppRoot(exeDir, cwd string) string {
+	if isShippedBundleAt(exeDir) {
+		return exeDir
+	}
+	dir := cwd
 	for {
-		if isRepoRoot(dir) {
+		if isDevRepoRoot(dir) {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -24,10 +38,23 @@ func FindRepoRoot() string {
 		}
 		dir = parent
 	}
-	return wd
+	return cwd
 }
 
-func isRepoRoot(dir string) bool {
+func isShippedBundleAt(root string) bool {
+	for _, rel := range []string{
+		filepath.Join("webui", "out", "index.html"),
+		filepath.Join("resources", "template-empty.w3x"),
+		"bin",
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func isDevRepoRoot(dir string) bool {
 	if st, err := os.Stat(filepath.Join(dir, "package.json")); err != nil || st.IsDir() {
 		return false
 	}
@@ -37,20 +64,36 @@ func isRepoRoot(dir string) bool {
 	return true
 }
 
-// ChdirRepoRoot changes the process working directory to the repo root when found.
-func ChdirRepoRoot() (string, error) {
-	root := FindRepoRoot()
-	if err := os.Chdir(root); err != nil {
-		return root, err
+func workingDir() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
 	}
-	return root, nil
+	return wd
 }
 
-// ResolveRepoPath maps a repo-relative path to an absolute path under FindRepoRoot().
+// IsDesktopApp reports whether AppRoot is the shipped desktop bundle (exe dir).
+func IsDesktopApp() bool {
+	return AppRoot() == ExeDir()
+}
+
+// FindRepoRoot is an alias for AppRoot.
+func FindRepoRoot() string { return AppRoot() }
+
+// ChdirAppRoot sets cwd to AppRoot.
+func ChdirAppRoot() (string, error) {
+	root := AppRoot()
+	return root, os.Chdir(root)
+}
+
+// ChdirRepoRoot is an alias for ChdirAppRoot.
+func ChdirRepoRoot() (string, error) { return ChdirAppRoot() }
+
+// ResolveRepoPath maps a repo-relative path to an absolute path under AppRoot().
 func ResolveRepoPath(rel string) string {
 	rel = strings.TrimSpace(rel)
 	if rel == "" {
-		return filepath.Clean(FindRepoRoot())
+		return filepath.Clean(AppRoot())
 	}
 	if filepath.IsAbs(rel) {
 		abs, err := filepath.Abs(rel)
@@ -59,17 +102,16 @@ func ResolveRepoPath(rel string) string {
 		}
 		return filepath.Clean(abs)
 	}
-	return filepath.Clean(filepath.Join(FindRepoRoot(), filepath.FromSlash(rel)))
+	return filepath.Clean(filepath.Join(AppRoot(), filepath.FromSlash(rel)))
 }
 
 // ResolveExportAssetDir returns an absolute export asset directory.
-// Relative paths are resolved against the repo root, matching TS path.resolve behavior.
 func ResolveExportAssetDir(dir string) string {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
-		dir = filepath.Join(FindRepoRoot(), ".cache", "wow-export")
+		dir = filepath.Join(AppRoot(), ".cache", "wow-export")
 	} else if !filepath.IsAbs(dir) {
-		dir = filepath.Join(FindRepoRoot(), filepath.FromSlash(dir))
+		dir = filepath.Join(AppRoot(), filepath.FromSlash(dir))
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -78,7 +120,7 @@ func ResolveExportAssetDir(dir string) string {
 	return filepath.Clean(abs)
 }
 
-// DefaultExportDir returns the export asset directory (WOW_EXPORT_DIR or .cache/wow-export under repo root).
+// DefaultExportDir returns the export asset directory (WOW_EXPORT_DIR or .cache/wow-export under AppRoot).
 func DefaultExportDir() string {
 	if v := strings.TrimSpace(os.Getenv("WOW_EXPORT_DIR")); v != "" {
 		return ResolveExportAssetDir(v)
@@ -105,7 +147,6 @@ func wowDataServerPort() string {
 }
 
 // PreferWowDataServerPortFromEnv uses WOW_DATA_SERVER_PORT from repo .env for local compare scripts.
-// Shell-level WOW_DATA_SERVER_URL often points at a stale port and makes tools look frozen.
 func PreferWowDataServerPortFromEnv() string {
 	port := wowDataServerPort()
 	if f, err := os.Open(".env"); err == nil {

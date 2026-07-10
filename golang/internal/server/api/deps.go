@@ -49,3 +49,8 @@ func (d *Deps) IsClassic(ctx context.Context) bool {
 	}
 	return client.IsClassicProduct(info.Build.Product)
 }
+
+// BuildKey returns the active CASC build config key, or empty when unloaded.
+func (d *Deps) BuildKey(ctx context.Context) string {
+	return d.buildKey(ctx)
+}

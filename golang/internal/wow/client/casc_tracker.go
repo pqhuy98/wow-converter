@@ -37,6 +37,20 @@ func (t *cascTracker) clear() {
 	t.cascLoaded = false
 }
 
+// clearIfWasLoaded clears tracker state and reports whether CASC was previously loaded.
+// Polls against an unloaded server must not trigger cache clears every time.
+func (t *cascTracker) clearIfWasLoaded() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.cascLoaded {
+		return false
+	}
+	t.buildKey = ""
+	t.product = ""
+	t.cascLoaded = false
+	return true
+}
+
 func (t *cascTracker) isClassic() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -70,11 +84,13 @@ func StartCascMonitor(ctx context.Context, c Client) {
 }
 
 func (c *HTTPClient) onCascUnavailable() {
-	c.casc.clear()
-	runtimecache.ClearConverterRuntimeCaches()
+	if c.casc.clearIfWasLoaded() {
+		runtimecache.ClearConverterRuntimeCaches()
+	}
 }
 
 func (c *InProcessClient) onCascUnavailable() {
-	c.casc.clear()
-	runtimecache.ClearConverterRuntimeCaches()
+	if c.casc.clearIfWasLoaded() {
+		runtimecache.ClearConverterRuntimeCaches()
+	}
 }

@@ -28,6 +28,7 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
 
   const hasInitFromUrlRef = useRef(false);
   const readyToSyncRef = useRef(false);
+  const suppressLocationChangeRef = useRef(false);
   const searchRef = useRef(search);
   const selectedPathRef = useRef(selectedPath);
   const resetLocalStateRef = useRef(resetLocalState);
@@ -52,7 +53,12 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
     const currentSearch = current.search.startsWith('?') ? current.search.slice(1) : current.search;
     if (newSearch !== currentSearch) {
       const newUrl = `${current.pathname}${newSearch ? `?${newSearch}` : ''}${current.hash ?? ''}`;
-      window.history.replaceState(window.history.state, '', newUrl);
+      suppressLocationChangeRef.current = true;
+      try {
+        window.history.replaceState(window.history.state, '', newUrl);
+      } finally {
+        suppressLocationChangeRef.current = false;
+      }
     }
   }, []);
 
@@ -102,29 +108,35 @@ export function useSearchSelectUrlSync(opts: UseSearchSelectUrlSyncOptions) {
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const onLocationChange = () => {
+      if (suppressLocationChangeRef.current) return;
       if (window.location.pathname !== basePath) return;
       const params = new URLSearchParams(window.location.search);
       const hasS = params.has('s');
       const hasC = params.has('c');
       if (!hasS && !hasC) {
-        resetLocalStateRef.current();
+        queueMicrotask(() => resetLocalStateRef.current());
         return;
       }
       const sRaw = params.get('s') ?? '';
       const sNext = sRaw.replace(/\+/g, ' ');
       const cNext = params.get('c');
-      if (sNext !== searchRef.current) {
-        setSearch(sNext);
-        setDebouncedSearch(sNext);
-      }
-      if (cNext && cNext !== selectedPathRef.current) {
-        setPendingScrollPath(cNext);
-      }
+      queueMicrotask(() => {
+        if (sNext !== searchRef.current) {
+          setSearch(sNext);
+          setDebouncedSearch(sNext);
+        }
+        if (cNext && cNext !== selectedPathRef.current) {
+          setPendingScrollPath(cNext);
+        }
+      });
     };
 
     const originalPushState: History['pushState'] = window.history.pushState.bind(window.history);
     const originalReplaceState: History['replaceState'] = window.history.replaceState.bind(window.history);
-    const emit = () => window.dispatchEvent(new Event('_locationchange'));
+    const emit = () => {
+      if (suppressLocationChangeRef.current) return;
+      window.dispatchEvent(new Event('_locationchange'));
+    };
     window.history.pushState = ((...args: Parameters<History['pushState']>) => {
       originalPushState(...args);
       emit();

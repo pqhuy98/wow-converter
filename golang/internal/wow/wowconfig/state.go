@@ -47,6 +47,7 @@ type Status struct {
 	ConfiguredFromEnv        bool         `json:"configuredFromEnv"`
 	CascLoaded               bool         `json:"cascLoaded"`
 	CascLoading              bool         `json:"cascLoading"`
+	CascLoadingMessage       string       `json:"cascLoadingMessage,omitempty"`
 	WowDataServerReachable   bool         `json:"wowDataServerReachable"`
 	Config                   *Config      `json:"config"`
 	CascInfo                 *InfoSummary `json:"cascInfo"`

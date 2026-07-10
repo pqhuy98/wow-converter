@@ -17,6 +17,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/testcases"
 	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/test/internal/snapshot"
 )
 
@@ -52,16 +53,16 @@ func main() {
 		randomCases = payload.Cases
 		caseCount = len(randomCases)
 	}
-	mapDir := filepath.Join("..", "..", "maps", "test-regression-retail.w3x")
+	mapDir := workspace.ResolveRepoPath("maps/test-regression-retail.w3x")
 	manifestPath := filepath.Join(mapDir, "manifest.json")
 	if *mount {
 		caseCount = len(testcases.MountCases())
-		mapDir = filepath.Join("..", "..", "maps", "test-regression-mount.w3x")
+		mapDir = workspace.ResolveRepoPath("maps/test-regression-mount.w3x")
 		manifestPath = filepath.Join(mapDir, "manifest.json")
 	} else if *classic && *casesFile == "" {
 		cases = testcases.ClassicCases()
 		caseCount = len(cases)
-		mapDir = filepath.Join("..", "..", "maps", "test-regression-classic.w3x")
+		mapDir = workspace.ResolveRepoPath("maps/test-regression-classic.w3x")
 		manifestPath = filepath.Join(mapDir, "manifest.json")
 	}
 	if *outDir != "" {

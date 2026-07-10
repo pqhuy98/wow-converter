@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pqhuy98/wow-converter/internal/converter/runtimecache"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
@@ -64,4 +65,15 @@ func getListFiles(ctx context.Context, c client.Client) ([]casc.ListfileEntry, e
 	}
 	listFilesMu.Unlock()
 	return entries, err
+}
+
+func resetListFileCache() {
+	listFilesMu.Lock()
+	listFiles = nil
+	listPending = false
+	listFilesMu.Unlock()
+}
+
+func init() {
+	runtimecache.RegisterConverterClearHook(resetListFileCache)
 }

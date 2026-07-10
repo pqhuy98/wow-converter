@@ -146,6 +146,19 @@ func (c *InProcessClient) GetCASCInfo(ctx context.Context) (CASCInfo, error) {
 	return CASCInfo{}, unexpectedResponse("getCascInfo", body)
 }
 
+func (c *InProcessClient) GetCascLoadProgress(ctx context.Context) (CascLoadProgress, error) {
+	body, status, err := c.doGet(ctx, "/rest/getCascLoadProgress", nil)
+	if err != nil {
+		return CascLoadProgress{}, err
+	}
+	if status != http.StatusOK || body["id"] != "CASC_LOAD_PROGRESS" {
+		return CascLoadProgress{}, unexpectedResponse("getCascLoadProgress", body)
+	}
+	loading, _ := body["loading"].(bool)
+	message, _ := body["message"].(string)
+	return CascLoadProgress{Loading: loading, Message: message}, nil
+}
+
 func (c *InProcessClient) UnloadCASC(ctx context.Context) error {
 	body, status, err := c.doPost(ctx, "/rest/unloadCasc", map[string]any{})
 	if err != nil {
@@ -384,6 +397,8 @@ func (c *InProcessClient) dispatchGET(path string, w http.ResponseWriter, r *htt
 	switch path {
 	case "/rest/getCascInfo":
 		c.handler.GetCascInfo(w, r)
+	case "/rest/getCascLoadProgress":
+		c.handler.GetCascLoadProgress(w, r)
 	case "/rest/getConfig":
 		c.handler.GetConfig(w, r)
 	case "/rest/searchFiles":

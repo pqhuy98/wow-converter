@@ -46,6 +46,7 @@ func newServer(handler *Handler, opts ServerListenOptions) *Server {
 	r.Use(httplog.RequestLogger())
 
 	r.Get("/rest/getCascInfo", handler.GetCascInfo)
+	r.Get("/rest/getCascLoadProgress", handler.GetCascLoadProgress)
 	r.Get("/rest/getConfig", handler.GetConfig)
 	r.Get("/rest/searchFiles", handler.SearchFiles)
 	r.Get("/rest/collectBrowseFileIndex", handler.CollectBrowseFileIndex)

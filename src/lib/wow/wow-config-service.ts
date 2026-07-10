@@ -237,7 +237,15 @@ export async function getWowConfigStatus(): Promise<WowConfigStatus> {
 
   const configuredFromEnv = isEnvWowConfigured();
   const config = getEffectiveWowConfig();
-  const cascLoading = isWowConfigApplyInFlight();
+  let cascLoading = isWowConfigApplyInFlight();
+  let cascLoadingMessage = '';
+  if (reachable) {
+    const { ok, json } = await getJson('/rest/getCascLoadProgress');
+    if (ok && json.id === 'CASC_LOAD_PROGRESS') {
+      if (json.loading === true) cascLoading = true;
+      if (typeof json.message === 'string') cascLoadingMessage = json.message;
+    }
+  }
   const needsSetup = !cascLoaded && !getMemoryWowConfig()
     && (runtimeConfigOverride || !configuredFromEnv);
 
@@ -246,6 +254,7 @@ export async function getWowConfigStatus(): Promise<WowConfigStatus> {
     configuredFromEnv,
     cascLoaded,
     cascLoading,
+    cascLoadingMessage: cascLoadingMessage || undefined,
     wowDataServerReachable: reachable,
     config,
     cascInfo,

@@ -11,6 +11,7 @@ import { useServerConfig } from '@/components/server-config';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { withCascBuild } from '@/lib/api/casc-cache';
 
 export const ICON_SIZE = 48; // Icon thumbnail size in pixels
 const ICON_PADDING = 8;
@@ -49,7 +50,7 @@ const FileRowWithThumbnailComponent = memo(({
   const [hasCopied, setHasCopied] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
-  const { isSharedHosting } = useServerConfig();
+  const { buildKey, isSharedHosting } = useServerConfig();
   const [shouldLoadImage, setShouldLoadImage] = useState(!isSharedHosting);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,7 +64,10 @@ const FileRowWithThumbnailComponent = memo(({
     ));
   };
 
-  const imageUrl = thumbnailUrl ?? `/api/texture/png/${encodeURIComponent(file.fileName)}`;
+  const imageUrl = thumbnailUrl ?? withCascBuild(
+    `/api/texture/png/${encodeURIComponent(file.fileName)}`,
+    buildKey,
+  );
 
   // Debounce image loading to avoid loading too many images during fast scrolling (only on shared hosting)
   useEffect(() => {

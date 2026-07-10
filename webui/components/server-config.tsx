@@ -9,6 +9,7 @@ type ServerConfig = {
   isSharedHosting: boolean
   isDev: boolean
   isClassic: boolean
+  buildKey: string
 };
 
 const defaultConfig: ServerConfig = {
@@ -16,6 +17,7 @@ const defaultConfig: ServerConfig = {
   isSharedHosting: false,
   isDev: false,
   isClassic: false,
+  buildKey: '',
 };
 
 // Keep an up-to-date copy of the latest server config for non-React consumers
@@ -51,6 +53,7 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
             && prevConfig.isSharedHosting === newConfig.isSharedHosting
             && prevConfig.isDev === newConfig.isDev
             && prevConfig.isClassic === newConfig.isClassic
+            && prevConfig.buildKey === newConfig.buildKey
           ) {
             return prevConfig; // Return previous config to avoid re-render
           }

@@ -16,6 +16,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/server/pathsafe"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
+	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/service"
 )
@@ -82,6 +83,16 @@ func (h *Handler) GetCascInfo(w http.ResponseWriter, _ *http.Request) {
 		"buildConfig": cascSource.BuildConfig(),
 		"buildName":   cascSource.GetBuildName(),
 		"buildKey":    cascSource.GetBuildKey(),
+	})
+}
+
+// GET /rest/getCascLoadProgress
+func (h *Handler) GetCascLoadProgress(w http.ResponseWriter, _ *http.Request) {
+	loading := h.Services.Loader.IsLoading() || log.IsLoadingProgressActive()
+	sendJSON(w, http.StatusOK, map[string]any{
+		"id":      "CASC_LOAD_PROGRESS",
+		"loading": loading,
+		"message": log.LatestLoadingMessage(),
 	})
 }
 

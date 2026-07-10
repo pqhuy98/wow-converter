@@ -8,8 +8,8 @@ import { join } from 'path';
 
 import { Config } from '@/lib/global-config';
 import { toMap, workerPool } from '@/lib/utils';
-import { bundledAppRoot } from '@/lib/wow-data-server/transport';
 import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
+import { bundledAppRoot } from '@/lib/wow-data-server/transport';
 
 import {
   Character, CharacterExporter, displayID, wowhead,

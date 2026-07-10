@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 
 import type { MapInfo } from '../minimap-viewer';
 import type { MapStore } from '../store';
-import { useHoverController } from './hover';
+import { type MapHoverChange, useHoverController } from './hover';
 import { usePanController } from './pan';
 import { useSelectionController } from './selection';
 import { useWheelZoomController } from './wheelZoom';
@@ -27,7 +27,7 @@ export function useInputControllers({
   store: MapStore;
   mapInfo: MapInfo;
   scheduleRender: () => void;
-  onHoverChange?: (tile: { x: number; y: number } | null) => void;
+  onHoverChange?: (hover: MapHoverChange) => void;
   emitTilesSelection: () => void;
 }) {
   // Initial center on tile (32,32)
@@ -67,7 +67,7 @@ export function useInputControllers({
 
     const disposePan = usePanController({ canvas, store: s, helpers });
     const disposeHover = useHoverController({
-      canvas, store: s, helpers, onHoverChange,
+      canvas, store: s, mapInfo, helpers, onHoverChange,
     });
     const disposeSelection = useSelectionController({
       canvas, store: s, helpers, emitTilesSelection,

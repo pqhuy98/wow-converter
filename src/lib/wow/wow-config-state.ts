@@ -45,6 +45,7 @@ export interface WowConfigStatus {
   configuredFromEnv: boolean;
   cascLoaded: boolean;
   cascLoading: boolean;
+  cascLoadingMessage?: string;
   wowDataServerReachable: boolean;
   config: WowConfig | null;
   cascInfo: CascInfoSummary | null;

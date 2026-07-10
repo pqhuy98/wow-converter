@@ -6,20 +6,11 @@ import (
 	"path/filepath"
 )
 
-// ResolveTemplateEmptyDir returns the WC3 empty-map template directory.
-// Bundled desktop builds ship it under resources/; dev and shared hosting use maps/.
+// ResolveTemplateEmptyDir returns the WC3 empty-map template directory under resources/.
 func ResolveTemplateEmptyDir() (string, error) {
-	for _, c := range templateEmptyCandidates() {
-		if st, err := os.Stat(c); err == nil && st.IsDir() {
-			return c, nil
-		}
+	dir := filepath.Join(FindRepoRoot(), "resources", "template-empty.w3x")
+	if st, err := os.Stat(dir); err == nil && st.IsDir() {
+		return dir, nil
 	}
-	return "", fmt.Errorf("missing WC3 map template (template-empty.w3x); checked %v", templateEmptyCandidates())
-}
-
-func templateEmptyCandidates() []string {
-	return []string{
-		filepath.Join(BundledAppRoot(), "resources", "template-empty.w3x"),
-		ResolveRepoPath("maps/template-empty.w3x"),
-	}
+	return "", fmt.Errorf("missing WC3 map template (template-empty.w3x): %s", dir)
 }

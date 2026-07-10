@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pqhuy98/wow-converter/internal/wow/config"
+	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
@@ -69,7 +69,7 @@ func LoadTactKeys() error {
 		}
 	}
 
-	remoteURLs := []string{config.WowConfig.TactKeysURL, config.WowConfig.TactKeysFallbackURL}
+	remoteURLs := []string{server.GetConfig().TactKeysURL, server.GetConfig().TactKeysFallbackURL}
 	for _, url := range remoteURLs {
 		if url == "" {
 			continue

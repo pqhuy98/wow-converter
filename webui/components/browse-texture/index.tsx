@@ -13,11 +13,13 @@ import {
   FileRow, FileRowWithThumbnail, VirtualListBox,
 } from '@/components/common/listbox';
 import TextureViewer from '@/components/common/texture-viewer';
+import { useServerConfig } from '@/components/server-config';
 import { Button } from '@/components/ui/button';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { withCascBuild } from '@/lib/api/casc-cache';
 import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
 import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
 import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
@@ -36,25 +38,25 @@ function isIcon(fileName: string): boolean {
 const suggestions = ['interface/icons/', 'loadingscreens/'] as const;
 
 export default function BrowseTexturePage() {
+  const { buildKey } = useServerConfig();
   const [allFiles, setAllFiles] = useState<FileEntry[]>([]);
 
-  async function fetchAllFiles() {
-    if (!allFiles.length) {
-      const res = await fetch('/api/browse?q=texture');
-      if (!res.ok) {
-        throw new Error('Failed to fetch texture list files');
-      }
-      const files = await res.json();
-      if (!files.length) {
-        throw new Error('No texture files found');
-      }
-      setAllFiles(files);
+  const fetchAllFiles = useCallback(async () => {
+    const res = await fetch(withCascBuild('/api/browse?q=texture', buildKey));
+    if (!res.ok) {
+      throw new Error('Failed to fetch texture list files');
     }
-  }
+    const files = await res.json();
+    if (!files.length) {
+      throw new Error('No texture files found');
+    }
+    setAllFiles(files);
+  }, [buildKey]);
 
   useEffect(() => {
-    void fetchAllFiles();
-  }, []);
+    setAllFiles([]);
+    void fetchAllFiles().catch(() => setAllFiles([]));
+  }, [fetchAllFiles]);
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');

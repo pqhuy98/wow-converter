@@ -406,7 +406,7 @@ func runCharacterExport(req exportCharacterRequest, d *Deps) (exportCharacterRes
 	sort.Slice(resp.ExportedTextures, func(i, j int) bool {
 		return stringsort.Less(resp.ExportedTextures[i].Path, resp.ExportedTextures[j].Path)
 	})
-	if req.IsBrowse {
+	if !d.Config.IsSharedHosting {
 		resp.OutputDirectory = outDir
 	}
 	summary, _ := json.MarshalIndent(map[string]any{

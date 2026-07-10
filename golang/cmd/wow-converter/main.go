@@ -22,21 +22,14 @@ import (
 )
 
 func main() {
-	bundled := flag.Bool("bundled", workspace.IsBundledLayout(), "run wow-data-server in-process")
-	flag.Parse()
-
-	if *bundled {
-		exeDir := workspace.BundledAppRoot()
-		_ = os.Chdir(exeDir)
-		_ = workspace.LoadEnvFile(filepath.Join(exeDir, ".env"))
-	} else {
-		if root, err := workspace.ChdirRepoRoot(); err != nil {
-			log.Printf("warning: chdir repo root: %v", err)
-		} else {
-			log.Printf("Working directory: %s", root)
-			_ = workspace.LoadEnvFile(filepath.Join(root, ".env"))
-		}
+	root := workspace.AppRoot()
+	if err := os.Chdir(root); err != nil {
+		log.Printf("warning: chdir app root: %v", err)
 	}
+	_ = workspace.LoadEnvFile(filepath.Join(root, ".env"))
+
+	bundled := flag.Bool("bundled", workspace.IsDesktopApp(), "run wow-data-server in-process")
+	flag.Parse()
 
 	ctx := context.Background()
 	var dataClient client.Client

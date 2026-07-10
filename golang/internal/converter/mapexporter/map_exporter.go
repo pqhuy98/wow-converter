@@ -272,11 +272,6 @@ func (e *MapExporter) SaveWar3mapFiles(outputDir, mapName string) error {
 	return nil
 }
 
-// GameZToPercent maps game Z to terrain clamp percent.
-func GameZToPercent(z float64) float64 {
-	return config.GameZToPercent(z)
-}
-
 func buildPaths(prefix string, min, max math.Vector2) []string {
 	var res []string
 	for i := int(min[0]); i <= int(max[0]); i++ {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/converter/character"
+	"github.com/pqhuy98/wow-converter/internal/converter/runtimecache"
 	"github.com/pqhuy98/wow-converter/internal/stringsort"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
@@ -174,21 +175,91 @@ func (b *browseIndexes) counts() (models, textures int) {
 	return len(b.modelFiles), len(b.textureFiles)
 }
 
-func registerBrowse(r Router, d *Deps) {
-	indexes := &browseIndexes{}
+var (
+	browseFileIndex   *browseIndexes
+	browsePreloadDeps *Deps
+	browsePreloadMu   sync.Mutex
+	browsePreloadRun  bool
+)
+
+func preloadBrowseIndexLoop(ctx context.Context, d *Deps, announceStartup bool) {
+	indexes := browseFileIndex
+	if indexes == nil {
+		return
+	}
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		waitForDataClient(ctx, d.Client)
+		if err := indexes.load(ctx, d.Client); err == nil {
+			models, textures := indexes.counts()
+			if models > 0 || textures > 0 {
+				if announceStartup {
+					d.startup.browseFinished(true, models, textures)
+				}
+				return
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			if announceStartup {
+				log.Printf("browse index preload failed: %v", ctx.Err())
+				d.startup.browseFinished(false, 0, 0)
+			}
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func scheduleBrowseIndexPreload(d *Deps, announceStartup bool) {
+	browsePreloadMu.Lock()
+	if browsePreloadRun {
+		browsePreloadMu.Unlock()
+		return
+	}
+	browsePreloadRun = true
+	browsePreloadMu.Unlock()
 
 	go func() {
-		ctx := context.Background()
-		waitForDataClient(ctx, d.Client)
-		err := indexes.load(ctx, d.Client)
-		if err != nil {
-			log.Printf("browse index preload failed: %v", err)
-			d.startup.browseFinished(false, 0, 0)
-			return
-		}
-		models, textures := indexes.counts()
-		d.startup.browseFinished(true, models, textures)
+		defer func() {
+			browsePreloadMu.Lock()
+			browsePreloadRun = false
+			browsePreloadMu.Unlock()
+		}()
+		preloadBrowseIndexLoop(context.Background(), d, announceStartup)
 	}()
+}
+
+func resetBrowseFileIndex() {
+	if browseFileIndex == nil {
+		return
+	}
+	browseFileIndex.mu.Lock()
+	browseFileIndex.modelFiles = nil
+	browseFileIndex.textureFiles = nil
+	browseFileIndex.loading = false
+	browseFileIndex.loadErr = nil
+	browseFileIndex.mu.Unlock()
+
+	if browsePreloadDeps != nil {
+		scheduleBrowseIndexPreload(browsePreloadDeps, false)
+	}
+}
+
+func init() {
+	runtimecache.RegisterConverterClearHook(resetBrowseFileIndex)
+}
+
+func registerBrowse(r Router, d *Deps) {
+	browsePreloadDeps = d
+	browseFileIndex = &browseIndexes{}
+	indexes := browseFileIndex
+
+	scheduleBrowseIndexPreload(d, true)
 
 	r.Get("/browse", func(w http.ResponseWriter, req *http.Request) {
 		if err := indexes.load(req.Context(), d.Client); err != nil {
@@ -204,8 +275,15 @@ func registerBrowse(r Router, d *Deps) {
 			sendError(w, http.StatusBadRequest, `q must be "model" or "texture"`)
 			return
 		}
-		w.Header().Set("Cache-Control", "public, max-age=60")
-		sendJSON(w, http.StatusOK, indexes.snapshot(q))
+		snapshot := indexes.snapshot(q)
+		buildKey := d.BuildKey(req.Context())
+		etag := etagFromParts("browse", buildKey, q, strconv.Itoa(len(snapshot)))
+		if matchNotModified(req, etag) {
+			writeNotModified(w, etag)
+			return
+		}
+		applyCascBuildCache(w, req, d.Config, buildKey, etag, false)
+		sendJSON(w, http.StatusOK, snapshot)
 	})
 
 	r.Get("/browse/model-skins", func(w http.ResponseWriter, req *http.Request) {

@@ -1,9 +1,11 @@
 import express from 'express';
 
 import { getModelSkinOptions } from '@/lib/converter/character/utils';
+import { getListFiles, registerListfileClearHook } from '@/lib/wow/listfile-cache';
 import { FileEntry, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
-
-import { getListFiles } from './shared';
+import {
+  applyCascBuildCache, etagFromParts, matchNotModified, writeNotModified,
+} from '@/server/utils/casc-cache';
 
 let allFiles: FileEntry[] | null = null;
 let modelFiles: FileEntry[] | null = null;
@@ -27,7 +29,28 @@ export function ControllerBrowse(router: express.Router) {
 
     console.log('Total texture files:', textureFiles.length);
   }
-  void fetchAllFiles();
+
+  async function preloadBrowseIndex() {
+    for (;;) {
+      try {
+        await wowDataClient.waitUntilReady();
+        await fetchAllFiles();
+        if ((modelFiles?.length ?? 0) > 0 || (textureFiles?.length ?? 0) > 0) return;
+      } catch (e) {
+        console.warn('browse index preload waiting for CASC:', (e as Error).message);
+      }
+      await new Promise<void>((resolve) => { setTimeout(resolve, 2000); });
+    }
+  }
+
+  registerListfileClearHook(() => {
+    allFiles = null;
+    modelFiles = null;
+    textureFiles = null;
+    void preloadBrowseIndex();
+  });
+
+  void preloadBrowseIndex();
 
   // Search files in the WoW listfile; default to all m2 if no search
   router.get('/browse', async (req, res) => {
@@ -50,7 +73,14 @@ export function ControllerBrowse(router: express.Router) {
         result = textureFiles ?? [];
       }
 
-      return res.header('Cache-Control', 'public, max-age=60').json(result);
+      const buildKey = wowDataClient.cascInfo?.buildKey ?? '';
+      const etag = etagFromParts('browse', buildKey, q, String(result.length));
+      if (matchNotModified(req, etag)) {
+        applyCascBuildCache(res, req, buildKey, etag);
+        return writeNotModified(res, etag);
+      }
+      applyCascBuildCache(res, req, buildKey, etag);
+      return res.json(result);
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

@@ -34,6 +34,41 @@ export async function readExportAssetUtf8(absPath: string): Promise<string> {
   return (await readExportAsset(absPath)).toString('utf-8');
 }
 
+function cascExportMarkerPath(absPath: string): string {
+  return `${absPath}.casc`;
+}
+
+function formatCascExportMarker(buildKey: string, fileDataID: number): string {
+  return `${buildKey}\t${fileDataID}`;
+}
+
+/** True when an on-disk export PNG belongs to the active CASC build + fileDataID. */
+export async function isCascExportCurrent(
+  absPath: string,
+  buildKey: string,
+  fileDataID: number,
+): Promise<boolean> {
+  if (!buildKey || !await exportAssetExists(absPath)) return false;
+  try {
+    const marker = await readExportAssetUtf8(cascExportMarkerPath(absPath));
+    return marker === formatCascExportMarker(buildKey, fileDataID);
+  } catch {
+    return false;
+  }
+}
+
+export async function writeCascExportMarker(
+  absPath: string,
+  buildKey: string,
+  fileDataID: number,
+): Promise<void> {
+  if (!buildKey) return;
+  await writeExportAsset(
+    cascExportMarkerPath(absPath),
+    Buffer.from(formatCascExportMarker(buildKey, fileDataID)),
+  );
+}
+
 export async function exportAssetStat(absPath: string): Promise<{ size: number }> {
   const stat = await fsStat(normalizeKey(absPath));
   return { size: stat.size };

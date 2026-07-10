@@ -75,7 +75,6 @@ if ($isWindows) {
 
 Write-Host "Copying resources/..."
 Copy-Item -Recurse -Force "resources" (Join-Path $distGo "resources")
-Copy-Item -Recurse -Force "maps/template-empty.w3x" (Join-Path $distGo "resources/template-empty.w3x")
 
 Write-Host ""
 Write-Host "Done: dist-go/"

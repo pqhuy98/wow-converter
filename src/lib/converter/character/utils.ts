@@ -2,7 +2,7 @@ import path from 'path';
 
 import { convertM2CollisionToMdl } from '@/lib/converter/wow-model/direct/m2';
 import {
-  exportAssetExists, writeExportAsset,
+  isCascExportCurrent, writeCascExportMarker, writeExportAsset,
 } from '@/lib/export-asset-store';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
@@ -71,9 +71,11 @@ export async function exportTexture(textureId: number): Promise<string> {
   const relPath = path.normalize(replaceExtension(fileName, '.png').replace(/\s/g, ''));
   const baseDir = await wowDataClient.getAssetDir();
   const absPath = path.join(baseDir, relPath);
-  if (!await exportAssetExists(absPath)) {
+  const buildKey = wowDataClient.cascInfo?.buildKey ?? '';
+  if (!await isCascExportCurrent(absPath, buildKey, textureId)) {
     const png = new BLPImage(new BufferWrapper(raw)).toPNG(0b1111).raw;
     await writeExportAsset(absPath, png);
+    await writeCascExportMarker(absPath, buildKey, textureId);
   }
   return relPath;
 }

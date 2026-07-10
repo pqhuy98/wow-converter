@@ -1,9 +1,6 @@
 package directm2
 
 import (
-	"path/filepath"
-	"strings"
-
 	objpkg "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/bundle/obj"
 	m2export "github.com/pqhuy98/wow-converter/internal/wow/export/m2"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
@@ -199,15 +196,4 @@ func itoa(n int) string {
 		return "-" + string(digits)
 	}
 	return string(digits)
-}
-
-// StripModelReferenceExt removes model file extensions from a path.
-func StripModelReferenceExt(p string) string {
-	base := filepath.Base(p)
-	for _, ext := range []string{".m2", ".wmo", ".mdx", ".mdl", ".obj"} {
-		if strings.HasSuffix(strings.ToLower(base), ext) {
-			return strings.TrimSuffix(p, ext)
-		}
-	}
-	return p
 }

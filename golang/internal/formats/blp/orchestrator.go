@@ -91,18 +91,3 @@ func SubmitBlpTask(input TaskInput, blpPath string) error {
 func ShutdownWorkerPool() {
 	ShutdownNativePool()
 }
-
-// EnsureInlinePool is an alias for EnsureWorkerPool (legacy name).
-func EnsureInlinePool(desiredSize int) *WorkerPool {
-	return EnsureWorkerPool(desiredSize)
-}
-
-// GetInlinePoolSize is an alias for GetWorkerPoolSize (legacy name).
-func GetInlinePoolSize() int {
-	return GetWorkerPoolSize()
-}
-
-// ShutdownInlinePool is an alias for ShutdownWorkerPool (legacy name).
-func ShutdownInlinePool() {
-	ShutdownWorkerPool()
-}

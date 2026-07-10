@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 
-import type { Creature } from '@/lib/azerothcore-client/creatures';
 import { distancePerTile, maxGameHeightDiff } from '@/lib/constants';
 import { isWowUnit, WowAdt, WowObject } from '@/lib/converter/common/models';
 import type { WowObjectManager } from '@/lib/converter/common/wow-object-manager';
@@ -8,20 +7,6 @@ import { MapExportConfig, MapExporter } from '@/lib/converter/map-exporter/map-e
 import { computeRecommendedTerrainClampPercent } from '@/lib/converter/map-exporter/wc3-converter';
 import { Vector3 } from '@/lib/math/common';
 import { V3 } from '@/lib/math/vector';
-
-export const CREATURE_EXPORT_CONCURRENCY = 5;
-
-export function countUniqueCreatureExports(creatures: Creature[]): number {
-  const displayIds = new Set<number>();
-  let count = 0;
-  for (const c of creatures) {
-    const displayId = c.model.CreatureDisplayID;
-    if (!displayId || displayIds.has(displayId)) continue;
-    displayIds.add(displayId);
-    count++;
-  }
-  return count;
-}
 
 export function computeCreatureExportSteps(uniqueCreatureCount: number): number {
   return uniqueCreatureCount > 0 ? uniqueCreatureCount : 0;

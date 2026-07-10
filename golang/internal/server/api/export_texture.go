@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,15 +66,15 @@ func registerExportTexture(r Router, d *Deps) {
 				sendInternalError(w, err)
 				return
 			}
-			sum := md5.Sum(append([]byte(absPath+req.URL.RawQuery), iconBuffer...))
-			etag := hex.EncodeToString(sum[:])
-			w.Header().Set("Content-Type", "image/png")
-			w.Header().Set("Cache-Control", "public, max-age=86400")
-			w.Header().Set("ETag", etag)
-			if req.Header.Get("If-None-Match") == etag {
-				w.WriteHeader(http.StatusNotModified)
+			buildKey := d.BuildKey(req.Context())
+			quotedETag := etagFromParts("texture-png-icon", buildKey, absPath, req.URL.RawQuery)
+			if matchNotModified(req, quotedETag) {
+				applyCascBuildCache(w, req, d.Config, buildKey, quotedETag, true)
+				writeNotModified(w, quotedETag)
 				return
 			}
+			w.Header().Set("Content-Type", "image/png")
+			applyCascBuildCache(w, req, d.Config, buildKey, quotedETag, true)
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(iconBuffer)
 			return
@@ -87,15 +85,15 @@ func registerExportTexture(r Router, d *Deps) {
 			sendError(w, http.StatusNotFound, "Texture not found")
 			return
 		}
-		sum := md5.Sum(append([]byte(absPath), data...))
-		etag := hex.EncodeToString(sum[:])
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "public, max-age=86400")
-		w.Header().Set("ETag", etag)
-		if req.Header.Get("If-None-Match") == etag {
-			w.WriteHeader(http.StatusNotModified)
+		buildKey := d.BuildKey(req.Context())
+		quotedETag := etagFromParts("texture-png", buildKey, absPath)
+		if matchNotModified(req, quotedETag) {
+			applyCascBuildCache(w, req, d.Config, buildKey, quotedETag, true)
+			writeNotModified(w, quotedETag)
 			return
 		}
+		w.Header().Set("Content-Type", "image/png")
+		applyCascBuildCache(w, req, d.Config, buildKey, quotedETag, true)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(data)
 	})
@@ -159,7 +157,7 @@ func registerExportTexture(r Router, d *Deps) {
 
 		count, paths, err := exporter.ExportToBlp(req.Context(), filtered)
 		if err != nil {
-			sendError(w, http.StatusBadRequest, "Texture export failed")
+			sendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		resp := map[string]any{"count": count, "paths": paths}

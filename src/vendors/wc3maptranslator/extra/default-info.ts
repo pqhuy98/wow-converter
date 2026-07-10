@@ -1,5 +1,5 @@
 import {
-  type Force, type Info, ScriptLanguage, SupportedModes, type Terrain,
+  type Info, ScriptLanguage, SupportedModes, type Terrain,
 } from '../data';
 
 export function defaultInfo(): Info {
@@ -7,7 +7,9 @@ export function defaultInfo(): Info {
     fileVersion: 33,
     saves: 1,
     editorVersion: 6116,
-    gameVersion: { major: 2, minor: 0, patch: 3, build: 22978 },
+    gameVersion: {
+      major: 2, minor: 0, patch: 3, build: 22978,
+    },
     map: {
       name: '',
       author: '',
@@ -39,8 +41,12 @@ export function defaultInfo(): Info {
     },
     camera: { bounds: [], complements: [0, 0, 0, 0] },
     gameDataSet: 0,
-    prologue: { path: '', text: '', title: '', subtitle: '' },
-    loadingScreen: { background: -1, path: '', text: '', title: '', subtitle: '' },
+    prologue: {
+      path: '', text: '', title: '', subtitle: '',
+    },
+    loadingScreen: {
+      background: -1, path: '', text: '', title: '', subtitle: '',
+    },
     fog: {
       type: 0,
       startHeight: 3000,

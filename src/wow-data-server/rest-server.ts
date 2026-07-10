@@ -10,6 +10,7 @@ import http from 'http';
 import path from 'path';
 import url from 'url';
 
+import { stableStringify } from '@/lib/utils';
 import { CASC } from '@/lib/wow/archive/casc/casc-source';
 import { CASCLocal } from '@/lib/wow/archive/casc/casc-source-local';
 import { CASCRemote } from '@/lib/wow/archive/casc/casc-source-remote';
@@ -39,7 +40,9 @@ import {
 } from '../lib/wow/character/headless-character';
 import { ensureModelCachesInitialized } from '../lib/wow/db/caches/init-cache';
 import { DB2Row, WDCReader } from '../lib/wow/db/wdc-reader';
-import { write } from '../lib/wow/log';
+import {
+  beginLoadingProgress, endLoadingProgress, isLoadingProgressActive, latestLoadingMessage, write,
+} from '../lib/wow/log';
 import { authorizeDataServerRequest } from './auth';
 import { autoLoadCascFromEnv } from './auto-load-env';
 import {
@@ -78,6 +81,8 @@ export class WowDataServer {
     switch (pathname) {
       case '/rest/getCascInfo':
         return this.getCascInfo(res);
+      case '/rest/getCascLoadProgress':
+        return this.getCascLoadProgress(res);
       case '/rest/getConfig':
         return this.getConfig(query, res);
       case '/rest/searchFiles':
@@ -154,6 +159,14 @@ export class WowDataServer {
       buildConfig: casc.buildConfig,
       buildName: casc.getBuildName(),
       buildKey: casc.getBuildKey(),
+    });
+  }
+
+  getCascLoadProgress(res: http.ServerResponse): void {
+    this.sendJSON(res, 200, {
+      id: 'CASC_LOAD_PROGRESS',
+      loading: isCascLoading() || isLoadingProgressActive(),
+      message: latestLoadingMessage(),
     });
   }
 
@@ -431,10 +444,15 @@ export class WowDataServer {
 
     try {
       write('REST loadCascLocal requested: %s', installDirectory);
-      const casc = new CASCLocal(installDirectory);
-      await casc.init();
-      this._pendingCASC = casc;
-      this.sendJSON(res, 200, { id: 'CASC_INSTALL_BUILDS', builds: casc.builds });
+      beginLoadingProgress();
+      try {
+        const casc = new CASCLocal(installDirectory);
+        await casc.init();
+        this._pendingCASC = casc;
+        this.sendJSON(res, 200, { id: 'CASC_INSTALL_BUILDS', builds: casc.builds });
+      } finally {
+        endLoadingProgress();
+      }
     } catch (e) {
       write('loadCascLocal failed: %s', (e as Error).message);
       this.sendJSON(res, 400, { id: 'ERR_INVALID_INSTALL', message: (e as Error).message });
@@ -458,10 +476,15 @@ export class WowDataServer {
 
     try {
       write('REST loadCascRemote requested: %s', body.regionTag);
-      const casc = new CASCRemote(body.regionTag);
-      await casc.init();
-      this._pendingCASC = casc;
-      this.sendJSON(res, 200, { id: 'CASC_INSTALL_BUILDS', builds: casc.builds });
+      beginLoadingProgress();
+      try {
+        const casc = new CASCRemote(body.regionTag);
+        await casc.init();
+        this._pendingCASC = casc;
+        this.sendJSON(res, 200, { id: 'CASC_INSTALL_BUILDS', builds: casc.builds });
+      } finally {
+        endLoadingProgress();
+      }
     } catch (e) {
       write('loadCascRemote failed: %s', (e as Error).message);
       this.sendJSON(res, 400, { id: 'ERR_INVALID_INSTALL' });
@@ -802,19 +825,6 @@ export class WowDataServer {
   // ---------------- cache helpers ----------------
 
   private _makeCacheKey(endpoint: string, body: unknown): string {
-    const stableStringify = (value: unknown): string => {
-      const seen = new WeakSet<object>();
-      const stringify = (val: unknown): unknown => {
-        if (val === null || typeof val !== 'object') return val;
-        if (seen.has(val)) return undefined;
-        seen.add(val);
-        if (Array.isArray(val)) return val.map(stringify);
-        const out: Record<string, unknown> = {};
-        for (const key of Object.keys(val).sort()) out[key] = stringify((val as Record<string, unknown>)[key]);
-        return out;
-      };
-      return JSON.stringify(stringify(value));
-    };
     return `${endpoint}:${stableStringify(body || {})}`;
   }
 

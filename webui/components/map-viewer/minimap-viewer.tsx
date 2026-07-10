@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import {
+  useCallback, useEffect, useRef, useState,
+} from 'react';
 
 import { useInputControllers } from './controllers';
+import type { MapHoverChange } from './controllers/hover';
 import { renderAllLayers } from './renderer/renderer';
 import { createTileLoader } from './services/tileLoader';
 import { createInitialStore, MapStore } from './store';
@@ -16,23 +19,30 @@ export type MapInfo = {
 }
 
 export default function MinimapViewer({
-  mapInfo, className, onHoverChange, onSelectionChange,
+  mapInfo, buildKey, className, onHoverChange, onSelectionChange,
 }: {
   mapInfo: MapInfo;
+  buildKey?: string;
   className?: string;
-  onHoverChange?: (tile: Point | null) => void;
+  onHoverChange?: (hover: MapHoverChange) => void;
   onSelectionChange?: (tiles: Point[]) => void;
 }) {
   const storeRef = useRef<MapStore>(createInitialStore());
   const store = storeRef.current;
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
-  const canvas = canvasRef.current;
+
+  const setCanvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    setCanvas(node);
+  }, []);
+
   useEffect(() => {
-    if (canvas) {
-      setCtx(canvas.getContext('2d'));
+    if (!canvas) {
+      setCtx(null);
+      return;
     }
+    setCtx(canvas.getContext('2d'));
   }, [canvas]);
 
   const renderPendingRef = useRef<boolean>(false);
@@ -120,11 +130,11 @@ export default function MinimapViewer({
     // bump version to invalidate any late responses and clear selection
     s.tilesData.version += 1;
     scheduleRender();
-  }, [mapInfo.mapId, canvas]);
+  }, [mapInfo.mapId, buildKey, canvas]);
 
   return (
     <canvas
-      ref={canvasRef}
+      ref={setCanvasRef}
       className={className}
     />
   );

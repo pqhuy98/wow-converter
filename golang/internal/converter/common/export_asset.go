@@ -12,15 +12,6 @@ func ExportAssetExists(absPath string) bool {
 	return err == nil
 }
 
-// ReadExportAssetUTF8 reads a text export artifact.
-func ReadExportAssetUTF8(absPath string) (string, error) {
-	data, err := os.ReadFile(filepath.Clean(absPath))
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
 // StripModelReferenceExt removes .m2/.wmo/.obj and .phys.* suffixes.
 func StripModelReferenceExt(ref string) string {
 	ref = strings.ReplaceAll(ref, "\\", "/")

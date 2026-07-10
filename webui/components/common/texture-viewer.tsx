@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { useServerConfig } from '@/components/server-config';
+import { withCascBuild } from '@/lib/api/casc-cache';
+
 interface TextureViewerProps {
   texturePath?: string;
   onLoad?: () => void;
@@ -13,6 +16,7 @@ export default function TextureViewer({
   onLoad,
   onError,
 }: TextureViewerProps) {
+  const { buildKey } = useServerConfig();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,7 +36,7 @@ export default function TextureViewer({
   }
 
   const encodedPath = encodeURIComponent(texturePath);
-  const imageUrl = `/api/texture/png/${encodedPath}`;
+  const imageUrl = withCascBuild(`/api/texture/png/${encodedPath}`, buildKey);
 
   return (
     <div

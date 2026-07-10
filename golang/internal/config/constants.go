@@ -21,12 +21,6 @@ func DataHeightMin() int { return dataHeightMin }
 // DataHeightMax returns the current terrain data height maximum.
 func DataHeightMax() int { return dataHeightMax }
 
-// SetDataHeightLimit updates terrain height limits.
-func SetDataHeightLimit(min, max int) {
-	dataHeightMin = min
-	dataHeightMax = max
-}
-
 // MaxGameHeightDiff is the usable Z range for terrain clamp percent.
 func MaxGameHeightDiff() float64 {
 	return float64(dataHeightMax-dataHeightMin) / 4

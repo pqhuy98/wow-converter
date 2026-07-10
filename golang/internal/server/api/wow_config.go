@@ -13,6 +13,7 @@ func registerWowConfig(r Router, d *Deps) {
 	svc := wowconfig.NewService(d.Client)
 
 	r.Get("/wow-config/status", func(w http.ResponseWriter, req *http.Request) {
+		setNoStore(w)
 		sendJSON(w, http.StatusOK, svc.GetStatus(req.Context()))
 	})
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
@@ -53,21 +54,57 @@ func (e *Exporter) ExportPngByPath(ctx context.Context, wowTexturePath string) (
 	if err != nil {
 		return "", err
 	}
-	if _, err := os.Stat(absPath); err == nil {
+	buildKey := ""
+	if info, err := e.client.GetCASCInfo(ctx); err == nil {
+		buildKey = info.BuildKey
+	}
+	if isCascExportCurrent(absPath, buildKey, fileDataID) {
 		return absPath, nil
 	}
-	if err := ensureTexturePNG(ctx, e.client, fileDataID, absPath); err != nil {
+	if err := ensureTexturePNG(ctx, e.client, fileDataID, absPath, buildKey); err != nil {
 		return "", err
 	}
 	return absPath, nil
 }
 
-func ensureTexturePNG(ctx context.Context, c client.Client, fileDataID int, absPNG string) error {
+func cascExportMarkerPath(absPNG string) string {
+	return absPNG + ".casc"
+}
+
+func formatCascExportMarker(buildKey string, fileDataID int) string {
+	return buildKey + "\t" + strconv.Itoa(fileDataID)
+}
+
+func isCascExportCurrent(absPNG, buildKey string, fileDataID int) bool {
+	if buildKey == "" {
+		return false
+	}
+	if _, err := os.Stat(absPNG); err != nil {
+		return false
+	}
+	data, err := os.ReadFile(cascExportMarkerPath(absPNG))
+	if err != nil {
+		return false
+	}
+	return string(data) == formatCascExportMarker(buildKey, fileDataID)
+}
+
+func writeCascExportMarker(absPNG, buildKey string, fileDataID int) error {
+	if buildKey == "" {
+		return nil
+	}
+	return os.WriteFile(cascExportMarkerPath(absPNG), []byte(formatCascExportMarker(buildKey, fileDataID)), 0o644)
+}
+
+func ensureTexturePNG(ctx context.Context, c client.Client, fileDataID int, absPNG, buildKey string) error {
 	raw, err := c.DownloadCascFile(ctx, fileDataID)
 	if err != nil {
 		return err
 	}
-	return writeBLPAsPNG(raw, absPNG)
+	if err := writeBLPAsPNG(raw, absPNG); err != nil {
+		return err
+	}
+	return writeCascExportMarker(absPNG, buildKey, fileDataID)
 }
 
 func writeBLPAsPNG(raw []byte, absPNG string) error {
@@ -199,6 +236,9 @@ func (e *Exporter) ExportToBlp(ctx context.Context, items []ExportItem) (int, []
 			} else {
 				blpRel = filepath.Base(strings.TrimSuffix(item.TexturePath, filepath.Ext(item.TexturePath)) + ".blp")
 			}
+		} else if strings.ContainsAny(blpRel, `/\`) {
+			// API handlers resolve basenames to WC3 paths before calling ExportToBlp.
+			blpRel = filepath.ToSlash(filepath.Clean(blpRel))
 		} else {
 			blpRel, err = validateOutputPath(blpRel, frame)
 			if err != nil {

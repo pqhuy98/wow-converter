@@ -220,16 +220,11 @@ export class MapExporter {
 }
 
 function resolveTemplateEmptyDir(): string {
-  const candidates = [
-    path.join(bundledAppRoot(), 'resources', 'template-empty.w3x'),
-    path.join(process.cwd(), 'maps', 'template-empty.w3x'),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
+  const dir = path.join(bundledAppRoot(), 'resources', 'template-empty.w3x');
+  if (!existsSync(dir)) {
+    throw new Error(`Missing WC3 map template (template-empty.w3x): ${dir}`);
   }
-  throw new Error(
-    `Missing WC3 map template (template-empty.w3x). Checked: ${candidates.join(', ')}`,
-  );
+  return dir;
 }
 
 function buildPaths(prefix: string, min: Vector2, max: Vector2) {

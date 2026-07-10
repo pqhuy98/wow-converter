@@ -1,5 +1,6 @@
 import type { Router } from 'express';
 
+import { clearProjectCacheDir, getProjectCacheDirSize } from '@/lib/wow/clear-project-cache';
 import { normalizeInstallDirectory } from '@/lib/wow/normalize-install-directory';
 import {
   applyWowConfig,
@@ -8,12 +9,11 @@ import {
   getWowConfigStatus,
   resetWowConfig,
 } from '@/lib/wow/wow-config-service';
-import { clearProjectCacheDir, getProjectCacheDirSize } from '@/lib/wow/clear-project-cache';
 import type { WowConfig } from '@/lib/wow/wow-config-state';
 
 import { isSharedHosting } from '../config';
-import { pickNativeFolder } from '../utils/pick-folder';
 import { assertDesktopOnly, desktopOnlyStatus } from '../shared-hosting';
+import { pickNativeFolder } from '../utils/pick-folder';
 
 const WOW_CONFIG_SHARED_HOSTING_LOCKED = 'WoW installation cannot be changed in shared hosting mode.';
 
@@ -30,6 +30,7 @@ function wowConfigErrorStatus(error: Error): number {
 export function ControllerWowConfig(router: Router): void {
   router.get('/wow-config/status', async (_req, res, next) => {
     try {
+      res.setHeader('Cache-Control', 'no-store');
       res.json(await getWowConfigStatus());
     } catch (e) {
       next(e);

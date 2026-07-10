@@ -46,6 +46,7 @@ export interface WowConfigStatus {
   configuredFromEnv: boolean;
   cascLoaded: boolean;
   cascLoading: boolean;
+  cascLoadingMessage?: string;
   wowDataServerReachable: boolean;
   config: WowConfig | null;
   cascInfo: CascInfoSummary | null;
@@ -102,9 +103,16 @@ export function WowConfigProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  const shouldPoll = !status.cascLoaded || status.cascLoading;
+  useEffect(() => {
+    if (!shouldPoll) {
+      return () => {};
+    }
     const id = setInterval(() => { void refresh(); }, 2000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [shouldPoll, refresh]);
 
   const value = useMemo(() => ({ status, refresh, isReady }), [status, refresh, isReady]);
 

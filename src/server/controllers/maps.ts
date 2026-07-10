@@ -5,12 +5,14 @@ import path from 'path';
 
 import { getCreaturesInTile } from '@/lib/azerothcore-client/creatures';
 import { exportTexture } from '@/lib/converter/character/utils';
+import { getListFiles, registerListfileClearHook } from '@/lib/wow/listfile-cache';
 import { FileEntry, MapListItem, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import { assertDesktopOnly, desktopOnlyStatus } from '@/server/shared-hosting';
+import {
+  applyCascBuildCache, etagFromParts, matchNotModified, minimapPngPath, writeNotModified,
+} from '@/server/utils/casc-cache';
 
-import { isDev } from '../config';
 import { registerMapGenerateRoutes } from './maps-generate';
-import { getListFiles } from './shared';
 
 type TileInfo = { x: number; y: number; hasTexture: boolean };
 type MapWithTiles = MapListItem & { tiles: TileInfo[] };
@@ -18,9 +20,20 @@ type MapWithTiles = MapListItem & { tiles: TileInfo[] };
 const tileBlpRegex = /^world\/minimaps\/([^/]+)\/map(\d{1,2})_(\d{1,2})\.blp$/i;
 const tileAdtRegex = /^world\/maps\/([^/]+)\/\1_(\d{2})_(\d{2})\.adt$/i;
 
-let mapsWithTiles: MapWithTiles[] = [];
+let mapsWithTiles: MapWithTiles[] | null = null;
 const mapsByDir = new Map<string, MapWithTiles>(); // dir(lowercased) -> map with tiles
 const fileNameToEntry = new Map<string, FileEntry>(); // normalized lowercased path -> entry
+
+registerListfileClearHook(() => {
+  mapsWithTiles = null;
+  mapsByDir.clear();
+  fileNameToEntry.clear();
+});
+
+async function ensureMapsIndex(): Promise<void> {
+  if (mapsWithTiles !== null) return;
+  await buildMapsIndex();
+}
 
 async function buildMapsIndex(): Promise<void> {
   await wowDataClient.waitUntilReady();
@@ -117,10 +130,18 @@ export function ControllerMaps(router: express.Router) {
   });
 
   // GET /api/maps -> list maps
-  router.get('/maps', (_req, res) => {
+  router.get('/maps', async (req, res) => {
     try {
-      if (!isDev) res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.json(mapsWithTiles.map((m) => ({
+      await ensureMapsIndex();
+      const list = mapsWithTiles ?? [];
+      const buildKey = wowDataClient.cascInfo?.buildKey ?? '';
+      const etag = etagFromParts('maps', buildKey, String(list.length));
+      if (matchNotModified(req, etag)) {
+        applyCascBuildCache(res, req, buildKey, etag);
+        return writeNotModified(res, etag);
+      }
+      applyCascBuildCache(res, req, buildKey, etag);
+      return res.json(list.map((m) => ({
         id: m.id, name: m.name, dir: m.dir, expansionID: m.expansionID,
       })));
     } catch (e) {
@@ -129,12 +150,19 @@ export function ControllerMaps(router: express.Router) {
   });
 
   // GET /api/maps/:map/wdt-mask -> tiles list with hasTexture flags
-  router.get('/maps/:map/wdt-mask', (req, res) => {
+  router.get('/maps/:map/wdt-mask', async (req, res) => {
     try {
+      await ensureMapsIndex();
       const key = String(req.params.map).toLowerCase();
       const entry = mapsByDir.get(key);
       const tiles = entry?.tiles ?? [];
-      if (!isDev) res.setHeader('Cache-Control', 'public, max-age=3600');
+      const buildKey = wowDataClient.cascInfo?.buildKey ?? '';
+      const etag = etagFromParts('wdt-mask', buildKey, key, String(tiles.length));
+      if (matchNotModified(req, etag)) {
+        applyCascBuildCache(res, req, buildKey, etag);
+        return writeNotModified(res, etag);
+      }
+      applyCascBuildCache(res, req, buildKey, etag);
       return res.json({ map: req.params.map, size: 64, tiles });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
@@ -217,21 +245,24 @@ export function ControllerMaps(router: express.Router) {
 
       const buildKey = wowDataClient.cascInfo?.buildKey || '';
       const etagSeed = `${buildKey}|${map}|${x}|${y}`;
-      const etag = crypto.createHash('md5').update(etagSeed).digest('hex');
+      const quotedETag = `"${crypto.createHash('md5').update(etagSeed).digest('hex')}"`;
 
-      if (!isDev && req.headers['if-none-match'] === etag) {
-        return res.status(304).end();
+      if (matchNotModified(req, quotedETag)) {
+        applyCascBuildCache(res, req, buildKey, quotedETag, true);
+        return writeNotModified(res, quotedETag);
       }
+
+      const sendPng = async (pngPath: string) => {
+        res.setHeader('Content-Type', 'image/png');
+        applyCascBuildCache(res, req, buildKey, quotedETag, true);
+        return res.send(await fsExtra.readFile(path.resolve(pngPath)));
+      };
 
       // If PNG already exists in the export asset directory, serve it directly.
       const assetDir = await wowDataClient.getAssetDir();
-      const preexistingPng = path.join(assetDir, 'world', 'minimaps', mapDir, `map${xs}_${ys}.png`);
+      const preexistingPng = minimapPngPath(assetDir, buildKey, mapDir, xs, ys);
       if (fsExtra.existsSync(preexistingPng)) {
-        res.setHeader('Content-Type', 'image/png');
-        if (!isDev) res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.setHeader('ETag', etag);
-        // express sendFile fails on Bun/Windows for these paths
-        return res.send(await fsExtra.readFile(path.resolve(preexistingPng)));
+        return sendPng(preexistingPng);
       }
 
       // Resolve the BLP using the prebuilt hash table
@@ -242,11 +273,7 @@ export function ControllerMaps(router: express.Router) {
       }
       const relPng = await exportTexture(file.fileDataID);
       const pngPath = path.join(assetDir, relPng);
-
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      res.setHeader('ETag', etag);
-      return res.send(await fsExtra.readFile(path.resolve(pngPath)));
+      return sendPng(pngPath);
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

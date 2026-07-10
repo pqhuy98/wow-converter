@@ -23,6 +23,14 @@ func TestMergeOptionsDefaults(t *testing.T) {
 	}
 }
 
+func TestValidateOutputPathResolvedWc3Path(t *testing.T) {
+	resolved := "ReplaceableTextures/CommandButtons/BTN_inv_misc_firekitty.blp"
+	_, err := validateOutputPath(resolved, FrameBtn)
+	if err == nil {
+		t.Fatal("expected basename-only validation to reject resolved WC3 paths")
+	}
+}
+
 func TestGetCustomFrameData(t *testing.T) {
 	entry := getCustomFrameData(FrameAtt, Size64, StyleClassicSD)
 	if entry == nil || entry.Size[0] != 48 {

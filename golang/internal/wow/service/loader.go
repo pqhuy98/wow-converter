@@ -10,6 +10,7 @@ import (
 	apicasc "github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/converter/runtimecache"
 	"github.com/pqhuy98/wow-converter/internal/wow/env"
+	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
 
@@ -74,6 +75,8 @@ func versionToBuild(entries []archivecasc.VersionConfigEntry) []apicasc.Build {
 }
 
 func (l *Loader) LoadLocal(_ context.Context, installDirectory string) ([]apicasc.Build, error) {
+	log.BeginLoadingProgress()
+	defer log.EndLoadingProgress()
 	casc := archivecasc.NewCASCLocal(installDirectory)
 	if err := casc.Init(); err != nil {
 		return nil, err
@@ -86,6 +89,8 @@ func (l *Loader) LoadLocal(_ context.Context, installDirectory string) ([]apicas
 }
 
 func (l *Loader) LoadRemote(_ context.Context, regionTag string) ([]apicasc.Build, error) {
+	log.BeginLoadingProgress()
+	defer log.EndLoadingProgress()
 	casc := archivecasc.NewCASCRemote(regionTag)
 	if err := casc.Init(); err != nil {
 		return nil, err
@@ -149,6 +154,8 @@ func (l *Loader) LoadBuild(ctx context.Context, buildIndex int) (apicasc.Source,
 	var err error
 	func() {
 		defer close(done)
+		log.BeginLoadingProgress()
+		defer log.EndLoadingProgress()
 		src, err = l.finalizeLoad(casc, buildIndex)
 		l.loadErr = err
 	}()

@@ -1,11 +1,11 @@
 import { applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl } from '@/lib/converter/character/utils';
 import { MDL } from '@/lib/formats/mdl/mdl';
-import { CharacterData } from '@/lib/wowhead-client/objects';
 import {
   getCreatureDisplaysByFileDataID,
   getFileDataIDByDisplayID,
   initializeCreatureData,
 } from '@/lib/wow/db/caches/db-creatures';
+import { CharacterData } from '@/lib/wowhead-client/objects';
 
 export async function resolveNpcMetaFromDB(displayId: number): Promise<CharacterData | null> {
   await initializeCreatureData();

@@ -1,7 +1,7 @@
 'use client';
 
-import { type ReactNode, useEffect, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { TooltipHelp } from '@/components/common/tooltip-help';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -27,13 +27,13 @@ import {
 import type { GenerateWc3FormValues } from '@/lib/models/map-generate.model';
 import { defaultGenerateWc3FormValues, MAP_SAVE_NAME_BASE_REGEX } from '@/lib/models/map-generate.model';
 import {
-  isMapExpansionAfterWotlk,
-  isMapExpansionWithinWotlk,
-} from '@/lib/utils/wow-expansions';
-import {
   normalizeMapSaveName,
   stripMapSaveNameExtension,
 } from '@/lib/utils/map-save-name';
+import {
+  isMapExpansionAfterWotlk,
+  isMapExpansionWithinWotlk,
+} from '@/lib/utils/wow-expansions';
 
 import { TerrainClampSlider } from './terrain-clamp-slider';
 

@@ -18,6 +18,12 @@ type CASCInfo struct {
 // ConfigResponse is a partial or full config map.
 type ConfigResponse map[string]any
 
+// CascLoadProgress is returned by GET /rest/getCascLoadProgress.
+type CascLoadProgress struct {
+	Loading bool   `json:"loading"`
+	Message string `json:"message"`
+}
+
 // Client is the Go counterpart of src/lib/wow-data-client/wow-data-client.ts.
 type Client interface {
 	WaitUntilReady(ctx context.Context) error
@@ -31,6 +37,7 @@ type Client interface {
 	LoadCASCRemote(ctx context.Context, regionTag string) ([]casc.Build, error)
 	LoadCASCBuild(ctx context.Context, buildIndex int) (CASCInfo, error)
 	GetCASCInfo(ctx context.Context) (CASCInfo, error)
+	GetCascLoadProgress(ctx context.Context) (CascLoadProgress, error)
 	UnloadCASC(ctx context.Context) error
 	SoftRestart(ctx context.Context, reloadEnv bool) (casc.SoftRestartResult, error)
 

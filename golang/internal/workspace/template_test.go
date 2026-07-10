@@ -16,7 +16,7 @@ func TestResolveTemplateEmptyDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(root, "maps", "template-empty.w3x")
+	want := filepath.Join(root, "resources", "template-empty.w3x")
 	if got != want {
 		t.Fatalf("ResolveTemplateEmptyDir = %q, want %q", got, want)
 	}

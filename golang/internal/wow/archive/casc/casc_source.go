@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
-	"github.com/pqhuy98/wow-converter/internal/wow/config"
+	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/runtime"
 )
@@ -65,7 +65,7 @@ type BaseCASC struct {
 
 // NewBaseCASC creates base CASC state.
 func NewBaseCASC(isRemote bool) *BaseCASC {
-	locale := config.WowConfig.CascLocale
+	locale := server.GetConfig().CascLocale
 	if locale <= 0 {
 		log.Write("Invalid locale set in configuration, defaulting to enUS")
 		locale = LocaleEnUS

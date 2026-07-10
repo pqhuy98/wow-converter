@@ -13,7 +13,6 @@ dist
 dist-go
 *.zip
 maps/*
-!maps/template-empty.w3x/
 !maps/test-*.w3x/
 maps/test-*.w3x/*.mdx
 maps/test-*.w3x/wow/**/*.blp

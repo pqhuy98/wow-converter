@@ -36,7 +36,9 @@ const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 const MAX_DISTANCE = 2000000;
 const FAR_CLIP_PLANE = 100_000_000;
 
-export default function ModelViewerUi({ modelPath, cameraSessionKey, alwaysFullscreen, source }: ModelViewerProps) {
+export default function ModelViewerUi({
+  modelPath, cameraSessionKey, alwaysFullscreen, source,
+}: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);

@@ -1,5 +1,8 @@
 'use client';
 
+import { getServerConfig } from '@/components/server-config';
+import { withCascBuild } from '@/lib/api/casc-cache';
+
 import type { MapInfo } from '../minimap-viewer';
 import type { MapStore } from '../store';
 
@@ -95,7 +98,10 @@ export function createTileLoader({
         prev?.abort();
         const controller = new AbortController();
         s.tilesData.controllers.set(key, controller);
-        const res = await fetch(`/api/maps/${encodeURIComponent(mapInfo.mapId)}/minimap/${x}/${y}`, {
+        const res = await fetch(withCascBuild(
+          `/api/maps/${encodeURIComponent(mapInfo.mapId)}/minimap/${x}/${y}`,
+          getServerConfig().buildKey,
+        ), {
           signal: controller.signal,
           cache: 'force-cache',
         });

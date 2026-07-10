@@ -12,7 +12,7 @@ import (
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
 	"github.com/pqhuy98/wow-converter/internal/stringsort"
-	"github.com/pqhuy98/wow-converter/internal/wow/config"
+	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
@@ -47,7 +47,7 @@ func replaceExtension(file, ext string) string {
 
 func doPreload() (bool, error) {
 	log.Write("Preloading master listfile...")
-	url := config.WowConfig.ListfileURL
+	url := server.GetConfig().ListfileURL
 	if url == "" {
 		return false, errMissingListfileURL
 	}
@@ -71,7 +71,7 @@ func doPreload() (bool, error) {
 			}
 		}
 		if lastModified > 0 {
-			ttl := int64(config.WowConfig.ListfileCacheRefresh) * 24 * 60 * 60 * 1000
+			ttl := int64(server.GetConfig().ListfileCacheRefresh) * 24 * 60 * 60 * 1000
 			if ttl == 0 || (time.Now().UnixMilli()-lastModified) > ttl {
 				log.Write("Cached listfile is out-of-date (> %d).", ttl)
 				requireDownload = true
@@ -86,7 +86,7 @@ func doPreload() (bool, error) {
 			log.Write("Listfile is not cached, downloading fresh.")
 		}
 		if requireDownload {
-			fallbackURL := strings.ReplaceAll(config.WowConfig.ListfileFallbackURL, "%s", "")
+			fallbackURL := strings.ReplaceAll(server.GetConfig().ListfileFallbackURL, "%s", "")
 			downloaded, err := formats.DownloadFile([]string{url, fallbackURL}, "", -1, -1, false)
 			if err != nil {
 				if cached == nil {
@@ -298,18 +298,19 @@ func GetFilenamesByExtension(exts ExtensionFilter) []string {
 
 // FormatEntries sorts and formats listfile entries.
 func FormatEntries(entries []int) []string {
-	if config.WowConfig.ListfileSortByID {
+	cfg := server.GetConfig()
+	if cfg.ListfileSortByID {
 		sort.Ints(entries)
 	}
 	formatted := make([]string, len(entries))
 	for i, e := range entries {
-		if config.WowConfig.ListfileShowFileDataIDs {
+		if cfg.ListfileShowFileDataIDs {
 			formatted[i] = GetByIDOrUnknown(e, "") + " [" + strconv.Itoa(e) + "]"
 		} else {
 			formatted[i] = GetByIDOrUnknown(e, "")
 		}
 	}
-	if !config.WowConfig.ListfileSortByID {
+	if !cfg.ListfileSortByID {
 		sort.Strings(formatted)
 	}
 	return formatted
