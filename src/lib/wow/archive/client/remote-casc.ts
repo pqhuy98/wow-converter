@@ -7,13 +7,14 @@
  * lets those parsers run inside the converter, backed by the raw-file layer
  * (local cache first, data-server REST fallback).
  *
- * Only getFile is supported; anything that needs listfile/DB2/encoding data
- * must stay on the data server.
+ * getFile and getFileByName are supported via the data-server listfile + raw-file
+ * layers. Encoding/root metadata must stay on the data server.
  */
 import type { CASC } from '@/lib/wow/archive/casc/casc-source';
 import { BufferWrapper } from '@/lib/wow/formats/buffer';
 import { runtimeState } from '@/lib/wow/server/runtime';
 
+import { getFileIDByName } from './name-client';
 import { getRawWowFile } from './raw-client';
 
 class RemoteCasc {
@@ -25,8 +26,10 @@ class RemoteCasc {
     return new BufferWrapper(await getRawWowFile(fileDataID));
   }
 
-  getFileByName(): never {
-    throw new Error('RemoteCasc does not support name-based file access');
+  async getFileByName(fileName: string): Promise<BufferWrapper> {
+    const fileDataID = await getFileIDByName(fileName);
+    if (fileDataID === undefined) throw new Error(`File not mapping in listfile: ${fileName}`);
+    return this.getFile(fileDataID);
   }
 
   getDataFile(): never {

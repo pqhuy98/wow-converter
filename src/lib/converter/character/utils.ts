@@ -1,8 +1,9 @@
 import path from 'path';
 
+import { getTextureSource } from '@/lib/converter/common/texture-source';
 import { convertM2CollisionToMdl } from '@/lib/converter/wow-model/direct/m2';
 import {
-  isCascExportCurrent, writeCascExportMarker, writeExportAsset,
+  exportAssetExists, isCascExportCurrent, readExportAsset, writeCascExportMarker, writeExportAsset,
 } from '@/lib/export-asset-store';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { Config } from '@/lib/global-config';
@@ -66,18 +67,50 @@ export async function exportModelFileIdAsMdl(ctx: ExportContext, modelFileId: nu
 }
 
 export async function exportTexture(textureId: number): Promise<string> {
+  const { relPath } = await exportTexturePng(textureId);
+  return relPath;
+}
+
+/** Export a BLP texture to PNG bytes; caches on disk when the CASC build changes. */
+export async function exportTexturePng(textureId: number): Promise<{ relPath: string; png: Buffer }> {
   const raw = await getRawWowFile(textureId);
   const fileName = (await getFileNameByID(textureId)) ?? `unknown/${textureId}.blp`;
   const relPath = path.normalize(replaceExtension(fileName, '.png').replace(/\s/g, ''));
   const baseDir = await wowDataClient.getAssetDir();
   const absPath = path.join(baseDir, relPath);
   const buildKey = wowDataClient.cascInfo?.buildKey ?? '';
-  if (!await isCascExportCurrent(absPath, buildKey, textureId)) {
-    const png = new BLPImage(new BufferWrapper(raw)).toPNG(0b1111).raw;
-    await writeExportAsset(absPath, png);
-    await writeCascExportMarker(absPath, buildKey, textureId);
+  if (await isCascExportCurrent(absPath, buildKey, textureId)) {
+    return { relPath, png: await readExportAsset(absPath) };
   }
-  return relPath;
+  const png = new BLPImage(new BufferWrapper(raw)).toPNG(0b1111).raw;
+  await writeExportAsset(absPath, png);
+  await writeCascExportMarker(absPath, buildKey, textureId);
+  return { relPath, png };
+}
+
+/** Resolve PNG bytes from the texture-source registry or export-asset cache. */
+export async function resolveTexturePngBytes(exportAssetDir: string, relPath: string): Promise<Buffer> {
+  const normalized = path.normalize(relPath.replace(/\\/g, '/'));
+  const source = getTextureSource(normalized);
+  if (source?.kind === 'png') {
+    return source.png;
+  }
+  if (source?.kind === 'blp') {
+    const raw = await getRawWowFile(source.fileDataID);
+    return new BLPImage(new BufferWrapper(raw)).toPNG(0b1111).raw;
+  }
+  const absPath = path.join(exportAssetDir, normalized);
+  if (await exportAssetExists(absPath)) {
+    return readExportAsset(absPath);
+  }
+  throw new Error(`texture not found: ${relPath}`);
+}
+
+export function textureRelPath(exportAssetDir: string, texturePath: string): string {
+  if (path.isAbsolute(texturePath)) {
+    return path.normalize(path.relative(exportAssetDir, texturePath).replace(/\\/g, '/'));
+  }
+  return path.normalize(texturePath.replace(/\\/g, '/'));
 }
 
 /** Pick a DB2 skin for a local model ref (explicit skin suffix or first skin). */

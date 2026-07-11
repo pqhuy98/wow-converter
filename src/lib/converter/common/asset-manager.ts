@@ -20,7 +20,7 @@ import { cachePathForLocalRef, normalizeLocalModelRef } from '../local-model-pat
 import { convertAdtTerrainObjToMdl } from '../wow-model/adt-terrain';
 import { ConvertM2Options, convertM2ToMdl } from '../wow-model/direct/m2';
 import { Model, WowObject, WowObjectType } from './models';
-import { getTextureSource, TextureSource } from './texture-source';
+import { getTextureSource, releaseGeneratedPngSources, TextureSource } from './texture-source';
 
 export class AssetManager {
   models = new Map<string, Model>();
@@ -122,6 +122,11 @@ export class AssetManager {
     if (overwrite) {
       this.texturesOverwrite.add(texturePath);
     }
+  }
+
+  /** Drop in-memory PNG registry entries for this export after BLP encoding. */
+  releaseGeneratedTextureSources(): void {
+    releaseGeneratedPngSources(Array.from(this.textures));
   }
 
   async exportTextures(assetPath: string) {
@@ -226,6 +231,7 @@ export class AssetManager {
     }
 
     console.log(`Wrote ${chalk.yellow(writeCount)}, skipped ${chalk.gray(this.textures.size - writeCount)} textures. Total: ${chalk.yellow(exportedTexturePaths.length)}`);
+    this.releaseGeneratedTextureSources();
     return exportedTexturePaths;
   }
 

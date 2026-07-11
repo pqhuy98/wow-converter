@@ -1,13 +1,11 @@
 package character
 
 import (
-	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -15,10 +13,8 @@ import (
 	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/ansi"
-	"github.com/pqhuy98/wow-converter/internal/buffer"
 	"github.com/pqhuy98/wow-converter/internal/converter/texturesource"
 	animmap "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/animation"
-	"github.com/pqhuy98/wow-converter/internal/formats/blp"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	pngfmt "github.com/pqhuy98/wow-converter/internal/formats/png"
@@ -131,15 +127,18 @@ func prepareCharacterExport(ctx *ExportContext, metadata CharacterData, expansio
 	fileDataIDOverride, _ := checkCharacterFileDataIDOverride(ctx, metadata, expansion)
 
 	customizations := map[string]int{}
+	customizationOrder := []int{}
 	if metadata.Creature != nil {
 		for _, c := range metadata.Creature.CreatureCustomizations {
 			customizations[strconv.Itoa(c.OptionID)] = c.ChoiceID
+			customizationOrder = append(customizationOrder, c.ChoiceID)
 		}
 	}
 	rpcParams := ExportCharacterParams{
 		Race: race, Gender: gender,
 		FileDataIDOverride: fileDataIDOverride,
 		Customizations:     customizations,
+		CustomizationOrder: customizationOrder,
 		GeosetIDs:          geosetIDs,
 		HideGeosetIDs:      hideGeosetIDs,
 	}
@@ -449,22 +448,8 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	if idx >= len(itemData.ModelFiles) {
 		return nil
 	}
-	texIdx := 0
-	if idx < len(itemData.ModelTextureFiles) {
-		texIdx = idx
-	}
-	_ = texIdx
 	fileDataID := itemData.ModelFiles[idx].FileDataID
-	replaceable := map[string]int{}
-	if idx < len(itemData.ModelTextureFiles) && len(itemData.ModelTextureFiles[idx]) > 0 {
-		for _, f := range itemData.ModelTextureFiles[idx] {
-			replaceable[strconv.Itoa(f.ComponentID)] = f.FileDataID
-		}
-	} else if len(itemData.ModelTextureFiles[0]) > 0 {
-		for _, f := range itemData.ModelTextureFiles[0] {
-			replaceable[strconv.Itoa(f.ComponentID)] = f.FileDataID
-		}
-	}
+	replaceable := itemReplaceableTextures(itemData.ModelTextureFiles)
 
 	if template, ok := templates[fileDataID]; ok {
 		enabled := FilterCollectionGeosets(equipmentSlots, slotData, template.MDL)
@@ -703,59 +688,36 @@ func applyEquipmentsBodyTextures(ctx *ExportContext, charMdl *mdl.MDL, prep char
 		if t.section.Width == 0 && t.section.Height == 0 {
 			continue
 		}
-		pngPath, err := ExportTexture(ctx, t.fileDataID)
+		rel, png, err := ExportTexturePNG(ctx, t.fileDataID)
 		if err != nil {
 			continue
 		}
-		absPng := filepath.Join(ctx.Config.ExportAssetDir, pngPath)
-		if err := ensureTexturePNG(ctx, pngPath, absPng); err != nil {
-			continue
-		}
 		draws = append(draws, pngfmt.Draw{
-			PngPath: absPng,
+			PngData: png,
+			PngPath: rel,
 			X:       t.section.X, Y: t.section.Y,
 			Width: t.section.Width, Height: t.section.Height,
 		})
 	}
-	basePng := filepath.Join(ctx.Config.ExportAssetDir, baseTexture.WowData.PngPath)
-	if err := ensureTexturePNG(ctx, baseTexture.WowData.PngPath, basePng); err != nil {
+	baseRel := TextureRelPath(ctx.Config.ExportAssetDir, baseTexture.WowData.PngPath)
+	basePng, err := ResolveTexturePNGBytes(ctx, baseRel)
+	if err != nil {
 		return err
 	}
 	newPng, err := pngfmt.DrawPngsOnBasePng(basePng, draws)
 	if err != nil {
 		return err
 	}
-	type textureDrawHash struct {
-		PngPath string  `json:"pngPath"`
-		X       float64 `json:"x"`
-		Y       float64 `json:"y"`
-		Width   float64 `json:"width"`
-		Height  float64 `json:"height"`
-	}
-	textureDraws := make([]textureDrawHash, 0, len(draws))
-	for _, draw := range draws {
-		textureDraws = append(textureDraws, textureDrawHash{
-			PngPath: draw.PngPath,
-			X:       draw.X,
-			Y:       draw.Y,
-			Width:   draw.Width,
-			Height:  draw.Height,
-		})
-	}
-	hashInput, _ := json.Marshal(map[string]any{"basePng": basePng, "textureDraws": textureDraws})
-	sum := md5.Sum(hashInput)
+	hashInput := bodyTextureHashInput(baseRel, draws)
+	sum := md5.Sum([]byte(hashInput))
 	newName := fmt.Sprintf("%s-%s.png", ctx.OutputFile, hex.EncodeToString(sum[:]))
-	newPngPath := filepath.Join(ctx.Config.ExportAssetDir, newName)
-	if err := osWriteExportAsset(newPngPath, newPng); err != nil {
-		return err
-	}
-	rel, _ := filepath.Rel(ctx.Config.ExportAssetDir, newPngPath)
-	newBlp := filepath.ToSlash(filepath.Join(ctx.Config.AssetPrefix, rel))
+	texturesource.Register(newName, texturesource.Source{Kind: texturesource.KindPNG, PNG: newPng})
+	newBlp := filepath.ToSlash(filepath.Join(ctx.Config.AssetPrefix, newName))
 	newBlp = strings.Replace(newBlp, ".png", ".blp", 1)
 	for i := range charMdl.Textures {
 		if charMdl.Textures[i].WowData.Type == 1 {
 			charMdl.Textures[i].Image = newBlp
-			charMdl.Textures[i].WowData.PngPath = rel
+			charMdl.Textures[i].WowData.PngPath = newName
 		}
 	}
 	for i := range charMdl.Geosets {
@@ -766,55 +728,12 @@ func applyEquipmentsBodyTextures(ctx *ExportContext, charMdl *mdl.MDL, prep char
 			layer := &charMdl.Geosets[i].Material.Layers[j]
 			if layer.Texture != nil && layer.Texture.WowData.Type == 1 {
 				layer.Texture.Image = newBlp
-				layer.Texture.WowData.PngPath = rel
+				layer.Texture.WowData.PngPath = newName
 			}
 		}
 	}
-	ctx.AssetManager.AddPngTexture(rel, true)
+	ctx.AssetManager.AddPngTexture(newName, true)
 	return nil
-}
-
-func ensureTexturePNG(ctx *ExportContext, rel, absPath string) error {
-	if _, err := os.Stat(absPath); err == nil {
-		return nil
-	}
-	source, ok := texturesource.Get(rel)
-	if !ok {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-		return err
-	}
-	switch source.Kind {
-	case texturesource.KindPNG:
-		return os.WriteFile(absPath, source.PNG, 0o644)
-	case texturesource.KindBLP:
-		if ctx.WowClient == nil {
-			return nil
-		}
-		raw, err := ctx.WowClient.DownloadCascFile(context.Background(), source.FileDataID)
-		if err != nil {
-			return err
-		}
-		img, err := blp.NewBLPImage(buffer.From(raw))
-		if err != nil {
-			return err
-		}
-		pngBuf, err := img.ToPNG(0b1111, 0)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(absPath, pngBuf.Raw(), 0o644)
-	default:
-		return nil
-	}
-}
-
-func osWriteExportAsset(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
 }
 
 func getExcludedAnimIDs(keepCinematic bool, attackTag animmap.AttackTag) []int {
@@ -830,4 +749,38 @@ func getExcludedAnimIDs(keepCinematic bool, attackTag animmap.AttackTag) []int {
 		}
 	}
 	return excluded
+}
+
+// bodyTextureHashInput mirrors TS JSON.stringify({ basePng, textureDraws }) key order for md5 naming.
+func bodyTextureHashInput(baseRel string, draws []pngfmt.Draw) string {
+	var b strings.Builder
+	b.WriteString(`{"basePng":`)
+	b.WriteString(strconv.Quote(baseRel))
+	b.WriteString(`,"textureDraws":[`)
+	for i, draw := range draws {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(`{"png":{"type":"Buffer","data":`)
+		b.WriteString(jsonUint8Array(draw.PngData))
+		b.WriteString(`},"pngPath":`)
+		b.WriteString(strconv.Quote(draw.PngPath))
+		fmt.Fprintf(&b, `,"x":%g,"y":%g,"width":%g,"height":%g}`, draw.X, draw.Y, draw.Width, draw.Height)
+		b.WriteByte('}')
+	}
+	b.WriteString(`]}`)
+	return b.String()
+}
+
+func jsonUint8Array(data []byte) string {
+	var b strings.Builder
+	b.WriteByte('[')
+	for i, v := range data {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.Itoa(int(v)))
+	}
+	b.WriteByte(']')
+	return b.String()
 }

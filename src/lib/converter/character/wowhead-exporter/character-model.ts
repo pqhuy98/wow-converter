@@ -4,13 +4,14 @@ import _ from 'lodash';
 import path from 'path';
 
 import {
-  applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture,
+  applyReplaceableTextures, ExportContext, exportModelFileIdAsMdl, exportTexture, exportTexturePng,
+  resolveTexturePngBytes, textureRelPath,
 } from '@/lib/converter/character/utils';
+import { registerTextureSource } from '@/lib/converter/common/texture-source';
 import {
   ANIM_NAMES, AttackTag, getWc3AnimName, getWowAnimName,
 } from '@/lib/converter/wow-model/animation/animation-mapper';
 import { getWoWAttachmentName, WoWAttachmentID } from '@/lib/converter/wow-model/animation/bones-mapper';
-import { writeExportAsset } from '@/lib/export-asset-store';
 import { MDL } from '@/lib/formats/mdl/mdl';
 import { canAddMdlCollectionItemToModel } from '@/lib/formats/mdl/modify/add-item-to-model';
 import { forkCollectionModel } from '@/lib/formats/mdl/modify/fork-collection-model';
@@ -28,7 +29,7 @@ import {
   EquipmentSlotData,
   filterCollectionGeosets,
   getEquipmentSlotName, getGeosetIdsFromEquipments,
-  getSubmeshName, processItemData,
+  getSubmeshName, itemReplaceableTextures, processItemData,
 } from './item-model';
 
 export async function exportCharacterAsMdl({
@@ -257,15 +258,15 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
     debug && console.log('attachItemModel', attachmentId != null ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
 
-    const itemReplaceableTextures = Object.fromEntries(itemData.modelTextureFiles[idx].map((f) => [f.componentId, f.fileDataId]));
-    debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTextures);
+    const itemReplaceableTexturesMap = itemReplaceableTextures(itemData.modelTextureFiles);
+    debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTexturesMap);
 
     if (collectionTemplates.has(fileDataId)) {
       const template = collectionTemplates.get(fileDataId)!;
       const enabledGeosets = filterCollectionGeosets(equipmentSlots, slotData, template.mdl);
       const itemModel = forkCollectionModel(template, enabledGeosets);
       const itemMdl = itemModel.mdl;
-      await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures);
+      await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTexturesMap);
       charMdl.modify.addMdlCollectionItemToModel(itemMdl);
       attachmentResults.push({
         attachmentId, itemMdl, ok: true, fileDataId,
@@ -287,7 +288,7 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
 
     const itemMdl = itemModel.mdl;
 
-    await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTextures);
+    await applyReplaceableTextures(ctx, itemMdl, itemReplaceableTexturesMap);
 
     if (isCollection) {
       const debugCollection = false;
@@ -569,9 +570,10 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
       continue;
     }
     debug && console.log('Draw', getEquipmentSlotName(t.slotId), t.fileDataId, t.priority, t.componentId, section.X, section.Y, section.Width, section.Height);
-    const pngPath = path.join(ctx.config.exportAssetDir, await exportTexture(t.fileDataId));
+    const { relPath, png } = await exportTexturePng(t.fileDataId);
     textureDraws.push({
-      pngPath,
+      png,
+      pngPath: relPath,
       x: section.X,
       y: section.Y,
       width: section.Width,
@@ -579,27 +581,28 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
     });
   }
 
-  const basePng = path.join(ctx.config.exportAssetDir, baseTexture.wowData.pngPath);
-  debug && console.log('Base PNG:', basePng);
+  const baseRel = textureRelPath(ctx.config.exportAssetDir, baseTexture.wowData.pngPath);
+  debug && console.log('Base PNG:', baseRel);
   debug && console.log('Texture draws:', textureDraws);
 
+  const basePng = await resolveTexturePngBytes(ctx.config.exportAssetDir, baseRel);
   const newPng = await drawPngsOnBasePng(basePng, textureDraws);
 
-  let newPngName = createHash('md5').update(JSON.stringify({ basePng, textureDraws })).digest('hex');
+  let newPngName = createHash('md5').update(JSON.stringify({ basePng: baseRel, textureDraws })).digest('hex');
   newPngName = `${ctx.outputFile}-${newPngName}`;
 
-  const newPngPath = path.join(ctx.config.exportAssetDir, `${newPngName}.png`);
-  await writeExportAsset(newPngPath, newPng);
-  const newBlpPath = path.join(ctx.config.assetPrefix, path.relative(ctx.config.exportAssetDir, newPngPath))
+  const newPngRel = `${newPngName}.png`;
+  registerTextureSource(newPngRel, { kind: 'png', png: newPng });
+  const newBlpPath = path.join(ctx.config.assetPrefix, newPngRel)
     .replace('.png', '.blp');
 
   charMdl.textures.forEach((t) => {
     if (t.wowData.type === 1) {
       t.image = newBlpPath;
-      t.wowData.pngPath = newPngPath;
+      t.wowData.pngPath = newPngRel;
     }
   });
-  ctx.assetManager.addPngTexture(path.relative(ctx.config.exportAssetDir, newPngPath), true);
+  ctx.assetManager.addPngTexture(newPngRel, true);
 }
 
 function getExcludedAnimIds(keepCinematic: boolean, attackTag: AttackTag | undefined): number[] {

@@ -105,6 +105,7 @@ func ResizePngBytes(pngBuffer []byte, targetWidth, targetHeight int) ([]byte, er
 }
 
 // ResizePngOutside scales PNG to cover target dimensions (sharp fit: outside).
+// When alpha is present, RGB and alpha are resized independently (TS resizePng parity).
 func ResizePngOutside(pngBuffer []byte, targetWidth, targetHeight int) ([]byte, error) {
 	data, width, height, err := DecodeRGBA(pngBuffer)
 	if err != nil {
@@ -119,7 +120,36 @@ func ResizePngOutside(pngBuffer []byte, targetWidth, targetHeight int) ([]byte, 
 	if outH < 1 {
 		outH = 1
 	}
-	resized := resizeRGBA(data, width, height, outW, outH)
+
+	hasAlpha := false
+	for i := 3; i < len(data); i += 4 {
+		if data[i] != 255 {
+			hasAlpha = true
+			break
+		}
+	}
+	if !hasAlpha {
+		resized := resizeRGBA(data, width, height, outW, outH)
+		return EncodeRGBA(resized, outW, outH)
+	}
+
+	rgb := make([]byte, width*height*3)
+	alpha := make([]byte, width*height)
+	for i := 0; i < width*height; i++ {
+		rgb[i*3] = data[i*4]
+		rgb[i*3+1] = data[i*4+1]
+		rgb[i*3+2] = data[i*4+2]
+		alpha[i] = data[i*4+3]
+	}
+	resizedRGB := resizeGrayPlane(rgb, width, height, 3, outW, outH)
+	resizedAlpha := resizeGrayPlane(alpha, width, height, 1, outW, outH)
+	resized := make([]byte, outW*outH*4)
+	for i := 0; i < outW*outH; i++ {
+		resized[i*4] = resizedRGB[i*3]
+		resized[i*4+1] = resizedRGB[i*3+1]
+		resized[i*4+2] = resizedRGB[i*3+2]
+		resized[i*4+3] = resizedAlpha[i]
+	}
 	return EncodeRGBA(resized, outW, outH)
 }
 

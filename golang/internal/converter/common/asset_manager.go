@@ -230,6 +230,16 @@ func (a *AssetManager) AddPngTexture(texturePath string, overwrite bool) {
 	}
 }
 
+// ReleaseGeneratedTextureSources drops in-memory PNG registry entries for this
+// export's texture paths after BLP encoding completes.
+func (a *AssetManager) ReleaseGeneratedTextureSources() {
+	paths := make([]string, 0, len(a.textures))
+	for rel := range a.textures {
+		paths = append(paths, rel)
+	}
+	texturesource.ReleaseGeneratedPNG(paths)
+}
+
 // ExportModels writes MDL/MDX files to assetPath.
 func (a *AssetManager) ExportModels(assetPath string) error {
 	log.Printf("Exporting models to %s ...", assetPath)
@@ -407,6 +417,7 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 		ansi.Yellowf("%d", writeCount),
 		ansi.Grayf("%d", skipped),
 		ansi.Yellowf("%d", len(exported)))
+	a.ReleaseGeneratedTextureSources()
 	return exported, nil
 }
 

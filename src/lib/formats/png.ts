@@ -54,7 +54,9 @@ export async function resizePng(from: string | Buffer, targetWidth: number, targ
 }
 
 export interface PngDraw {
-  pngPath: string;
+  png: Buffer;
+  /** Relative path key for logging/hash only. */
+  pngPath?: string;
   x: number;
   y: number;
   width: number;
@@ -63,10 +65,10 @@ export interface PngDraw {
 
 // x, y, width, height are in percentage of the base texture
 export async function drawPngsOnBasePng(
-  basePngPath: string,
+  basePng: string | Buffer,
   draws: PngDraw[],
 ): Promise<Buffer> {
-  const base = sharpFromExportAsset(basePngPath);
+  const base = typeof basePng === 'string' ? sharpFromExportAsset(basePng) : sharp(basePng);
   const meta = await base.metadata();
 
   if (!meta.width || !meta.height) {
@@ -87,15 +89,15 @@ export async function drawPngsOnBasePng(
 
     let input: Buffer;
 
-    if (await isAbnormalTransparency(draw.pngPath)) {
-      console.log('Abnormal transparency, removing alpha', draw.pngPath);
+    if (await isAbnormalTransparency(draw.png)) {
+      console.log('Abnormal transparency, removing alpha', draw.pngPath ?? '<buffer>');
       input = await sharp(
         // cannot chain sharp operations otherwise RGB will turn to 0
-        await sharpFromExportAsset(draw.pngPath).removeAlpha().toBuffer(),
+        await sharp(draw.png).removeAlpha().toBuffer(),
       ).resize({ width: targetWidth, height: targetHeight, fit: 'outside' })
         .toBuffer();
     } else {
-      input = await resizePng(draw.pngPath, targetWidth, targetHeight);
+      input = await resizePng(draw.png, targetWidth, targetHeight);
     }
 
     return {
@@ -109,9 +111,9 @@ export async function drawPngsOnBasePng(
     .toBuffer();
 }
 
-async function isAbnormalTransparency(pngPath: string): Promise<boolean> {
-  const png = sharpFromExportAsset(pngPath);
-  const metadata = await png.metadata();
+async function isAbnormalTransparency(png: string | Buffer): Promise<boolean> {
+  const img = typeof png === 'string' ? sharpFromExportAsset(png) : sharp(png);
+  const metadata = await img.metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error('PNG must have width and height metadata');
   }
@@ -123,7 +125,7 @@ async function isAbnormalTransparency(pngPath: string): Promise<boolean> {
     return false;
   }
 
-  const alphaBuffer = await png
+  const alphaBuffer = await img
     .ensureAlpha()
     .extractChannel('alpha')
     .raw()

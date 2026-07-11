@@ -33,6 +33,8 @@
     "start": "set NODE_ENV=production && bun src/server/index.ts",
     "test": "bun tests/index.ts",
     "test:fresh": "bun tests/index.ts --fresh",
+    "test-go": "cd golang && go run ./test/cmd/test-export",
+    "test-go:fresh": "cd golang && go run ./test/cmd/test-export -fresh",
     "prisma:generate": "prisma generate",
     "generate:acore-sqlite": "bun scripts/generate-azerothcore-sqlite.ts",
     "verify:acore-sqlite": "bun scripts/verify-acore-sqlite.ts",

@@ -315,6 +315,31 @@ func resolveHideGeosetIDs(itemData wowhead.ItemData, targetRace, targetGender in
 	return ids
 }
 
+func itemReplaceableTextures(files [2][]FileWithComponent) map[string]int {
+	replaceable := map[string]int{}
+	for _, set := range files {
+		for _, f := range set {
+			replaceable[strconv.Itoa(f.ComponentID)] = f.FileDataID
+		}
+	}
+	return replaceable
+}
+
+func itemModelTextureIDs(files [2][]FileWithComponent) []int {
+	seen := map[int]struct{}{}
+	out := make([]int, 0)
+	for _, set := range files {
+		for _, f := range set {
+			if _, ok := seen[f.FileDataID]; ok {
+				continue
+			}
+			seen[f.FileDataID] = struct{}{}
+			out = append(out, f.FileDataID)
+		}
+	}
+	return out
+}
+
 // ProcessItemData fetches and processes zam item meta.
 func ProcessItemData(http *wowhead.HTTPClient, expansion wowhead.Expansion, zam wowhead.ZamURL, targetRace, targetGender, targetClass int) (ItemMetadata, error) {
 	itemData, err := wowhead.FetchItemMeta(http, expansion, zam.DisplayID, zam.SlotID)
@@ -359,19 +384,13 @@ func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targ
 		return nil, ItemMetadata{}, fmt.Errorf("found no model for item %d", zam.DisplayID)
 	}
 	modelID := result.ModelFiles[0].FileDataID
-	textureIDs := make([]int, 0, len(result.ModelTextureFiles[0]))
-	for _, f := range result.ModelTextureFiles[0] {
-		textureIDs = append(textureIDs, f.FileDataID)
-	}
-	model, err := ExportModelFileIDAsMdl(ctx, modelID, ExportModelOptions{TextureIDs: textureIDs})
+	model, err := ExportModelFileIDAsMdl(ctx, modelID, ExportModelOptions{
+		TextureIDs: itemModelTextureIDs(result.ModelTextureFiles),
+	})
 	if err != nil {
 		return nil, ItemMetadata{}, err
 	}
-	replaceable := map[string]int{}
-	for _, f := range result.ModelTextureFiles[0] {
-		replaceable[strconv.Itoa(f.ComponentID)] = f.FileDataID
-	}
-	if err := ApplyReplaceableTextures(ctx, model.MDL, replaceable); err != nil {
+	if err := ApplyReplaceableTextures(ctx, model.MDL, itemReplaceableTextures(result.ModelTextureFiles)); err != nil {
 		return nil, ItemMetadata{}, err
 	}
 	return model, result, nil

@@ -155,8 +155,14 @@ func ApplyReplaceableTextures(ctx *ExportContext, m *mdl.MDL, replaceable map[st
 
 // ExportTexture exports a BLP texture to PNG and returns the relative path.
 func ExportTexture(ctx *ExportContext, textureID int) (string, error) {
+	rel, _, err := ExportTexturePNG(ctx, textureID)
+	return rel, err
+}
+
+// ExportTexturePNG exports a BLP texture and returns the relative path with PNG bytes.
+func ExportTexturePNG(ctx *ExportContext, textureID int) (string, []byte, error) {
 	if textureID <= 0 {
-		return "", fmt.Errorf("invalid texture fileDataID: %d", textureID)
+		return "", nil, fmt.Errorf("invalid texture fileDataID: %d", textureID)
 	}
 	fileName := fmt.Sprintf("unknown/%d.blp", textureID)
 	if ctx.WowClient != nil {
@@ -165,29 +171,87 @@ func ExportTexture(ctx *ExportContext, textureID int) (string, error) {
 		}
 	}
 	rel := normalizeTexturePath(replaceExt(fileName, ".blp", ".png"))
+	if source, ok := texturesource.Get(rel); ok && source.Kind == texturesource.KindPNG && len(source.PNG) > 0 {
+		return rel, source.PNG, nil
+	}
 	absPath := filepath.Join(ctx.Config.ExportAssetDir, rel)
-	if !common.ExportAssetExists(absPath) && ctx.WowClient != nil {
-		raw, err := ctx.WowClient.DownloadCascFile(context.Background(), textureID)
+	if common.ExportAssetExists(absPath) {
+		data, err := os.ReadFile(absPath)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
-		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-			return "", err
-		}
-		img, err := blp.NewBLPImage(buffer.From(raw))
-		if err != nil {
-			return "", err
-		}
-		pngBuf, err := img.ToPNG(0b1111, 0)
-		if err != nil {
-			return "", err
-		}
-		if err := os.WriteFile(absPath, pngBuf.Raw(), 0o644); err != nil {
-			return "", err
-		}
+		texturesource.Register(rel, texturesource.Source{Kind: texturesource.KindBLP, FileDataID: textureID})
+		return rel, data, nil
+	}
+	if ctx.WowClient == nil {
+		return "", nil, fmt.Errorf("texture not found: %s", rel)
+	}
+	raw, err := ctx.WowClient.DownloadCascFile(context.Background(), textureID)
+	if err != nil {
+		return "", nil, err
+	}
+	img, err := blp.NewBLPImage(buffer.From(raw))
+	if err != nil {
+		return "", nil, err
+	}
+	pngBuf, err := img.ToPNG(0b1111, 0)
+	if err != nil {
+		return "", nil, err
+	}
+	png := pngBuf.Raw()
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		return "", nil, err
+	}
+	if err := os.WriteFile(absPath, png, 0o644); err != nil {
+		return "", nil, err
 	}
 	texturesource.Register(rel, texturesource.Source{Kind: texturesource.KindBLP, FileDataID: textureID})
-	return rel, nil
+	return rel, png, nil
+}
+
+// ResolveTexturePNGBytes loads PNG bytes from the texture-source registry or export cache.
+func ResolveTexturePNGBytes(ctx *ExportContext, relPath string) ([]byte, error) {
+	rel := filepath.ToSlash(relPath)
+	if source, ok := texturesource.Get(rel); ok {
+		switch source.Kind {
+		case texturesource.KindPNG:
+			return source.PNG, nil
+		case texturesource.KindBLP:
+			if ctx.WowClient == nil {
+				return nil, fmt.Errorf("texture not found: %s", relPath)
+			}
+			raw, err := ctx.WowClient.DownloadCascFile(context.Background(), source.FileDataID)
+			if err != nil {
+				return nil, err
+			}
+			img, err := blp.NewBLPImage(buffer.From(raw))
+			if err != nil {
+				return nil, err
+			}
+			pngBuf, err := img.ToPNG(0b1111, 0)
+			if err != nil {
+				return nil, err
+			}
+			return pngBuf.Raw(), nil
+		}
+	}
+	absPath := filepath.Join(ctx.Config.ExportAssetDir, filepath.FromSlash(rel))
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("texture not found: %s", relPath)
+	}
+	return data, nil
+}
+
+// TextureRelPath normalizes an absolute or relative export texture path.
+func TextureRelPath(exportAssetDir, texturePath string) string {
+	if filepath.IsAbs(texturePath) {
+		rel, err := filepath.Rel(exportAssetDir, texturePath)
+		if err == nil {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(texturePath)
 }
 
 func normalizeTexturePath(p string) string {

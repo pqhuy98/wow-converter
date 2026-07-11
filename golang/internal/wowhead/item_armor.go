@@ -73,40 +73,45 @@ type HideGeosetEntry struct {
 	GeosetGroup int `json:"GeosetGroup"`
 }
 
-// FetchItemMeta fetches item or armor meta JSON from zam modelviewer.
-func FetchItemMeta(client *HTTPClient, expansion Expansion, displayID int, slotID *int) (ItemData, error) {
-	effectiveSlot := 0
-	if slotID != nil {
-		effectiveSlot = *slotID
+func itemMetaCandidatePaths(displayID, preferredSlot int) []string {
+	paths := make([]string, 0, len(armorSlots)+2)
+	seen := map[int]bool{}
+	addSlot := func(slot int) {
+		if slot <= 0 || seen[slot] {
+			return
+		}
+		seen[slot] = true
+		paths = append(paths, fmt.Sprintf("meta/armor/%d/%d.json", slot, displayID))
 	}
-	if effectiveSlot > 0 && !containsArmorSlot(EquipmentSlot(effectiveSlot)) {
-		effectiveSlot = 0
+	addSlot(preferredSlot)
+	if backup, ok := slotBackup[preferredSlot]; ok {
+		addSlot(backup)
 	}
-	path := fmt.Sprintf("meta/item/%d.json", displayID)
-	if effectiveSlot > 0 {
-		path = fmt.Sprintf("meta/armor/%d/%d.json", effectiveSlot, displayID)
+	for _, slot := range armorSlots {
+		addSlot(int(slot))
 	}
-	if expansion == ExpansionLatestAvailable {
+	paths = append(paths, fmt.Sprintf("meta/item/%d.json", displayID))
+	return paths
+}
+
+func fetchItemMetaAtPath(client *HTTPClient, expansion Expansion, path string) (ItemData, error) {
+	exp := expansion
+	if exp == ExpansionLatestAvailable {
 		var err error
-		expansion, err = GetLatestExpansionHavingURL(client, path)
+		exp, err = GetLatestExpansionHavingURL(client, path)
 		if err != nil {
 			return ItemData{}, err
 		}
 	}
-	url := GetZamBaseURL(expansion) + "/" + path
+	url := GetZamBaseURL(exp) + "/" + path
 	text, err := FetchWithCache(client, url)
+	if err != nil && expansion != ExpansionLatestAvailable {
+		if fallback, err2 := GetLatestExpansionHavingURL(client, path); err2 == nil && fallback != exp {
+			url = GetZamBaseURL(fallback) + "/" + path
+			text, err = FetchWithCache(client, url)
+		}
+	}
 	if err != nil {
-		if effectiveSlot > 0 {
-			if backup, ok := slotBackup[effectiveSlot]; ok {
-				backupPtr := backup
-				return FetchItemMeta(client, expansion, displayID, &backupPtr)
-			}
-		}
-		if expansion != ExpansionLatestAvailable {
-			if fallback, err2 := GetLatestExpansionHavingURL(client, path); err2 == nil && fallback != expansion {
-				return FetchItemMeta(client, fallback, displayID, slotID)
-			}
-		}
 		return ItemData{}, err
 	}
 	var data ItemData
@@ -114,6 +119,29 @@ func FetchItemMeta(client *HTTPClient, expansion Expansion, displayID int, slotI
 		return ItemData{}, err
 	}
 	return data, nil
+}
+
+// FetchItemMeta fetches item or armor meta JSON from zam modelviewer.
+func FetchItemMeta(client *HTTPClient, expansion Expansion, displayID int, slotID *int) (ItemData, error) {
+	preferredSlot := 0
+	if slotID != nil {
+		preferredSlot = *slotID
+		if preferredSlot > 0 && !containsArmorSlot(EquipmentSlot(preferredSlot)) {
+			preferredSlot = 0
+		}
+	}
+	var lastErr error
+	for _, path := range itemMetaCandidatePaths(displayID, preferredSlot) {
+		data, err := fetchItemMetaAtPath(client, expansion, path)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return ItemData{}, lastErr
+	}
+	return ItemData{}, fmt.Errorf("item meta not found for display %d", displayID)
 }
 
 func containsArmorSlot(slot EquipmentSlot) bool {

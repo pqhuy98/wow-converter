@@ -15,7 +15,6 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/converter/character"
 	animmap "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/animation"
 	"github.com/pqhuy98/wow-converter/internal/testcases"
-	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/test/internal/snapshot"
@@ -107,6 +106,7 @@ func main() {
 	cfg.MaxTextureSize = 512
 	cfg.OverrideModels = *casesFile != ""
 
+	var mapUnits []mapUnitEntry
 	for i := startIdx; i < endIdx; i++ {
 		var ch character.Character
 		var name string
@@ -129,6 +129,8 @@ func main() {
 			name = deriveName(tc.Base)
 			particles = tc.ParticlesDensity
 		}
+		mapUnits = append(mapUnits, mapUnitEntry{Name: name})
+
 		outPath := filepath.Join(mapDir, name+"."+*format)
 		if _, err := os.Stat(outPath); err == nil && !cfg.OverrideModels {
 			log.Printf("Skipping existing %s", name)
@@ -138,7 +140,8 @@ func main() {
 		log.Printf("Exporting %d/%d: %s", i-startIdx+1, endIdx-startIdx, name)
 		start := time.Now()
 		caseExporter := character.NewCharacterExporter(cfg, wowClient)
-		if _, err := caseExporter.ExportCharacter(ctx, ch, name, exportOpts...); err != nil {
+		exportedMdl, err := caseExporter.ExportCharacter(ctx, ch, name, exportOpts...)
+		if err != nil {
 			log.Fatalf("export %s: %v", name, err)
 		}
 		caseExporter.OptimizeModelsTextures(character.ExportOptimization{
@@ -152,14 +155,12 @@ func main() {
 		if _, err := caseExporter.WriteAllModels(mapDir, *format); err != nil {
 			log.Fatalf("models %s: %v", name, err)
 		}
+		mapUnits[len(mapUnits)-1].MDL = exportedMdl
 		log.Printf("Done %s in %.2fs", name, time.Since(start).Seconds())
 	}
 
-	mapMgr := extra.NewMapManager()
-	if err := mapMgr.Load(mapDir); err != nil {
-		log.Printf("map load warning: %v", err)
-	} else if err := mapMgr.Save(mapDir); err != nil {
-		log.Printf("map save warning: %v", err)
+	if err := populateRegressionMapUnits(mapDir, *format, mapUnits); err != nil {
+		log.Fatalf("populate map units: %v", err)
 	}
 
 	fmt.Printf("Test export complete: %d cases -> %s\n", endIdx-startIdx, mapDir)

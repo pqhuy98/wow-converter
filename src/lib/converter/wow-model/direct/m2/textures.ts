@@ -10,7 +10,6 @@ import path from 'path';
 
 import { registerTextureSource, TextureSource } from '@/lib/converter/common/texture-source';
 import type { ObjMaterial } from '@/lib/converter/wow-model/bundle/mtl';
-import { writeExportAsset } from '@/lib/export-asset-store';
 import { getFileNameByID } from '@/lib/wow/archive/client/name-client';
 import { getRawWowFile } from '@/lib/wow/archive/client/raw-client';
 import type { TextureManifestEntry, VariantTexture } from '@/lib/wow/export/m2/m2-exporter';
@@ -86,9 +85,6 @@ export async function resolveTextures(
     }
 
     registerSource(texPath, source);
-    // Mirror the legacy server writing the baked PNG file: body-texture
-    // compositing reads it from the export-asset store.
-    if (source.kind === 'png') await writeExportAsset(texPath, source.png);
 
     addMaterial(matName, texFile);
     validTextures.set(`data-${textureType}`, {

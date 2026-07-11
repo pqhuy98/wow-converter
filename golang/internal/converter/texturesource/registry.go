@@ -51,6 +51,32 @@ func Has(relativePath string) bool {
 	return ok
 }
 
+// Unregister removes a registered texture source.
+func Unregister(relativePath string) {
+	key := normalize(relativePath)
+	registryMu.Lock()
+	delete(registry, key)
+	registryMu.Unlock()
+}
+
+// ReleaseGeneratedPNG drops in-memory PNG sources for the given relative paths.
+// BLP entries are kept (cheap; re-registered on next model parse).
+func ReleaseGeneratedPNG(relativePaths []string) int {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	released := 0
+	for _, rel := range relativePaths {
+		key := normalize(rel)
+		src, ok := registry[key]
+		if !ok || src.Kind != KindPNG {
+			continue
+		}
+		delete(registry, key)
+		released++
+	}
+	return released
+}
+
 // Clear drops all registered texture sources (e.g. on CASC unload).
 func Clear() {
 	registryMu.Lock()

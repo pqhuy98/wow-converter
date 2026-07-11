@@ -1,5 +1,3 @@
-import chalk from 'chalk';
-
 import {
   fetchWithCache, getLatestExpansionHavingUrl, getZamBaseUrl, ZamUrl,
 } from './zam-url';
@@ -75,42 +73,64 @@ const slotBackup = {
   5: 20,
 };
 
+function itemMetaCandidatePaths(displayId: number, preferredSlot: number | null): string[] {
+  const paths: string[] = [];
+  const seen = new Set<number>();
+  const addSlot = (slot: number) => {
+    if (slot <= 0 || seen.has(slot)) return;
+    seen.add(slot);
+    paths.push(`meta/armor/${slot}/${displayId}.json`);
+  };
+  if (preferredSlot) {
+    addSlot(preferredSlot);
+    const backup = slotBackup[preferredSlot as keyof typeof slotBackup];
+    if (backup) addSlot(backup);
+  }
+  for (const slot of ArmorSlots) {
+    addSlot(slot);
+  }
+  paths.push(`meta/item/${displayId}.json`);
+  return paths;
+}
+
+async function fetchItemMetaAtPath(expansion: ZamUrl['expansion'], path: string): Promise<ItemData> {
+  let exp = expansion;
+  if (exp === 'latest-available') {
+    exp = await getLatestExpansionHavingUrl(path);
+  }
+  const url = `${getZamBaseUrl(exp)}/${path}`;
+  try {
+    const res = await fetchWithCache(url);
+    return JSON.parse(res) as unknown as ItemData;
+  } catch (e) {
+    if (expansion !== 'latest-available') {
+      try {
+        const fallback = await getLatestExpansionHavingUrl(path);
+        if (fallback !== exp) {
+          const fallbackUrl = `${getZamBaseUrl(fallback)}/${path}`;
+          const res = await fetchWithCache(fallbackUrl);
+          return JSON.parse(res) as unknown as ItemData;
+        }
+      } catch {
+        // fall through
+      }
+    }
+    throw e;
+  }
+}
+
 export async function fetchItemMeta(zam: ZamUrl): Promise<ItemData> {
   if (zam.type !== 'item') throw new Error('fetchItemMeta expects a ZamUrl of type item');
   let slotId: number | null = zam.slotId;
   if (slotId && !ArmorSlots.includes(slotId)) slotId = null;
 
-  const path = slotId
-    ? `meta/armor/${slotId}/${zam.displayId}.json`
-    : `meta/item/${zam.displayId}.json`;
-
-  let expansion = zam.expansion;
-  if (expansion === 'latest-available') {
-    expansion = await getLatestExpansionHavingUrl(path);
-  }
-  const base = getZamBaseUrl(expansion);
-  const url = `${base}/${path}`;
-  debug && console.log('Get item meta from', chalk.blue(url));
-  try {
-    const res = await fetchWithCache(url);
-    return JSON.parse(res) as unknown as ItemData;
-  } catch (e) {
-    if (slotId && slotBackup[slotId]) {
-      return fetchItemMeta({ ...zam, slotId: slotBackup[slotId] });
+  let lastError: unknown;
+  for (const path of itemMetaCandidatePaths(zam.displayId, slotId)) {
+    try {
+      return await fetchItemMetaAtPath(zam.expansion, path);
+    } catch (e) {
+      lastError = e;
     }
-    // Some item metas are missing from a specific expansion's CDN (e.g. wrath)
-    // but exist on another (live/classic); retry against any expansion that has it.
-    if (zam.expansion !== 'latest-available') {
-      try {
-        const fallback = await getLatestExpansionHavingUrl(path);
-        if (fallback !== expansion) {
-          console.warn(`Item meta ${path} missing on ${expansion}, using ${fallback}`);
-          return fetchItemMeta({ ...zam, expansion: fallback });
-        }
-      } catch {
-        // fall through to original error
-      }
-    }
-    throw e;
   }
+  throw lastError;
 }

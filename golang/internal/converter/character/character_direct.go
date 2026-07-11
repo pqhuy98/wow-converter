@@ -36,7 +36,8 @@ type ExportCharacterParams struct {
 	Race                int            `json:"race"`
 	Gender              int            `json:"gender"`
 	FileDataIDOverride  *int           `json:"fileDataIdOverride,omitempty"`
-	Customizations      map[string]int `json:"customizations"`
+	Customizations       map[string]int `json:"customizations"`
+	CustomizationOrder   []int          `json:"-"`
 	ExcludeAnimationIDs []int          `json:"excludeAnimationIds,omitempty"`
 	GeosetIDs           []int          `json:"geosetIds,omitempty"`
 	HideGeosetIDs       []int          `json:"hideGeosetIds,omitempty"`
@@ -287,6 +288,9 @@ func bakeCharacterMaterials(ctx *ExportContext, choices map[int]parsedChoiceMeta
 }
 
 func customizationChoiceOrder(body ExportCharacterParams) []int {
+	if len(body.CustomizationOrder) > 0 {
+		return body.CustomizationOrder
+	}
 	return sortedCustomizationChoices(body.Customizations)
 }
 

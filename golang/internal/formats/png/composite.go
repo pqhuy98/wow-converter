@@ -5,11 +5,12 @@ import (
 	"image"
 	"image/draw"
 	_ "image/png"
-	"os"
 )
 
 // Draw describes an overlay region as fractions of the base texture.
 type Draw struct {
+	PngData []byte
+	// PngPath is an optional relative path key for logging/hash only.
 	PngPath string
 	X       float64
 	Y       float64
@@ -17,14 +18,9 @@ type Draw struct {
 	Height  float64
 }
 
-// DrawPngsOnBasePng composites overlay PNGs onto a base PNG file.
-func DrawPngsOnBasePng(basePngPath string, draws []Draw) ([]byte, error) {
-	baseFile, err := os.Open(basePngPath)
-	if err != nil {
-		return nil, err
-	}
-	defer baseFile.Close()
-	baseImg, _, err := image.Decode(baseFile)
+// DrawPngsOnBasePng composites overlay PNGs onto a base PNG buffer.
+func DrawPngsOnBasePng(basePng []byte, draws []Draw) ([]byte, error) {
+	baseImg, _, err := image.Decode(bytes.NewReader(basePng))
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +33,7 @@ func DrawPngsOnBasePng(basePngPath string, draws []Draw) ([]byte, error) {
 	}
 
 	for _, d := range draws {
-		overlayData, err := os.ReadFile(d.PngPath)
-		if err != nil {
+		if len(d.PngData) == 0 {
 			continue
 		}
 		targetW := maxInt(1, int(float64(bounds.Dx())*d.Width+0.5))
@@ -47,15 +42,15 @@ func DrawPngsOnBasePng(basePngPath string, draws []Draw) ([]byte, error) {
 		top := int(float64(bounds.Dy())*d.Y + 0.5)
 
 		var resized []byte
-		abnormal, err := IsAbnormalTransparency(overlayData)
+		abnormal, err := IsAbnormalTransparency(d.PngData)
 		if err == nil && abnormal {
-			noAlpha, err := removeAlphaChannel(overlayData)
+			noAlpha, err := removeAlphaChannel(d.PngData)
 			if err != nil {
 				continue
 			}
 			resized, err = ResizePngOutside(noAlpha, targetW, targetH)
 		} else {
-			resized, err = ResizePngOutside(overlayData, targetW, targetH)
+			resized, err = ResizePngOutside(d.PngData, targetW, targetH)
 		}
 		if err != nil {
 			continue
@@ -84,7 +79,7 @@ func removeAlphaChannel(pngBuffer []byte) ([]byte, error) {
 func encodeImageRGBA(img *image.RGBA) ([]byte, error) {
 	data := make([]byte, img.Bounds().Dx()*img.Bounds().Dy()*4)
 	for y := 0; y < img.Bounds().Dy(); y++ {
-		copy(data[y*img.Bounds().Dx()*4:(y+1)*img.Bounds().Dx()*4], img.Pix[y*img.Stride : (y+1)*img.Stride][:img.Bounds().Dx()*4])
+		copy(data[y*img.Bounds().Dx()*4:(y+1)*img.Bounds().Dx()*4], img.Pix[y*img.Stride:(y+1)*img.Stride][:img.Bounds().Dx()*4])
 	}
 	return EncodeRGBA(data, img.Bounds().Dx(), img.Bounds().Dy())
 }

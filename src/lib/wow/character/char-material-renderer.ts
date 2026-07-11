@@ -61,32 +61,6 @@ interface TextureTarget {
   filename: string | undefined;
 }
 
-/**
- * Un-premultiply an RGBA buffer the way Chromium serialises a WebGL canvas
- * created with premultipliedAlpha=true: raw bytes are interpreted as
- * premultiplied, so rgb' = clamp(round(rgb * 255 / a)); a=0 zeroes rgb.
- */
-function unpremultiply(src: Uint8ClampedArray | Uint8Array): Uint8Array {
-  const out = new Uint8Array(src.length);
-  for (let i = 0; i < src.length; i += 4) {
-    const a = src[i + 3];
-    if (a === 0) {
-      out[i + 3] = 0;
-    } else if (a === 255) {
-      out[i] = src[i];
-      out[i + 1] = src[i + 1];
-      out[i + 2] = src[i + 2];
-      out[i + 3] = 255;
-    } else {
-      out[i] = Math.min(255, Math.round((src[i] * 255) / a));
-      out[i + 1] = Math.min(255, Math.round((src[i + 1] * 255) / a));
-      out[i + 2] = Math.min(255, Math.round((src[i + 2] * 255) / a));
-      out[i + 3] = a;
-    }
-  }
-  return out;
-}
-
 /** Sample a texture with CLAMP_TO_EDGE + GL filter selection (NEAREST min / LINEAR mag). */
 function sampleTexture(tex: CPUTexture, u: number, v: number, minified: boolean, out: Float64Array): void {
   const {
@@ -168,10 +142,8 @@ export class CharMaterialRenderer {
   /** Encode the canvas to a PNG buffer. */
   getPNG(): Buffer {
     const png = new PNGWriter(this.width, this.height);
-    // wow.export's WebGL canvas uses premultipliedAlpha=true: the drawing
-    // buffer bytes are interpreted as premultiplied, so canvas.toDataURL()
-    // un-premultiplies them (rgb * 255 / a, clamped). Replicate that here.
-    png.getPixelData().set(unpremultiply(this.canvas));
+    // wow.export uses gl.readPixels via getRawPixels(), not canvas.toDataURL().
+    png.getPixelData().set(this.canvas);
     return png.getBuffer().raw;
   }
 
@@ -278,9 +250,7 @@ export class CharMaterialRenderer {
     let baseTex: CPUTexture | null = null;
     if (blendMode === 4 || blendMode === 6 || blendMode === 7) {
       if (material.Width === section.Width && material.Height === section.Height) {
-        // texImage2D(canvas) un-premultiplies the (premultiplied-interpreted)
-        // canvas bytes; readPixels (the partial path below) does not.
-        baseTex = { data: unpremultiply(this.canvas), width: this.width, height: this.height };
+        baseTex = { data: new Uint8Array(this.canvas), width: this.width, height: this.height };
       } else {
         const snap = new Uint8Array(rectW * rectH * 4);
         for (let fy = 0; fy < rectH; fy++) {
@@ -356,8 +326,8 @@ export class CharMaterialRenderer {
         // --- Framebuffer blending ---
         const di = (py * this.width + px) * 4;
         const sa = frag[3];
-        if (blendMode === 0) {
-          // Blending disabled: direct write.
+        if (blendMode === 0 || blendMode === 1) {
+          // Blending disabled: direct write (wow.export disables blend for mode 1).
           this.canvas[di] = frag[0] * 255;
           this.canvas[di + 1] = frag[1] * 255;
           this.canvas[di + 2] = frag[2] * 255;

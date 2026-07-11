@@ -22,7 +22,9 @@ import { Model } from '../common/models';
 import { guessAttackTag, InventoryType } from './item-mapper';
 import { ExportContext, exportLocalModelAsMdl } from './utils';
 import { exportCharacterAsMdl } from './wowhead-exporter/character-model';
-import { exportCreatureNpcAsMdl, mergeNpcMeta, resolveNpcMetaFromDB } from './wowhead-exporter/creature-model';
+import {
+  exportCreatureNpcAsMdl, hasResolvedModel, mergeNpcMeta, resolveNpcMetaFromDB,
+} from './wowhead-exporter/creature-model';
 import { exportZamItemAsMdl, getEquipmentSlotName } from './wowhead-exporter/item-model';
 
 // Local file path must be a relative path and must not contain ".." or start with a slash.
@@ -324,14 +326,18 @@ export class CharacterExporter {
       }
 
       let charMeta = npcMeta;
-      if (!charMeta.Model && baseZam.type === 'npc') {
-        const dbMeta = await resolveNpcMetaFromDB(baseZam.displayId);
-        if (dbMeta) {
-          charMeta = mergeNpcMeta(npcMeta, dbMeta);
+      if (baseZam.type === 'npc') {
+        try {
+          const dbMeta = await resolveNpcMetaFromDB(baseZam.displayId);
+          if (dbMeta) {
+            charMeta = mergeNpcMeta(npcMeta, dbMeta, wowDataClient.isClassic());
+          }
+        } catch (e) {
+          if (!npcMeta.Character && !hasResolvedModel(npcMeta.Model)) throw e;
         }
       }
 
-      if (charMeta.Model) {
+      if (hasResolvedModel(charMeta.Model) && !charMeta.Character) {
         return exportCreatureNpcAsMdl(ctx, charMeta);
       }
 
@@ -341,7 +347,7 @@ export class CharacterExporter {
 
       return exportCharacterAsMdl({
         ctx,
-        metaData: npcMeta,
+        metaData: charMeta,
         expansion: baseZam.expansion,
         keepCinematic: Boolean(char.keepCinematic),
         attackTag: char.attackTag,

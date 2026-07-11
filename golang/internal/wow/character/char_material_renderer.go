@@ -3,6 +3,7 @@ package character
 import (
 	"context"
 	"math"
+	"strconv"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
 	"github.com/pqhuy98/wow-converter/internal/formats/blp"
@@ -66,10 +67,10 @@ func (r *MaterialRenderer) clearCanvas() {
 	}
 }
 
-// GetPNG returns baked canvas as PNG bytes.
+// GetPNG returns baked canvas as PNG bytes (raw framebuffer pixels, no unpremultiply).
 func (r *MaterialRenderer) GetPNG() ([]byte, error) {
 	writer := png.NewWriter(r.Width, r.Height)
-	copy(writer.PixelData(), unpremultiply(r.Canvas))
+	copy(writer.PixelData(), r.Canvas)
 	buf, err := writer.Buffer()
 	if err != nil {
 		return nil, err
@@ -160,28 +161,9 @@ func sortTargetsByID(targets []textureTarget) {
 }
 
 func fmtKey(layer textureTarget) string {
-	return string(rune(layer.ID)) + "_" +
-		itoa(layer.Section.X) + "_" + itoa(layer.Section.Y) + "_" +
-		itoa(layer.Section.Width) + "_" + itoa(layer.Section.Height)
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var d []byte
-	for n > 0 {
-		d = append([]byte{byte('0' + n%10)}, d...)
-		n /= 10
-	}
-	if neg {
-		return "-" + string(d)
-	}
-	return string(d)
+	return strconv.Itoa(layer.ID) + "_" +
+		strconv.Itoa(layer.Section.X) + "_" + strconv.Itoa(layer.Section.Y) + "_" +
+		strconv.Itoa(layer.Section.Width) + "_" + strconv.Itoa(layer.Section.Height)
 }
 
 func (r *MaterialRenderer) drawLayer(layer textureTarget) {
@@ -200,7 +182,8 @@ func (r *MaterialRenderer) drawLayer(layer textureTarget) {
 	var baseTex *cpuTexture
 	if blendMode == 4 || blendMode == 6 || blendMode == 7 {
 		if material.Width == section.Width && material.Height == section.Height {
-			data := unpremultiply(r.Canvas)
+			data := make([]uint8, len(r.Canvas))
+			copy(data, r.Canvas)
 			baseTex = &cpuTexture{Data: data, Width: r.Width, Height: r.Height}
 		} else {
 			snap := make([]uint8, rectW*rectH*4)
@@ -274,7 +257,7 @@ func (r *MaterialRenderer) drawLayer(layer textureTarget) {
 
 			di := (py*r.Width + px) * 4
 			sa := frag[3]
-			if blendMode == 0 {
+			if blendMode == 0 || blendMode == 1 {
 				r.Canvas[di] = uint8(frag[0] * 255)
 				r.Canvas[di+1] = uint8(frag[1] * 255)
 				r.Canvas[di+2] = uint8(frag[2] * 255)
@@ -329,24 +312,6 @@ func sampleTexture(tex cpuTexture, u, v float64, minified bool, out []float64) {
 		out[c] = (float64(tex.Data[i00+c])*w00 + float64(tex.Data[i10+c])*w10 +
 			float64(tex.Data[i01+c])*w01 + float64(tex.Data[i11+c])*w11) / 255
 	}
-}
-
-func unpremultiply(src []uint8) []uint8 {
-	out := make([]uint8, len(src))
-	for i := 0; i < len(src); i += 4 {
-		a := src[i+3]
-		if a == 0 {
-			out[i+3] = 0
-		} else if a == 255 {
-			out[i], out[i+1], out[i+2], out[i+3] = src[i], src[i+1], src[i+2], 255
-		} else {
-			out[i] = uint8(minInt(255, int(math.Round(float64(src[i]*255)/float64(a)))))
-			out[i+1] = uint8(minInt(255, int(math.Round(float64(src[i+1]*255)/float64(a)))))
-			out[i+2] = uint8(minInt(255, int(math.Round(float64(src[i+2]*255)/float64(a)))))
-			out[i+3] = a
-		}
-	}
-	return out
 }
 
 func minInt(a, b int) int {

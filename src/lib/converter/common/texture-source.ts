@@ -31,6 +31,23 @@ export function hasTextureSource(relPngPath: string): boolean {
   return sources.has(normalizeKey(relPngPath));
 }
 
+export function unregisterTextureSource(relPngPath: string): void {
+  sources.delete(normalizeKey(relPngPath));
+}
+
+/** Drop in-memory PNG sources for paths from a completed export. BLP entries are kept. */
+export function releaseGeneratedPngSources(relativePaths: readonly string[]): number {
+  let released = 0;
+  for (const rel of relativePaths) {
+    const key = normalizeKey(rel);
+    const source = sources.get(key);
+    if (source?.kind !== 'png') continue;
+    sources.delete(key);
+    released++;
+  }
+  return released;
+}
+
 export function clearTextureSources(): void {
   sources.clear();
 }

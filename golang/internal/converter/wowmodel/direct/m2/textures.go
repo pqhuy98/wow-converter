@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -98,11 +97,6 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 			matName = fmt.Sprintf("mat_%d", texType)
 		}
 		register(texPath, dataTexture.Source)
-		if dataTexture.Source.Kind == texturesource.KindPNG && len(dataTexture.Source.PNG) > 0 {
-			if err := writeExportAssetPNG(texPath, dataTexture.Source.PNG); err != nil {
-				return ResolvedTextures{}, err
-			}
-		}
 		addMaterial(matName, texFile)
 		valid[fmt.Sprintf("data-%d", texType)] = m2export.TextureManifestEntry{
 			MatName: matName, MatPathRelative: texFile, MatPath: texPath,
@@ -169,11 +163,4 @@ func relPath(outDir, absPath string) string {
 		return filepath.Base(absPath)
 	}
 	return rel
-}
-
-func writeExportAssetPNG(absPath string, png []byte) error {
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(absPath, png, 0o644)
 }

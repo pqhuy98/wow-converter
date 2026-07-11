@@ -2,6 +2,27 @@ package wowhead
 
 import "testing"
 
+func TestDecodeDressingRoomSingleEquipmentSlots(t *testing.T) {
+	if err := initDressingRoomData(); err != nil {
+		t.Fatalf("init dressing room data: %v", err)
+	}
+	hash := "fa80o0zN89c8zZ8jY8z18nw8zZ8jY8z28nj8z38n18z48yo8aM8z5P8Mz8yt8MM8yC8sW8z3g8zYv8dLv8Mtr808og8yh8M08yL877g3MZ8Maz87r"
+	latestVersion := getLatestTemplateVersion()
+	cfg := prepareDecodeConfig(latestVersion)
+	pre := decompress(cfg, hash)
+	tpl := hashTemplates[latestVersion]
+	data := mapToDecoded(decodeWithTemplate(cfg, tpl, pre))
+	for k, item := range data.Equipment {
+		if item.ItemID == 0 {
+			delete(data.Equipment, k)
+		}
+	}
+	for dollSlot, item := range data.Equipment {
+		slotID := paperdollSlots[toInt(dollSlot)]
+		t.Logf("doll %q -> equip slot %d item %d bonus %d", dollSlot, slotID, item.ItemID, item.ItemBonus)
+	}
+}
+
 func TestDecodeDressingRoomFrostPrinceEquipment(t *testing.T) {
 	if err := initDressingRoomData(); err != nil {
 		t.Fatalf("init dressing room data: %v", err)

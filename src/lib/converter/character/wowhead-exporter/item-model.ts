@@ -301,6 +301,16 @@ function resolveHideGeosetIds(itemData: ItemData, targetRace: number, targetGend
   return Array.from(result).sort((a, b) => a - b);
 }
 
+export function itemReplaceableTextures(modelTextureFiles: [FileWithComponent[], FileWithComponent[]]) {
+  return Object.fromEntries(
+    [...modelTextureFiles[0], ...modelTextureFiles[1]].map((f) => [f.componentId, f.fileDataId]),
+  );
+}
+
+function itemModelTextureIds(modelTextureFiles: [FileWithComponent[], FileWithComponent[]]) {
+  return [...new Set([...modelTextureFiles[0], ...modelTextureFiles[1]].map((f) => f.fileDataId))];
+}
+
 export async function processItemData(url: ItemZamUrl, targetRace: number, targetGender: number, targetClass: number): Promise<ItemMetata> {
   const itemData = await fetchItemMeta(url);
   const result: ItemMetata = {
@@ -438,9 +448,9 @@ export async function exportZamItemAsMdl({
   if (!modelId) {
     throw new Error(`Found no model found for item ${zam.displayId}`);
   }
-  const allTextureIds = result.modelTextureFiles[0].map((f) => f.fileDataId);
+  const allTextureIds = itemModelTextureIds(result.modelTextureFiles);
   const model = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
-  await applyReplaceableTextures(ctx, model.mdl, Object.fromEntries(result.modelTextureFiles[0].map((f) => [f.componentId, f.fileDataId])));
+  await applyReplaceableTextures(ctx, model.mdl, itemReplaceableTextures(result.modelTextureFiles));
   return { model, itemData: result };
 }
 
