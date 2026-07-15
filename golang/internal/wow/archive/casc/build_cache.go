@@ -76,6 +76,9 @@ func (c *BuildCache) Init() error {
 // GetFile attempts to get a file from this build cache.
 func (c *BuildCache) GetFile(file string, dir string) (*buffer.Buffer, error) {
 	filePath := c.GetFilePath(file, dir)
+	if _, err := os.Stat(filePath); err != nil {
+		return nil, nil
+	}
 	integrity, err := ensureCacheIntegrity()
 	if err != nil {
 		return nil, nil
@@ -84,7 +87,7 @@ func (c *BuildCache) GetFile(file string, dir string) (*buffer.Buffer, error) {
 	integrityHash, ok := integrity[filePath]
 	integrityMu.RUnlock()
 	if !ok {
-		log.Write("Cannot verify integrity of file, rejecting cache (%s)", filePath)
+		log.Write("Cache file has no integrity record, ignoring (%s)", filePath)
 		return nil, nil
 	}
 	data, err := buffer.ReadFile(filePath)

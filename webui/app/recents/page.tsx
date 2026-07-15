@@ -71,11 +71,12 @@ export default function RecentsPage() {
         if (!response.ok) {
           throw new Error('Failed to fetch recent jobs');
         }
-        const data = await response.json();
-        setJobs(data);
+        const data: unknown = await response.json();
+        const recentJobs = Array.isArray(data) ? data : [];
+        setJobs(recentJobs);
 
         // Set the most recent successful job as selected
-        const mostRecentDone = data.find((job: FullJobStatus) => job.status === 'done');
+        const mostRecentDone = recentJobs.find((job: FullJobStatus) => job.status === 'done');
         if (mostRecentDone) {
           setSelectedJobId(mostRecentDone.id);
         }

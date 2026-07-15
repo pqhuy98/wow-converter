@@ -164,7 +164,7 @@ func registerExportCharacter(r Router, d *Deps) {
 			return
 		}
 		_ = os.Remove(d.Config.RecentExports)
-		queue.RecentCompletedJobs = nil
+		queue.RecentCompletedJobs = emptyRecentExports()
 		log.Printf("Removed %s", d.Config.RecentExports)
 		_ = os.RemoveAll(d.Config.OutputDir)
 		_ = os.MkdirAll(d.Config.OutputDir, 0o755)
@@ -248,11 +248,19 @@ func mustJSON(v any) []byte {
 }
 
 func loadRecentExports(queue *util.JobQueue[exportCharacterRequest, exportCharacterResponse], path string) {
+	queue.RecentCompletedJobs = emptyRecentExports()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
 	_ = json.Unmarshal(data, &queue.RecentCompletedJobs)
+	if queue.RecentCompletedJobs == nil {
+		queue.RecentCompletedJobs = emptyRecentExports()
+	}
+}
+
+func emptyRecentExports() []*util.Job[exportCharacterRequest, exportCharacterResponse] {
+	return []*util.Job[exportCharacterRequest, exportCharacterResponse]{}
 }
 
 func saveRecentExports(path string, jobs []*util.Job[exportCharacterRequest, exportCharacterResponse]) error {
