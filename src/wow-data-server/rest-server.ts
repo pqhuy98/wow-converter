@@ -901,11 +901,13 @@ export class WowDataServer {
   }
 
   private _sendAndCache(res: http.ServerResponse, key: string, status: number, obj: JSONValue): void {
-    this._responseCache.set(key, { ts: Date.now(), status, obj });
-    if (this._responseCache.size > this._responseCacheMaxEntries) {
-      this._pruneResponseCache();
+    if (status >= 200 && status < 300) {
+      this._responseCache.set(key, { ts: Date.now(), status, obj });
       if (this._responseCache.size > this._responseCacheMaxEntries) {
-        this._evictOldestResponseCacheEntries(this._responseCache.size - this._responseCacheMaxEntries);
+        this._pruneResponseCache();
+        if (this._responseCache.size > this._responseCacheMaxEntries) {
+          this._evictOldestResponseCacheEntries(this._responseCache.size - this._responseCacheMaxEntries);
+        }
       }
     }
     this.sendJSON(res, status, obj);

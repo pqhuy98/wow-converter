@@ -98,7 +98,9 @@ func (c *responseCache) pruneLocked() {
 }
 
 func (c *responseCache) sendAndCache(w http.ResponseWriter, key string, status int, obj any) {
-	c.set(key, status, obj)
+	if status >= 200 && status < 300 {
+		c.set(key, status, obj)
+	}
 	sendJSON(w, status, obj)
 }
 
