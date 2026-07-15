@@ -21,6 +21,14 @@ static void* sym(void* handle, const char* name) {
 static void close_lib(void* handle) {
     if (handle != NULL) dlclose(handle);
 }
+
+static int call_encode(void* fn, const unsigned char* png, size_t png_len, unsigned char** out_buf, size_t* out_len) {
+    return ((blp_encode_png_fn)fn)(png, png_len, out_buf, out_len);
+}
+
+static void call_free(void* fn, unsigned char* buf) {
+    ((blp_encode_free_fn)fn)(buf);
+}
 */
 import "C"
 
@@ -53,13 +61,11 @@ func loadLinux(path string) error {
 		return fmt.Errorf("missing exports in %s", path)
 	}
 
-	encodePtr := (C.blp_encode_png_fn)(encodeSym)
-	freePtr := (C.blp_encode_free_fn)(freeSym)
-
 	encodeFn = func(png *byte, pngLen uintptr, outBuf **byte, outLen *uintptr) uintptr {
 		var cOut *C.uchar
 		var cLen C.size_t
-		rc := encodePtr(
+		rc := C.call_encode(
+			encodeSym,
 			(*C.uchar)(unsafe.Pointer(png)),
 			C.size_t(pngLen),
 			&cOut,
@@ -70,7 +76,7 @@ func loadLinux(path string) error {
 		return uintptr(rc)
 	}
 	freeFn = func(buf *byte) {
-		freePtr((*C.uchar)(unsafe.Pointer(buf)))
+		C.call_free(freeSym, (*C.uchar)(unsafe.Pointer(buf)))
 	}
 	return nil
 }

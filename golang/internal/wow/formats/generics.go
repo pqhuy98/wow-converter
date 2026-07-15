@@ -32,6 +32,14 @@ type HTTPResponse struct {
 	OK     bool
 }
 
+type downloadStatusError struct {
+	status int
+}
+
+func (e downloadStatusError) Error() string {
+	return fmt.Sprintf("status code: %d", e.status)
+}
+
 var httpClient = &http.Client{
 	Timeout: 10 * time.Minute,
 	Transport: &http.Transport{
@@ -81,6 +89,12 @@ func doGet(url string, partialOfs, partialLen int) (*HTTPResponse, error) {
 func isRetryableDownloadError(err error) bool {
 	if err == nil {
 		return false
+	}
+	var statusErr downloadStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.status == http.StatusRequestTimeout ||
+			statusErr.status == http.StatusTooManyRequests ||
+			statusErr.status >= http.StatusInternalServerError
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "timeout") ||
@@ -136,7 +150,7 @@ func requestDataSingleHop(url string, partialOfs, partialLen int) ([]byte, int, 
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 302 {
-		return nil, resp.StatusCode, fmt.Errorf("status code: %d", resp.StatusCode)
+		return nil, resp.StatusCode, downloadStatusError{status: resp.StatusCode}
 	}
 
 	data, err := io.ReadAll(resp.Body)
