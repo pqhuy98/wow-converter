@@ -2,6 +2,8 @@
 set -euo pipefail
 
 export PATH="/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export HOME="${HOME:-/root}"
+export GOPATH="${GOPATH:-${HOME}/go}"
 
 REPO="${WOW_CONVERTER_REPO:-/root/wow-converter}"
 BRANCH="${WOW_DEPLOY_BRANCH:-golang-port}"

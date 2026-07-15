@@ -3,7 +3,7 @@ Description=Poll wow-converter repo every 30 seconds
 
 [Timer]
 OnBootSec=30
-OnUnitActiveSec=30
+OnUnitInactiveSec=30
 Persistent=true
 
 [Install]
