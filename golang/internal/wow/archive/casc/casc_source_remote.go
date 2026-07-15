@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
@@ -27,14 +28,18 @@ type CASCRemote struct {
 	Region       string
 	Host         string
 	ServerConfig VersionConfigEntry
+	cdnHosts     []string
+	cdnRetryAt   map[string]time.Time
+	cdnHostsMu   sync.Mutex
 }
 
 // NewCASCRemote creates a remote CASC source.
 func NewCASCRemote(region string) *CASCRemote {
 	return &CASCRemote{
-		BaseCASC: NewBaseCASC(true),
-		Archives: map[string]archiveEntry{},
-		Region:   region,
+		BaseCASC:   NewBaseCASC(true),
+		Archives:   map[string]archiveEntry{},
+		Region:     region,
+		cdnRetryAt: map[string]time.Time{},
 	}
 }
 
@@ -386,12 +391,55 @@ func (c *CASCRemote) ParseArchiveIndex(key string) error {
 
 // GetDataFile downloads a data file from the CDN.
 func (c *CASCRemote) GetDataFile(file string) (*buffer.Buffer, error) {
-	return formats.DownloadFile([]string{c.Host + "data/" + file}, "", -1, -1, false)
+	return c.downloadDataFile(file, -1, -1)
 }
 
 // GetDataFilePartial downloads a partial chunk of a data file.
 func (c *CASCRemote) GetDataFilePartial(file string, ofs, length int) (*buffer.Buffer, error) {
-	return formats.DownloadFile([]string{c.Host + "data/" + file}, "", ofs, length, false)
+	return c.downloadDataFile(file, ofs, length)
+}
+
+func (c *CASCRemote) downloadDataFile(file string, ofs, length int) (*buffer.Buffer, error) {
+	var lastErr error
+	for _, host := range c.healthyCDNHosts(time.Now()) {
+		data, err := formats.DownloadFile([]string{host + "data/" + file}, "", ofs, length, false)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+		c.deferCDNHost(host, time.Now())
+		log.Write("CASC data host failed, trying fallback: %s (%s)", host, err)
+	}
+	return nil, lastErr
+}
+
+func (c *CASCRemote) healthyCDNHosts(now time.Time) []string {
+	c.cdnHostsMu.Lock()
+	defer c.cdnHostsMu.Unlock()
+
+	hosts := c.cdnHosts
+	if len(hosts) == 0 {
+		hosts = []string{c.Host}
+	}
+	ready := make([]string, 0, len(hosts))
+	deferred := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		if retryAt := c.cdnRetryAt[host]; retryAt.After(now) {
+			deferred = append(deferred, host)
+		} else {
+			ready = append(ready, host)
+		}
+	}
+	if len(ready) == 0 {
+		return deferred
+	}
+	return append(ready, deferred...)
+}
+
+func (c *CASCRemote) deferCDNHost(host string, now time.Time) {
+	c.cdnHostsMu.Lock()
+	defer c.cdnHostsMu.Unlock()
+	c.cdnRetryAt[host] = now.Add(30 * time.Second)
 }
 
 // LoadConfigs downloads CDNConfig and BuildConfig.
@@ -420,11 +468,15 @@ func (c *CASCRemote) ResolveCDNHost() error {
 			return err
 		}
 	}
-	host, err := DefaultCDNResolver.GetBestHost(c.Region, c.ServerConfig)
+	hosts, err := DefaultCDNResolver.GetRankedHosts(c.Region, c.ServerConfig)
 	if err != nil {
 		return err
 	}
-	c.Host = host
+	c.cdnHostsMu.Lock()
+	c.cdnHosts = hosts
+	c.cdnRetryAt = map[string]time.Time{}
+	c.Host = hosts[0]
+	c.cdnHostsMu.Unlock()
 	return nil
 }
 

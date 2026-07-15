@@ -40,6 +40,10 @@ export class CASCRemote extends CASC {
 
   serverConfig!: VersionConfigEntry;
 
+  private cdnHosts: string[] = [];
+
+  private cdnRetryAt = new Map<string, number>();
+
   /**
    * Create a new CASC source using a Blizzard CDN.
    * @param region Region tag (eu, us, etc).
@@ -343,12 +347,41 @@ export class CASCRemote extends CASC {
 
   /** Download a data file from the CDN. */
   async getDataFile(file: string): Promise<BufferWrapper> {
-    return downloadFile(`${this.host}data/${file}`);
+    return this.downloadDataFile(file, -1, -1);
   }
 
   /** Download a partial chunk of a data file from the CDN. */
   async getDataFilePartial(file: string, ofs: number, len: number): Promise<BufferWrapper> {
-    return downloadFile(`${this.host}data/${file}`, undefined, ofs, len);
+    return this.downloadDataFile(file, ofs, len);
+  }
+
+  private async downloadDataFile(file: string, ofs: number, len: number): Promise<BufferWrapper> {
+    let lastError: unknown;
+    for (const host of this.healthyCDNHosts()) {
+      try {
+        return await downloadFile(`${host}data/${file}`, undefined, ofs, len);
+      } catch (error) {
+        lastError = error;
+        this.deferCDNHost(host);
+        write('CASC data host failed, trying fallback: %s (%s)', host, (error as Error).message);
+      }
+    }
+    throw lastError ?? new Error('No CDN hosts available');
+  }
+
+  private healthyCDNHosts(now = Date.now()): string[] {
+    const hosts = this.cdnHosts.length > 0 ? this.cdnHosts : [this.host];
+    const ready: string[] = [];
+    const deferred: string[] = [];
+    for (const host of hosts) {
+      if ((this.cdnRetryAt.get(host) ?? 0) > now) deferred.push(host);
+      else ready.push(host);
+    }
+    return ready.length > 0 ? [...ready, ...deferred] : deferred;
+  }
+
+  private deferCDNHost(host: string): void {
+    this.cdnRetryAt.set(host, Date.now() + 30_000);
   }
 
   /** Download the CDNConfig and BuildConfig. */
@@ -365,7 +398,9 @@ export class CASCRemote extends CASC {
   async resolveCDNHost(): Promise<void> {
     if (this.progress) await this.progress.step('Locating fastest CDN server');
 
-    this.host = await cdnResolver.getBestHost(this.region, this.serverConfig);
+    this.cdnHosts = await cdnResolver.getRankedHosts(this.region, this.serverConfig);
+    this.cdnRetryAt.clear();
+    [this.host] = this.cdnHosts;
   }
 
   /**

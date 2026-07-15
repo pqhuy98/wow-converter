@@ -230,7 +230,12 @@ function isRetryableDownloadError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException)?.code;
   const msg = (err as Error)?.message ?? '';
   if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'EPIPE') return true;
-  if (/socket hang up|timeout/i.test(msg)) return true;
+  if (/socket hang up|timeout|\bEOF\b/i.test(msg)) return true;
+  const status = /status code:\s*(\d+)/i.exec(msg)?.[1];
+  if (status !== undefined) {
+    const code = Number(status);
+    return code === 408 || code === 429 || code >= 500;
+  }
   return false;
 }
 

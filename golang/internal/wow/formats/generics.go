@@ -4,12 +4,14 @@ package formats
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,8 +48,27 @@ var httpClient = &http.Client{
 		MaxIdleConns:        64,
 		MaxIdleConnsPerHost: 64,
 		IdleConnTimeout:     90 * time.Second,
-		TLSClientConfig:     &tls.Config{},
+		DialContext:         dialBlizzardIPv4,
+		ForceAttemptHTTP2:   false,
+		TLSNextProto:        map[string]func(string, *tls.Conn) http.RoundTripper{},
+		TLSClientConfig:     &tls.Config{NextProtos: []string{"http/1.1"}},
 	},
+}
+
+func dialBlizzardIPv4(ctx context.Context, network, address string) (net.Conn, error) {
+	dialer := &net.Dialer{}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || !blizzardHostPattern.MatchString(host) {
+		return dialer.DialContext(ctx, network, address)
+	}
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", host)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no IPv4 address found for %s", host)
+	}
+	return dialer.DialContext(ctx, "tcp4", net.JoinHostPort(ips[0].String(), port))
 }
 
 // Get performs HTTP GET with fallback URL support.
