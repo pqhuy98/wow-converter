@@ -4,14 +4,18 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"runtime"
+	"runtime/debug"
 	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/pqhuy98/wow-converter/internal/config"
+	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/server/util"
+	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 )
 
@@ -174,48 +178,12 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 	req := job.Request
 	progressKey := job.ID
 	includeInteriors := includeBuildingInteriorsEnabled(req.Body.IncludeBuildingInteriors)
-	opts := buildADTExportOptions(true, true, includeInteriors, true, true, true, true)
-	stepsPerTile := ComputeStepsPerTile(req.Body.Quality, opts)
+	stepsPerTile := 1
 	tileCount := len(req.OrderedTiles)
 	adtTotalSteps := tileCount * stepsPerTile
 
 	initMapGenerateProgress(progressKey, adtTotalSteps, initialConvertSteps, tileCount, stepsPerTile)
 
-	succeeded, failed := exportADTTilesParallel(ctx, d, req.OrderedTiles, func(tile exportAdtTile, tileIndex int) casc.ADTExportParams {
-		quality := req.Body.Quality
-		ti := tileIndex
-		tc := tileCount
-		spt := stepsPerTile
-		return casc.ADTExportParams{
-			MapID: req.MapID, MapDir: req.MapDir, TileX: tile.X, TileY: tile.Y,
-			Quality: &quality,
-			IncludeM2: boolPtr(true), IncludeWMO: boolPtr(true), IncludeWMOSets: &includeInteriors,
-			IncludeGameObjects: boolPtr(true), IncludeLiquid: boolPtr(true),
-			IncludeFoliage: boolPtr(true), IncludeHoles: boolPtr(true),
-			ProgressKey: progressKey, TileIndex: &ti, TileCount: &tc, StepsPerTile: &spt,
-		}
-	}, func(completed int, tile exportAdtTile) {
-		syncAdtProgress(progressKey, minInt(completed*stepsPerTile, adtTotalSteps), completed-1, tileCount, stepsPerTile,
-			&tileCoord{X: tile.X, Y: tile.Y}, "Exporting tiles")
-	})
-
-	_, _ = d.Client.FinalizeExportProgress(ctx, progressKey)
-	if len(failed) == tileCount {
-		clearMapGenerateProgress(progressKey)
-		msg := "All tiles failed to export"
-		if len(failed) > 0 {
-			msg = failed[0].Error
-		}
-		return mapGenerateJobResult{}, errString(msg)
-	}
-
-	setMapGeneratePhase(progressKey, phaseConvert, "Converting to WC3 map")
-	syncAdtProgress(progressKey, adtTotalSteps, tileCount-1, tileCount, stepsPerTile, nil, "Tiles exported")
-	initMapGenerateProgress(progressKey, adtTotalSteps, initialConvertSteps, tileCount, stepsPerTile)
-	setMapGeneratePhase(progressKey, phaseConvert, "Converting to WC3 map")
-
-	cfg := config.DefaultConfig()
-	cfg.ExportAssetDir = d.ExportAssetDir()
 	mapExportCfg := mapexporter.BuildMapExportConfig(struct {
 		MapID           int
 		WowExportFolder string
@@ -240,6 +208,36 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		AllAreDoodads:   req.Body.Creatures.AllAreDoodads,
 	})
 
+	registry := common.NewTileRegistry()
+	tileCoords := make([]mapexporter.TileCoord, len(req.OrderedTiles))
+	for i, t := range req.OrderedTiles {
+		tileCoords[i] = mapexporter.TileCoord{X: t.X, Y: t.Y}
+	}
+	if err := mapexporter.LoadADTTilesForConversion(ctx, d.Client, d.ExportAssetDir(), mapExportCfg, req.Body.Quality, tileCoords, includeInteriors, registry, func(completed, total int, tile mapexporter.TileCoord) {
+		syncAdtProgress(progressKey, minInt(completed*stepsPerTile, adtTotalSteps), completed-1, tileCount, stepsPerTile,
+			&tileCoord{X: tile.X, Y: tile.Y}, "Loading tiles")
+	}); err != nil {
+		clearMapGenerateProgress(progressKey)
+		return mapGenerateJobResult{}, err
+	}
+	exportadt.ReleaseAdtExportBatchMemory()
+	runtime.GC()
+	debug.FreeOSMemory()
+
+	succeeded := make([]mapExportTileSuccess, 0, len(req.OrderedTiles))
+	for _, t := range req.OrderedTiles {
+		succeeded = append(succeeded, mapExportTileSuccess{
+			TileX: t.X, TileY: t.Y,
+			Result: casc.ADTExportResult{ExportType: "ADT_DIRECT", MapID: req.MapID, MapDir: req.MapDir, TileX: t.X, TileY: t.Y},
+		})
+	}
+	failed := make([]mapExportTileFailure, 0)
+
+	setMapGeneratePhase(progressKey, phaseConvert, "Converting to WC3 map")
+	syncAdtProgress(progressKey, adtTotalSteps, tileCount-1, tileCount, stepsPerTile, nil, "Tiles loaded")
+
+	cfg := config.DefaultConfig()
+	cfg.ExportAssetDir = d.ExportAssetDir()
 	convertSteps := initialConvertSteps
 	conversion, err := mapexporter.RunMapGenerateConversion(ctx, mapexporter.MapGenerateConversionOptions{
 		Config:                   cfg,
@@ -250,6 +248,8 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		AutoClampPercent:         req.Body.AutoClampPercent,
 		UnitScale:        req.Body.UnitScale,
 		WowClient:        d.Client,
+		TileRegistry:     registry,
+		TileQuality:      req.Body.Quality,
 		OnConvertStepsKnown: func(steps int) {
 			convertSteps = steps
 			updateMapGenerateTotalSteps(progressKey, convertSteps, adtTotalSteps)

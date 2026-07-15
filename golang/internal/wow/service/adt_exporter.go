@@ -97,7 +97,7 @@ func (ADTExporterService) Export(ctx context.Context, params casc.ADTExportParam
 		})
 	}
 
-	result, err := exporter.Export(ctx, source, baseDir, quality, options, gameObjects, progress)
+	result, err := exporter.Export(ctx, source, baseDir, quality, options, gameObjects, progress, nil)
 	if err != nil {
 		return casc.ADTExportResult{}, err
 	}
@@ -117,6 +117,64 @@ func (ADTExporterService) Export(ctx context.Context, params casc.ADTExportParam
 		TileIndex:  tileIndex(params),
 		ExportPath: baseDir, ExportType: "ADT_OBJ", MainFile: &relMain,
 	}, nil
+}
+
+// ExportForConversion loads an ADT tile into memory for WC3 map conversion.
+func (ADTExporterService) ExportForConversion(ctx context.Context, params casc.ADTExportParams) (*exportadt.ConversionOutput, error) {
+	source, err := server.GlobalRuntime.GetCasc()
+	if err != nil {
+		return nil, err
+	}
+
+	quality := server.GetConfig().ExportMapQuality
+	if params.Quality != nil {
+		quality = *params.Quality
+	}
+
+	overrides := map[string]any{
+		"mapsIncludeM2": true, "mapsIncludeWMO": true,
+		"mapsIncludeGameObjects": true, "mapsIncludeHoles": true,
+		"mapsIncludeLiquid": false, "mapsIncludeFoliage": false,
+	}
+	if params.IncludeM2 != nil {
+		overrides["mapsIncludeM2"] = *params.IncludeM2
+	}
+	if params.IncludeWMO != nil {
+		overrides["mapsIncludeWMO"] = *params.IncludeWMO
+	}
+	if params.IncludeWMOSets != nil {
+		overrides["mapsIncludeWMOSets"] = *params.IncludeWMOSets
+	}
+	if params.IncludeGameObjects != nil {
+		overrides["mapsIncludeGameObjects"] = *params.IncludeGameObjects
+	}
+	if params.IncludeHoles != nil {
+		overrides["mapsIncludeHoles"] = *params.IncludeHoles
+	}
+	options := exportadt.BuildADTExportOptions(overrides)
+
+	gameObjects := map[uint32]db.DB2Row{}
+	if options.MapsIncludeGameObjects {
+		startX, startY, endX, endY := exportadt.TileBounds(params.TileX, params.TileY)
+		collected, err := exportadt.CollectGameObjects(ctx, uint32(params.MapID), func(obj db.DB2Row) bool {
+			pos := gameObjectPos(obj)
+			if len(pos) < 2 {
+				return false
+			}
+			return pos[0] > startX && pos[0] < endX && pos[1] > startY && pos[1] < endY
+		})
+		if err == nil {
+			gameObjects = collected
+		}
+	}
+
+	exportAssetDir := params.ExportAssetDir
+	if exportAssetDir == "" {
+		exportAssetDir = server.GetConfig().ExportDirectory
+	}
+
+	exporter := exportadt.NewExporter(params.MapID, params.MapDir, params.TileX*64+params.TileY)
+	return exporter.ExportForConversion(ctx, source, exportAssetDir, quality, options, gameObjects, nil)
 }
 
 func tileIndex(params casc.ADTExportParams) int {

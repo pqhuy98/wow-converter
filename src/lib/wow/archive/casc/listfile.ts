@@ -429,14 +429,18 @@ export function resetForCascUnload(): void {
   preloadedNameLookup.clear();
   browseModels = null;
   browseTextures = null;
+  mapTileFileIndex = null;
 }
 
 const browseM2WmoRegex = /\.(m2|wmo)$/i;
 const browseBadWmoRegex = /_([0-9]{3}|lod\d)\.wmo$/i;
 const browseTextureRegex = /\.(blp|png|tga|dds)$/i;
+const mapTileBlpRegex = /^world\/minimaps\/([^/]+)\/map(\d{1,2})_(\d{1,2})\.blp$/i;
+const mapTileAdtRegex = /^world\/maps\/([^/]+)\/([^/]+)_(\d{2})_(\d{2})\.adt$/i;
 
 let browseModels: ListfileEntry[] | null = null;
 let browseTextures: ListfileEntry[] | null = null;
+let mapTileFileIndex: ListfileEntry[] | null = null;
 
 function buildBrowseFileIndex(): { models: ListfileEntry[]; textures: ListfileEntry[] } {
   const models: ListfileEntry[] = [];
@@ -465,6 +469,26 @@ export function collectBrowseFileIndex(): { models: ListfileEntry[]; textures: L
   return built;
 }
 
+function buildMapTileFileIndex(): ListfileEntry[] {
+  const entries: ListfileEntry[] = [];
+  for (const [fileDataID, fileName] of idLookup.entries()) {
+    const lower = fileName.replace(/\\/g, '/').toLowerCase();
+    if (mapTileBlpRegex.test(lower) || mapTileAdtRegex.test(lower)) {
+      entries.push({ fileDataID, fileName });
+    }
+  }
+  return entries;
+}
+
+/** Returns cached minimap/ADT tile listfile entries (mirrors Go CollectMapTileFileIndex). */
+export function collectMapTileFileIndex(): ListfileEntry[] {
+  if (mapTileFileIndex !== null) {
+    return mapTileFileIndex;
+  }
+  mapTileFileIndex = buildMapTileFileIndex();
+  return mapTileFileIndex;
+}
+
 export default {
   loadUnknowns,
   loadUnknownTextures,
@@ -486,6 +510,7 @@ export default {
   isLoaded,
   addEntry,
   collectBrowseFileIndex,
+  collectMapTileFileIndex,
   setUnknownModelProvider,
   setUnknownTextureProvider,
 };

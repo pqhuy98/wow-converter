@@ -10,6 +10,7 @@ import http from 'http';
 import path from 'path';
 import url from 'url';
 
+import { isDev } from '@/lib/config/env';
 import { stableStringify } from '@/lib/utils';
 import { CASC } from '@/lib/wow/archive/casc/casc-source';
 import { CASCLocal } from '@/lib/wow/archive/casc/casc-source-local';
@@ -32,6 +33,7 @@ import { wowConfig, type WowReaderConfig } from '@/lib/wow/server/config';
 import { collectMemoryDiagnostics, formatMemoryDiagnostics } from '@/lib/wow/server/memory-diagnostics';
 import { runtimeState } from '@/lib/wow/server/runtime';
 import { isSettableConfigKey } from '@/lib/wow/server/settable-config';
+import { resolveNpcDisplayMeta } from '@/lib/wow/service/resolve-npc-display';
 import { registerWowDataServerClearHook } from '@/lib/wow/wow-data-server-hooks';
 import { prepareSocketPath } from '@/lib/wow-data-server/transport';
 
@@ -89,6 +91,8 @@ export class WowDataServer {
         return this.searchFiles(query, res);
       case '/rest/collectBrowseFileIndex':
         return this.collectBrowseFileIndex(res);
+      case '/rest/collectMapTileFileIndex':
+        return this.collectMapTileFileIndex(res);
       case '/rest/getFileById':
         return this.getFileById(query, res);
       case '/rest/getFileByName':
@@ -97,11 +101,16 @@ export class WowDataServer {
         return this.getModelSkins(query, res);
       case '/rest/initModelCaches':
         return this.initModelCaches(res);
+      case '/rest/resolveNpcDisplay':
+        return this.resolveNpcDisplay(query, res);
       case '/rest/cascFile':
         return this.cascFile(query, res);
       case '/rest/download':
         return this.download(query, res);
       case '/rest/debugMemory':
+        if (!isDev()) {
+          return this.sendJSON(res, 404, { id: 'ERR_NOT_FOUND' });
+        }
         if (!authorizeDataServerRequest(req)) {
           return this.sendJSON(res, 403, { id: 'ERR_FORBIDDEN', message: 'missing or invalid data server token' });
         }
@@ -362,6 +371,15 @@ export class WowDataServer {
     this.sendJSON(res, 200, { id: 'BROWSE_FILE_INDEX', models, textures });
   }
 
+  collectMapTileFileIndex(res: http.ServerResponse): void {
+    if (!listfile.isLoaded()) {
+      this.sendJSON(res, 409, { id: 'ERR_LISTFILE_NOT_LOADED' });
+      return;
+    }
+    const entries = listfile.collectMapTileFileIndex();
+    this.sendJSON(res, 200, { id: 'MAP_TILE_FILE_INDEX', entries });
+  }
+
   getFileById(query: Record<string, unknown>, res: http.ServerResponse): void {
     if (!listfile.isLoaded()) {
       this.sendJSON(res, 409, { id: 'ERR_LISTFILE_NOT_LOADED' });
@@ -410,6 +428,31 @@ export class WowDataServer {
     try {
       await ensureModelCachesInitialized();
       this.sendJSON(res, 200, { id: 'MODEL_CACHES_READY' });
+    } catch (e) {
+      this.sendJSON(res, 500, { id: 'ERR_INTERNAL', message: (e as Error).message });
+    }
+  }
+
+  async resolveNpcDisplay(query: Record<string, unknown>, res: http.ServerResponse): Promise<void> {
+    const casc = runtimeState.casc;
+    if (!casc || !casc.isLoaded) {
+      this.sendJSON(res, 409, { id: 'ERR_NO_CASC' });
+      return;
+    }
+    const displayId = Number(query.displayId);
+    if (!Number.isFinite(displayId)) {
+      this.sendJSON(res, 400, { id: 'ERR_INVALID_PARAMETERS', required: { displayId: 'number' } });
+      return;
+    }
+    try {
+      const meta = await resolveNpcDisplayMeta(displayId);
+      this.sendJSON(res, 200, {
+        id: 'NPC_DISPLAY_META',
+        found: meta.found,
+        model: meta.model,
+        textures: meta.textures,
+        geosets: meta.geosets,
+      });
     } catch (e) {
       this.sendJSON(res, 500, { id: 'ERR_INTERNAL', message: (e as Error).message });
     }

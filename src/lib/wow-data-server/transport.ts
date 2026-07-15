@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
+import { isBundledEnv } from '@/lib/config/env';
+
 /** True when running the compiled single-binary distribution. */
 export function isBundledApp(): boolean {
-  if (process.env.WOW_CONVERTER_BUNDLE === '1') return true;
+  if (isBundledEnv()) return true;
   const argv0 = process.argv[0] ?? '';
   return argv0.endsWith('.exe') && !argv0.toLowerCase().includes('bun');
 }
@@ -41,7 +43,8 @@ export function getDataServerHttpOrigin(): string {
 
 /** Configure bundled app: wow-data-server listens on a unix socket only. */
 export function configureBundledTransport(): void {
-  process.env.WOW_CONVERTER_BUNDLE = '1';
+  process.env.WOW_CONVERTER_BUNDLED = '1';
+  delete process.env.WOW_CONVERTER_BUNDLE;
   process.env.WOW_DATA_TRANSPORT = 'socket';
   process.env.WOW_DATA_SERVER_SOCKET = defaultSocketPath();
   delete process.env.WOW_DATA_SERVER_URL;

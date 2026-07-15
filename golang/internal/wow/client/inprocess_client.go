@@ -14,6 +14,9 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/converter/runtimecache"
 	"github.com/pqhuy98/wow-converter/internal/server/rest"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
+	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
+	"github.com/pqhuy98/wow-converter/internal/wow/server"
+	"github.com/pqhuy98/wow-converter/internal/wow/service"
 )
 
 // InProcessClient calls wow-data-server REST handlers in-process (bundled mode).
@@ -339,6 +342,16 @@ func (c *InProcessClient) ExportADT(ctx context.Context, params casc.ADTExportPa
 	return casc.ADTExportResult{}, unexpectedResponse("exportADT", body)
 }
 
+func (c *InProcessClient) ExportADTForConversion(ctx context.Context, params casc.ADTExportParams) (*exportadt.ConversionOutput, error) {
+	// ponytail: avoid REST JSON round-trip (PNG base64 + map re-marshal) in bundled mode.
+	if server.GlobalRuntime.GetCascOptional() == nil {
+		return nil, errNoCASC
+	}
+	exportadt.BeginConversionExport()
+	defer exportadt.EndConversionExport()
+	return service.ADTExporterService{}.ExportForConversion(ctx, params)
+}
+
 func (c *InProcessClient) GetExportProgress(ctx context.Context, progressKey string) (*casc.ExportProgressSnapshot, error) {
 	params := url.Values{"key": {progressKey}}
 	body, status, err := c.doGet(ctx, "/rest/exportProgress", params)
@@ -444,6 +457,8 @@ func (c *InProcessClient) dispatchPOST(path string, w http.ResponseWriter, r *ht
 		c.handler.CharMeta(w, r)
 	case "/rest/exportADT":
 		c.handler.ExportADT(w, r)
+	case "/rest/exportADTForConversion":
+		c.handler.ExportADTForConversion(w, r)
 	case "/rest/finalizeExportProgress":
 		c.handler.FinalizeExportProgress(w, r)
 	default:

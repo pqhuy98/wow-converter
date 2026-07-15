@@ -67,12 +67,16 @@ Add alongside existing Bun scripts:
   "scripts": {
     "dev:go-data-server": "cd golang && go run ./cmd/wow-data-server",
     "dev:go-converter": "cd golang && cross-env NODE_ENV=development go tool air",
-    "dev:go": "npm-run-all kill:dev-ports --parallel dev:go-data-server dev:go-converter dev:webui"
+    "dev:go": "npm-run-all kill:dev-ports --parallel dev:go-data-server dev:go-converter dev:webui",
+    "dev:goapp-converter": "cd golang && cross-env NODE_ENV=development WOW_CONVERTER_BUNDLED=1 go tool air",
+    "dev:goapp": "npm-run-all kill:dev-ports --parallel dev:goapp-converter dev:webui"
   }
 }
 ```
 
 `dev:go` mirrors `dev` but swaps Bun server/data-server for Go binaries. Keep `dev:webui` for Next.js hot reload in development. Only `wow-converter` hot-reloads (via [Air](https://github.com/air-verse/air), pinned in `go.mod` as `go tool air`); `wow-data-server` runs once with plain `go run`.
+
+`dev:goapp` runs a single bundled process (`WOW_CONVERTER_BUNDLED=1` + Air) with wow-data-server in-process — no separate `:17753` server. Same UI on `:3000`, converter API on `:3001`.
 
 ## wow-data-server REST routes
 

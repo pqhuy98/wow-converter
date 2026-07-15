@@ -376,6 +376,44 @@ export class WowDataClient {
     throw new Error('Failed to initialize model caches');
   }
 
+  /** Filtered browse model/texture index (avoids full listfile copy). */
+  public async collectBrowseFileIndex(): Promise<{ models: FileEntry[]; textures: FileEntry[] }> {
+    const json = await this.getJSON('/rest/collectBrowseFileIndex');
+    if (json.id === 'BROWSE_FILE_INDEX') {
+      return { models: json.models as FileEntry[], textures: json.textures as FileEntry[] };
+    }
+    if (json.id === 'ERR_LISTFILE_NOT_LOADED') throw new Error('Listfile not loaded');
+    throw new Error('Failed to collect browse file index');
+  }
+
+  /** Filtered minimap/ADT tile listfile entries (avoids full listfile copy). */
+  public async collectMapTileFileIndex(): Promise<FileEntry[]> {
+    const json = await this.getJSON('/rest/collectMapTileFileIndex');
+    if (json.id === 'MAP_TILE_FILE_INDEX') return json.entries as FileEntry[];
+    if (json.id === 'ERR_LISTFILE_NOT_LOADED') throw new Error('Listfile not loaded');
+    throw new Error('Failed to collect map tile file index');
+  }
+
+  /** Creature display metadata from DB2 tables (model, textures, geosets). */
+  public async resolveNpcDisplayMeta(displayId: number): Promise<{
+    found: boolean;
+    model?: number;
+    textures?: Record<string, number>;
+    geosets?: { geosetIndex: number; geosetValue: number }[];
+  }> {
+    const json = await this.getJSON('/rest/resolveNpcDisplay', { displayId: String(displayId) });
+    if (json.id === 'NPC_DISPLAY_META') {
+      return {
+        found: json.found === true,
+        model: json.model as number | undefined,
+        textures: json.textures as Record<string, number> | undefined,
+        geosets: json.geosets as { geosetIndex: number; geosetValue: number }[] | undefined,
+      };
+    }
+    if (json.id === 'ERR_NO_CASC') throw new Error('No CASC loaded');
+    throw new Error('Failed to resolve NPC display metadata');
+  }
+
   /** Download a raw (BLTE-decoded) CASC file by fileDataID. */
   public async downloadCascFile(fileDataID: number): Promise<Buffer> {
     const res = await this.http.request<ArrayBuffer | Buffer>({

@@ -26,3 +26,20 @@ func TestReleaseAdtExportBatchMemoryClearsCaches(t *testing.T) {
 		t.Fatalf("game object cache not cleared: maps=%d rows=%d", stats.GameObjectMaps, stats.GameObjectRows)
 	}
 }
+
+func TestEndConversionExportClearsWhenLastRequestFinishes(t *testing.T) {
+	conversionExportsInFlight.Store(0)
+	wdtCache.Store("northrend", struct{}{})
+
+	BeginConversionExport()
+	BeginConversionExport()
+	EndConversionExport()
+	if stats := CacheStats(); stats.WDTEntries != 1 {
+		t.Fatalf("WDTEntries = %d after first End, want 1", stats.WDTEntries)
+	}
+
+	EndConversionExport()
+	if stats := CacheStats(); stats.WDTEntries != 0 {
+		t.Fatalf("WDTEntries = %d after last End, want 0", stats.WDTEntries)
+	}
+}

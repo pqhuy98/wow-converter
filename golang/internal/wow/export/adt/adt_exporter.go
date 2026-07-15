@@ -15,7 +15,6 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/db"
 	"github.com/pqhuy98/wow-converter/internal/wow/export"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
-	"github.com/pqhuy98/wow-converter/internal/wow/formats/png"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
@@ -55,8 +54,9 @@ type ExportResult struct {
 	Path string
 }
 
-// Export exports the ADT tile to dir.
-func (e *Exporter) Export(ctx context.Context, source casc.Source, dir string, quality int, options export.ADTExportOptions, gameObjects map[uint32]db.DB2Row, progress *export.ProgressReporter) (ExportResult, error) {
+// Export exports the ADT tile to dir. When conv is non-nil, artifacts are captured in memory
+// instead of written to disk (liquid/foliage/tex JSON are skipped).
+func (e *Exporter) Export(ctx context.Context, source casc.Source, dir string, quality int, options export.ADTExportOptions, gameObjects map[uint32]db.DB2Row, progress *export.ProgressReporter, conv *ConversionOutput) (ExportResult, error) {
 	cfg := server.GetConfig()
 	getFile := func(_ context.Context, fileDataID uint32) ([]byte, error) {
 		return source.GetFile(ctx, int(fileDataID))
@@ -268,11 +268,16 @@ func (e *Exporter) Export(ctx context.Context, source casc.Source, dir string, q
 	if !mtl.IsEmpty() {
 		obj.SetMaterialLibrary(filepath.Base(mtl.Out))
 	}
-	if err := obj.Write(options.OverwriteFiles); err != nil {
-		return ExportResult{}, err
-	}
-	if err := mtl.Write(options.OverwriteFiles); err != nil {
-		return ExportResult{}, err
+	if conv != nil {
+		conv.ObjText = obj.Content()
+		conv.MtlText = mtl.Content()
+	} else {
+		if err := obj.Write(options.OverwriteFiles); err != nil {
+			return ExportResult{}, err
+		}
+		if err := mtl.Write(options.OverwriteFiles); err != nil {
+			return ExportResult{}, err
+		}
 	}
 	if progress != nil {
 		progress.Advance()
@@ -280,10 +285,12 @@ func (e *Exporter) Export(ctx context.Context, source casc.Source, dir string, q
 	}
 
 	if quality != 0 && !isAlphaMaps {
-		if err := e.exportTextures(ctx, getFile, dir, quality, options, rootAdt, texAdt, firstChunk, chunkMeshes, vertices, uvsBake, vertexColors, progress); err != nil {
+		if err := e.exportTextures(ctx, getFile, dir, quality, options, rootAdt, texAdt, firstChunk, chunkMeshes, vertices, uvsBake, vertexColors, progress, conv); err != nil {
 			log.Write("Terrain bake warning: %v", err)
 		}
-		ClearBakeTextureCache()
+		if conv == nil {
+			ClearBakeTextureCache()
+		}
 		if progress != nil {
 			progress.Advance()
 		}
@@ -293,20 +300,22 @@ func (e *Exporter) Export(ctx context.Context, source casc.Source, dir string, q
 		if progress != nil {
 			progress.SetLabel("Tile " + e.TileID + ", model placements")
 		}
-		if err := e.exportModelPlacements(ctx, dir, options, objAdt, gameObjects, progress, getFile); err != nil {
+		if err := e.exportModelPlacements(ctx, dir, options, objAdt, gameObjects, progress, getFile, conv); err != nil {
 			log.Write("Model placement export warning: %v", err)
 		}
 	}
 
-	if options.MapsIncludeLiquid {
-		if err := e.exportLiquid(rootAdt, dir, options, progress); err != nil {
-			log.Write("Liquid export warning: %v", err)
+	if conv == nil {
+		if options.MapsIncludeLiquid {
+			if err := e.exportLiquid(rootAdt, dir, options, progress); err != nil {
+				log.Write("Liquid export warning: %v", err)
+			}
 		}
-	}
 
-	if options.MapsIncludeFoliage {
-		if err := e.exportFoliage(ctx, dir, texAdt, progress); err != nil {
-			log.Write("Foliage export warning: %v", err)
+		if options.MapsIncludeFoliage {
+			if err := e.exportFoliage(ctx, dir, texAdt, progress); err != nil {
+				log.Write("Foliage export warning: %v", err)
+			}
 		}
 	}
 
@@ -353,13 +362,7 @@ func (e *Exporter) calculateUVBounds(rootAdt *adtfmt.ADTLoader, firstChunkX, fir
 }
 
 func writePNG(path string, pixels []byte, width, height int) error {
-	w := png.NewWriter(width, height)
-	copy(w.Pixels(), pixels)
-	data, err := w.Encode()
-	if err != nil {
-		return err
-	}
-	return writers.WriteOutputFile(path, data)
+	return storePNG(path, pixels, width, height, nil)
 }
 
 func getFileByName(ctx context.Context, source casc.Source, fileName string) ([]byte, error) {

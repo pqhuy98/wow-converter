@@ -30,6 +30,7 @@ func (e *Exporter) exportTextures(
 	chunkMeshes [][]int,
 	vertices, uvsBake, vertexColors []float32,
 	progress *export.ProgressReporter,
+	conv *ConversionOutput,
 ) error {
 	cfg := server.GetConfig()
 	isAlphaMaps := quality == -1
@@ -38,12 +39,12 @@ func (e *Exporter) exportTextures(
 	isSplittingTextures := isLargeBake && cfg.SplitLargeTerrainBakes
 
 	if isAlphaMaps {
-		return e.exportAlphaMaps(ctx, source, dir, options, rootAdt, texAdt, isSplittingAlphaMaps, progress)
+		return e.exportAlphaMaps(ctx, source, dir, options, rootAdt, texAdt, isSplittingAlphaMaps, progress, conv)
 	}
 	if quality <= 512 {
-		return e.exportMinimap(ctx, source, dir, quality, options, progress)
+		return e.exportMinimap(ctx, source, dir, quality, options, progress, conv)
 	}
-	return e.exportLargeBake(ctx, source, dir, quality, options, rootAdt, texAdt, firstChunk, chunkMeshes, vertices, uvsBake, vertexColors, isSplittingTextures, progress)
+	return e.exportLargeBake(ctx, source, dir, quality, options, rootAdt, texAdt, firstChunk, chunkMeshes, vertices, uvsBake, vertexColors, isSplittingTextures, progress, conv)
 }
 
 func (e *Exporter) exportAlphaMaps(
@@ -54,6 +55,7 @@ func (e *Exporter) exportAlphaMaps(
 	rootAdt, texAdt *adtfmt.ADTLoader,
 	split bool,
 	progress *export.ProgressReporter,
+	conv *ConversionOutput,
 ) error {
 	usePosix := options.PathFormat == "posix"
 	materialIDs := texAdt.DiffuseTextureFileDataIDs
@@ -98,7 +100,7 @@ func (e *Exporter) exportAlphaMaps(
 			texPath = filepath.Join(dir, filepath.Base(fileName))
 			texFileOut = filepath.Base(texPath)
 		}
-		if err := writePNG(texPath, rgba, img.ScaledWidth, img.ScaledHeight); err != nil {
+		if err := storePNG(texPath, rgba, img.ScaledWidth, img.ScaledHeight, conv); err != nil {
 			return "", err
 		}
 		if usePosix {
@@ -227,20 +229,22 @@ func (e *Exporter) exportAlphaMaps(
 				progressMu.Unlock()
 			}
 			filePrefix := fmt.Sprintf("%s_%d", e.TileID, job.chunkIndex)
-			if err := writePNG(filepath.Join(dir, "tex_"+filePrefix+".png"), job.imageData, 64, 64); err != nil {
+			if err := storePNG(filepath.Join(dir, "tex_"+filePrefix+".png"), job.imageData, 64, 64, conv); err != nil {
 				firstErr.Store(err)
 				return err
 			}
-			json := writers.NewJSONWriter(filepath.Join(dir, "tex_"+filePrefix+".json"))
-			json.AddProperty("layers", job.layerRows)
-			if job.vertexRow != nil {
-				if shading, ok := job.vertexRow["shading"]; ok {
-					json.AddProperty("vertexColors", shading)
+			if conv == nil {
+				json := writers.NewJSONWriter(filepath.Join(dir, "tex_"+filePrefix+".json"))
+				json.AddProperty("layers", job.layerRows)
+				if job.vertexRow != nil {
+					if shading, ok := job.vertexRow["shading"]; ok {
+						json.AddProperty("vertexColors", shading)
+					}
 				}
-			}
-			if err := json.Write(options.OverwriteFiles); err != nil {
-				firstErr.Store(err)
-				return err
+				if err := json.Write(options.OverwriteFiles); err != nil {
+					firstErr.Store(err)
+					return err
+				}
 			}
 			return nil
 		}
@@ -273,15 +277,18 @@ func (e *Exporter) exportAlphaMaps(
 	if split {
 		return nil
 	}
-	if err := writePNG(filepath.Join(dir, "tex_"+e.TileID+".png"), canvas, canvasSize, canvasSize); err != nil {
+	if err := storePNG(filepath.Join(dir, "tex_"+e.TileID+".png"), canvas, canvasSize, canvasSize, conv); err != nil {
 		return err
 	}
-	json := writers.NewJSONWriter(filepath.Join(dir, "tex_"+e.TileID+".json"))
-	json.AddProperty("layers", layers)
-	if len(chunkVertexColors) > 0 {
-		json.AddProperty("vertexColors", chunkVertexColors)
+	if conv == nil {
+		json := writers.NewJSONWriter(filepath.Join(dir, "tex_"+e.TileID+".json"))
+		json.AddProperty("layers", layers)
+		if len(chunkVertexColors) > 0 {
+			json.AddProperty("vertexColors", chunkVertexColors)
+		}
+		return json.Write(options.OverwriteFiles)
 	}
-	return json.Write(options.OverwriteFiles)
+	return nil
 }
 
 func (e *Exporter) exportMinimap(
@@ -291,13 +298,14 @@ func (e *Exporter) exportMinimap(
 	quality int,
 	options export.ADTExportOptions,
 	progress *export.ProgressReporter,
+	conv *ConversionOutput,
 ) error {
 	_ = progress
 	paddedX := fmt.Sprintf("%02d", e.TileY)
 	paddedY := fmt.Sprintf("%02d", e.TileX)
 	tilePath := fmt.Sprintf("world/minimaps/%s/map%s_%s.blp", e.MapDir, paddedX, paddedY)
 	tileOutPath := filepath.Join(dir, "tex_"+e.TileID+".png")
-	if !options.OverwriteFiles && writers.OutputFileExists(tileOutPath) {
+	if conv == nil && !options.OverwriteFiles && writers.OutputFileExists(tileOutPath) {
 		log.Write("Skipping ADT bake of %s (file exists, overwrite disabled)", tileOutPath)
 		return nil
 	}
@@ -318,7 +326,7 @@ func (e *Exporter) exportMinimap(
 		return err
 	}
 	scaled := ResizeBilinear(rgba, img.ScaledWidth, img.ScaledHeight, quality, quality)
-	return writePNG(tileOutPath, scaled, quality, quality)
+	return storePNG(tileOutPath, scaled, quality, quality, conv)
 }
 
 func (e *Exporter) exportLargeBake(
@@ -333,9 +341,10 @@ func (e *Exporter) exportLargeBake(
 	vertices, uvsBake, vertexColors []float32,
 	split bool,
 	progress *export.ProgressReporter,
+	conv *ConversionOutput,
 ) error {
 	tileOutPath := filepath.Join(dir, "tex_"+e.TileID+".png")
-	if !split && !options.OverwriteFiles && writers.OutputFileExists(tileOutPath) {
+	if !split && conv == nil && !options.OverwriteFiles && writers.OutputFileExists(tileOutPath) {
 		log.Write("Skipping ADT bake of %s (file exists, overwrite disabled)", tileOutPath)
 		return nil
 	}
@@ -437,7 +446,7 @@ func (e *Exporter) exportLargeBake(
 		if split {
 			outPath := filepath.Join(dir, fmt.Sprintf("tex_%s_%d.png", e.TileID, job.chunkIndex))
 			if options.OverwriteFiles || !writers.OutputFileExists(outPath) {
-				if err := writePNG(outPath, rotated, chunkSizePx, chunkSizePx); err != nil {
+				if err := storePNG(outPath, rotated, chunkSizePx, chunkSizePx, conv); err != nil {
 					firstErr.Store(err)
 					return err
 				}
@@ -464,7 +473,7 @@ func (e *Exporter) exportLargeBake(
 		if progress != nil {
 			progress.SetLabel("Tile " + e.TileID + ", saving terrain texture")
 		}
-		return writePNG(tileOutPath, composite, quality, quality)
+		return storePNG(tileOutPath, composite, quality, quality, conv)
 	}
 	return nil
 }

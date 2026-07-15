@@ -17,6 +17,7 @@ import (
 
 	"github.com/pqhuy98/wow-converter/internal/converter/runtimecache"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
+	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/transport"
 )
 
@@ -458,6 +459,40 @@ func (c *HTTPClient) ExportADT(ctx context.Context, params casc.ADTExportParams)
 		return casc.ADTExportResult{}, fmt.Errorf("server error during ADT export: %s", msg)
 	}
 	return casc.ADTExportResult{}, errors.New("unexpected response for ADT export")
+}
+
+func (c *HTTPClient) ExportADTForConversion(ctx context.Context, params casc.ADTExportParams) (*exportadt.ConversionOutput, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "/rest/exportADTForConversion", nil, params)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var envelope struct {
+		ID       string                      `json:"id"`
+		Snapshot *exportadt.ConversionOutput   `json:"snapshot"`
+		Message  string                      `json:"message"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return nil, err
+	}
+	if res.StatusCode == http.StatusOK && envelope.ID == "ADT_CONVERSION_SNAPSHOT" && envelope.Snapshot != nil {
+		return envelope.Snapshot, nil
+	}
+	if res.StatusCode == http.StatusConflict || envelope.ID == "ERR_NO_CASC" {
+		return nil, errors.New("no CASC loaded")
+	}
+	if res.StatusCode >= 500 {
+		return nil, fmt.Errorf("server error during ADT conversion export: %s", envelope.Message)
+	}
+	return nil, errors.New("unexpected response for ADT conversion export")
 }
 
 func (c *HTTPClient) GetExportProgress(ctx context.Context, progressKey string) (*casc.ExportProgressSnapshot, error) {

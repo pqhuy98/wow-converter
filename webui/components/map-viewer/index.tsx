@@ -32,10 +32,10 @@ import {
 
 import { useServerConfig } from '../server-config';
 import { MapViewerControlHints } from './control-hints';
+import type { MapHoverChange } from './controllers/hover';
 import { ExpansionFilterBar } from './expansion-filter-bar';
 import { ExpansionIcon } from './expansion-icon';
 import GenerateWc3Dialog from './generate-wc3-dialog';
-import type { MapHoverChange } from './controllers/hover';
 import MinimapViewer, { MapInfo } from './minimap-viewer';
 
 interface MapResponse {
@@ -550,9 +550,9 @@ export default function MapViewer() {
                       <p className="text-xs text-green-600">
                         Generated {generateJob.result.mapSaveName} in {formatElapsedDuration(
                         (generateJob.finishedAt ?? clockNow) - generateJob.submittedAt,
-                      )} — exported {generateJob.result.succeeded.length}/{generateJob.result.total} tiles
-                        {generateJob.result.failed.length > 0
-                          ? ` (${generateJob.result.failed.length} tile export failures)`
+                      )} — loaded {generateJob.result.succeeded.length}/{generateJob.result.total} tiles
+                        {(generateJob.result.failed ?? []).length > 0
+                          ? ` (${(generateJob.result.failed ?? []).length} tile load failures)`
                           : ''}
                       </p>
                       {generateJob.result.outputDir && (

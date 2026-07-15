@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/server/httplog"
 	wowlog "github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/transport"
@@ -63,7 +64,9 @@ func newServer(handler *Handler, opts ServerListenOptions) *Server {
 
 	r.Group(func(r chi.Router) {
 		r.Use(requireDataServerToken)
-		r.Get("/rest/debugMemory", handler.DebugMemory)
+		if config.IsDev() {
+			r.Get("/rest/debugMemory", handler.DebugMemory)
+		}
 		r.Post("/rest/loadCascLocal", handler.LoadCascLocal)
 		r.Post("/rest/loadCascRemote", handler.LoadCascRemote)
 		r.Post("/rest/loadCascBuild", handler.LoadCascBuild)
@@ -72,6 +75,7 @@ func newServer(handler *Handler, opts ServerListenOptions) *Server {
 		r.Post("/rest/setConfig", handler.SetConfig)
 		r.Post("/rest/charMeta", handler.CharMeta)
 		r.Post("/rest/exportADT", handler.ExportADT)
+		r.Post("/rest/exportADTForConversion", handler.ExportADTForConversion)
 		r.Post("/rest/finalizeExportProgress", handler.FinalizeExportProgress)
 	})
 

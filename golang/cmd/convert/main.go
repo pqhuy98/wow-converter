@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
+	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/bootstrap"
@@ -102,12 +103,20 @@ func run() error {
 	cfg.ExportAssetDir = mapexporter.SyncExportAssetDir(ctx, wowClient, cfg.ExportAssetDir)
 	log.Printf("Export asset dir: %s", cfg.ExportAssetDir)
 
-	if err := mapexporter.EnsureADTTilesExported(ctx, cfg.ExportAssetDir, mapCfg, wowClient); err != nil {
+	registry := common.NewTileRegistry()
+	defer registry.Release()
+	loaded, err := mapexporter.TryLoadADTTilesForConversion(ctx, wowClient, cfg.ExportAssetDir, mapCfg, 4096, mapexporter.TilesFromBounds(int(mapCfg.Min[0]), int(mapCfg.Min[1]), int(mapCfg.Max[0]), int(mapCfg.Max[1])), true, registry, nil)
+	if err != nil {
+		return err
+	}
+	if loaded {
+		registry.RegisterTerrainTextures()
+	} else if err := mapexporter.EnsureADTTilesExported(ctx, cfg.ExportAssetDir, mapCfg, wowClient); err != nil {
 		return err
 	}
 
 	start := time.Now()
-	exporter := mapexporter.NewMapExporter(cfg, &mapCfg, wowClient)
+	exporter := mapexporter.NewMapExporter(cfg, &mapCfg, wowClient, registry)
 	if err := exporter.ParseObjects(nil); err != nil {
 		return err
 	}

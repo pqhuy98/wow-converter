@@ -13,7 +13,7 @@ import (
 
 func TestPurgeKeepsUsedModelsByName(t *testing.T) {
 	cfg := config.DefaultConfig()
-	am := common.NewAssetManager(cfg, nil)
+	am := common.NewAssetManager(cfg, nil, nil)
 
 	objectPath := "world/maps/azeroth/elwynn/foo"
 	modelName := cfg.AssetPrefix + "/" + objectPath
@@ -46,7 +46,7 @@ func TestAddDoodadTypeMutationsPersist(t *testing.T) {
 
 func TestPurgeMatchesDfilFromDoodadType(t *testing.T) {
 	cfg := config.DefaultConfig()
-	am := common.NewAssetManager(cfg, nil)
+	am := common.NewAssetManager(cfg, nil, nil)
 
 	objectPath := "world/maps/azeroth/elwynn/bar"
 	modelName := cfg.AssetPrefix + "/" + objectPath

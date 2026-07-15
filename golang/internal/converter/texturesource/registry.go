@@ -59,8 +59,22 @@ func Unregister(relativePath string) {
 	registryMu.Unlock()
 }
 
+// ReleasePaths drops registered texture sources for the given relative paths.
+func ReleasePaths(relativePaths []string) int {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	released := 0
+	for _, rel := range relativePaths {
+		key := normalize(rel)
+		if _, ok := registry[key]; ok {
+			delete(registry, key)
+			released++
+		}
+	}
+	return released
+}
+
 // ReleaseGeneratedPNG drops in-memory PNG sources for the given relative paths.
-// BLP entries are kept (cheap; re-registered on next model parse).
 func ReleaseGeneratedPNG(relativePaths []string) int {
 	registryMu.Lock()
 	defer registryMu.Unlock()

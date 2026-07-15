@@ -47,6 +47,9 @@ func NewServer(d *Deps) *Server {
 	registerMaps(apiRouter, d)
 	registerExportCharacter(apiRouter, d)
 	registerExportTexture(apiRouter, d)
+	if cfg.IsDev {
+		registerDebugMemory(apiRouter)
+	}
 
 	root := chi.NewRouter()
 	root.Use(middleware.Recoverer)

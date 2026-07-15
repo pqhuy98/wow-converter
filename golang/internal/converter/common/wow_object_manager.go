@@ -14,6 +14,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
+	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 )
 
 const maxWoWSize = 51200.0 / 3.0
@@ -37,6 +38,7 @@ type placementInfoRow struct {
 type WowObjectManager struct {
 	config       config.Config
 	AssetManager *AssetManager
+	TileRegistry *TileRegistry
 	Objects      map[string]*WowObject
 	Terrains     []*WowObject
 	Doodads      []*WowObject
@@ -44,10 +46,11 @@ type WowObjectManager struct {
 }
 
 // NewWowObjectManager creates a manager.
-func NewWowObjectManager(cfg config.Config, wowClient client.Client) *WowObjectManager {
+func NewWowObjectManager(cfg config.Config, wowClient client.Client, tileRegistry *TileRegistry) *WowObjectManager {
 	return &WowObjectManager{
 		config:       cfg,
-		AssetManager: NewAssetManager(cfg, wowClient),
+		AssetManager: NewAssetManager(cfg, wowClient, tileRegistry),
+		TileRegistry: tileRegistry,
 		Objects:      map[string]*WowObject{},
 	}
 }
@@ -78,18 +81,24 @@ func (m *WowObjectManager) IterateObjects(fn func(obj *WowObject, abs ObjectAbso
 	}
 }
 
-// ReadTerrainsDoodads parses exported OBJ roots matching patterns.
+// ReadTerrainsDoodads parses exported OBJ roots matching patterns or in-memory tile snapshots.
 func (m *WowObjectManager) ReadTerrainsDoodads(patterns []string, filter func(id string, typ WowObjectType) bool) error {
 	start := time.Now()
 	rootSet := map[*WowObject]struct{}{}
 
 	var files []string
-	for _, pattern := range patterns {
-		matches, err := GlobExportFiles(m.config.ExportAssetDir, pattern)
-		if err != nil {
-			return err
+	if m.TileRegistry != nil && m.TileRegistry.HasTiles() {
+		for _, objectPath := range m.TileRegistry.ObjectPaths() {
+			files = append(files, m.full(objectPath+".obj"))
 		}
-		files = append(files, matches...)
+	} else {
+		for _, pattern := range patterns {
+			matches, err := GlobExportFiles(m.config.ExportAssetDir, pattern)
+			if err != nil {
+				return err
+			}
+			files = append(files, matches...)
+		}
 	}
 	log.Printf("Parsing root files %v", files)
 
@@ -241,13 +250,22 @@ func (m *WowObjectManager) parseRecursive(objectPath string, current *WowObject,
 		log.Printf("Found gobj %s %v %v", current.ID, current.Position, current.Rotation)
 	}
 
-	csvPath := m.full(filepath.Join(objectPath+"_ModelPlacementInformation.csv"))
-	if !ExportAssetExists(csvPath) {
-		return nil
+	csvPath := m.full(filepath.Join(objectPath + "_ModelPlacementInformation.csv"))
+	var rows []placementInfoRow
+	if m.TileRegistry != nil {
+		if inline := m.TileRegistry.Placements(objectPath); len(inline) > 0 {
+			rows = placementRowsFromADT(inline)
+		}
 	}
-	rows, err := parsePlacementCSV(csvPath)
-	if err != nil {
-		return err
+	if len(rows) == 0 && ExportAssetExists(csvPath) {
+		var err error
+		rows, err = parsePlacementCSV(csvPath)
+		if err != nil {
+			return err
+		}
+	}
+	if len(rows) == 0 {
+		return nil
 	}
 	for _, row := range rows {
 		id := fmt.Sprintf("%s:%s:%s:%s:%s", row.FileDataID, row.ModelFile, row.PositionX, row.PositionY, row.PositionZ)
@@ -292,6 +310,18 @@ func (m *WowObjectManager) parseRecursive(objectPath string, current *WowObject,
 		}
 	}
 	return nil
+}
+
+func placementRowsFromADT(rows []exportadt.PlacementRow) []placementInfoRow {
+	out := make([]placementInfoRow, len(rows))
+	for i, row := range rows {
+		out[i] = placementInfoRow{
+			ModelFile: row.ModelFile, PositionX: row.PositionX, PositionY: row.PositionY, PositionZ: row.PositionZ,
+			RotationX: row.RotationX, RotationY: row.RotationY, RotationZ: row.RotationZ, RotationW: row.RotationW,
+			ScaleFactor: row.ScaleFactor, ModelId: row.ModelId, FileDataID: row.FileDataID, Type: row.Type,
+		}
+	}
+	return out
 }
 
 func parsePlacementCSV(file string) ([]placementInfoRow, error) {

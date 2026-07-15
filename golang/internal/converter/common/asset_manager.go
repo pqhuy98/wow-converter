@@ -43,6 +43,7 @@ type AbsoluteExtents struct {
 type AssetManager struct {
 	config            config.Config
 	wowClient         client.Client
+	tileRegistry      *TileRegistry
 	models            map[string]*Model
 	textures          map[string]struct{}
 	texturesOverwrite map[string]struct{}
@@ -50,10 +51,11 @@ type AssetManager struct {
 }
 
 // NewAssetManager creates an asset manager.
-func NewAssetManager(cfg config.Config, wowClient client.Client) *AssetManager {
+func NewAssetManager(cfg config.Config, wowClient client.Client, tileRegistry *TileRegistry) *AssetManager {
 	return &AssetManager{
 		config:            cfg,
 		wowClient:         wowClient,
+		tileRegistry:      tileRegistry,
 		models:            map[string]*Model{},
 		textures:          map[string]struct{}{},
 		texturesOverwrite: map[string]struct{}{},
@@ -76,6 +78,22 @@ func (a *AssetManager) ResolveModel(objectPath string, fileDataID int, typ WowOb
 	}
 
 	if typ == WowObjectADT {
+		if a.tileRegistry != nil {
+			if snap := a.tileRegistry.Snapshot(objectPath); snap != nil {
+				result, err := wowmodel.ConvertAdtTerrainContentToMdl(snap.ObjFilePath, snap.ObjText, snap.MtlText, a.config)
+				if err != nil {
+					return nil, err
+				}
+				model := &Model{RelativePath: result.MDL.Model.Name, MDL: result.MDL, TexturePaths: result.TexturePaths}
+				for _, p := range result.TexturePaths {
+					a.textures[normalizeRel(p)] = struct{}{}
+				}
+				if !noCache {
+					a.models[objectPath] = model
+				}
+				return model, nil
+			}
+		}
 		objPath := filepath.Join(a.config.ExportAssetDir, NormalizeLocalModelRef(objectPath)+".obj")
 		result, err := wowmodel.ConvertAdtTerrainObjToMdl(objPath, a.config)
 		if err != nil {
@@ -237,7 +255,15 @@ func (a *AssetManager) ReleaseGeneratedTextureSources() {
 	for rel := range a.textures {
 		paths = append(paths, rel)
 	}
-	texturesource.ReleaseGeneratedPNG(paths)
+	texturesource.ReleasePaths(paths)
+}
+
+// ReleaseAfterExport drops parsed model and texture bookkeeping after assets are on disk.
+func (a *AssetManager) ReleaseAfterExport() {
+	a.models = map[string]*Model{}
+	a.textures = map[string]struct{}{}
+	a.texturesOverwrite = map[string]struct{}{}
+	a.blpTextures = map[string][]byte{}
 }
 
 // ExportModels writes MDL/MDX files to assetPath.
@@ -465,7 +491,7 @@ func (a *AssetManager) prepTextureForExport(rel, assetPath string) texturePrepRe
 		}
 		item.rawBLP = raw
 	case hasSource && source.Kind == texturesource.KindPNG:
-		item.pngData = append([]byte(nil), source.PNG...)
+		item.pngData = source.PNG
 	default:
 		item.pngPath = fromPath
 	}

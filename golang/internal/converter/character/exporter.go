@@ -41,7 +41,7 @@ func NewCharacterExporter(cfg config.Config, wowClient client.Client) *Character
 	httpClient := wowhead.NewHTTPClient()
 	return &CharacterExporter{
 		Config:       cfg,
-		AssetManager: common.NewAssetManager(cfg, wowClient),
+		AssetManager: common.NewAssetManager(cfg, wowClient, nil),
 		WowClient:    wowClient,
 		Wowhead:      DefaultWowheadClient{HTTP: httpClient},
 		HTTP:         httpClient,

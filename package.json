@@ -22,6 +22,8 @@
     "parity:random-mdl-loop": "bun scripts/retail-mdl-parity-loop.ts --random-mdl",
     "dev:go-converter": "cd golang && cross-env NODE_ENV=development go tool air",
     "dev:go": "npm-run-all kill:dev-ports --parallel dev:go-data-server dev:go-converter dev:webui",
+    "dev:goapp-converter": "cd golang && cross-env NODE_ENV=development WOW_CONVERTER_BUNDLED=1 go tool air",
+    "dev:goapp": "npm-run-all kill:dev-ports --parallel dev:goapp-converter dev:webui",
     "build:go-app": "run-s build:webui build:go-app:bundle",
     "build:go-app:bundle": "powershell -ExecutionPolicy Bypass -File scripts/build-go-app.ps1 -SkipWebUI",
     "parity:mount-mdl-loop": "bun scripts/mount-mdl-parity-loop.ts",

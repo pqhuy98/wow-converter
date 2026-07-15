@@ -91,6 +91,7 @@ func buildMapsIndex(ctx context.Context, d *Deps) error {
 
 	adtByDir := map[string]map[string]struct{}{}
 	texByDir := map[string]map[string]struct{}{}
+	localFileNameIndex := map[string]casc.ListfileEntry{}
 
 	for _, entry := range files {
 		fileName := strings.ToLower(strings.ReplaceAll(entry.FileName, `\`, `/`))
@@ -100,7 +101,7 @@ func buildMapsIndex(ctx context.Context, d *Deps) error {
 			y, _ := strconv.Atoi(m[3])
 			if x >= 0 && x < 64 && y >= 0 && y < 64 {
 				ensureSet(texByDir, dir)[tileKey(x, y)] = struct{}{}
-				fileNameIndex[fileName] = entry
+				localFileNameIndex[fileName] = entry
 			}
 			continue
 		}
@@ -118,6 +119,7 @@ func buildMapsIndex(ctx context.Context, d *Deps) error {
 	defer mapsMu.Unlock()
 	mapsWithTiles = nil
 	mapsByDir = map[string]*mapWithTiles{}
+	fileNameIndex = localFileNameIndex
 
 	for _, m := range baseMaps {
 		dir := strings.ToLower(m.Dir)
@@ -168,20 +170,25 @@ func parseTileKey(key string) (int, int) {
 }
 
 func ensureMapsIndex(ctx context.Context, d *Deps) error {
-	mapsIndexMu.Lock()
 	mapsMu.RLock()
-	ready := len(mapsWithTiles) > 0
-	mapsMu.RUnlock()
-	mapsIndexMu.Unlock()
-	if ready {
+	if len(mapsWithTiles) > 0 {
+		mapsMu.RUnlock()
 		return nil
 	}
+	mapsMu.RUnlock()
 
-	// Do not hold mapsIndexMu across WaitUntilReady: CASC polls call cache-clear
-	// hooks that reset the maps index and would deadlock on the same mutex.
 	if err := d.Client.WaitUntilReady(ctx); err != nil {
 		return err
 	}
+
+	mapsIndexMu.Lock()
+	defer mapsIndexMu.Unlock()
+	mapsMu.RLock()
+	if len(mapsWithTiles) > 0 {
+		mapsMu.RUnlock()
+		return nil
+	}
+	mapsMu.RUnlock()
 	return buildMapsIndex(ctx, d)
 }
 

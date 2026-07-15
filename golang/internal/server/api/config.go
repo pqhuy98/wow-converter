@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
@@ -29,7 +30,7 @@ type Config struct {
 // LoadConfig reads environment and ensures output directories exist.
 func LoadConfig() Config {
 	isShared := os.Getenv("IS_SHARED_HOSTING") == "true"
-	isDev := os.Getenv("NODE_ENV") == "development"
+	isDev := config.IsDev()
 
 	outputDir := workspace.ResolveRepoPath(outputDirRel)
 	outputDirBrowse := workspace.ResolveRepoPath(outputDirBrowseRel)

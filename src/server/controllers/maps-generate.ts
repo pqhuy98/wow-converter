@@ -9,8 +9,6 @@ import {
 import { getDefaultConfig } from '@/lib/global-config';
 import { normalizeMapSaveName } from '@/lib/map-save-name';
 import { Vector2 } from '@/lib/math/common';
-import { buildADTExportOptions } from '@/lib/wow/export/adt/map-export-utils';
-import { computeStepsPerTile } from '@/lib/wow/export/export-progress';
 import { wowConfig } from '@/lib/wow/server/config';
 import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import {
@@ -187,16 +185,7 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
     const progressKey = job.id;
 
     const includeInteriors = body.includeBuildingInteriors;
-    const exportOptions = buildADTExportOptions(undefined, {
-      mapsIncludeM2: true,
-      mapsIncludeWMO: true,
-      mapsIncludeWMOSets: includeInteriors,
-      mapsIncludeGameObjects: true,
-      mapsIncludeLiquid: true,
-      mapsIncludeFoliage: true,
-      mapsIncludeHoles: true,
-    });
-    const stepsPerTile = computeStepsPerTile(body.quality, exportOptions);
+    const stepsPerTile = 1;
     const tileCount = orderedTiles.length;
     const adtTotalSteps = tileCount * stepsPerTile;
 
@@ -228,8 +217,8 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
           includeWMO: true,
           includeWMOSets: includeInteriors,
           includeGameObjects: true,
-          includeLiquid: true,
-          includeFoliage: true,
+          includeLiquid: false,
+          includeFoliage: false,
           includeHoles: true,
           progressKey,
           tileIndex,

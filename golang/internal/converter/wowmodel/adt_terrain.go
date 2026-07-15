@@ -13,6 +13,36 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/config"
 )
 
+// ConvertAdtTerrainContentToMdl assembles MDL from in-memory OBJ/MTL text.
+func ConvertAdtTerrainContentToMdl(objFilePath, objText, mtlText string, cfg config.Config) (ConvertResult, error) {
+	convertlog.Loading(cfg, objFilePath)
+	objRes := obj.Parse(objText)
+	mtlMaterials := mtl.Parse(mtlText)
+
+	animPath := strings.TrimSuffix(objFilePath, filepath.Ext(objFilePath)) + "_bones.json"
+	animFile := bundleanim.NewFile(animPath, cfg)
+	_ = animFile.Parse()
+
+	metaPath := strings.TrimSuffix(objFilePath, filepath.Ext(objFilePath)) + ".json"
+	metaFile := bundlemeta.NewFile(metaPath, cfg, animFile)
+	_ = metaFile.Parse()
+
+	inputs := assemble.Inputs{
+		ObjFilePath: objFilePath,
+		Obj:         objRes,
+		Animation:   animFile,
+		Metadata:    metaFile,
+	}
+	inputs.Mtl.Materials = mtlMaterials
+
+	result := assemble.AssembleWowModel(inputs, cfg)
+	textures := make([]string, 0, len(result.TexturePaths))
+	for p := range result.TexturePaths {
+		textures = append(textures, p)
+	}
+	return ConvertResult{MDL: result.MDL, TexturePaths: textures}, nil
+}
+
 // ConvertAdtTerrainObjToMdl parses ADT terrain OBJ/MTL and assembles MDL.
 func ConvertAdtTerrainObjToMdl(objFilePath string, cfg config.Config) (ConvertResult, error) {
 	convertlog.Loading(cfg, objFilePath)

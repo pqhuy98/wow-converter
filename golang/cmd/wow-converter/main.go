@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,7 +29,7 @@ func main() {
 	}
 	_ = workspace.LoadEnvFile(filepath.Join(root, ".env"))
 
-	bundled := flag.Bool("bundled", workspace.IsDesktopApp(), "run wow-data-server in-process")
+	bundled := flag.Bool("bundled", workspace.IsDesktopApp() || envTruthy("WOW_CONVERTER_BUNDLED"), "run wow-data-server in-process")
 	flag.Parse()
 
 	ctx := context.Background()
@@ -100,4 +101,9 @@ func main() {
 		log.Printf("shutdown error: %v", err)
 	}
 	log.Println("wow-converter stopped")
+}
+
+func envTruthy(key string) bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return v == "1" || v == "true" || v == "yes"
 }

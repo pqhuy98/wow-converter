@@ -16,8 +16,8 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wc3/data"
 	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
-	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
+	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
 
 // MapExportConcurrency caps parallel workers for map export tasks (ADT tiles, creatures).
@@ -91,11 +91,12 @@ type MapExporter struct {
 	MapManager       *extra.MapManager
 	WowObjectManager *common.WowObjectManager
 	wowClient        client.Client
+	tileRegistry     *common.TileRegistry
 	filterDoodads    func(id string, typ common.WowObjectType) bool
 }
 
 // NewMapExporter creates an exporter. mapCfg must be non-nil and is mutated in place during export.
-func NewMapExporter(cfg config.Config, mapCfg *MapExportConfig, wowClient client.Client) *MapExporter {
+func NewMapExporter(cfg config.Config, mapCfg *MapExportConfig, wowClient client.Client, tileRegistry *common.TileRegistry) *MapExporter {
 	if mapCfg == nil {
 		panic("mapexporter: nil MapExportConfig")
 	}
@@ -104,13 +105,14 @@ func NewMapExporter(cfg config.Config, mapCfg *MapExportConfig, wowClient client
 		MapExportConfig: mapCfg,
 		MapManager:      extra.NewMapManager(),
 		wowClient:       wowClient,
+		tileRegistry:    tileRegistry,
 	}
 }
 
 // ParseObjects reads terrains, doodads, and creatures.
 func (e *MapExporter) ParseObjects(filter func(id string, typ common.WowObjectType) bool) error {
 	mc := e.MapExportConfig
-	e.WowObjectManager = common.NewWowObjectManager(e.Config, e.wowClient)
+	e.WowObjectManager = common.NewWowObjectManager(e.Config, e.wowClient, e.tileRegistry)
 	e.filterDoodads = func(id string, typ common.WowObjectType) bool {
 		enabled := mc.Doodads.Enable.Others
 		switch typ {
@@ -149,6 +151,9 @@ func (e *MapExporter) ParseObjects(filter func(id string, typ common.WowObjectTy
 	log.Printf("Object type count: %v", typeCount)
 	log.Printf("Rotating roots at center by %.0f degrees", mc.MapAngleDeg)
 	e.WowObjectManager.RotateRootsAtCenter([3]float64{0, 0, math.Radians(-90 + mc.MapAngleDeg)})
+	if e.tileRegistry != nil {
+		e.tileRegistry.TrimAfterParse()
+	}
 	return nil
 }
 
@@ -216,7 +221,11 @@ func (e *MapExporter) ExportTerrainsDoodads(outputDir string) error {
 	if _, err := am.ExportTextures(outputDir); err != nil {
 		return err
 	}
-	return am.ExportModels(outputDir)
+	if err := am.ExportModels(outputDir); err != nil {
+		return err
+	}
+	am.ReleaseAfterExport()
+	return nil
 }
 
 // ExportCreatures places units and exports creature models.

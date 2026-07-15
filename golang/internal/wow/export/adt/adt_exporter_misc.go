@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
@@ -67,10 +68,11 @@ func (e *Exporter) exportModelPlacements(
 	gameObjects map[uint32]db.DB2Row,
 	progress *export.ProgressReporter,
 	getFile func(context.Context, uint32) ([]byte, error),
+	conv *ConversionOutput,
 ) error {
 	usePosix := options.PathFormat == "posix"
 	csvPath := filepath.Join(dir, "adt_"+e.TileID+"_ModelPlacementInformation.csv")
-	if !options.OverwriteFiles && writers.OutputFileExists(csvPath) {
+	if conv == nil && !options.OverwriteFiles && writers.OutputFileExists(csvPath) {
 		log.Write("Skipping model placement export %s (file exists, overwrite disabled)", csvPath)
 		if progress != nil {
 			progress.Advance()
@@ -78,11 +80,34 @@ func (e *Exporter) exportModelPlacements(
 		return nil
 	}
 
-	csv := &writers.CSVWriter{Out: csvPath}
-	csv.AddField("ModelFile", "PositionX", "PositionY", "PositionZ", "RotationX", "RotationY", "RotationZ", "RotationW", "ScaleFactor", "ModelId", "Type", "FileDataID", "DoodadSetIndexes", "DoodadSetNames")
+	var csv *writers.CSVWriter
+	if conv == nil {
+		csv = &writers.CSVWriter{Out: csvPath}
+		csv.AddField("ModelFile", "PositionX", "PositionY", "PositionZ", "RotationX", "RotationY", "RotationZ", "RotationW", "ScaleFactor", "ModelId", "Type", "FileDataID", "DoodadSetIndexes", "DoodadSetNames")
+	}
+
+	addRow := func(row PlacementRow) {
+		if conv != nil {
+			conv.Placements = append(conv.Placements, row)
+			return
+		}
+		csv.AddRow(map[string]any{
+			"ModelFile": row.ModelFile, "PositionX": row.PositionX, "PositionY": row.PositionY, "PositionZ": row.PositionZ,
+			"RotationX": row.RotationX, "RotationY": row.RotationY, "RotationZ": row.RotationZ, "RotationW": row.RotationW,
+			"ScaleFactor": row.ScaleFactor, "ModelId": row.ModelId, "Type": row.Type, "FileDataID": row.FileDataID,
+			"DoodadSetIndexes": "", "DoodadSetNames": "",
+		})
+	}
+	logPlacements := func(count int, kind string) {
+		if conv != nil {
+			log.Write("Collecting %d %s placements...", count, kind)
+			return
+		}
+		log.Write("Writing %d %s placements to CSV...", count, kind)
+	}
 
 	exportDoodads := func(exportType, csvName string, objects []adtfmt.DoodadEntry) {
-		log.Write("Writing %d %s placements to CSV...", len(objects), exportType)
+		logPlacements(len(objects), exportType)
 		for i, model := range objects {
 			if progress != nil {
 				progress.SetLabel(fmt.Sprintf("Tile %s, %s", e.TileID, exportType), i+1, len(objects))
@@ -93,17 +118,16 @@ func (e *Exporter) exportModelPlacements(
 			if usePosix {
 				modelFile = writers.Win32ToPosix(modelFile)
 			}
-			csv.AddRow(map[string]any{
-				"ModelFile": modelFile, "PositionX": model.Position[0], "PositionY": model.Position[1], "PositionZ": model.Position[2],
-				"RotationX": model.Rotation[0], "RotationY": model.Rotation[1], "RotationZ": model.Rotation[2], "RotationW": 0.0,
-				"ScaleFactor": float64(model.Scale) / 1024, "ModelId": model.UniqueID, "Type": csvName, "FileDataID": model.MmidEntry,
-				"DoodadSetIndexes": 0, "DoodadSetNames": "",
+			addRow(PlacementRow{
+				ModelFile: modelFile, PositionX: fmt.Sprint(model.Position[0]), PositionY: fmt.Sprint(model.Position[1]), PositionZ: fmt.Sprint(model.Position[2]),
+				RotationX: fmt.Sprint(model.Rotation[0]), RotationY: fmt.Sprint(model.Rotation[1]), RotationZ: fmt.Sprint(model.Rotation[2]), RotationW: "0",
+				ScaleFactor: fmt.Sprint(float64(model.Scale) / 1024), ModelId: fmt.Sprint(model.UniqueID), Type: csvName, FileDataID: fmt.Sprint(model.MmidEntry),
 			})
 		}
 	}
 
 	exportGameObjects := func(objects map[uint32]db.DB2Row) {
-		log.Write("Writing %d game objects placements to CSV...", len(objects))
+		logPlacements(len(objects), "game objects")
 		i := 0
 		for _, model := range objects {
 			i++
@@ -119,19 +143,18 @@ func (e *Exporter) exportModelPlacements(
 			}
 			pos := rowFloatSlice(model["Position"])
 			rot := rowFloatSlice(model["Rotation"])
-			csv.AddRow(map[string]any{
-				"ModelFile": modelFile,
-				"PositionX": posAt(pos, 0), "PositionY": posAt(pos, 1), "PositionZ": posAt(pos, 2),
-				"RotationX": posAt(rot, 0), "RotationY": posAt(rot, 1), "RotationZ": posAt(rot, 2), "RotationW": posAt(rot, 3),
-				"ScaleFactor": 1.0, "ModelId": rowUint32(model["uniqueId"]), "Type": "gobj", "FileDataID": fileDataID,
-				"DoodadSetIndexes": 0, "DoodadSetNames": "",
+			addRow(PlacementRow{
+				ModelFile: modelFile,
+				PositionX: fmt.Sprint(posAt(pos, 0)), PositionY: fmt.Sprint(posAt(pos, 1)), PositionZ: fmt.Sprint(posAt(pos, 2)),
+				RotationX: fmt.Sprint(posAt(rot, 0)), RotationY: fmt.Sprint(posAt(rot, 1)), RotationZ: fmt.Sprint(posAt(rot, 2)), RotationW: fmt.Sprint(posAt(rot, 3)),
+				ScaleFactor: "1", ModelId: fmt.Sprint(rowUint32(model["uniqueId"])), Type: "gobj", FileDataID: fmt.Sprint(fileDataID),
 			})
 		}
 	}
 
 	exportWMOs := func() {
 		worldModels := objAdt.WorldModels
-		log.Write("Writing %d WMO placements to CSV...", len(worldModels))
+		logPlacements(len(worldModels), "WMO")
 		setNameCache := make(map[uint32][]string)
 		objectCache := make(map[string]struct{})
 		usingNames := len(objAdt.WmoNames) > 0
@@ -183,7 +206,15 @@ func (e *Exporter) exportModelPlacements(
 				if options.MapsIncludeWMOSets {
 					mask := buildWMOSetsMask(wmoExp.Loader.DoodadSets, useADTSets, doodadSets, model.DoodadSet)
 					wmoExp.SetDoodadSetMask(mask)
-					if err := wmoExp.ExportDoodadPlacementCsv(modelPath, options, progress); err != nil {
+					if conv != nil {
+						rows, err := wmoExp.CollectDoodadPlacements(modelPath, options)
+						if err != nil {
+							log.Write("Failed to collect WMO interior placements [%d]: %v", fileDataID, err)
+						} else if len(rows) > 0 {
+							wmoKey := wmoObjectPathKey(conv.ExportAssetDir, modelPath)
+							conv.WmoPlacements[wmoKey] = interiorPlacementsToRows(rows)
+						}
+					} else if err := wmoExp.ExportDoodadPlacementCsv(modelPath, options, progress); err != nil {
 						log.Write("Failed to export WMO interior CSV [%d]: %v", fileDataID, err)
 					}
 				}
@@ -197,12 +228,21 @@ func (e *Exporter) exportModelPlacements(
 			}
 			setIndexes := joinUint16(doodadSets)
 			setNames := joinDoodadSetNames(doodadSets, doodadNames)
-			csv.AddRow(map[string]any{
-				"ModelFile": modelFile, "PositionX": model.Position[0], "PositionY": model.Position[1], "PositionZ": model.Position[2],
-				"RotationX": model.Rotation[0], "RotationY": model.Rotation[1], "RotationZ": model.Rotation[2], "RotationW": 0.0,
-				"ScaleFactor": float64(model.Scale) / 1024, "ModelId": model.UniqueID, "Type": "wmo", "FileDataID": fileDataID,
-				"DoodadSetIndexes": setIndexes, "DoodadSetNames": setNames,
-			})
+			row := PlacementRow{
+				ModelFile: modelFile, PositionX: fmt.Sprint(model.Position[0]), PositionY: fmt.Sprint(model.Position[1]), PositionZ: fmt.Sprint(model.Position[2]),
+				RotationX: fmt.Sprint(model.Rotation[0]), RotationY: fmt.Sprint(model.Rotation[1]), RotationZ: fmt.Sprint(model.Rotation[2]), RotationW: "0",
+				ScaleFactor: fmt.Sprint(float64(model.Scale) / 1024), ModelId: fmt.Sprint(model.UniqueID), Type: "wmo", FileDataID: fmt.Sprint(fileDataID),
+			}
+			if conv != nil {
+				conv.Placements = append(conv.Placements, row)
+			} else {
+				csv.AddRow(map[string]any{
+					"ModelFile": row.ModelFile, "PositionX": model.Position[0], "PositionY": model.Position[1], "PositionZ": model.Position[2],
+					"RotationX": model.Rotation[0], "RotationY": model.Rotation[1], "RotationZ": model.Rotation[2], "RotationW": 0.0,
+					"ScaleFactor": float64(model.Scale) / 1024, "ModelId": model.UniqueID, "Type": "wmo", "FileDataID": fileDataID,
+					"DoodadSetIndexes": setIndexes, "DoodadSetNames": setNames,
+				})
+			}
 		}
 	}
 
@@ -218,7 +258,34 @@ func (e *Exporter) exportModelPlacements(
 	if progress != nil {
 		progress.Advance()
 	}
+	if conv != nil {
+		return nil
+	}
 	return csv.Write(options.OverwriteFiles)
+}
+
+func wmoObjectPathKey(exportAssetDir, modelPath string) string {
+	rel, err := filepath.Rel(exportAssetDir, modelPath)
+	if err != nil {
+		rel = modelPath
+	}
+	rel = filepath.ToSlash(rel)
+	if ext := filepath.Ext(rel); ext != "" {
+		rel = strings.TrimSuffix(rel, ext)
+	}
+	return rel
+}
+
+func interiorPlacementsToRows(rows []wmoexport.InteriorPlacement) []PlacementRow {
+	out := make([]PlacementRow, len(rows))
+	for i, row := range rows {
+		out[i] = PlacementRow{
+			ModelFile: row.ModelFile, PositionX: row.PositionX, PositionY: row.PositionY, PositionZ: row.PositionZ,
+			RotationW: row.RotationW, RotationX: row.RotationX, RotationY: row.RotationY, RotationZ: row.RotationZ,
+			ScaleFactor: row.ScaleFactor, FileDataID: row.FileDataID, Type: "m2",
+		}
+	}
+	return out
 }
 
 func (e *Exporter) exportLiquid(rootAdt *adtfmt.ADTLoader, dir string, options export.ADTExportOptions, progress *export.ProgressReporter) error {

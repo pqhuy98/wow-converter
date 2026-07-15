@@ -818,6 +818,62 @@ func (h *Handler) ExportADT(w http.ResponseWriter, r *http.Request) {
 	h.responseCache.sendAndCache(w, cacheKey, http.StatusOK, responseObj)
 }
 
+// POST /rest/exportADTForConversion
+func (h *Handler) ExportADTForConversion(w http.ResponseWriter, r *http.Request) {
+	body, err := readJSONBody(r)
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, map[string]any{"id": "ERR_INVALID_JSON"})
+		return
+	}
+
+	cascSource := h.Runtime.GetCascOptional()
+	if cascSource == nil || !cascSource.IsLoaded() {
+		sendJSON(w, http.StatusConflict, map[string]any{"id": "ERR_NO_CASC"})
+		return
+	}
+
+	params, valid, tileErr := parseADTExportParams(body)
+	if !valid {
+		sendJSON(w, http.StatusBadRequest, map[string]any{
+			"id": "ERR_INVALID_PARAMETERS",
+			"required": map[string]string{
+				"mapID":  "number",
+				"mapDir": "string",
+				"tileX":  "number (0-63)",
+				"tileY":  "number (0-63)",
+			},
+		})
+		return
+	}
+	if tileErr {
+		sendJSON(w, http.StatusBadRequest, map[string]any{
+			"id":      "ERR_INVALID_TILE_COORDS",
+			"message": "Tile coordinates must be 0-63",
+		})
+		return
+	}
+	if v, ok := body["exportAssetDir"].(string); ok {
+		params.ExportAssetDir = v
+	}
+
+	exportadt.BeginConversionExport()
+	defer exportadt.EndConversionExport()
+
+	snapshot, err := service.ADTExporterService{}.ExportForConversion(r.Context(), params)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, map[string]any{
+			"id":      "ERR_INTERNAL",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	sendJSON(w, http.StatusOK, map[string]any{
+		"id":       "ADT_CONVERSION_SNAPSHOT",
+		"snapshot": snapshot,
+	})
+}
+
 // POST /rest/finalizeExportProgress
 func (h *Handler) FinalizeExportProgress(w http.ResponseWriter, r *http.Request) {
 	body, err := readJSONBody(r)

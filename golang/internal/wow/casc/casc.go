@@ -182,6 +182,7 @@ type ADTExportParams struct {
 	TileIndex              *int   `json:"tileIndex,omitempty"`
 	TileCount              *int   `json:"tileCount,omitempty"`
 	StepsPerTile           *int   `json:"stepsPerTile,omitempty"`
+	ExportAssetDir         string `json:"exportAssetDir,omitempty"`
 }
 
 // ADTExportResult is the EXPORT_RESULT payload for ADT exports.

@@ -6,6 +6,7 @@ import path from 'path';
 import { getCreaturesInTile } from '@/lib/azerothcore-client/creatures';
 import { exportTexture } from '@/lib/converter/character/utils';
 import { getListFiles, registerListfileClearHook } from '@/lib/wow/listfile-cache';
+import { isDirectListfileClient, tryInProcessListfileClient } from '@/lib/wow-data-client/direct-listfile';
 import { FileEntry, MapListItem, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import { assertDesktopOnly, desktopOnlyStatus } from '@/server/shared-hosting';
 import {
@@ -44,7 +45,30 @@ async function buildMapsIndex(): Promise<void> {
   } catch {
     baseMaps = [];
   }
-  const files = await getListFiles();
+
+  const start = Date.now();
+  let files: FileEntry[];
+  const inProcess = tryInProcessListfileClient();
+  if (inProcess) {
+    console.log('Building maps index from listfile...');
+    files = await inProcess.collectMapTileFileIndex();
+    console.log(`Collected ${files.length} map tile files in ${((Date.now() - start) / 1000).toFixed(1)}s`);
+  } else if (isDirectListfileClient(wowDataClient)) {
+    console.log('Building maps index from listfile...');
+    try {
+      files = await wowDataClient.collectMapTileFileIndex();
+      console.log(`Collected ${files.length} map tile files in ${((Date.now() - start) / 1000).toFixed(1)}s`);
+    } catch (e) {
+      console.warn('Direct map tile index unavailable, falling back to full listfile copy:', (e as Error).message);
+      console.log('Building maps index (full listfile copy)...');
+      files = await getListFiles();
+      console.log(`Loaded ${files.length} listfile entries for maps in ${((Date.now() - start) / 1000).toFixed(1)}s`);
+    }
+  } else {
+    console.log('Building maps index (full listfile copy)...');
+    files = await getListFiles();
+    console.log(`Loaded ${files.length} listfile entries for maps in ${((Date.now() - start) / 1000).toFixed(1)}s`);
+  }
 
   const adtByDir = new Map<string, Set<string>>(); // key: "x,y"
   const texByDir = new Map<string, Set<string>>();
@@ -83,6 +107,7 @@ async function buildMapsIndex(): Promise<void> {
 
   mapsWithTiles = [];
   mapsByDir.clear();
+  fileNameToEntry.clear();
 
   for (const m of baseMaps) {
     const dir = m.dir.toLowerCase();

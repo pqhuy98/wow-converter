@@ -36,6 +36,96 @@ func (e *Exporter) SetDoodadSetMask(mask []DoodadSetMaskEntry) {
 	e.doodadSetMask = mask
 }
 
+// InteriorPlacement is one WMO interior doodad row for in-memory map conversion.
+type InteriorPlacement struct {
+	ModelFile   string
+	PositionX   string
+	PositionY   string
+	PositionZ   string
+	RotationW   string
+	RotationX   string
+	RotationY   string
+	RotationZ   string
+	ScaleFactor string
+	FileDataID  string
+}
+
+// CollectDoodadPlacements returns interior M2 placements for enabled doodad sets.
+func (e *Exporter) CollectDoodadPlacements(out string, options exportpkg.ADTExportOptions) ([]InteriorPlacement, error) {
+	if err := e.Loader.Load(); err != nil {
+		return nil, err
+	}
+	useAbsolute := options.EnableAbsoluteCSVPaths
+	usePosix := options.PathFormat == "posix"
+	outDir := filepath.Dir(out)
+	var rows []InteriorPlacement
+	for i, set := range e.Loader.DoodadSets {
+		if len(e.doodadSetMask) > i && !e.doodadSetMask[i].Checked {
+			continue
+		}
+		for j := uint32(0); j < set.DoodadCount; j++ {
+			idx := set.FirstInstanceIndex + j
+			if int(idx) >= len(e.Loader.Doodads) {
+				continue
+			}
+			doodad := e.Loader.Doodads[idx]
+			var fileDataID uint32
+			if len(e.Loader.FileDataIDs) > 0 {
+				if int(doodad.Offset) < len(e.Loader.FileDataIDs) {
+					fileDataID = e.Loader.FileDataIDs[doodad.Offset]
+				}
+			} else if e.Loader.DoodadNames != nil {
+				fileName := e.Loader.DoodadNames[int(doodad.Offset)]
+				if id, ok := archivecasc.GetByFilename(fileName); ok {
+					fileDataID = uint32(id)
+				}
+			}
+			if fileDataID == 0 {
+				continue
+			}
+			refName := exportpkg.ModelReferencePath(fileDataID, "m2", nil)
+			var m2Path string
+			if options.EnableSharedChildren {
+				m2Path = writers.GetExportPath(refName)
+			} else {
+				m2Path = writers.ReplaceFile(out, refName)
+			}
+			modelPath, err := filepath.Rel(outDir, m2Path)
+			if err != nil {
+				modelPath = m2Path
+			}
+			if useAbsolute {
+				modelPath, _ = filepath.Abs(filepath.Join(outDir, modelPath))
+			}
+			if usePosix {
+				modelPath = writers.Win32ToPosix(modelPath)
+			}
+			rot := doodad.Rotation
+			rotW, rotX, rotY, rotZ := "0", "0", "0", "0"
+			if len(rot) > 0 {
+				rotX = fmt.Sprint(rot[0])
+			}
+			if len(rot) > 1 {
+				rotY = fmt.Sprint(rot[1])
+			}
+			if len(rot) > 2 {
+				rotZ = fmt.Sprint(rot[2])
+			}
+			if len(rot) > 3 {
+				rotW = fmt.Sprint(rot[3])
+			}
+			pos := doodad.Position
+			rows = append(rows, InteriorPlacement{
+				ModelFile: modelPath,
+				PositionX: fmt.Sprint(posAt(pos, 0)), PositionY: fmt.Sprint(posAt(pos, 1)), PositionZ: fmt.Sprint(posAt(pos, 2)),
+				RotationW: rotW, RotationX: rotX, RotationY: rotY, RotationZ: rotZ,
+				ScaleFactor: fmt.Sprint(doodad.Scale), FileDataID: fmt.Sprint(fileDataID),
+			})
+		}
+	}
+	return rows, nil
+}
+
 // ExportDoodadPlacementCsv writes interior M2 placements for enabled doodad sets.
 func (e *Exporter) ExportDoodadPlacementCsv(
 	out string,

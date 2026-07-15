@@ -44,7 +44,7 @@ func initMapGenerateProgress(key string, adtTotalSteps, convertSteps, tileCount,
 		CompletedSteps: 0,
 		TotalSteps:     adtTotalSteps + convertSteps,
 		Phase:          phaseADT,
-		TaskName:       "Exporting tiles",
+		TaskName:       "Loading tiles",
 		TileIndex:      &ti,
 		TileCount:      &tc,
 		StepsPerTile:   &spt,
@@ -91,7 +91,7 @@ func syncAdtProgress(key string, completedSteps, tileIndex, tileCount, stepsPerT
 	if taskName != "" {
 		snap.TaskName = taskName
 	} else {
-		snap.TaskName = "Exporting tiles"
+		snap.TaskName = "Loading tiles"
 	}
 }
 

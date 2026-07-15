@@ -3,6 +3,7 @@ description: AI agent development rules for wow-converter
 alwaysApply: false
 ---
 - Avoid using `any` or `as` casting in TypeScript unless absolutely necessary. Avoid unncessary `instanceof` when developing in TypeScript, trust TypeScript static type.
+- **Architecture decisions:** recorded in `docs/decisions/` (ADR-style). Check there before assuming Go/TS parity or re-porting Go-only features to TypeScript.
 - Follow code best practices like DRY, YAGNI, SOLID, Clean Code. Avoid unnecessary complexity and overengineering.
 - Do not export functions, types, or constants that are not used outside their module/directory. Only export what is needed by external consumers.
 - Do not extract helpers into separate util files when they have a single caller **and** the caller file stays small — keep them in the caller file as unexported functions. When the owner module is already large, colocate by **folder** (same package/directory as the owner) rather than inflating a single file.

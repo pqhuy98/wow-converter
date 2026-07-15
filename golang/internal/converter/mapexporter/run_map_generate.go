@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
+	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
@@ -22,6 +25,8 @@ type MapGenerateConversionOptions struct {
 	AutoClampPercent         bool
 	UnitScale                float64
 	WowClient                client.Client
+	TileRegistry             *common.TileRegistry
+	TileQuality              int
 	OnConvertStepsKnown      func(convertSteps int)
 	OnProgress               func(convertCompleted int, taskName string, creatureProgress *CreatureProgress)
 }
@@ -69,6 +74,9 @@ func BuildMapExportConfig(params struct {
 // RunMapGenerateConversion executes parse, export, and save for a generated map.
 func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOptions) (MapGenerateConversionResult, error) {
 	autoClamp := opts.AutoClampPercent
+	if opts.TileRegistry != nil {
+		defer opts.TileRegistry.Release()
+	}
 
 	if opts.WowClient != nil {
 		if err := opts.WowClient.WaitUntilReady(ctx); err != nil {
@@ -95,7 +103,10 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 		}
 	}
 
-	exporter := NewMapExporter(conversionCfg, opts.MapExportConfig, opts.WowClient)
+	exporter := NewMapExporter(conversionCfg, opts.MapExportConfig, opts.WowClient, opts.TileRegistry)
+	if opts.TileRegistry != nil {
+		opts.TileRegistry.RegisterTerrainTextures()
+	}
 	LogMapGeneratePhase("Parsing map objects")
 	report("Parsing map data", nil)
 	if err := exporter.ParseObjects(nil); err != nil {
@@ -153,6 +164,8 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 
 	absOut, _ := filepath.Abs(outputDir)
 	LogMapGeneratePhase("Complete: " + mapSaveName + " → " + absOut)
+	runtime.GC()
+	debug.FreeOSMemory()
 	return MapGenerateConversionResult{
 		OutputDir:    absOut,
 		MapSaveName:  mapSaveName,

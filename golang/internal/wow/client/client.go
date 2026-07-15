@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
+	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 )
 
 // CASCInfo mirrors the CASC_INFO response payload.
@@ -54,6 +55,7 @@ type Client interface {
 
 	GetCharMeta(ctx context.Context, params casc.CharacterMetaParams) (casc.CharacterMetaResponse, error)
 	ExportADT(ctx context.Context, params casc.ADTExportParams) (casc.ADTExportResult, error)
+	ExportADTForConversion(ctx context.Context, params casc.ADTExportParams) (*exportadt.ConversionOutput, error)
 	GetExportProgress(ctx context.Context, progressKey string) (*casc.ExportProgressSnapshot, error)
 	FinalizeExportProgress(ctx context.Context, progressKey string) (*casc.ExportProgressSnapshot, error)
 }

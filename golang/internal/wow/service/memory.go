@@ -124,8 +124,8 @@ func formatMemoryDiagnostics(d apicasc.MemoryDiagnostics) string {
 	mb := func(n int64) string { return fmt.Sprintf("%.1f MB", float64(n)/1024/1024) }
 	p := d.Process
 	lines := []string{
-		fmt.Sprintf("Go heap in-use %s | heap alloc %s | stack %s | sys %s | goroutines %d",
-			mb(p["heapInuse"]), mb(p["heapAlloc"]), mb(p["stackInuse"]), mb(p["sys"]), p["goroutines"]),
+		fmt.Sprintf("Go heap in-use %s | heap idle (retained) %s | heap alloc %s | stack %s | sys %s | goroutines %d",
+			mb(p["heapInuse"]), mb(p["heapIdle"]), mb(p["heapAlloc"]), mb(p["stackInuse"]), mb(p["sys"]), p["goroutines"]),
 	}
 	if casc, ok := d.Casc["loaded"].(bool); ok && casc {
 		lines = append(lines, fmt.Sprintf("CASC rootEntries=%v encodingEntries=%v localIndexes=%v build=%v",
