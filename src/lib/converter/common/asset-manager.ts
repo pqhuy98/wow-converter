@@ -20,7 +20,7 @@ import { cachePathForLocalRef, normalizeLocalModelRef } from '../local-model-pat
 import { convertAdtTerrainObjToMdl } from '../wow-model/adt-terrain';
 import { ConvertM2Options, convertM2ToMdl } from '../wow-model/direct/m2';
 import { Model, WowObject, WowObjectType } from './models';
-import { getTextureSource, releaseGeneratedPngSources, TextureSource } from './texture-source';
+import { getTextureSource, releaseTextureSourcePaths, TextureSource } from './texture-source';
 
 export class AssetManager {
   models = new Map<string, Model>();
@@ -124,9 +124,9 @@ export class AssetManager {
     }
   }
 
-  /** Drop in-memory PNG registry entries for this export after BLP encoding. */
+  /** Drop registered sources for this export after BLP encoding. */
   releaseGeneratedTextureSources(): void {
-    releaseGeneratedPngSources(Array.from(this.textures));
+    releaseTextureSourcePaths(Array.from(this.textures));
   }
 
   async exportTextures(assetPath: string) {

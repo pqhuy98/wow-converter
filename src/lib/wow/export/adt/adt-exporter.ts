@@ -59,7 +59,9 @@ function getPlacementCoord(model: ADTExportObject, axis: 'position' | 'rotation'
     const arr = axis === 'position' ? model.position : model.rotation;
     return arr[index] ?? 0;
   }
-  const arr = axis === 'position' ? model.Position : model.Rotation;
+  const arr = axis === 'position'
+    ? model.Position ?? model.Pos
+    : model.Rotation ?? model.Rot;
   return Array.isArray(arr) ? (arr[index] as number | undefined) ?? 0 : 0;
 }
 
@@ -70,7 +72,7 @@ function getPlacementScaleFactor(model: ADTExportObject): number {
 
 function getPlacementUniqueId(model: ADTExportObject): number {
   if (isDoodadEntry(model)) return model.uniqueId;
-  const uid = model.uniqueId;
+  const uid = model.uniqueId ?? model.ID;
   return typeof uid === 'number' ? uid : 0;
 }
 

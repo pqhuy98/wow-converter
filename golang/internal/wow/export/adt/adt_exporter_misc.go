@@ -9,12 +9,12 @@ import (
 	"sync"
 
 	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
-	adtfmt "github.com/pqhuy98/wow-converter/internal/wow/formats/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/db"
 	"github.com/pqhuy98/wow-converter/internal/wow/export"
 	exportwriters "github.com/pqhuy98/wow-converter/internal/wow/export"
 	wmoexport "github.com/pqhuy98/wow-converter/internal/wow/export/wmo"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
+	adtfmt "github.com/pqhuy98/wow-converter/internal/wow/formats/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/wmo"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
@@ -142,12 +142,22 @@ func (e *Exporter) exportModelPlacements(
 				modelFile = writers.Win32ToPosix(modelFile)
 			}
 			pos := rowFloatSlice(model["Position"])
+			if len(pos) == 0 {
+				pos = rowFloatSlice(model["Pos"])
+			}
 			rot := rowFloatSlice(model["Rotation"])
+			if len(rot) == 0 {
+				rot = rowFloatSlice(model["Rot"])
+			}
+			modelID := rowUint32(model["uniqueId"])
+			if modelID == 0 {
+				modelID = rowUint32(model["ID"])
+			}
 			addRow(PlacementRow{
 				ModelFile: modelFile,
 				PositionX: fmt.Sprint(posAt(pos, 0)), PositionY: fmt.Sprint(posAt(pos, 1)), PositionZ: fmt.Sprint(posAt(pos, 2)),
 				RotationX: fmt.Sprint(posAt(rot, 0)), RotationY: fmt.Sprint(posAt(rot, 1)), RotationZ: fmt.Sprint(posAt(rot, 2)), RotationW: fmt.Sprint(posAt(rot, 3)),
-				ScaleFactor: "1", ModelId: fmt.Sprint(rowUint32(model["uniqueId"])), Type: "gobj", FileDataID: fmt.Sprint(fileDataID),
+				ScaleFactor: "1", ModelId: fmt.Sprint(modelID), Type: "gobj", FileDataID: fmt.Sprint(fileDataID),
 			})
 		}
 	}
@@ -456,20 +466,7 @@ func liquidInstanceToMap(instance adtfmt.LiquidInstance) map[string]any {
 }
 
 func rowUint32(v any) uint32 {
-	switch x := v.(type) {
-	case uint32:
-		return x
-	case int32:
-		return uint32(x)
-	case int64:
-		return uint32(x)
-	case int:
-		return uint32(x)
-	case float64:
-		return uint32(x)
-	default:
-		return 0
-	}
+	return toUint32(v)
 }
 
 func rowUint32Slice(v any) []uint32 {
@@ -497,6 +494,16 @@ func rowFloatSlice(v any) []float64 {
 		return out
 	case []float64:
 		return x
+	case []any:
+		out := make([]float64, 0, len(x))
+		for _, value := range x {
+			number, ok := toFloat64(value)
+			if !ok {
+				return nil
+			}
+			out = append(out, number)
+		}
+		return out
 	default:
 		return nil
 	}

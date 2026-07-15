@@ -51,6 +51,7 @@ type DoodadEnable struct {
 // MapExportConfig drives a single map export run.
 type MapExportConfig struct {
 	MapID           int
+	CascMapDir      string
 	WowExportFolder string
 	WMOSet          []string
 	Min             math.Vector2

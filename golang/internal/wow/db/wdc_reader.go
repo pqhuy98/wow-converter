@@ -188,7 +188,11 @@ func convertDBDToSchemaType(entry *DBDField) SchemaEntry {
 		return SchemaEntry{Type: FieldTypeString}
 	}
 	if entry.Type == DBDColumnFloat {
-		return SchemaEntry{Type: FieldTypeFloat}
+		schema := SchemaEntry{Type: FieldTypeFloat}
+		if entry.ArrayLength > -1 {
+			schema.Count = entry.ArrayLength
+		}
+		return schema
 	}
 	if entry.Type == DBDColumnInt {
 		var ft FieldType
@@ -745,11 +749,15 @@ func (r *WDCReader) Parse(ctx context.Context, input []byte) error {
 						out[prop] = reinterpretField(castBuffer, fieldType)
 					} else {
 						arr := out[prop].([]uint32)
-						for j := 0; j < len(arr); j++ {
-							castBuffer.Seek(0)
-							castBuffer.WriteBigUInt64LE(uint64(arr[j]))
-							castBuffer.Seek(0)
-							arr[j] = uint32(toUint64(reinterpretField(castBuffer, fieldType)))
+						if fieldType == FieldTypeFloat {
+							out[prop] = reinterpretCompressedFloatArray(castBuffer, arr)
+						} else {
+							for j := 0; j < len(arr); j++ {
+								castBuffer.Seek(0)
+								castBuffer.WriteBigUInt64LE(uint64(arr[j]))
+								castBuffer.Seek(0)
+								arr[j] = uint32(toUint64(reinterpretField(castBuffer, fieldType)))
+							}
 						}
 					}
 				}
@@ -818,6 +826,17 @@ func reinterpretField(buf *buffer.Buffer, fieldType FieldType) any {
 }
 
 type intReader func(*buffer.Buffer) int64
+
+func reinterpretCompressedFloatArray(castBuffer *buffer.Buffer, values []uint32) []float32 {
+	out := make([]float32, len(values))
+	for i, value := range values {
+		castBuffer.Seek(0)
+		castBuffer.WriteBigUInt64LE(uint64(value))
+		castBuffer.Seek(0)
+		out[i] = reinterpretField(castBuffer, FieldTypeFloat).(float32)
+	}
+	return out
+}
 
 func readFieldInts(data *buffer.Buffer, count int, read intReader) any {
 	if count > 0 {

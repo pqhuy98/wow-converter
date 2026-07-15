@@ -72,7 +72,7 @@ func (ADTExporterService) Export(ctx context.Context, params casc.ADTExportParam
 	} else if options.MapsIncludeGameObjects {
 		startX, startY, endX, endY := exportadt.TileBounds(params.TileX, params.TileY)
 		collected, err := exportadt.CollectGameObjects(ctx, uint32(params.MapID), func(obj db.DB2Row) bool {
-			pos := gameObjectPos(obj)
+			pos := exportadt.GameObjectPosition(obj)
 			if len(pos) < 2 {
 				return false
 			}
@@ -157,7 +157,7 @@ func (ADTExporterService) ExportForConversion(ctx context.Context, params casc.A
 	if options.MapsIncludeGameObjects {
 		startX, startY, endX, endY := exportadt.TileBounds(params.TileX, params.TileY)
 		collected, err := exportadt.CollectGameObjects(ctx, uint32(params.MapID), func(obj db.DB2Row) bool {
-			pos := gameObjectPos(obj)
+			pos := exportadt.GameObjectPosition(obj)
 			if len(pos) < 2 {
 				return false
 			}
@@ -194,28 +194,5 @@ func gameObjectID(row db.DB2Row) uint32 {
 		return v
 	default:
 		return 0
-	}
-}
-
-func gameObjectPos(row db.DB2Row) []float64 {
-	switch v := row["Pos"].(type) {
-	case []float64:
-		return v
-	case []float32:
-		out := make([]float64, len(v))
-		for i, n := range v {
-			out[i] = float64(n)
-		}
-		return out
-	case []any:
-		out := make([]float64, 0, len(v))
-		for _, item := range v {
-			if n, ok := item.(float64); ok {
-				out = append(out, n)
-			}
-		}
-		return out
-	default:
-		return nil
 	}
 }

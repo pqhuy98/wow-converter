@@ -48,10 +48,37 @@ Do **not** treat missing TS parity as a bug unless a TS dev workflow explicitly 
 
 ### Tooling & observability
 
-- `dev:goapp` / `WOW_CONVERTER_BUNDLED` single-process dev
+- `dev` / `WOW_CONVERTER_BUNDLED` single-process Go dev
 - `GET /api/debugMemory` (converter, dev-only)
 - Dev-only gating for debug memory routes (`config.IsDev()`)
 - `maps.go` index rebuild concurrency fix (Go-specific race)
+
+## Other intentional one-sided features
+
+### TS-only remote asset caching
+
+The TS converter supports a wow-data-server on another host. `WowDataClient`
+automatically mirrors exported artifacts into the local `.cache` directory and
+proxies raw CASC files needed by converter-side readers.
+
+Go does not mirror remote assets. Its supported production path is bundled or
+local, where conversion reads CASC in-process or uses the in-memory ADT path.
+Do not add remote download caching to Go unless remote Go conversion becomes a
+supported deployment mode.
+
+### Go-only bulk map CLI
+
+`golang/cmd/convert/main.go` is the standalone bulk map conversion entry point.
+It remains Go-only because scripted, production, and memory-sensitive bulk
+exports use the Go pipeline. If TS tooling needs bulk conversion later, it
+should call the converter API rather than duplicate the conversion pipeline.
+
+### TS wrapper-library role
+
+Go is the default server and owns heavy export/conversion operations. TS
+converter libraries remain supported for ergonomic automation: consumers can
+call the Go API, then perform MDL transformations with TS syntax. This is not a
+reason to retain duplicate TS server-side conversion pipelines indefinitely.
 
 ## TS alignment (partial, intentional)
 
@@ -65,8 +92,9 @@ TS **still** runs the full disk export loop (`exportADT` + `finalizeExportProgre
 
 ## Consequences
 
-- **Go** (`dev:goapp`, desktop): preferred for large maps, memory-sensitive exports, bundled CASC.
-- **TS** (`npm run dev`): fine for day-to-day UI/converter dev; uses disk ADT export via wow-data-server on `:17753`.
+- **Go** (`npm run dev`, desktop, VPS): default for maps, model exports, and bundled CASC.
+- **TS** (`npm run dev:ts`): compatibility runtime for TS wrapper development; its map path still uses disk ADT export via wow-data-server on `:17753`.
+- A Go job timeout fails only that job. It must not reset the shared in-process wow-data-server or discard bundled CASC state.
 - Before porting a Go feature to TS, ask: does TS dev actually need it, or is Go-only acceptable per this ADR?
 - New decisions that affect cross-language expectations belong in `docs/decisions/` as additional ADR files.
 
@@ -74,4 +102,6 @@ TS **still** runs the full disk export loop (`exportADT` + `finalizeExportProgre
 
 - Go entry: `golang/internal/server/api/maps_generate.go`, `golang/internal/converter/mapexporter/tile_loader.go`
 - TS entry: `src/server/controllers/maps-generate.ts`
-- Bundled mode: `golang/cmd/wow-converter/main.go`, `package.json` `dev:goapp`
+- TS remote caching: `src/lib/wow-data-client/wow-data-client.ts`, `src/lib/wow/archive/client/raw-client.ts`
+- Go bulk CLI: `golang/cmd/convert/main.go`
+- Bundled mode: `golang/cmd/wow-converter/main.go`, `package.json` `dev`

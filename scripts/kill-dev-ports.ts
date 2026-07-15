@@ -1,6 +1,6 @@
 /**
  * Kill stale dev servers listening on the standard local ports.
- * Used before `dev` / `dev:go` / `dev:goapp` so restarts do not fail with EADDRINUSE.
+ * Used before `dev` / `dev:split` / `dev:ts` so restarts do not fail with EADDRINUSE.
  */
 import { spawnSync } from 'child_process';
 

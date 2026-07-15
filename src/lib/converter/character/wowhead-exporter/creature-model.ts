@@ -6,6 +6,7 @@ import {
   getFileDataIDByDisplayID,
   initializeCreatureData,
 } from '@/lib/wow/db/caches/db-creatures';
+import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 import { CharacterData } from '@/lib/wowhead-client/objects';
 
 /** Wowhead uses Model=0 as a sentinel for chr-model NPCs; only positive IDs are creature M2s. */
@@ -14,6 +15,27 @@ export function hasResolvedModel(model?: number): model is number {
 }
 
 export async function resolveNpcMetaFromDB(displayId: number): Promise<CharacterData | null> {
+  try {
+    const remote = await wowDataClient.resolveNpcDisplayMeta(displayId);
+    if (remote.found && remote.model != null) {
+      return {
+        Model: remote.model,
+        Textures: remote.textures ?? {},
+        Creature: remote.geosets?.length
+          ? {
+            CreatureCustomizations: [],
+            CreatureGeosetData: remote.geosets.map(({ geosetIndex, geosetValue }) => ({
+              GeosetIndex: geosetIndex,
+              GeosetValue: geosetValue,
+            })),
+          }
+          : undefined,
+      };
+    }
+  } catch {
+    // Match Go: fall back to converter-side DB2 caches when the data client fails.
+  }
+
   ensureConverterCasc();
   await initializeCreatureData();
   const fileDataId = getFileDataIDByDisplayID(displayId);

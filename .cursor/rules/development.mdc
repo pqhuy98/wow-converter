@@ -16,7 +16,8 @@ alwaysApply: false
   - Organize complex methods into clear phases with comments (e.g., "1) Discover X", "2) Process Y", "3) Compute Z").
   - Prefer local helper functions over repeated inline logic; extract when logic appears 2+ times.
   - Only store shared state as class properties; move method-local data into local variables.
-- Run the app with `npm run dev` as background daemon emitting logs to `log.txt`. Tail the log file, when the message `Serving UI web interface at http://127.0.0.1:3001/` appears means server started successfully. Always kill the old server on port 3000, 3001, and 17753 before starting a new one. Server `npm run dev` has hot-reload (includes wow-data-server), so no need to kill every code change.
+- Run the default bundled Go app with `npm run dev` as a background daemon emitting logs to `log.txt`. Use `npm run dev:ts` only when explicitly testing the legacy TS server. When `Serving UI web interface at http://127.0.0.1:3001/` appears, the server started successfully. Always kill old servers on ports 3000, 3001, and 17753 before starting. The Go converter and web UI hot-reload; the bundled in-process wow-data-server restarts with the converter.
+- Parity verification: `bun run parity:map` starts isolated TS/Go data servers and converters, runs the full Valiance Keep comparison, and writes outputs to `.parity-artifacts/map-output/{ts,go}`. Follow any failure with `go -C golang run ./test/cmd/compare-map ../.parity-artifacts/map-output/ts ../.parity-artifacts/map-output/go`. For MDL parity, start `bun scripts/start-parity-servers.ts` in a separate terminal, then run `bun run parity:mdl` (add flags after `--`, such as `-- --case-idx=0 --debug`).
 - Commit hygiene: squash commits before merging to `main`.
   ```bash
   git fetch origin

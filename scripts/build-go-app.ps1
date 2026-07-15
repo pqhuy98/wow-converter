@@ -1,5 +1,5 @@
 # Build production Go wow-converter bundle to dist-go/.
-# Run from repo root: npm run build:go-app
+# Run from repo root: npm run build
 #
 # Includes: Go binary, webui, native bin/, resources/ (incl. map template).
 # Excludes: Node deps, blp-preview bindings, MSVC link artifacts, debug DLLs.
@@ -31,7 +31,7 @@ function Copy-IfExists([string]$Source, [string]$Destination) {
 
 if (-not $SkipWebUI) {
     if (-not (Test-Path "webui/out/index.html")) {
-        throw "webui/out is missing. Run 'npm run build:webui' first, or run 'npm run build:go-app' from package.json."
+        throw "webui/out is missing. Run 'npm run build:webui' first, or run 'npm run build' from package.json."
     }
 }
 

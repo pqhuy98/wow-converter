@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import fs from 'fs';
 
+import { isBundledEnv } from '@/lib/config/env';
 import { maxConcurrency } from '@/lib/constants';
 import { readExportAsset } from '@/lib/export-asset-store';
 

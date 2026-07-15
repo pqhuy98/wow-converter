@@ -42,7 +42,7 @@ Bundled mode sets `WOW_DATA_TRANSPORT=socket` and listens on `.cache/wow-data-se
 **Production build** (from repo root):
 
 ```bash
-npm run build:go-app
+npm run build
 ```
 
 Output directory: `dist-go/` (Go binary, `webui/out`, `bin/`, `resources/` including `template-empty.w3x`).
@@ -58,25 +58,20 @@ Bundled mode is auto-detected when `webui/out` sits beside the exe (same as the 
 
 Run: `.\dist-go\wow-converter.exe`
 
-### Suggested root `package.json` scripts
+### Root development scripts
 
-Add alongside existing Bun scripts:
+`npm run dev` is the default single-process Go development mode
+(`WOW_CONVERTER_BUNDLED=1` + Air), with wow-data-server in-process and no
+separate `:17753` listener. The Next.js UI remains on `:3000`; converter API
+and UI proxy are on `:3001`.
 
-```json
-{
-  "scripts": {
-    "dev:go-data-server": "cd golang && go run ./cmd/wow-data-server",
-    "dev:go-converter": "cd golang && cross-env NODE_ENV=development go tool air",
-    "dev:go": "npm-run-all kill:dev-ports --parallel dev:go-data-server dev:go-converter dev:webui",
-    "dev:goapp-converter": "cd golang && cross-env NODE_ENV=development WOW_CONVERTER_BUNDLED=1 go tool air",
-    "dev:goapp": "npm-run-all kill:dev-ports --parallel dev:goapp-converter dev:webui"
-  }
-}
-```
+Use `npm run dev:ts` only for legacy TS wrapper compatibility work. To debug
+the Go data server independently, run `go run ./cmd/wow-data-server` from
+`golang/` alongside the converter.
 
-`dev:go` mirrors `dev` but swaps Bun server/data-server for Go binaries. Keep `dev:webui` for Next.js hot reload in development. Only `wow-converter` hot-reloads (via [Air](https://github.com/air-verse/air), pinned in `go.mod` as `go tool air`); `wow-data-server` runs once with plain `go run`.
-
-`dev:goapp` runs a single bundled process (`WOW_CONVERTER_BUNDLED=1` + Air) with wow-data-server in-process — no separate `:17753` server. Same UI on `:3000`, converter API on `:3001`.
+An export job timeout fails that job only. It must not restart or reset the
+in-process wow-data-server because doing so would discard the bundled CASC
+runtime used by other jobs.
 
 ## wow-data-server REST routes
 
@@ -193,11 +188,14 @@ go test -tags integration ./test/integration/...
 |----------|---------|-------------|
 | `WOW_DATA_SERVER_URL` | `http://127.0.0.1:17753` | Server under test |
 | `WOW_TS_REFERENCE_URL` | (unset) | Optional TS server for live Go-vs-TS parity |
+| `WOW_TS_CONVERTER_URL` | (unset) | TS converter used by the full Valiance Keep map parity test |
+| `WOW_GO_CONVERTER_URL` | (unset) | Go converter used by the full Valiance Keep map parity test |
 
 Integration tests **skip** (not fail) when the server is unreachable or CASC is not loaded.
 
 - `test/integration/casc_parity_test.go` — `GET /rest/cascFile` magic checks (M2 MD20/MD21, BLP1/BLP2, DB2 WDC) plus optional golden/TS byte parity
 - `test/integration/adt_parity_test.go` — `POST /rest/exportADT` for northrend tile `21_27` vs TS reference or golden manifest
+- `test/integration/map_generate_parity_test.go` — full four-tile Valiance Keep output from `examples/convert.ts`, TS disk pipeline vs Go in-memory pipeline; requires both converter URL variables and skips otherwise
 
 ### Benchmarks
 

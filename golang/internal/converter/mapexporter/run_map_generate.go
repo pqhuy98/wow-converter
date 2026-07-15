@@ -11,8 +11,8 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/math"
-	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
+	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
 
 // MapGenerateConversionOptions configures a server-side WC3 conversion run.
@@ -47,6 +47,7 @@ type MapGenerateConversionResult struct {
 // BuildMapExportConfig constructs MapExportConfig from API parameters.
 func BuildMapExportConfig(params struct {
 	MapID           int
+	CascMapDir      string
 	WowExportFolder string
 	Min             math.Vector2
 	Max             math.Vector2
@@ -59,6 +60,7 @@ func BuildMapExportConfig(params struct {
 }) MapExportConfig {
 	cfg := DefaultMapExportConfig()
 	cfg.MapID = params.MapID
+	cfg.CascMapDir = params.CascMapDir
 	cfg.WowExportFolder = params.WowExportFolder
 	cfg.Min = params.Min
 	cfg.Max = params.Max

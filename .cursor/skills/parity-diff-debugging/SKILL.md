@@ -24,7 +24,7 @@ Do not guess from the final `.mdl` or `.mdx` diff alone. Work backward from the 
    Use the full loop only after the focused case is fixed:
 
    ```powershell
-   bun parity:retail-mdl-loop
+   bun run parity:mdl
    ```
 
 2. Inspect the actual artifact diff first.
@@ -155,7 +155,7 @@ After the fix, run:
 ```powershell
 go test ./internal/formats/mdl ./internal/converter/character
 bun scripts/retail-mdl-parity-loop.ts --case-idx=<N> --diff-lines=40
-bun parity:retail-mdl-loop
+bun run parity:mdl
 ```
 
 ## Rules Of Thumb

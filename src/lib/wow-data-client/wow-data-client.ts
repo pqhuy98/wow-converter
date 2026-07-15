@@ -305,7 +305,9 @@ export class WowDataClient {
   public async loadCASCLocal(installDirectory: string): Promise<CASCBuild[]> {
     const json = await this.postJSON('/rest/loadCascLocal', { installDirectory });
     if (json.id === 'CASC_INSTALL_BUILDS') return json.builds;
-    if (json.id === 'ERR_INVALID_INSTALL') throw new Error('Invalid WoW installation directory');
+    if (json.id === 'ERR_INVALID_INSTALL') {
+      throw new Error(typeof json.message === 'string' ? json.message : 'Invalid WoW installation directory');
+    }
     if (json.id === 'ERR_CASC_ACTIVE') throw new Error('CASC is already active');
     throw new Error('Failed to load CASC (local)');
   }
@@ -313,7 +315,9 @@ export class WowDataClient {
   public async loadCASCRemote(regionTag: string): Promise<CASCBuild[]> {
     const json = await this.postJSON('/rest/loadCascRemote', { regionTag });
     if (json.id === 'CASC_INSTALL_BUILDS') return json.builds;
-    if (json.id === 'ERR_INVALID_INSTALL') throw new Error('Invalid CDN region');
+    if (json.id === 'ERR_INVALID_INSTALL') {
+      throw new Error(typeof json.message === 'string' ? json.message : 'Invalid CDN region');
+    }
     if (json.id === 'ERR_CASC_ACTIVE') throw new Error('CASC is already active');
     throw new Error('Failed to load CASC (remote)');
   }

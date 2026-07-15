@@ -1,7 +1,7 @@
 /**
  * Single-binary entry point: starts wow-data-server (unix socket) then the converter UI/API.
  *
- * Dev uses separate processes (`bun run dev`); production build compiles this file only.
+ * Legacy TS dev uses separate processes (`bun run dev:ts`); the TS production build compiles this file only.
  */
 import { configureBundledTransport } from '@/lib/wow-data-server/transport';
 

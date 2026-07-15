@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
-	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
 const sharedHostingLocked = "WoW installation cannot be changed in shared hosting mode."
@@ -53,20 +53,19 @@ func (s *Service) DiscoverRemoteBuilds(ctx context.Context, regionTag string) ([
 }
 
 func discoverFailureError(local bool, err error) error {
-	msg := err.Error()
-	if msg == "CASC is already active" {
-		return errors.New("WoW data is already loaded. Change the installation source from setup first.")
+	var restErr *client.RESTError
+	if errors.As(err, &restErr) {
+		switch restErr.ID {
+		case "ERR_CASC_ACTIVE":
+			return errors.New("WoW data is already loaded. Change the installation source from setup first.")
+		case "ERR_INVALID_INSTALL":
+			return errors.New(restErr.Error())
+		}
 	}
 	if local {
-		if msg == "invalid WoW installation directory or CDN region" {
-			return errors.New("Invalid WoW installation directory")
-		}
-		return fmt.Errorf("Could not read WoW installation: %s", msg)
+		return fmt.Errorf("Could not read WoW installation: %s", err)
 	}
-	if msg == "invalid WoW installation directory or CDN region" {
-		return errors.New("Invalid CDN region")
-	}
-	return fmt.Errorf("Could not read CDN region: %s", msg)
+	return fmt.Errorf("Could not read CDN region: %s", err)
 }
 
 func toBuildSummaries(builds []casc.Build) []BuildSummary {

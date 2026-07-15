@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,22 +18,23 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/server/util"
-	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
+	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
+	wowserver "github.com/pqhuy98/wow-converter/internal/wow/server"
 )
 
 type generateWc3Body struct {
-	Tiles        []exportAdtTile `json:"tiles"`
-	Quality      int             `json:"quality"`
-	MapSaveName  string          `json:"mapSaveName"`
-	ClampLower       float64 `json:"clampLower"`
-	ClampUpper       float64 `json:"clampUpper"`
-	AutoClampPercent bool    `json:"autoClampPercent"`
-	MapAngleDeg      float64 `json:"mapAngleDeg"`
-	UnitScale    float64         `json:"unitScale"`
+	Tiles                    []exportAdtTile `json:"tiles"`
+	Quality                  int             `json:"quality"`
+	MapSaveName              string          `json:"mapSaveName"`
+	ClampLower               float64         `json:"clampLower"`
+	ClampUpper               float64         `json:"clampUpper"`
+	AutoClampPercent         bool            `json:"autoClampPercent"`
+	MapAngleDeg              float64         `json:"mapAngleDeg"`
+	UnitScale                float64         `json:"unitScale"`
 	IncludeBuildingInteriors *bool           `json:"includeBuildingInteriors"`
 	FreshExport              bool            `json:"freshExport"`
-	Creatures    struct {
+	Creatures                struct {
 		Enable        bool `json:"enable"`
 		AllAreDoodads bool `json:"allAreDoodads"`
 	} `json:"creatures"`
@@ -50,17 +54,17 @@ type tileBounds struct {
 }
 
 type mapGenerateJobResult struct {
-	ID          string                 `json:"id"`
-	Map         string                 `json:"map"`
-	MapID       int                    `json:"mapID"`
-	MapSaveName string                 `json:"mapSaveName"`
-	OutputDir   string                 `json:"outputDir"`
-	Quality     int                    `json:"quality"`
-	Total       int                    `json:"total"`
-	StepsPerTile int                   `json:"stepsPerTile"`
-	TotalSteps  int                    `json:"totalSteps"`
-	Succeeded   []mapExportTileSuccess `json:"succeeded"`
-	Failed      []mapExportTileFailure `json:"failed"`
+	ID           string                 `json:"id"`
+	Map          string                 `json:"map"`
+	MapID        int                    `json:"mapID"`
+	MapSaveName  string                 `json:"mapSaveName"`
+	OutputDir    string                 `json:"outputDir"`
+	Quality      int                    `json:"quality"`
+	Total        int                    `json:"total"`
+	StepsPerTile int                    `json:"stepsPerTile"`
+	TotalSteps   int                    `json:"totalSteps"`
+	Succeeded    []mapExportTileSuccess `json:"succeeded"`
+	Failed       []mapExportTileFailure `json:"failed"`
 }
 
 type mapGenerateProgressView struct {
@@ -109,18 +113,17 @@ func registerMapGenerateRoutes(r Router, d *Deps) {
 			sendError(w, http.StatusNotFound, "Unknown map")
 			return
 		}
-		var body generateWc3Body
-		if err := readJSONBody(req, &body); err != nil || len(body.Tiles) == 0 || body.MapSaveName == "" {
+		rawBody, err := readJSONMap(req)
+		if err != nil {
 			sendError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
-		body.MapSaveName = mapexporter.NormalizeMapSaveName(body.MapSaveName)
-		if body.MapSaveName == "" {
-			sendError(w, http.StatusBadRequest, "Invalid map save name")
-			return
-		}
-		if body.ClampUpper < body.ClampLower {
-			sendError(w, http.StatusBadRequest, "clampUpper must be >= clampLower")
+		body, issues := parseGenerateWc3Body(rawBody)
+		if len(issues) > 0 {
+			sendJSON(w, http.StatusBadRequest, map[string]any{
+				"error":  "Invalid request body",
+				"issues": issues,
+			})
 			return
 		}
 
@@ -184,8 +187,20 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 
 	initMapGenerateProgress(progressKey, adtTotalSteps, initialConvertSteps, tileCount, stepsPerTile)
 
+	if d.Client != nil {
+		if err := d.Client.WaitUntilReady(ctx); err != nil {
+			clearMapGenerateProgress(progressKey)
+			return mapGenerateJobResult{}, fmt.Errorf("WoW data not loaded: %w", err)
+		}
+	}
+
+	wowExportFolder := req.MapDir
+	if wowserver.GetConfig().RemovePathSpaces {
+		wowExportFolder = strings.ReplaceAll(wowExportFolder, " ", "")
+	}
 	mapExportCfg := mapexporter.BuildMapExportConfig(struct {
 		MapID           int
+		CascMapDir      string
 		WowExportFolder string
 		Min             math.Vector2
 		Max             math.Vector2
@@ -197,7 +212,8 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		AllAreDoodads   bool
 	}{
 		MapID:           req.MapID,
-		WowExportFolder: req.MapDir,
+		CascMapDir:      req.MapDir,
+		WowExportFolder: wowExportFolder,
 		Min:             math.Vector2{float64(req.TileBounds.Min[0]), float64(req.TileBounds.Min[1])},
 		Max:             math.Vector2{float64(req.TileBounds.Max[0]), float64(req.TileBounds.Max[1])},
 		MapAngleDeg:     req.Body.MapAngleDeg,
@@ -213,25 +229,53 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 	for i, t := range req.OrderedTiles {
 		tileCoords[i] = mapexporter.TileCoord{X: t.X, Y: t.Y}
 	}
-	if err := mapexporter.LoadADTTilesForConversion(ctx, d.Client, d.ExportAssetDir(), mapExportCfg, req.Body.Quality, tileCoords, includeInteriors, registry, func(completed, total int, tile mapexporter.TileCoord) {
+	loadedTiles, tileFailures, err := mapexporter.LoadADTTilesForConversionSummary(ctx, d.Client, d.ExportAssetDir(), mapExportCfg, req.Body.Quality, tileCoords, includeInteriors, registry, func(completed, total int, tile mapexporter.TileCoord) {
 		syncAdtProgress(progressKey, minInt(completed*stepsPerTile, adtTotalSteps), completed-1, tileCount, stepsPerTile,
 			&tileCoord{X: tile.X, Y: tile.Y}, "Loading tiles")
-	}); err != nil {
+	})
+	succeeded := make([]mapExportTileSuccess, 0, len(loadedTiles))
+	for _, tile := range loadedTiles {
+		succeeded = append(succeeded, mapExportTileSuccess{
+			TileX: tile.X, TileY: tile.Y,
+			Result: casc.ADTExportResult{
+				ExportType: "ADT_DIRECT", MapID: req.MapID, MapDir: req.MapDir,
+				TileX: tile.X, TileY: tile.Y,
+			},
+		})
+	}
+	failed := make([]mapExportTileFailure, 0, len(tileFailures))
+	for _, failure := range tileFailures {
+		failed = append(failed, mapExportTileFailure{
+			TileX: failure.Tile.X, TileY: failure.Tile.Y, Error: failure.Err.Error(),
+		})
+	}
+	if err != nil {
+		registry.Release()
+		exportadt.ReleaseAdtExportBatchMemory()
+		runtime.GC()
+		debug.FreeOSMemory()
 		clearMapGenerateProgress(progressKey)
+		if len(failed) > 0 {
+			summary := mapGenerateJobResult{
+				ID:           "WC3_MAP_GENERATE_SUMMARY",
+				Map:          req.MapDir,
+				MapID:        req.MapID,
+				MapSaveName:  req.Body.MapSaveName,
+				Quality:      req.Body.Quality,
+				Total:        tileCount,
+				StepsPerTile: stepsPerTile,
+				TotalSteps:   adtTotalSteps,
+				Succeeded:    succeeded,
+				Failed:       failed,
+			}
+			job.PreserveResultOnError()
+			return summary, errors.New(formatMapTileFailures(failed))
+		}
 		return mapGenerateJobResult{}, err
 	}
 	exportadt.ReleaseAdtExportBatchMemory()
 	runtime.GC()
 	debug.FreeOSMemory()
-
-	succeeded := make([]mapExportTileSuccess, 0, len(req.OrderedTiles))
-	for _, t := range req.OrderedTiles {
-		succeeded = append(succeeded, mapExportTileSuccess{
-			TileX: t.X, TileY: t.Y,
-			Result: casc.ADTExportResult{ExportType: "ADT_DIRECT", MapID: req.MapID, MapDir: req.MapDir, TileX: t.X, TileY: t.Y},
-		})
-	}
-	failed := make([]mapExportTileFailure, 0)
 
 	setMapGeneratePhase(progressKey, phaseConvert, "Converting to WC3 map")
 	syncAdtProgress(progressKey, adtTotalSteps, tileCount-1, tileCount, stepsPerTile, nil, "Tiles loaded")
@@ -246,10 +290,10 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		FreshExport:              req.Body.FreshExport,
 		IncludeBuildingInteriors: includeInteriors,
 		AutoClampPercent:         req.Body.AutoClampPercent,
-		UnitScale:        req.Body.UnitScale,
-		WowClient:        d.Client,
-		TileRegistry:     registry,
-		TileQuality:      req.Body.Quality,
+		UnitScale:                req.Body.UnitScale,
+		WowClient:                d.Client,
+		TileRegistry:             registry,
+		TileQuality:              req.Body.Quality,
 		OnConvertStepsKnown: func(steps int) {
 			convertSteps = steps
 			updateMapGenerateTotalSteps(progressKey, convertSteps, adtTotalSteps)
@@ -283,6 +327,25 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		Succeeded:    succeeded,
 		Failed:       failed,
 	}, nil
+}
+
+func formatMapTileFailures(failed []mapExportTileFailure) string {
+	details := make([]string, 0, minInt(len(failed), 5))
+	for i, failure := range failed {
+		if i >= 5 {
+			break
+		}
+		details = append(details, fmt.Sprintf("%d,%d: %s", failure.TileX, failure.TileY, failure.Error))
+	}
+	suffix := ""
+	if len(failed) > 5 {
+		suffix = fmt.Sprintf("; %d more", len(failed)-5)
+	}
+	label := "tile export"
+	if len(failed) != 1 {
+		label += "s"
+	}
+	return fmt.Sprintf("%d %s failed (%s%s)", len(failed), label, strings.Join(details, "; "), suffix)
 }
 
 func boolPtr(v bool) *bool { return &v }

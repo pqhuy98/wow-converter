@@ -108,6 +108,35 @@ export interface MapGenerateJobResult {
   failed: MapExportTileFailure[];
 }
 
+export function failMapGenerateOnTileErrors(
+  job: { result?: MapGenerateJobResult },
+  request: Pick<MapGenerateJobRequest, 'mapDir' | 'mapID' | 'body' | 'orderedTiles'>,
+  succeeded: readonly MapExportTileSuccess[],
+  failed: readonly MapExportTileFailure[],
+  stepsPerTile: number,
+): void {
+  if (failed.length === 0) return;
+  job.result = {
+    id: 'WC3_MAP_GENERATE_SUMMARY',
+    map: request.mapDir,
+    mapID: request.mapID,
+    mapSaveName: request.body.mapSaveName,
+    outputDir: '',
+    quality: request.body.quality,
+    total: request.orderedTiles.length,
+    stepsPerTile,
+    totalSteps: request.orderedTiles.length * stepsPerTile,
+    succeeded: [...succeeded],
+    failed: [...failed],
+  };
+  const details = failed
+    .slice(0, 5)
+    .map(({ tileX, tileY, error }) => `${tileX},${tileY}: ${error}`)
+    .join('; ');
+  const omitted = failed.length > 5 ? `; ${failed.length - 5} more` : '';
+  throw new Error(`${failed.length} tile export${failed.length === 1 ? '' : 's'} failed (${details}${omitted})`);
+}
+
 export interface MapGenerateProgress {
   completedSteps: number;
   totalSteps: number;
@@ -244,9 +273,9 @@ const mapGenerateQueue = new JobQueue<MapGenerateJobRequest, MapGenerateJobResul
 
     await wowDataClient.finalizeExportProgress(progressKey);
 
-    if (failed.length === orderedTiles.length) {
+    if (failed.length > 0) {
       clearMapGenerateProgress(progressKey);
-      throw new Error(failed[0]?.error ?? 'All tiles failed to export');
+      failMapGenerateOnTileErrors(job, job.request, succeeded, failed, stepsPerTile);
     }
 
     setMapGeneratePhase(progressKey, 'convert', 'Converting to WC3 map');

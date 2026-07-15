@@ -96,7 +96,7 @@ async function waitForExport(jobId: string): Promise<void> {
 
 async function main(): Promise<void> {
   if (!existsSync(path.join(distDir, 'wow-converter.exe'))) {
-    throw new Error(`Missing ${path.join(distDir, 'wow-converter.exe')} — run bun run build first`);
+    throw new Error(`Missing ${path.join(distDir, 'wow-converter.exe')} — run bun run build:ts first`);
   }
 
   if (!useInPlace) {

@@ -121,7 +121,7 @@ func (c *HTTPClient) LoadCASCLocal(ctx context.Context, installDirectory string)
 	if err != nil {
 		return nil, err
 	}
-	return parseBuildsResponse(jsonBody)
+	return parseBuildsResponse(jsonBody, true)
 }
 
 func (c *HTTPClient) LoadCASCRemote(ctx context.Context, regionTag string) ([]casc.Build, error) {
@@ -129,7 +129,7 @@ func (c *HTTPClient) LoadCASCRemote(ctx context.Context, regionTag string) ([]ca
 	if err != nil {
 		return nil, err
 	}
-	return parseBuildsResponse(jsonBody)
+	return parseBuildsResponse(jsonBody, false)
 }
 
 func (c *HTTPClient) LoadCASCBuild(ctx context.Context, buildIndex int) (CASCInfo, error) {
@@ -426,17 +426,7 @@ func (c *HTTPClient) GetCharMeta(ctx context.Context, params casc.CharacterMetaP
 	if status == http.StatusOK && jsonBody["id"] == "CHAR_META" {
 		return decodeObject[casc.CharacterMetaResponse](jsonBody)
 	}
-	if status == http.StatusConflict || jsonBody["id"] == "ERR_NO_CASC" {
-		return casc.CharacterMetaResponse{}, errors.New("no CASC loaded")
-	}
-	if status == http.StatusBadRequest {
-		return casc.CharacterMetaResponse{}, errors.New("invalid parameters for character metadata")
-	}
-	if status >= 500 {
-		msg, _ := jsonBody["message"].(string)
-		return casc.CharacterMetaResponse{}, fmt.Errorf("server error during character metadata lookup: %s", msg)
-	}
-	return casc.CharacterMetaResponse{}, errors.New("unexpected response for character metadata")
+	return casc.CharacterMetaResponse{}, charMetaRESTError(status, jsonBody)
 }
 
 func (c *HTTPClient) ExportADT(ctx context.Context, params casc.ADTExportParams) (casc.ADTExportResult, error) {
@@ -477,7 +467,7 @@ func (c *HTTPClient) ExportADTForConversion(ctx context.Context, params casc.ADT
 	}
 	var envelope struct {
 		ID       string                      `json:"id"`
-		Snapshot *exportadt.ConversionOutput   `json:"snapshot"`
+		Snapshot *exportadt.ConversionOutput `json:"snapshot"`
 		Message  string                      `json:"message"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
@@ -610,16 +600,12 @@ func decodeJSONMap(r io.Reader, status int) (map[string]any, int, error) {
 	return out, status, nil
 }
 
-func parseBuildsResponse(jsonBody map[string]any) ([]casc.Build, error) {
+func parseBuildsResponse(jsonBody map[string]any, local bool) ([]casc.Build, error) {
 	switch jsonBody["id"] {
 	case "CASC_INSTALL_BUILDS":
 		return decodeSlice[casc.Build](jsonBody["builds"])
-	case "ERR_INVALID_INSTALL":
-		return nil, errors.New("invalid WoW installation directory or CDN region")
-	case "ERR_CASC_ACTIVE":
-		return nil, errors.New("CASC is already active")
 	default:
-		return nil, errors.New("failed to load CASC")
+		return nil, buildsRESTError(jsonBody, local)
 	}
 }
 

@@ -22,8 +22,8 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/server/exportlog"
 	"github.com/pqhuy98/wow-converter/internal/server/pathsafe"
 	"github.com/pqhuy98/wow-converter/internal/server/util"
-	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/stringsort"
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
 
@@ -82,7 +82,7 @@ func registerExportCharacter(r Router, d *Deps) {
 	}, func(job *util.Job[exportCharacterRequest, exportCharacterResponse]) (exportCharacterResponse, error) {
 		exportlog.Begin()
 		defer exportlog.End()
-		return runCharacterExport(job.Request, d)
+		return runCharacterExport(job.Request, job.ID, d)
 	})
 	loadRecentExports(queue, d.Config.RecentExports)
 
@@ -95,8 +95,8 @@ func registerExportCharacter(r Router, d *Deps) {
 			sendError(w, http.StatusInternalServerError, "wow-data-server is not ready")
 			return
 		}
-		var body exportCharacterRequest
-		if err := readJSONBody(req, &body); err != nil {
+		rawBody, err := readJSONMap(req)
+		if err != nil {
 			if errors.Is(err, errRequestBodyTooLarge) {
 				sendError(w, http.StatusRequestEntityTooLarge, "Request body too large")
 				return
@@ -104,20 +104,12 @@ func registerExportCharacter(r Router, d *Deps) {
 			sendError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
-		if body.OutputFileName == "" {
-			sendError(w, http.StatusBadRequest, "Invalid request body")
-			return
-		}
-		if err := pathsafe.ValidateRelativeRef(body.OutputFileName); err != nil {
-			sendError(w, http.StatusBadRequest, "Invalid output file name")
-			return
-		}
-		if err := validateCharacterRefs(body.Character); err != nil {
-			sendError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if body.Format != "mdx" && body.Format != "mdl" {
-			sendError(w, http.StatusBadRequest, `format must be "mdx" or "mdl"`)
+		body, issues := parseExportCharacterRequest(rawBody)
+		if len(issues) > 0 {
+			sendJSON(w, http.StatusBadRequest, map[string]any{
+				"error":  "Invalid request body",
+				"issues": issues,
+			})
 			return
 		}
 
@@ -278,34 +270,7 @@ func optimizationBool(v *bool, defaultVal bool) bool {
 	return *v
 }
 
-func validateCharacterRefs(char character.Character) error {
-	if err := validateRef(char.Base); err != nil {
-		return err
-	}
-	if char.Mount != nil {
-		if err := validateRef(char.Mount.Path); err != nil {
-			return errors.New("Invalid mount path")
-		}
-	}
-	for _, item := range char.AttachItems {
-		if err := validateRef(item.Path); err != nil {
-			return errors.New("Invalid attach item path")
-		}
-	}
-	return nil
-}
-
-func validateRef(ref character.Ref) error {
-	if ref.Type != "local" {
-		return nil
-	}
-	if err := pathsafe.ValidateRelativeRef(ref.Value); err != nil {
-		return errors.New("Invalid local model path")
-	}
-	return nil
-}
-
-func runCharacterExport(req exportCharacterRequest, d *Deps) (exportCharacterResponse, error) {
+func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (exportCharacterResponse, error) {
 	startedAt := time.Now()
 	requestJSON, _ := json.MarshalIndent(req, "", "  ")
 	log.Printf("Start exporting %s: %s", req.OutputFileName, ansi.Gray(string(requestJSON)))
@@ -375,12 +340,8 @@ func runCharacterExport(req exportCharacterRequest, d *Deps) (exportCharacterRes
 		return exportCharacterResponse{}, modelErr
 	}
 
-	resp := exportCharacterResponse{
-		ExportedModels:   []exportAssetInfo{},
-		ExportedTextures: []exportAssetInfo{},
-		ModelStats:       exporter.AggregateModelStats(req.FormatVersion),
-		VersionID:        req.OutputFileName,
-	}
+	resp := newExportCharacterResponse(jobID)
+	resp.ModelStats = exporter.AggregateModelStats(req.FormatVersion)
 	for _, modelFile := range modelPaths {
 		info, err := os.Stat(modelFile)
 		if err != nil {
@@ -416,4 +377,12 @@ func runCharacterExport(req exportCharacterRequest, d *Deps) (exportCharacterRes
 	}, "", "  ")
 	log.Printf("Job finished %s %s", ansi.Yellowf("%.2fs", time.Since(startedAt).Seconds()), ansi.Gray(string(summary)))
 	return resp, nil
+}
+
+func newExportCharacterResponse(jobID string) exportCharacterResponse {
+	return exportCharacterResponse{
+		ExportedModels:   []exportAssetInfo{},
+		ExportedTextures: []exportAssetInfo{},
+		VersionID:        jobID,
+	}
 }

@@ -38,6 +38,8 @@ func registerWebUI(root chiRouter, d *Deps, uiDir string) bool {
 
 func registerDevProxy(root chiRouter) {
 	target, _ := url.Parse("http://localhost:3000")
+	// ReverseProxy handles HTTP Upgrade natively, so Next.js HMR WebSockets
+	// pass through this handler without a separate upgrade hook.
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Director = func(req *http.Request) {
 		req.URL.Scheme = target.Scheme

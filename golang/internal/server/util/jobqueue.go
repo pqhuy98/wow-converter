@@ -20,16 +20,23 @@ const (
 
 // Job is a unit of work in the queue.
 type Job[T, V any] struct {
-	ID          string    `json:"id"`
-	Request     T         `json:"request"`
-	Status      JobStatus `json:"status"`
-	Result      *V        `json:"result,omitempty"`
-	Error       string    `json:"error,omitempty"`
-	SubmittedAt int64     `json:"submittedAt"`
-	StartedAt   *int64    `json:"startedAt,omitempty"`
-	FinishedAt  *int64    `json:"finishedAt,omitempty"`
-	AddToRecent bool      `json:"addToRecent,omitempty"`
-	NoTimeout   bool      `json:"noTimeout,omitempty"`
+	ID            string    `json:"id"`
+	Request       T         `json:"request"`
+	Status        JobStatus `json:"status"`
+	Result        *V        `json:"result,omitempty"`
+	Error         string    `json:"error,omitempty"`
+	SubmittedAt   int64     `json:"submittedAt"`
+	StartedAt     *int64    `json:"startedAt,omitempty"`
+	FinishedAt    *int64    `json:"finishedAt,omitempty"`
+	AddToRecent   bool      `json:"addToRecent,omitempty"`
+	NoTimeout     bool      `json:"noTimeout,omitempty"`
+	resultOnError bool
+}
+
+// PreserveResultOnError asks the queue to publish the handler's returned
+// result even when the handler also returns an error.
+func (j *Job[T, V]) PreserveResultOnError() {
+	j.resultOnError = true
 }
 
 // JobStatusView is the public status payload for API responses.
@@ -46,12 +53,14 @@ type JobStatusView[V any] struct {
 
 // QueueConfig configures queue behavior.
 type QueueConfig[T, V any] struct {
-	Concurrency          int
-	MaxPendingJobs       int
-	JobTTL               time.Duration
-	JobTimeout           time.Duration
-	OnCompleted          func(*Job[T, V])
-	OnTimeout            func()
+	Concurrency    int
+	MaxPendingJobs int
+	JobTTL         time.Duration
+	JobTimeout     time.Duration
+	OnCompleted    func(*Job[T, V])
+	// OnTimeout is for job-local cleanup only. It must not reset or restart the
+	// wow-data-server because bundled mode shares its in-process CASC runtime.
+	OnTimeout func()
 }
 
 // JobQueue processes jobs with bounded concurrency.
@@ -59,12 +68,12 @@ type JobQueue[T, V any] struct {
 	config QueueConfig[T, V]
 	handle func(*Job[T, V]) (V, error)
 
-	mu                 sync.Mutex
-	pending            []*Job[T, V]
-	queueHead          int
-	pendingIndex       map[string]int
-	jobs               map[string]*Job[T, V]
-	activeJobs         int
+	mu                  sync.Mutex
+	pending             []*Job[T, V]
+	queueHead           int
+	pendingIndex        map[string]int
+	jobs                map[string]*Job[T, V]
+	activeJobs          int
 	RecentCompletedJobs []*Job[T, V]
 }
 
@@ -232,6 +241,9 @@ func (q *JobQueue[T, V]) runJob(job *Job[T, V]) {
 	if err != nil {
 		job.Status = JobFailed
 		job.Error = err.Error()
+		if job.resultOnError {
+			job.Result = &result
+		}
 		log.Printf("%s", ansi.Redf("Job failed: %s: %v", job.ID, err))
 	} else {
 		job.Status = JobDone

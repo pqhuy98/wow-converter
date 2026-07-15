@@ -70,21 +70,21 @@ func BuildADTExportOptions(overrides map[string]any) export.ADTExportOptions {
 		pathFormat = v
 	}
 	return export.ADTExportOptions{
-		PathFormat: pathFormat,
-		EnableSharedTextures: pickBool("enableSharedTextures", cfg.EnableSharedTextures),
-		OverwriteFiles: pickBool("overwriteFiles", cfg.OverwriteFiles),
-		SplitAlphaMaps: pickBool("splitAlphaMaps", cfg.SplitAlphaMaps),
+		PathFormat:             pathFormat,
+		EnableSharedTextures:   pickBool("enableSharedTextures", cfg.EnableSharedTextures),
+		OverwriteFiles:         pickBool("overwriteFiles", cfg.OverwriteFiles),
+		SplitAlphaMaps:         pickBool("splitAlphaMaps", cfg.SplitAlphaMaps),
 		SplitLargeTerrainBakes: pickBool("splitLargeTerrainBakes", cfg.SplitLargeTerrainBakes),
-		MapsIncludeHoles: pickBool("mapsIncludeHoles", cfg.MapsIncludeHoles),
-		EnableSharedChildren: pickBool("enableSharedChildren", cfg.EnableSharedChildren),
+		MapsIncludeHoles:       pickBool("mapsIncludeHoles", cfg.MapsIncludeHoles),
+		EnableSharedChildren:   pickBool("enableSharedChildren", cfg.EnableSharedChildren),
 		EnableAbsoluteCSVPaths: pickBool("enableAbsoluteCSVPaths", cfg.EnableAbsoluteCSVPaths),
-		ModelsExportCollision: pickBool("modelsExportCollision", cfg.ModelsExportCollision),
-		MapsIncludeWMO: pickBool("mapsIncludeWMO", cfg.MapsIncludeWMO),
-		MapsIncludeM2: pickBool("mapsIncludeM2", cfg.MapsIncludeM2),
-		MapsIncludeWMOSets: pickBool("mapsIncludeWMOSets", cfg.MapsIncludeWMOSets),
-		ExportFoliageMeta: pickBool("exportFoliageMeta", cfg.ExportFoliageMeta),
-		MapsIncludeFoliage: pickBool("mapsIncludeFoliage", cfg.MapsIncludeFoliage),
-		MapsIncludeLiquid: pickBool("mapsIncludeLiquid", cfg.MapsIncludeLiquid),
+		ModelsExportCollision:  pickBool("modelsExportCollision", cfg.ModelsExportCollision),
+		MapsIncludeWMO:         pickBool("mapsIncludeWMO", cfg.MapsIncludeWMO),
+		MapsIncludeM2:          pickBool("mapsIncludeM2", cfg.MapsIncludeM2),
+		MapsIncludeWMOSets:     pickBool("mapsIncludeWMOSets", cfg.MapsIncludeWMOSets),
+		ExportFoliageMeta:      pickBool("exportFoliageMeta", cfg.ExportFoliageMeta),
+		MapsIncludeFoliage:     pickBool("mapsIncludeFoliage", cfg.MapsIncludeFoliage),
+		MapsIncludeLiquid:      pickBool("mapsIncludeLiquid", cfg.MapsIncludeLiquid),
 		MapsIncludeGameObjects: pickBool("mapsIncludeGameObjects", cfg.MapsIncludeGameObjects),
 	}
 }
@@ -146,6 +146,59 @@ func CollectGameObjects(ctx context.Context, mapID uint32, filter func(db.DB2Row
 	return result, nil
 }
 
+// GameObjectPosition returns the DB2 game object's map position.
+func GameObjectPosition(row db.DB2Row) []float64 {
+	return numberSlice(row["Pos"])
+}
+
+func numberSlice(value any) []float64 {
+	switch values := value.(type) {
+	case []float64:
+		return values
+	case []float32:
+		out := make([]float64, len(values))
+		for i, value := range values {
+			out[i] = float64(value)
+		}
+		return out
+	case []any:
+		out := make([]float64, 0, len(values))
+		for _, value := range values {
+			number, ok := toFloat64(value)
+			if !ok {
+				return nil
+			}
+			out = append(out, number)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func toFloat64(value any) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, true
+	case float32:
+		return float64(number), true
+	case int:
+		return float64(number), true
+	case int32:
+		return float64(number), true
+	case int64:
+		return float64(number), true
+	case uint:
+		return float64(number), true
+	case uint32:
+		return float64(number), true
+	case uint64:
+		return float64(number), true
+	default:
+		return 0, false
+	}
+}
+
 func toUint32(v any) uint32 {
 	switch x := v.(type) {
 	case uint32:
@@ -160,7 +213,26 @@ func toUint32(v any) uint32 {
 		return uint32(x)
 	case float32:
 		return uint32(x)
+	case float64:
+		return uint32(x)
+	case []uint32:
+		if len(x) > 0 {
+			return x[0]
+		}
+	case []int64:
+		if len(x) > 0 {
+			return uint32(x[0])
+		}
+	case []float32:
+		if len(x) > 0 {
+			return uint32(x[0])
+		}
+	case []float64:
+		if len(x) > 0 {
+			return uint32(x[0])
+		}
 	default:
 		return 0
 	}
+	return 0
 }

@@ -3,12 +3,14 @@ package adt
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/db"
 	"github.com/pqhuy98/wow-converter/internal/wow/export"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/png"
+	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
 
 func encodePNGBytes(pixels []byte, width, height int) ([]byte, error) {
@@ -46,13 +48,14 @@ func (e *Exporter) ExportForConversion(
 	gameObjects map[uint32]db.DB2Row,
 	progress *export.ProgressReporter,
 ) (*ConversionOutput, error) {
-	mapRelDir := filepath.ToSlash(filepath.Join("maps", e.MapDir))
+	exportMapDir := normalizeConversionMapDir(e.MapDir, server.GetConfig().RemovePathSpaces)
+	mapRelDir := filepath.ToSlash(filepath.Join("maps", exportMapDir))
 	conv := &ConversionOutput{
 		ExportAssetDir: exportAssetDir,
 		TileX:          e.TileX,
-		TileY:         e.TileY,
-		ObjectPath:    filepath.ToSlash(filepath.Join(mapRelDir, "adt_"+e.TileID)),
-		WmoPlacements: map[string][]PlacementRow{},
+		TileY:          e.TileY,
+		ObjectPath:     filepath.ToSlash(filepath.Join(mapRelDir, "adt_"+e.TileID)),
+		WmoPlacements:  map[string][]PlacementRow{},
 	}
 	dir := filepath.Join(exportAssetDir, mapRelDir)
 	conv.ObjFilePath = filepath.Join(dir, "adt_"+e.TileID+".obj")
@@ -61,4 +64,11 @@ func (e *Exporter) ExportForConversion(
 		return nil, err
 	}
 	return conv, nil
+}
+
+func normalizeConversionMapDir(mapDir string, removePathSpaces bool) string {
+	if removePathSpaces {
+		return strings.ReplaceAll(mapDir, " ", "")
+	}
+	return mapDir
 }

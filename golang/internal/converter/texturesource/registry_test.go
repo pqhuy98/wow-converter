@@ -17,3 +17,13 @@ func TestReleaseGeneratedPNG(t *testing.T) {
 		t.Fatal("blp entry should remain")
 	}
 }
+
+func TestRegistryPathsAreCaseInsensitive(t *testing.T) {
+	Clear()
+	Register(`Textures\Creature\Skin.PNG`, Source{Kind: KindBLP, FileDataID: 42})
+
+	source, ok := Get("textures/creature/skin.png")
+	if !ok || source.FileDataID != 42 {
+		t.Fatalf("case-insensitive lookup failed: %#v, %v", source, ok)
+	}
+}

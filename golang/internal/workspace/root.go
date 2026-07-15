@@ -18,7 +18,7 @@ func ExeDir() string {
 
 // AppRoot is the base directory for app-relative paths (exports, caches, bin/, resources/).
 // Desktop bundle: exe dir when build-go-app markers sit beside the binary.
-// Dev (dev:go, wow-data-server, CLI): walk up from cwd to package.json + golang/go.mod.
+// Dev (dev, dev:split, wow-data-server, CLI): walk up from cwd to package.json + golang/go.mod.
 func AppRoot() string {
 	return resolveAppRoot(ExeDir(), workingDir())
 }

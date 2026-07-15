@@ -35,6 +35,15 @@ export function unregisterTextureSource(relPngPath: string): void {
   sources.delete(normalizeKey(relPngPath));
 }
 
+/** Drop registered texture sources for paths from a completed export. */
+export function releaseTextureSourcePaths(relativePaths: readonly string[]): number {
+  let released = 0;
+  for (const rel of relativePaths) {
+    if (sources.delete(normalizeKey(rel))) released++;
+  }
+  return released;
+}
+
 /** Drop in-memory PNG sources for paths from a completed export. BLP entries are kept. */
 export function releaseGeneratedPngSources(relativePaths: readonly string[]): number {
   let released = 0;

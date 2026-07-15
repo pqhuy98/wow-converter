@@ -54,19 +54,43 @@ Download the latest release ZIP here: https://github.com/pqhuy98/wow-converter/r
 ---
 
 ## Building From Source (Optional)
-This section is for experienced programmers who want to build the app from source code. Requires [**Bun**](https://bun.com/) and [**Git**](https://git-scm.com/downloads).
+This section is for experienced programmers who want to build the app from source code. Requires [**Go**](https://go.dev/), [**Bun**](https://bun.com/), and [**Git**](https://git-scm.com/downloads).
 
 Clone this repository:
 ```
 git clone https://github.com/pqhuy98/wow-converter
 cd wow-converter
 bun install
-bun run build   # outputs wow-converter.exe into the `dist` folder
+bun run build   # outputs the bundled Go app into `dist-go`
 ```
 
-For development, run all three processes:
+For development, run the bundled Go server and Next.js UI:
 ```
-bun run dev   # starts wow-converter, web UI, and wow-data-server (TCP :17753) with hot reload
+bun run dev
+```
+
+The legacy TS server remains available as `bun run dev:ts` for wrapper-library compatibility work.
+
+### Parity checks
+
+Run the full Valiance Keep TS-versus-Go map comparison:
+
+```bash
+bun run parity:map
+```
+
+The command writes both outputs to `.parity-artifacts/map-output/{ts,go}`. Inspect
+a failed map comparison semantically with:
+
+```bash
+go -C golang run ./test/cmd/compare-map ../.parity-artifacts/map-output/ts ../.parity-artifacts/map-output/go
+```
+
+For MDL parity, start the two data servers in one terminal, then run the loop in another:
+
+```bash
+bun scripts/start-parity-servers.ts
+bun run parity:mdl
 ```
 
 Map exports use a bundled SQLite copy of AzerothCore world data (`bin/azerothcore-world.sqlite`) — no live MySQL/PostgreSQL is required at runtime. To refresh that file from your AzerothCore world database:
@@ -75,7 +99,7 @@ Map exports use a bundled SQLite copy of AzerothCore world data (`bin/azerothcor
 bun run generate:acore-sqlite   # reads ACORE_SOURCE_DATABASE_URL, writes bin/azerothcore-world.sqlite
 ```
 
-Table list for the export lives in `scripts/acore-sqlite-tables.ts`. After adding tables there, rerun the command above and `bun run prisma:generate` if the Prisma schema changed.
+Table list for the export lives in `scripts/acore-sqlite-tables.ts`. After adding tables there, rerun the command above and `bunx prisma generate` if the Prisma schema changed.
 
 The release binary embeds wow-data-server and talks to it over a local unix socket (not exposed on a second port). Only the web UI/API listens on `:3001`.
 

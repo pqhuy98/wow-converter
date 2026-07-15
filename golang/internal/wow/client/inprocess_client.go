@@ -102,7 +102,7 @@ func (c *InProcessClient) LoadCASCLocal(ctx context.Context, installDirectory st
 	if status == http.StatusConflict && body["id"] == "ERR_CASC_ACTIVE" {
 		return nil, errCASCActive
 	}
-	return parseBuildsResponse(body)
+	return parseBuildsResponse(body, true)
 }
 
 func (c *InProcessClient) LoadCASCRemote(ctx context.Context, regionTag string) ([]casc.Build, error) {
@@ -113,7 +113,7 @@ func (c *InProcessClient) LoadCASCRemote(ctx context.Context, regionTag string) 
 	if status == http.StatusConflict && body["id"] == "ERR_CASC_ACTIVE" {
 		return nil, errCASCActive
 	}
-	return parseBuildsResponse(body)
+	return parseBuildsResponse(body, false)
 }
 
 func (c *InProcessClient) LoadCASCBuild(ctx context.Context, buildIndex int) (CASCInfo, error) {
@@ -322,10 +322,7 @@ func (c *InProcessClient) GetCharMeta(ctx context.Context, params casc.Character
 	if status == http.StatusOK && body["id"] == "CHAR_META" {
 		return decodeObject[casc.CharacterMetaResponse](body)
 	}
-	if status == http.StatusConflict {
-		return casc.CharacterMetaResponse{}, errNoCASC
-	}
-	return casc.CharacterMetaResponse{}, unexpectedResponse("charMeta", body)
+	return casc.CharacterMetaResponse{}, charMetaRESTError(status, body)
 }
 
 func (c *InProcessClient) ExportADT(ctx context.Context, params casc.ADTExportParams) (casc.ADTExportResult, error) {

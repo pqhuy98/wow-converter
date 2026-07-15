@@ -45,14 +45,18 @@ func ExportCreatureModels(creatures []azerothcore.Creature, outputPath string, c
 
 	ctx := context.Background()
 	if wowClient != nil {
-		_ = wowClient.InitModelCaches(ctx)
+		if err := wowClient.InitModelCaches(ctx); err != nil {
+			return fmt.Errorf("initialize creature model caches: %w", err)
+		}
 	}
 
 	tasks := make([]func() error, 0, len(unique))
 	for i, c := range unique {
 		i, c := i, c
 		tasks = append(tasks, func() error {
-			exportOneCreature(ctx, cfg, wowClient, outputPath, c, i+1, len(unique))
+			if err := exportOneCreature(ctx, cfg, wowClient, outputPath, c, i+1, len(unique)); err != nil {
+				return err
+			}
 			completed.Add(1)
 			reportProgress()
 			return nil
@@ -61,7 +65,7 @@ func ExportCreatureModels(creatures []azerothcore.Creature, outputPath string, c
 	return common.WorkerPool(workers, tasks)
 }
 
-func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.Client, outputPath string, c azerothcore.Creature, index, total int) {
+func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.Client, outputPath string, c azerothcore.Creature, index, total int) error {
 	displayID := c.Model.CreatureDisplayID
 	fileName := fmt.Sprintf("creature-%d", displayID)
 	ext := ".mdl"
@@ -70,7 +74,7 @@ func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.
 	}
 	full := filepath.Join(outputPath, fileName+ext)
 	if _, err := os.Stat(full); err == nil && !cfg.OverrideModels {
-		return
+		return nil
 	}
 
 	log.Printf("")
@@ -120,8 +124,7 @@ func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.
 	}
 	log.Printf("Attack tag: %s", ch.AttackTag)
 	if _, err := ex.ExportCharacter(ctx, ch, fileName); err != nil {
-		log.Printf("%s", ansi.Redf("Creature export failed %s: %v", fileName, err))
-		return
+		return fmt.Errorf("export creature %s: %w", fileName, err)
 	}
 	ex.OptimizeModelsTextures(DefaultExportOptimization())
 	log.Printf("optimize models and textures took %s", ansi.Yellowf("%.2fs", time.Since(optStart).Seconds()))
@@ -132,15 +135,14 @@ func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.
 		format = "mdx"
 	}
 	if _, err := ex.WriteAllTextures(outputPath); err != nil {
-		log.Printf("%s", ansi.Redf("Creature textures failed %s: %v", fileName, err))
-		return
+		return fmt.Errorf("write creature textures %s: %w", fileName, err)
 	}
 	if _, err := ex.WriteAllModels(outputPath, format); err != nil {
-		log.Printf("%s", ansi.Redf("Creature models failed %s: %v", fileName, err))
-		return
+		return fmt.Errorf("write creature models %s: %w", fileName, err)
 	}
 	log.Printf("write models and textures took %s", ansi.Yellowf("%.2fs", time.Since(writeStart).Seconds()))
 	log.Printf("%s %s",
 		ansi.Greenf("=> Exported creature %s in", c.Template.Name),
 		ansi.Yellowf("%.2fs", time.Since(start0).Seconds()))
+	return nil
 }

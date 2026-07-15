@@ -1,11 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 
 import { AnimationFile, type Data } from '@/lib/converter/wow-model/bundle/animation';
-import { getDefaultConfig } from '@/lib/global-config';
+import { type Config } from '@/lib/global-config';
 
 describe('AnimationFile quaternion conversion', () => {
-  test('keeps xyzw order while remapping axes', async () => {
-    const config = await getDefaultConfig();
+  test('keeps xyzw order while remapping axes', () => {
+    const config: Config = {
+      assetPrefix: 'wow',
+      exportAssetDir: '.cache/wow-export',
+      infiniteExtentBoundRadiusThreshold: 2000,
+      mdx: true,
+      overrideModels: true,
+      overrideTextures: false,
+      rawModelScaleUp: 56,
+    };
     const file = new AnimationFile('inline', config);
 
     const bone: Data.Bone = {

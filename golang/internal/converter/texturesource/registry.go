@@ -1,6 +1,7 @@
 package texturesource
 
 import (
+	"path"
 	"strings"
 	"sync"
 )
@@ -110,5 +111,5 @@ func CacheStats() (entries int, pngBytes int64) {
 }
 
 func normalize(p string) string {
-	return strings.ReplaceAll(p, "\\", "/")
+	return strings.ToLower(path.Clean(strings.ReplaceAll(p, "\\", "/")))
 }
