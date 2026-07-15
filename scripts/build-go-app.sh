@@ -10,8 +10,14 @@ cd "${ROOT}"
   exit 1
 }
 
-rm -rf "${DIST}"
 mkdir -p "${DIST}"
+# Keep the remote CASC cache across releases. It can be several GB and is
+# independent of the bundle artifacts rebuilt below.
+shopt -s dotglob nullglob
+for path in "${DIST}"/*; do
+  [[ "${path}" == "${DIST}/.cache" ]] && continue
+  rm -rf "${path}"
+done
 
 (
   cd golang
