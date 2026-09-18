@@ -62,6 +62,7 @@ var (
 	lastError            *string
 	applyInFlight        bool
 	memoryApplyAttempted bool
+	envApplyAttempted    bool
 	runtimeConfigOverride bool
 	prevCascLoaded       bool
 )
@@ -137,8 +138,21 @@ func ResetSession() {
 	defer stateMu.Unlock()
 	runtimeConfigOverride = true
 	memoryApplyAttempted = false
+	envApplyAttempted = false
 	memoryConfig = nil
 	lastError = nil
+}
+
+func ShouldRetryEnvApply() bool {
+	stateMu.RLock()
+	defer stateMu.RUnlock()
+	return !envApplyAttempted && !runtimeConfigOverride && IsEnvConfigured()
+}
+
+func MarkEnvApplyAttempted() {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	envApplyAttempted = true
 }
 
 func RuntimeConfigOverride() bool {

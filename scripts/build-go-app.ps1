@@ -76,6 +76,12 @@ if ($isWindows) {
 Write-Host "Copying resources/..."
 Copy-Item -Recurse -Force "resources" (Join-Path $distGo "resources")
 
+$zipPath = Join-Path $root "wow-converter.zip"
+Write-Host "Creating wow-converter.zip..."
+if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+Compress-Archive -Path (Join-Path $distGo "*") -DestinationPath $zipPath -Force
+
 Write-Host ""
 Write-Host "Done: dist-go/"
+Write-Host "Done: wow-converter.zip"
 Write-Host "  Run: .\dist-go\$exeName"

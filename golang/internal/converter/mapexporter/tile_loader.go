@@ -76,6 +76,9 @@ func LoadADTTilesForConversionSummary(
 	for _, tile := range tiles {
 		tile := tile
 		tasks = append(tasks, func() error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			snapshot, err := loadTileSnapshot(ctx, wowClient, exportAssetDir, mc, quality, tile, includeInteriors, includeWMOSets)
 			if err != nil {
 				resultMu.Lock()
@@ -97,6 +100,9 @@ func LoadADTTilesForConversionSummary(
 		})
 	}
 	_ = common.WorkerPool(MapExportWorkerCount(), tasks)
+	if err := ctx.Err(); err != nil {
+		return loaded, failures, err
+	}
 	sortTileCoords(loaded)
 	if len(failures) > 0 {
 		sort.Slice(failures, func(i, j int) bool {

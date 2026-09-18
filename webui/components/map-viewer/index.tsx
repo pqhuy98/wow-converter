@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy } from 'lucide-react';
+import { Copy, Square } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -54,8 +54,12 @@ function isActiveJob(job: MapGenerateJobStatus | undefined): job is MapGenerateJ
   return job?.status === 'pending' || job?.status === 'processing';
 }
 
+function isTerminalJob(job: MapGenerateJobStatus): boolean {
+  return job.status === 'done' || job.status === 'failed' || job.status === 'cancelled';
+}
+
 export default function MapViewer() {
-  const { buildKey, isSharedHosting } = useServerConfig();
+  const { buildKey, isSharedHosting, mapGenerateHalt } = useServerConfig();
   const [maps, setMaps] = useState<MapResponse[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [selectedMapDir, setSelectedMapDir] = useState<string | null>(null);
@@ -66,6 +70,8 @@ export default function MapViewer() {
   const [generateJob, setGenerateJob] = useState<MapGenerateJobStatus | undefined>(undefined);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [isHalting, setIsHalting] = useState(false);
+  const [haltError, setHaltError] = useState<string | null>(null);
 
   const pollInFlightRef = useRef(false);
   const jobIdRef = useRef<string | undefined>(undefined);
@@ -84,6 +90,7 @@ export default function MapViewer() {
 
   const applyJobUpdate = useCallback((data: MapGenerateJobStatus) => {
     setGenerateJob(data);
+    if (isTerminalJob(data)) setIsHalting(false);
     persistGenerateJobFromStatus(data);
   }, []);
 
@@ -285,6 +292,8 @@ export default function MapViewer() {
 
   const onGenerateWc3 = useCallback(async (form: GenerateWc3FormValues) => {
     if (!mapInfo || selectedTiles.length === 0 || isGenerating) return;
+    setHaltError(null);
+    setIsHalting(false);
     setGenerateJob({
       id: '',
       status: 'pending',
@@ -335,13 +344,30 @@ export default function MapViewer() {
     }
   }, [mapInfo, selectedTiles, texSize, isGenerating, applyJobUpdate]);
 
+  const onHaltGenerate = useCallback(async () => {
+    const jobID = generateJob?.id;
+    if (!jobID || !isGenerating || isHalting) return;
+    setIsHalting(true);
+    setHaltError(null);
+    try {
+      const res = await fetch(`/api/maps/generate-wc3/halt/${encodeURIComponent(jobID)}`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error(await res.text());
+      applyJobUpdate((await res.json()) as MapGenerateJobStatus);
+    } catch (e) {
+      setIsHalting(false);
+      setHaltError(e instanceof Error ? e.message : String(e));
+    }
+  }, [applyJobUpdate, generateJob?.id, isGenerating, isHalting]);
+
   useEffect(() => {
     jobIdRef.current = generateJob?.id || undefined;
   }, [generateJob?.id]);
 
   useEffect(() => {
     const jobId = generateJob?.id;
-    const terminal = generateJob?.status === 'done' || generateJob?.status === 'failed';
+    const terminal = generateJob != null && isTerminalJob(generateJob);
     if (!jobId || terminal) return undefined;
 
     let cancelled = false;
@@ -367,7 +393,7 @@ export default function MapViewer() {
         const data = (await res.json()) as MapGenerateJobStatus;
         if (cancelled) return;
 
-        if (data.status === 'done' || data.status === 'failed') {
+        if (isTerminalJob(data)) {
           applyJobUpdate(data);
           terminal = true;
           return;
@@ -532,6 +558,20 @@ export default function MapViewer() {
                         <span className="text-xs tabular-nums whitespace-nowrap text-foreground/80">
                           {formatElapsedDuration(elapsedMs)}
                         </span>
+                        {mapGenerateHalt && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            title={isHalting ? 'Halting export…' : 'Halt export'}
+                            aria-label={isHalting ? 'Halting export' : 'Halt export'}
+                            disabled={!generateJob.id || isHalting}
+                            onClick={() => void onHaltGenerate()}
+                          >
+                            <Square className="h-3 w-3 fill-current" />
+                          </Button>
+                        )}
                       </div>
                       <p className="text-xs text-foreground/80">
                         {formatProgressLabel(generateJob)}
@@ -542,6 +582,9 @@ export default function MapViewer() {
                         <p className="text-xs text-foreground/70">
                           {generateJob.queuePending} job{generateJob.queuePending === 1 ? '' : 's'} waiting in queue
                         </p>
+                      )}
+                      {haltError && (
+                        <p className="text-xs text-destructive">{haltError}</p>
                       )}
                     </div>
                   )}
@@ -581,6 +624,9 @@ export default function MapViewer() {
                   )}
                   {generateJob?.status === 'failed' && (
                     <p className="text-xs text-destructive pt-2">{generateJob.error ?? 'Generation failed'}</p>
+                  )}
+                  {generateJob?.status === 'cancelled' && (
+                    <p className="text-xs text-muted-foreground pt-2">Export halted</p>
                   )}
                 </div>}
               </CardContent>
@@ -701,7 +747,7 @@ function formatProgressLabel(job: MapGenerateJobStatus): string {
 }
 
 function persistGenerateJobFromStatus(job: MapGenerateJobStatus): void {
-  if (!job.id || job.status === 'done' || job.status === 'failed') {
+  if (!job.id || isTerminalJob(job)) {
     clearStoredGenerateJob();
     return;
   }

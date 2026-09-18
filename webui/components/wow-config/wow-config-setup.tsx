@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  CheckCircle2, FolderOpen, Globe, HardDrive, Loader2,
+  AlertCircle, CheckCircle2, FolderOpen, Globe, HardDrive, Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -327,21 +327,31 @@ export function WowConfigSetup() {
   }
 
   if (isSharedHosting) {
+    const sharedHostingLoading = !status.cascLoaded && status.cascLoading;
+    const sharedHostingFailed = !status.cascLoaded && !status.cascLoading;
     return (
       <Card className="mx-auto max-w-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {status.cascLoaded ? (
               <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
+            ) : sharedHostingLoading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-destructive" />
             )}
-            {status.cascLoaded ? 'WoW is loaded' : 'Loading WoW'}
+            {status.cascLoaded
+              ? 'WoW is loaded'
+              : sharedHostingLoading
+                ? 'Loading WoW'
+                : 'WoW failed to load'}
           </CardTitle>
           <CardDescription>
             {status.cascLoaded
               ? status.cascInfo?.buildName
-              : status.cascLoadingMessage ?? 'WoW data is managed by the server on shared hosting.'}
+              : sharedHostingLoading
+                ? (status.cascLoadingMessage ?? 'WoW data is managed by the server on shared hosting.')
+                : (status.error ?? 'WoW data failed to load on the server. Try again after a restart.')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -362,9 +372,14 @@ export function WowConfigSetup() {
           <p className="text-sm text-muted-foreground">
             WoW installation cannot be changed from the web UI in shared hosting mode.
           </p>
-          {status.error && !status.cascLoaded && (
+          {sharedHostingFailed && status.error && (
             <Alert variant="destructive">
               <AlertDescription>{status.error}</AlertDescription>
+            </Alert>
+          )}
+          {sharedHostingFailed && !status.error && status.cascLoadingMessage && (
+            <Alert variant="destructive">
+              <AlertDescription>{status.cascLoadingMessage}</AlertDescription>
             </Alert>
           )}
           <Button variant="outline" asChild>

@@ -75,6 +75,9 @@ func BuildMapExportConfig(params struct {
 
 // RunMapGenerateConversion executes parse, export, and save for a generated map.
 func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOptions) (MapGenerateConversionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return MapGenerateConversionResult{}, err
+	}
 	autoClamp := opts.AutoClampPercent
 	if opts.TileRegistry != nil {
 		defer opts.TileRegistry.Release()
@@ -91,6 +94,9 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	if opts.FreshExport {
 		_ = os.RemoveAll(outputDir)
 		LogMapGeneratePhase("Removed existing map folder " + outputDir)
+	}
+	if err := ctx.Err(); err != nil {
+		return MapGenerateConversionResult{}, err
 	}
 
 	conversionCfg := opts.Config
@@ -112,6 +118,9 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	LogMapGeneratePhase("Parsing map objects")
 	report("Parsing map data", nil)
 	if err := exporter.ParseObjects(nil); err != nil {
+		return MapGenerateConversionResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
 	pruneDepth := 2
@@ -140,6 +149,9 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	if err := exporter.ExportTerrainsDoodads(outputDir); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return MapGenerateConversionResult{}, err
+	}
 	convertCompleted = 2
 	report("Saved terrain and doodads", nil)
 
@@ -152,12 +164,18 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 		}); err != nil {
 			return MapGenerateConversionResult{}, err
 		}
+		if err := ctx.Err(); err != nil {
+			return MapGenerateConversionResult{}, err
+		}
 		convertCompleted = 2 + creatureExportSteps
 		report("Exported creature models", nil)
 	}
 
 	LogMapGeneratePhase("Saving war3map files")
 	report("Saving war3map files", nil)
+	if err := ctx.Err(); err != nil {
+		return MapGenerateConversionResult{}, err
+	}
 	if err := exporter.SaveWar3mapFiles(outputDir, mapSaveName); err != nil {
 		return MapGenerateConversionResult{}, err
 	}

@@ -49,7 +49,7 @@ export interface MapGenerateProgress {
 
 export interface MapGenerateJobStatus {
   id: string;
-  status: 'pending' | 'processing' | 'done' | 'failed';
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'cancelled';
   position?: number;
   mapSaveName?: string;
   mapDir?: string;

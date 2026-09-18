@@ -221,6 +221,20 @@ func (s *Service) GetStatus(ctx context.Context) Status {
 		} else {
 			status.Error = GetError()
 		}
+	} else if !cascLoaded && ShouldRetryEnvApply() && GetError() != nil {
+		MarkEnvApplyAttempted()
+		if cfg := GetEnvConfig(); cfg != nil {
+			if _, err := s.Apply(ctx, *cfg, false); err == nil {
+				if info, err := s.FetchCascInfo(ctx); err == nil {
+					status.CascInfo = info
+					status.CascLoaded = true
+					status.CascLoading = false
+					status.Error = nil
+				}
+			} else {
+				status.Error = GetError()
+			}
+		}
 	}
 
 	return status

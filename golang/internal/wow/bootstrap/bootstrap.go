@@ -10,6 +10,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/export"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/service"
+	"github.com/pqhuy98/wow-converter/internal/wow/wowconfig"
 )
 
 // AutoLoadResult mirrors TS autoLoadCascFromEnv result.
@@ -86,7 +87,12 @@ func NewHandler() *rest.Handler {
 func StartWowDataServer(ctx context.Context) (*rest.Handler, error) {
 	h := NewHandler()
 	if loader, ok := h.Services.Loader.(*service.Loader); ok {
-		_, _ = AutoLoadFromEnv(ctx, loader)
+		result, _ := AutoLoadFromEnv(ctx, loader)
+		if !result.Loaded && result.Error != "" {
+			msg := result.Error
+			wowconfig.SetError(&msg)
+			log.Printf("Auto-load of CASC from .env failed: %s", result.Error)
+		}
 	}
 	return h, nil
 }

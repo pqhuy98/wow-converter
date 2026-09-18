@@ -1,6 +1,8 @@
 package util
 
 import (
+	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -16,6 +18,7 @@ const (
 	JobProcessing JobStatus = "processing"
 	JobDone       JobStatus = "done"
 	JobFailed     JobStatus = "failed"
+	JobCancelled  JobStatus = "cancelled"
 )
 
 // Job is a unit of work in the queue.
@@ -31,6 +34,16 @@ type Job[T, V any] struct {
 	AddToRecent   bool      `json:"addToRecent,omitempty"`
 	NoTimeout     bool      `json:"noTimeout,omitempty"`
 	resultOnError bool
+	ctx           context.Context
+	cancel        context.CancelFunc
+}
+
+// Context is cancelled when CancelJob is called for this job.
+func (j *Job[T, V]) Context() context.Context {
+	if j.ctx == nil {
+		return context.Background()
+	}
+	return j.ctx
 }
 
 // PreserveResultOnError asks the queue to publish the handler's returned
@@ -96,7 +109,7 @@ func (q *JobQueue[T, V]) cleanupLoop() {
 		now := time.Now().UnixMilli()
 		q.mu.Lock()
 		for id, job := range q.jobs {
-			if (job.Status == JobDone || job.Status == JobFailed) && job.FinishedAt != nil {
+			if (job.Status == JobDone || job.Status == JobFailed || job.Status == JobCancelled) && job.FinishedAt != nil {
 				if now-*job.FinishedAt > q.config.JobTTL.Milliseconds() {
 					delete(q.jobs, id)
 				}
@@ -109,11 +122,33 @@ func (q *JobQueue[T, V]) cleanupLoop() {
 // AddJob enqueues a job and starts processing when possible.
 func (q *JobQueue[T, V]) AddJob(job *Job[T, V]) {
 	q.mu.Lock()
+	job.ctx, job.cancel = context.WithCancel(context.Background())
 	q.pending = append(q.pending, job)
 	q.pendingIndex[job.ID] = len(q.pending) - 1
 	q.jobs[job.ID] = job
 	q.mu.Unlock()
 	q.tryProcessQueue()
+}
+
+// CancelJob cancels a pending or processing job.
+func (q *JobQueue[T, V]) CancelJob(id string) bool {
+	q.mu.Lock()
+	job, ok := q.jobs[id]
+	if !ok || (job.Status != JobPending && job.Status != JobProcessing) {
+		q.mu.Unlock()
+		return false
+	}
+	job.cancel()
+	if job.Status == JobPending {
+		delete(q.pendingIndex, id)
+		job.Status = JobCancelled
+		job.Error = "Export halted"
+		now := time.Now().UnixMilli()
+		job.FinishedAt = &now
+	}
+	q.mu.Unlock()
+	q.tryProcessQueue()
+	return true
 }
 
 // GetJob returns a job by ID.
@@ -198,6 +233,9 @@ func (q *JobQueue[T, V]) tryProcessQueue() {
 		job := q.pending[q.queueHead]
 		q.queueHead++
 		delete(q.pendingIndex, job.ID)
+		if job.Status != JobPending {
+			continue
+		}
 		q.activeJobs++
 		job.Status = JobProcessing
 		now := time.Now().UnixMilli()
@@ -238,7 +276,11 @@ func (q *JobQueue[T, V]) runJob(job *Job[T, V]) {
 	defer q.mu.Unlock()
 	now := time.Now().UnixMilli()
 	job.FinishedAt = &now
-	if err != nil {
+	if errors.Is(job.Context().Err(), context.Canceled) {
+		job.Status = JobCancelled
+		job.Error = "Export halted"
+		log.Printf("Job cancelled: %s", job.ID)
+	} else if err != nil {
 		job.Status = JobFailed
 		job.Error = err.Error()
 		if job.resultOnError {

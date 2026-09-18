@@ -11,6 +11,7 @@ func registerGetConfig(r Router, d *Deps) {
 			"isDev":           d.Config.IsDev,
 			"isClassic":       d.IsClassic(req.Context()),
 			"buildKey":        d.BuildKey(req.Context()),
+			"mapGenerateHalt": true,
 		})
 	})
 }

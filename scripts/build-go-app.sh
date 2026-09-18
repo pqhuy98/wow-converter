@@ -32,4 +32,10 @@ cp -a resources "${DIST}/resources"
 [[ -d bin/blp-native ]] && cp -a bin/blp-native "${DIST}/bin/"
 [[ -d bin/upscayl ]] && cp -a bin/upscayl "${DIST}/bin/"
 
+ZIP="${ROOT}/wow-converter.zip"
+echo "Creating wow-converter.zip..."
+rm -f "${ZIP}"
+(cd "${DIST}" && zip -qr "${ZIP}" . -x '.cache/*')
+
 echo "Built ${DIST}/wow-converter"
+echo "Built ${ZIP}"

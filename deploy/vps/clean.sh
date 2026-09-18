@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Prune generated export artifacts only; keep .cache/wow (CASC) and .cache/wow-export.
+# Prune generated export artifacts only; keep .cache/wow (CASC).
+APP_ROOT="${WOW_CONVERTER_APP_ROOT:-/root/wow-converter/dist-go}"
 rm -rf \
-  ~/wow-converter/exported-assets \
-  ~/wow-converter/exported-assets-browse \
-  ~/wow-converter/recent-exports.json
+  "${APP_ROOT}/exported-assets" \
+  "${APP_ROOT}/exported-assets-browse" \
+  "${APP_ROOT}/recent-exports.json" \
+  "${APP_ROOT}/.cache/wow-export"

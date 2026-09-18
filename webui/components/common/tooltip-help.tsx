@@ -12,10 +12,10 @@ import {
 export function TooltipHelp({
   tooltips,
   trigger,
-  asChild,
 }: {
   trigger?: ReactNode
   tooltips: string | React.ReactNode
+  /** @deprecated TooltipTrigger always uses asChild; kept for call-site compatibility. */
   asChild?: boolean
 }) {
   const [open, setOpen] = useState(false);
@@ -61,11 +61,16 @@ export function TooltipHelp({
   return (
     <TooltipProvider>
       <Tooltip open={open} onOpenChange={handleOpenChange}>
-        <TooltipTrigger asChild={asChild}>
+        <TooltipTrigger asChild>
           <span
             className="inline-flex align-middle"
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onClick={(e) => {
+              // Prevent implicit form submit and label-associated checkbox toggles.
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
             {triggerNode}
           </span>

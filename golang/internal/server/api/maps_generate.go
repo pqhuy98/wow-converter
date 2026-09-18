@@ -100,7 +100,7 @@ const initialConvertSteps = 3
 
 func registerMapGenerateRoutes(r Router, d *Deps) {
 	queue := util.NewJobQueue(mapGenerateQueueConfig(), func(job *util.Job[mapGenerateJobRequest, mapGenerateJobResult]) (mapGenerateJobResult, error) {
-		return runMapGenerateJob(context.Background(), d, job)
+		return runMapGenerateJob(job.Context(), d, job)
 	})
 
 	r.Post("/maps/{map}/generate-wc3", func(w http.ResponseWriter, req *http.Request) {
@@ -153,6 +153,23 @@ func registerMapGenerateRoutes(r Router, d *Deps) {
 			return
 		}
 		sendJSON(w, http.StatusOK, status)
+	})
+
+	r.Post("/maps/generate-wc3/halt/{jobId}", func(w http.ResponseWriter, req *http.Request) {
+		if err := assertDesktopOnly(d.Config.IsSharedHosting); err != nil {
+			sendError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		jobID := chi.URLParam(req, "jobId")
+		if queue.GetJobStatus(jobID) == nil {
+			sendError(w, http.StatusNotFound, "Generate job not found")
+			return
+		}
+		if !queue.CancelJob(jobID) {
+			sendError(w, http.StatusConflict, "Generate job is no longer active")
+			return
+		}
+		sendJSON(w, http.StatusOK, buildMapGenerateStatus(d, queue, jobID))
 	})
 
 	r.Get("/maps/generate-wc3/active", func(w http.ResponseWriter, _ *http.Request) {
@@ -398,7 +415,7 @@ func buildMapGenerateStatus(d *Deps, queue *util.JobQueue[mapGenerateJobRequest,
 			Phase: "convert", TaskName: "Complete", Percent: 100,
 		}
 		clearMapGenerateProgress(jobID)
-	} else if base.Status == util.JobFailed {
+	} else if base.Status == util.JobFailed || base.Status == util.JobCancelled {
 		clearMapGenerateProgress(jobID)
 	}
 	return status
