@@ -40,6 +40,10 @@ interface MapFlags {
   enableWaterTinting: boolean // 0x10000
   useAccurateProbabilityForCalculations: boolean // 0x20000
   useCustomAbilitySkins: boolean // 0x40000
+  disableDenyIcon: boolean // 0x80000 (w3i v32+)
+  forceDefaultCameraZoom: boolean // 0x100000 (w3i v32+)
+  forceMaxCameraZoom: boolean // 0x200000 (w3i v32+)
+  forceMinCameraZoom: boolean // 0x400000 (w3i v33+)
 }
 
 interface LoadingScreen {

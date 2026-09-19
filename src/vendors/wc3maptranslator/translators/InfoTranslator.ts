@@ -83,12 +83,10 @@ export class InfoTranslator implements Translator<Info> {
       if (infoJson.map.flags.enableWaterTinting) flags |= 0x10000;
       if (infoJson.map.flags.useAccurateProbabilityForCalculations) flags |= 0x20000;
       if (infoJson.map.flags.useCustomAbilitySkins) flags |= 0x40000;
-      // 0x80000
-      // 0x100000
-      // 0x200000
-      // 0x400000
-      // 0x800000
-      // 8 -unknown bits?
+      if (infoJson.map.flags.disableDenyIcon) flags |= 0x80000;
+      if (infoJson.map.flags.forceDefaultCameraZoom) flags |= 0x100000;
+      if (infoJson.map.flags.forceMaxCameraZoom) flags |= 0x200000;
+      if (infoJson.map.flags.forceMinCameraZoom) flags |= 0x400000;
     }
 
     outBufferToWar.addInt(flags); // Add flags
@@ -142,9 +140,13 @@ export class InfoTranslator implements Translator<Info> {
     outBufferToWar.addInt(infoJson.supportedModes);
     outBufferToWar.addInt(infoJson.gameDataVersion);
 
-    outBufferToWar.addInt(infoJson.defaultCameraZoom);
-    outBufferToWar.addInt(infoJson.maxCameraZoom);
-    outBufferToWar.addInt(infoJson.minCameraZoom);
+    if (infoJson.fileVersion >= 32) {
+      outBufferToWar.addInt(infoJson.defaultCameraZoom);
+      outBufferToWar.addInt(infoJson.maxCameraZoom);
+    }
+    if (infoJson.fileVersion >= 33) {
+      outBufferToWar.addInt(infoJson.minCameraZoom);
+    }
 
     // Players
     outBufferToWar.addInt(infoJson.players?.length || 0);
@@ -265,6 +267,10 @@ export class InfoTranslator implements Translator<Info> {
           enableWaterTinting: false, // 0x10000
           useAccurateProbabilityForCalculations: false, // 0x20000
           useCustomAbilitySkins: false, // 0x40000
+          disableDenyIcon: false, // 0x80000
+          forceDefaultCameraZoom: false, // 0x100000
+          forceMaxCameraZoom: false, // 0x200000
+          forceMinCameraZoom: false, // 0x400000
         },
       },
       loadingScreen: {
@@ -371,6 +377,10 @@ export class InfoTranslator implements Translator<Info> {
       enableWaterTinting: !!(flags & 0x10000),
       useAccurateProbabilityForCalculations: !!(flags & 0x20000),
       useCustomAbilitySkins: !!(flags & 0x40000),
+      disableDenyIcon: !!(flags & 0x80000),
+      forceDefaultCameraZoom: !!(flags & 0x100000),
+      forceMaxCameraZoom: !!(flags & 0x200000),
+      forceMinCameraZoom: !!(flags & 0x400000),
     };
 
     result.map.mainTileType = outBufferToJSON.readChars();
@@ -407,9 +417,13 @@ export class InfoTranslator implements Translator<Info> {
     result.supportedModes = outBufferToJSON.readInt();
     result.gameDataVersion = outBufferToJSON.readInt();
 
-    result.defaultCameraZoom = outBufferToJSON.readInt();
-    result.maxCameraZoom = outBufferToJSON.readInt();
-    result.minCameraZoom = outBufferToJSON.readInt();
+    if (result.fileVersion >= 32) {
+      result.defaultCameraZoom = outBufferToJSON.readInt();
+      result.maxCameraZoom = outBufferToJSON.readInt();
+    }
+    if (result.fileVersion >= 33) {
+      result.minCameraZoom = outBufferToJSON.readInt();
+    }
 
     // Struct: players
     const numPlayers = outBufferToJSON.readInt();

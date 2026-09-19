@@ -54,7 +54,7 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
     /*
          * Header
          */
-    outBufferToWar.addInt(2); // file version
+    outBufferToWar.addInt(3); // file version (Reforged 2.0.3+)
 
     const generateTableFromJson = (tableType: TableType, tableData: object): void => { // create "original" or "custom" table
       if (!tableData) {
@@ -74,9 +74,12 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
           outBufferToWar.addChars(defKey.substring(0, 4)); // custom id
         }
 
-        // Number of modifications made to this object
+        // v3: one modification set per object (set count, set flag, mod count)
         // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
-        outBufferToWar.addInt(obj?.length || 0);
+        const modCount = obj?.length || 0;
+        outBufferToWar.addInt(1);
+        outBufferToWar.addInt(0);
+        outBufferToWar.addInt(modCount);
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         obj?.forEach((mod: Modification) => {

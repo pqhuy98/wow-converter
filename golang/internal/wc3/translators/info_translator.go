@@ -92,9 +92,13 @@ func (*InfoTranslator) jsonToWar(infoJson data.Info) wc3.WarResult {
 	out.AddInt(int(infoJson.SupportedModes))
 	out.AddInt(int(infoJson.GameDataVersion))
 
-	out.AddInt(int(infoJson.DefaultCameraZoom))
-	out.AddInt(int(infoJson.MaxCameraZoom))
-	out.AddInt(int(infoJson.MinCameraZoom))
+	if infoJson.FileVersion >= 32 {
+		out.AddInt(int(infoJson.DefaultCameraZoom))
+		out.AddInt(int(infoJson.MaxCameraZoom))
+	}
+	if infoJson.FileVersion >= 33 {
+		out.AddInt(int(infoJson.MinCameraZoom))
+	}
 
 	out.AddInt(len(infoJson.Players))
 	for _, player := range infoJson.Players {
@@ -242,9 +246,13 @@ func (*InfoTranslator) warToJSON(buffer []byte) wc3.JsonResult[data.Info] {
 	result.SupportedModes = data.SupportedModes(buf.ReadInt())
 	result.GameDataVersion = buf.ReadInt()
 
-	result.DefaultCameraZoom = buf.ReadInt()
-	result.MaxCameraZoom = buf.ReadInt()
-	result.MinCameraZoom = buf.ReadInt()
+	if result.FileVersion >= 32 {
+		result.DefaultCameraZoom = buf.ReadInt()
+		result.MaxCameraZoom = buf.ReadInt()
+	}
+	if result.FileVersion >= 33 {
+		result.MinCameraZoom = buf.ReadInt()
+	}
 
 	numPlayers := int(buf.ReadInt())
 	for i := 0; i < numPlayers; i++ {
