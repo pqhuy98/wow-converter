@@ -48,6 +48,20 @@ function virtualExportPath(exportRoot: string, file: string): string {
   return path.normalize(path.join(exportRoot, file.replace(/\s/g, '')));
 }
 
+/** Albedo file id. Shader 23 ignores texture1 only when that slot is filled. */
+function wmoDiffuseFileID(material: WMOMaterial): number {
+  let skipTexture1 = material.shader === 23 && material.texture1 !== 0;
+  for (const id of exportTextureSlots(material)) {
+    if (id === 0) continue;
+    if (skipTexture1) {
+      skipTexture1 = false;
+      continue;
+    }
+    return id;
+  }
+  return 0;
+}
+
 /** Texture slots in WMOExporter.exportTextures order (flags3 before color3 for shader 23). */
 function exportTextureSlots(material: WMOMaterial): number[] {
   const slots = [material.texture1, material.texture2, material.texture3];
@@ -86,8 +100,9 @@ async function resolveWmoTextures(
   for (let i = 0; i < materials.length; i++) {
     const material = materials[i];
 
-    // Variable that purely exists to not handle the first texture as the main one for shader23
-    let dontUseFirstTexture = material.shader === 23;
+    // Shader 23 keeps the albedo in texture2. texture1 is often 0; skipping the
+    // first non-zero slot then binds texture3 (a mask) and the surface goes magenta or black.
+    const diffuseID = wmoDiffuseFileID(material);
 
     for (const materialTexture of exportTextureSlots(material)) {
       // Skip unused material slots.
@@ -142,11 +157,7 @@ async function resolveWmoTextures(
         mtlMaterials.push({ name: matName, map_Kd: texFile });
         textureMap.set(fileDataID, { matPathRelative: texFile, matPath: texPath, matName });
 
-        // MTL only supports one texture per material, only link the first unless we only want the second one (e.g. for shader 23).
-        if (!materialMap.has(i) && dontUseFirstTexture === false) materialMap.set(i, matName);
-
-        // Unset skip here so we always pick the next texture in line
-        dontUseFirstTexture = false;
+        if (!materialMap.has(i) && materialTexture === diffuseID) materialMap.set(i, matName);
       } catch (e) {
         console.warn(`Failed to resolve texture ${fileDataID} for WMO:`, e instanceof Error ? e.message : String(e));
       }

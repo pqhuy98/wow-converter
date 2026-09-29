@@ -65,9 +65,9 @@ type exportCharacterJobStatus struct {
 func registerExportCharacter(r Router, d *Deps) {
 	exportlog.Install()
 
-	timeout := 60 * time.Second
+	timeout := 5 * time.Minute
 	if d.Config.IsSharedHosting {
-		timeout += 60 * time.Second
+		timeout = 2 * time.Minute
 	}
 
 	var queue *util.JobQueue[exportCharacterRequest, exportCharacterResponse]

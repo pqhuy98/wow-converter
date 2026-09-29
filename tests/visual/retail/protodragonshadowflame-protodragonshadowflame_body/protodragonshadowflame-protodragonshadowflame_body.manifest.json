@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "protodragonshadowflame-protodragonshadowflame_body",
+  "suite": "retail",
+  "case": {
+    "base": "local::creature\\protodragonshadowflame\\protodragonshadowflame_body",
+    "weaponR": "",
+    "weaponL": "",
+    "size": "hero"
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

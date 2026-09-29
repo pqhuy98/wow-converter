@@ -319,7 +319,10 @@ export class CharacterExporter {
           });
           break;
         case 'dressing-room':
-          npcMeta = await decodeDressingRoom(baseZam.expansion, baseZam.hash);
+          npcMeta = await decodeDressingRoom(
+            wowDataClient.isClassic() ? baseZam.expansion : 'latest-available',
+            baseZam.hash,
+          );
           break;
         default:
           throw new Error(`Unallowed base zam type: ${baseZam.type}`);
@@ -348,7 +351,9 @@ export class CharacterExporter {
       return exportCharacterAsMdl({
         ctx,
         metaData: charMeta,
-        expansion: baseZam.expansion,
+        expansion: baseZam.type === 'dressing-room' && !wowDataClient.isClassic()
+          ? 'latest-available'
+          : baseZam.expansion,
         keepCinematic: Boolean(char.keepCinematic),
         attackTag: char.attackTag,
       });

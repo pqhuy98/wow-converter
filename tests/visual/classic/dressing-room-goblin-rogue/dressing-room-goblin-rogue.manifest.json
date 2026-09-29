@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-goblin-rogue",
+  "suite": "classic",
+  "case": {
+    "base": "https://www.wowhead.com/mop-classic/dressing-room?goblin-rogue#fs80m0zN89c8zJ8Vhv8MvI8wl38zO8VhB8MvN8wBL8MvA8wBl877vpOB87cpKv87VpS7MpKl808pUw808pKC808pSY808tAf87MtLi87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

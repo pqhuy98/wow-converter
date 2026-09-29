@@ -1,5 +1,5 @@
+import displayModByBonus from '../../../golang/internal/wowhead/display_mod_bonuses.json';
 import { customFetch } from './http-client';
-import { g_itembonuses } from './snipped-data/g_itembonuses';
 import { getWowheadPrefix, ZamExpansion } from './zam-url';
 
 export interface GathererAppearancesMap {
@@ -88,14 +88,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function selectDisplayIdForCharacter(entry: GathererEntry, bonus: number): number {
-  const EFFECT_TYPE_DISPLAY_MOD = 7;
-  let idx = 0;
-  if (bonus) {
-    const arr = g_itembonuses[bonus]?.find((v) => v[0] === EFFECT_TYPE_DISPLAY_MOD);
-    if (arr?.[1]) {
-      idx = arr[1];
-    }
-  }
+  const idx = displayModIndex(bonus);
   const appearances = entry.json.appearances ?? entry.jsonequip?.appearances ?? {};
   return appearances[idx]?.[0] ?? entry.json.displayid;
+}
+
+const displayModByBonusId = new Map<string, number>(Object.entries(displayModByBonus));
+
+function displayModIndex(bonus: number): number {
+  if (!bonus) return 0;
+  return displayModByBonusId.get(String(bonus)) ?? 0;
 }

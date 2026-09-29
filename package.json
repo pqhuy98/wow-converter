@@ -21,6 +21,9 @@
     "parity:mdl": "bun scripts/retail-mdl-parity-loop.ts",
     "generate:acore-sqlite": "bun scripts/generate-azerothcore-sqlite.ts",
     "clean": "bun scripts/clean.ts",
+    "shot": "bun scripts/shot-export.ts",
+    "test:visual": "bun scripts/visual-snapshot.ts",
+    "test:visual:update": "bun scripts/visual-snapshot.ts --update",
     "smoke": "bun scripts/smoke-go-bundle.ts",
     "smoke:hmr": "bun scripts/smoke-go-hmr.ts",
     "postinstall": "cd webui && bun install && cd .. && prisma generate"

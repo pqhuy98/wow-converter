@@ -1,10 +1,29 @@
 package wowhead
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 )
+
+//go:embed display_mod_bonuses.json
+var displayModBonusesJSON []byte
+
+// displayModByBonus maps a wowhead item-bonus id to its display-modifier
+// appearance index (effect type 7, first match). Snipped from
+// https://nether.wowhead.com/data/item-bonuses on 2026-09-30.
+// A bonus absent from the map uses appearance 0.
+var displayModByBonus = mustDisplayModBonuses()
+
+func mustDisplayModBonuses() map[string]int {
+	var mods map[string]int
+	if err := json.Unmarshal(displayModBonusesJSON, &mods); err != nil {
+		panic(err)
+	}
+	return mods
+}
 
 // GatherItemInput is an item id + bonus pair from dressing room equipment.
 type GatherItemInput struct {
@@ -105,16 +124,10 @@ func selectDisplayIDForCharacter(entry gathererEntry, itemBonus int) int {
 }
 
 func displayModIndexForBonus(itemBonus int) int {
-	switch itemBonus {
-	case 6806, 7980:
-		return 1
-	case 6807, 7309:
-		return 3
-	case 12282:
-		return 4
-	default:
+	if itemBonus == 0 {
 		return 0
 	}
+	return displayModByBonus[strconv.Itoa(itemBonus)]
 }
 
 func appearanceDisplayID(appearances map[string][]any, idx int) int {

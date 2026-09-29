@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-red-dh",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?red-dh#fm8zb0zN89c858fD8bb8Muh8bl8MNW8qP8MfC8Mtc808bF8MAa8zYA8dAU8X8rG8Z8rX8Y8MIF8bh8MuC848fx818fV8bW8Mpz8br8MuA8bw8Mut8bU8MLa8W8dY8oy8fb838fI8bx8MIS8bn8MIi876H1R8081PB808DHH87sYdM808mjK808muM8083Aj8MzI8083Aj8MzI87V",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

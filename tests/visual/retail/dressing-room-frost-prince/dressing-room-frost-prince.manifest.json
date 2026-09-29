@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-frost-prince",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?frost-prince#fa80o0zN89c8zZ8jY8z18nw8z28nj8z38n18z48yo8M08yL8Mz8yt8MM8yC8og8yh8sW8z3g8aM8z5P8zYv8dLv8Mtr877inNk808zMaD808zMal808zMaO808zVpW87Vzzei8MIv83MZ8Maz8zVDJ808zMnO8MIv8zoFW87MzoFW87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

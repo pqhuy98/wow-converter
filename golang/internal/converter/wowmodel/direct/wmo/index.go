@@ -49,6 +49,24 @@ func wmoMaterialJSON(m wmo.Material) map[string]any {
 	}
 }
 
+// wmoDiffuseFileID is the texture file data ID bound as the WC3 diffuse.
+// Shader 23 ignores texture1 only when that slot is filled; an empty texture1
+// must not also skip texture2.
+func wmoDiffuseFileID(material wmo.Material) uint32 {
+	skipTexture1 := material.Shader == 23 && material.Texture1 != 0
+	for _, id := range exportTextureSlots(material) {
+		if id == 0 {
+			continue
+		}
+		if skipTexture1 {
+			skipTexture1 = false
+			continue
+		}
+		return id
+	}
+	return 0
+}
+
 func exportTextureSlots(material wmo.Material) []uint32 {
 	slots := []uint32{material.Texture1, material.Texture2, material.Texture3}
 	if material.Shader == 23 {
@@ -82,7 +100,9 @@ func resolveWmoTextures(
 	materials := root.Materials
 
 	for i, material := range materials {
-		dontUseFirstTexture := material.Shader == 23
+		// Shader 23 keeps the albedo in texture2. texture1 is often 0; skipping the
+		// first non-zero slot then binds texture3 (a mask) and the surface goes magenta or black.
+		diffuseID := wmoDiffuseFileID(material)
 		for _, materialTexture := range exportTextureSlots(material) {
 			if materialTexture == 0 {
 				continue
@@ -132,10 +152,9 @@ func resolveWmoTextures(
 
 			mtlMaterials = append(mtlMaterials, mtl.Material{Name: matName, MapKd: texFile})
 			textureMap[fileDataID] = textureMapEntry{matPathRelative: texFile, matPath: texPath, matName: matName}
-			if _, ok := materialMap[i]; !ok && !dontUseFirstTexture {
+			if _, ok := materialMap[i]; !ok && materialTexture == diffuseID {
 				materialMap[i] = matName
 			}
-			dontUseFirstTexture = false
 		}
 	}
 	return textureMap, materialMap, mtlMaterials, nil
@@ -171,8 +190,8 @@ func loadGroups(ctx context.Context, root *wmo.Loader, fileName string, getRaw f
 
 func buildWmoObjResult(root *wmo.Loader, allGroups []*wmo.Loader, materialMap map[int]string, modelName, mtlLib string) objpkg.Result {
 	type groupRef struct {
-		group   *wmo.Loader
-		indOfs  int
+		group    *wmo.Loader
+		indOfs   int
 		indCount int
 	}
 	var groups []groupRef

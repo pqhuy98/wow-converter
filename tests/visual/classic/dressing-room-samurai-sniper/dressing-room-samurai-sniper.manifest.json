@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-samurai-sniper",
+  "suite": "classic",
+  "case": {
+    "base": "https://www.wowhead.com/mop-classic/dressing-room?samurai-sniper#fz80z0zN89c8s8VVX8a8Vom8q8Vow8b8Von8d8VoC877gG4k808G4s87cG4V87VI0p808G4o808G5s808G4R808G51808r5J87s",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

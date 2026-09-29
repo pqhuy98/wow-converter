@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "npc-56439-sha-of-doubt",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/npc=56439/sha-of-doubt",
+    "weaponR": "",
+    "weaponL": "",
+    "size": "giant"
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-ninja-turtle",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?ninja-turtle#fM80z0zN89c8G8ol8u8MPd8I8o28N8kq8A8kI8fo8M1r8rb8MKS8zYh8dAn8Mx4808rr8MPI8fk8M1A8rL8MQg8fV8M1o8fm8M1M8rf8MPj8rw8MPt8ri8MPE8L8ke877ozqXd87czbRH808MTC808zqgi87cwLU87czm5q808zqyd808zqhM808zbgk87MzbSq87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

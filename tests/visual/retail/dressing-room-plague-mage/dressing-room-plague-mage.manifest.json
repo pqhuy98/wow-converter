@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-plague-mage",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?plague-mage#fm80R0zN89c8H8bA8F8q58J8bH8K8MLf8bK8MAt8bO8MAB8O8ds8S8dn8U8dE8bJ8MAy8bC8MA08qO8MfV8zYN8dAO8bQ8MLs8bg8MNr8bv8MNB8MgK8wTB8MtM808on8df8Q8MLQ877MyX4808yYm87cyYM87VyP1808yX2808yPK808yY7MyPW808tAf87MtG7k",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

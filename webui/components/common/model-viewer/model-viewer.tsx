@@ -16,6 +16,12 @@ import {
   useEffect, useMemo, useRef, useState,
 } from 'react';
 
+declare global {
+  interface Window {
+    __shotView?: (name: string) => string
+  }
+}
+
 import { Button } from '@/components/ui/button';
 
 import { useServerConfig } from '../../server-config';
@@ -28,6 +34,10 @@ interface ModelViewerProps {
   cameraSessionKey?: string
   alwaysFullscreen?: boolean
   source?: 'export' | 'browse'
+  /** Headless capture: hide chrome, frame the model, set `dataset.viewerReady` when drawn. */
+  shot?: boolean
+  /** Sequence name for shot mode. Defaults to Stand. */
+  shotSequence?: string
 }
 
 // Normalises backslashes to forward slashes for safe URL usage
@@ -37,7 +47,7 @@ const MAX_DISTANCE = 2000000;
 const FAR_CLIP_PLANE = 100_000_000;
 
 export default function ModelViewerUi({
-  modelPath, cameraSessionKey, alwaysFullscreen, source,
+  modelPath, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence,
 }: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -270,10 +280,12 @@ export default function ModelViewerUi({
     resizeViewerToCanvas();
 
     setLoadedCount(0);
-    void (async () => {
-      const gridInsts = await createGridModel(viewer, scene, 50, 128);
-      gridInstancesRef.current = gridInsts;
-    })();
+    if (!shot) {
+      void (async () => {
+        const gridInsts = await createGridModel(viewer, scene, 50, 128);
+        gridInstancesRef.current = gridInsts;
+      })();
+    }
 
     const requestId = ++loadRequestIdRef.current;
     let cancelled = false;
@@ -301,8 +313,12 @@ export default function ModelViewerUi({
       // Load the model (assumed to be in MDX|MDL format)
       const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver);
       if (cancelled || loadRequestIdRef.current !== requestId) return;
-      if (!(model instanceof MdxModel)) return;
+      if (!(model instanceof MdxModel)) {
+        if (shot) document.documentElement.dataset.viewerError = 'not an mdx model';
+        return;
+      }
       modelInstance = model.addInstance();
+      if (shot) modelInstance.timeScale = 0;
       modelRef.current = model;
       try {
         const cams = model.cameras;
@@ -319,7 +335,12 @@ export default function ModelViewerUi({
         cameraSessionKey && anim.sessionKey === cameraSessionKey,
       );
       let nextSeq = 0;
-      if (preserveAnim) {
+      if (shot) {
+        const want = (shotSequence ?? 'Stand').trim().toLowerCase();
+        const exact = model.sequences.findIndex((seq) => seq.name.toLowerCase() === want);
+        const prefix = model.sequences.findIndex((seq) => seq.name.toLowerCase().startsWith(want));
+        nextSeq = exact >= 0 ? exact : prefix >= 0 ? prefix : 0;
+      } else if (preserveAnim) {
         if (anim.sequenceIndex < model.sequences.length) {
           nextSeq = anim.sequenceIndex;
         } else if (anim.sequenceName) {
@@ -596,7 +617,10 @@ export default function ModelViewerUi({
       }
       window.addEventListener('mousemove', onMouseMove!);
       window.addEventListener('mouseup', onMouseUp!);
-    })();
+    })().catch((err: unknown) => {
+      if (!shot || cancelled) return;
+      document.documentElement.dataset.viewerError = err instanceof Error ? err.message : 'load failed';
+    });
 
     return () => {
       cancelled = true;
@@ -628,7 +652,7 @@ export default function ModelViewerUi({
         setCurrentCamera(null);
       }
     };
-  }, [modelPath, cameraSessionKey, canvasRef.current, viewer]);
+  }, [modelPath, cameraSessionKey, canvasRef.current, viewer, shot, shotSequence]);
 
   const [progress, setProgress] = useState(0);
 
@@ -639,6 +663,20 @@ export default function ModelViewerUi({
       inst.setSequence(currentSeq);
       // 0 = loop based on model, 1 = never loop, 2 = always loop (see mdx impl)
       inst.sequenceLoopMode = 0;
+      const seq = sequences[currentSeq];
+      if (shot && seq) {
+        inst.timeScale = 0;
+        const scene = sceneRef.current;
+        if (scene) applyShotView(scene, inst, 'front');
+        window.__shotView = (name: string) => {
+          const liveScene = sceneRef.current;
+          const liveInst = instanceRef.current;
+          if (!liveScene || !liveInst) return '';
+          applyShotView(liveScene, liveInst, name);
+          document.documentElement.dataset.viewerView = name;
+          return name;
+        };
+      }
       setProgress(0);
     }
     if (cameraSessionKey) {
@@ -647,7 +685,31 @@ export default function ModelViewerUi({
       anim.sequenceIndex = currentSeq;
       anim.sequenceName = sequences[currentSeq]?.name ?? anim.sequenceName;
     }
-  }, [currentSeq, cameraSessionKey, sequences]);
+    if (!shot || !inst || !viewer) return undefined;
+    let cancelled = false;
+    delete document.documentElement.dataset.viewerReady;
+    void (async () => {
+      await viewer.whenAllLoaded();
+      if (cancelled) return;
+      const scene = sceneRef.current;
+      const live = instanceRef.current;
+      const liveSeq = sequences[currentSeq];
+      if (scene && live && liveSeq) {
+        const span = liveSeq.interval[1] - liveSeq.interval[0];
+        settleShotPose(scene, live, liveSeq.interval[0] + span / 2);
+      }
+      resizeViewerToCanvas();
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      if (cancelled) return;
+      document.documentElement.dataset.viewerSequence = sequences[currentSeq]?.name ?? '';
+      document.documentElement.dataset.viewerReady = '1';
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSeq, cameraSessionKey, sequences, shot, viewer]);
 
   // Keep a live progress percentage for the active sequence
   useEffect(() => {
@@ -879,7 +941,7 @@ export default function ModelViewerUi({
   return (
     <div className={`flex flex-col lg:flex-row w-full h-full ${alwaysFullscreen ? 'fixed inset-0 z-50' : isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
       <div ref={canvasContainerRef} className={`relative flex-1 min-h-0 ${alwaysFullscreen || isFullscreen ? 'h-full' : 'h-full'}`}>
-        <div className="absolute top-2 left-2 z-10 flex gap-2">
+        {!shot && <div className="absolute top-2 left-2 z-10 flex gap-2">
           {!alwaysFullscreen && (
             <Button
               variant="secondary"
@@ -949,8 +1011,8 @@ export default function ModelViewerUi({
               tooltips={cutBoxEnabled ? 'Disable Cut Box' : 'Enable Cut Box'} asChild
             />
           </Button>}
-        </div>
-        <div className="absolute bottom-2 left-2 z-10 flex items-end gap-3">
+        </div>}
+        {!shot && <div className="absolute bottom-2 left-2 z-10 flex items-end gap-3">
           <TooltipHelp
             trigger={<span className="inline-flex"><Mouse className="w-6 h-6 text-[hsl(var(--viewer-sidebar-fg))]/90 drop-shadow" /></span>}
             tooltips={(
@@ -962,7 +1024,7 @@ export default function ModelViewerUi({
             )}
             asChild
           />
-        </div>
+        </div>}
         <canvas
           ref={canvasRef}
           width={1}
@@ -975,7 +1037,7 @@ export default function ModelViewerUi({
           }}
         />
       </div>
-      <div className="flex lg:flex-row flex-col lg:h-full h-[420px] min-h-[420px] lg:border-l border-t lg:border-t-0 border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))]">
+      {!shot && <div className="flex lg:flex-row flex-col lg:h-full h-[420px] min-h-[420px] lg:border-l border-t lg:border-t-0 border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))]">
         <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] lg:border-r border-b lg:border-b-0 border-[hsl(var(--viewer-divider))] flex flex-col'}>
           <div className="flex-1 lg:flex lg:flex-col lg:overflow-hidden overflow-y-auto viewer-scroll">
             <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-0 lg:z-10">
@@ -1100,9 +1162,74 @@ export default function ModelViewerUi({
           </div>
         </div>
         ) : null}
-      </div>
+      </div>}
     </div>
   );
+}
+
+const SHOT_STEP_S = 1 / 60;
+
+/** Same generator the viewer already ships, with a fixed seed for shot captures. */
+function seededRandom(seed: number): () => number {
+  return () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+}
+
+/**
+ * Play from the sequence start to `targetFrame` at a fixed 60Hz step, then stop the clock.
+ * Particle spread uses a seeded Math.random for the duration of the replay.
+ */
+function settleShotPose(scene: Scene, inst: MdxModelInstance, targetFrame: number): void {
+  inst.clearEmittedObjects();
+  inst.timeScale = 1;
+  scene.emittedObjectUpdater.update(0);
+  inst.setSequence(inst.sequence);
+  for (const emitter of inst.particleEmitters2) emitter.lastEmissionKey = -1;
+  inst.timeScale = 0;
+  const random = Math.random;
+  Math.random = seededRandom(1);
+  try {
+    inst.timeScale = 1;
+    let guard = 0;
+    while (inst.frame + 1e-3 < targetFrame && guard < 20000) {
+      const dt = Math.min(SHOT_STEP_S, (targetFrame - inst.frame) / 1000);
+      if (dt <= 0) break;
+      inst.updateAnimations(dt);
+      scene.emittedObjectUpdater.update(dt);
+      guard += 1;
+    }
+    inst.frame = targetFrame;
+  } finally {
+    inst.timeScale = 0;
+    Math.random = random;
+  }
+}
+
+/** Model faces +X. `left` looks from the model's left toward its right. */
+function applyShotView(scene: Scene, inst: MdxModelInstance, view: string): void {
+  const bounds = inst.getBounds();
+  const target = vec3.fromValues(bounds.x, bounds.y, bounds.z);
+  const fov = scene.camera.fov > 0 ? scene.camera.fov : Math.PI / 4;
+  const distance = Math.max(bounds.r * 2.2, (bounds.r / Math.sin(fov / 2)) * 1.35);
+  const offset = shotViewOffset(view);
+  scene.camera.moveToAndFace(
+    vec3.fromValues(target[0] + distance * offset[0], target[1] + distance * offset[1], target[2] + distance * offset[2]),
+    target,
+    vec3.fromValues(offset[3], offset[4], offset[5]),
+  );
+}
+
+function shotViewOffset(view: string): readonly [number, number, number, number, number, number] {
+  switch (view) {
+    case 'back': return [-1, 0, 0, 0, 0, 1];
+    case 'left': return [0, 1, 0, 0, 0, 1];
+    case 'right': return [0, -1, 0, 0, 0, 1];
+    case 'top': return [0, 0, 1, 1, 0, 0];
+    case 'bottom': return [0, 0, -1, 1, 0, 0];
+    default: return [1, 0, 0, 0, 0, 1];
+  }
 }
 
 async function createGridModel(viewer: ModelViewer, scene: Scene, size: number, step: number): Promise<MdxModelInstance[]> {

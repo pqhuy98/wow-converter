@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "npc-114895-nightbane",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/npc=114895/nightbane#modelviewer",
+    "weaponR": "",
+    "weaponL": "",
+    "size": "hero"
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

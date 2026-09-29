@@ -1,5 +1,8 @@
 exported-assets
 exported-assets-browse
+tests/visual/**/*.actual.png
+tests/visual/**/*.diff.png
+tmp/
 recent-exports.json
 .playwright-mcp
 wow-converter.code-workspace

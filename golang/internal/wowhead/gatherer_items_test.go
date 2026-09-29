@@ -25,6 +25,19 @@ func TestSelectDisplayIDForCharacterUsesDisplayModBonusIndex(t *testing.T) {
 	}
 }
 
+func TestDisplayModIndexForOutfitColorBonuses(t *testing.T) {
+	cases := map[int]int{
+		0: 0, 6806: 1, 7309: 3, 12282: 4, 7980: 1,
+		8999: 159, 9434: 160, 13473: 3, 11981: 1, 12265: 4,
+		999999: 0,
+	}
+	for bonus, want := range cases {
+		if got := displayModIndexForBonus(bonus); got != want {
+			t.Fatalf("bonus %d: got appearance %d, want %d", bonus, got, want)
+		}
+	}
+}
+
 func TestSelectDisplayIDForCharacterFallsBackToJSONEquipAppearances(t *testing.T) {
 	entry := gathererEntry{}
 	entry.JSON.DisplayID = 0

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-tauren-druid",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?tauren-druid#fn80k0zN89c8oO8SD8oK8VHu8oP8SZ8TS8VHE8rX8MWJ8TU8VHD8T18VJb8zYO8dpw8MtL808mf8VJQ8mw8SW8TZ8VJk8T28VJf8T38VJG8j08VJC8jM8VJF8jc8VJU8r18MXm8oQ8S58T48VJt8T58VJE876zRZ7MzRZM808zRZm808zRY387VzRZV808zRY5808zRZc808zRZz808zRY4808zbCP8cBO808zbC58cBO87V",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

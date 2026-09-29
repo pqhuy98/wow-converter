@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "slug": "outfit-621337-thornspeaker-urven",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room#fm80q0zg89c8F8bc8H8bA8J8bH8K8b58O8dq8Q8MLQ8S8dn8U8dE8on8df8qO8MfR8bg8MNr8bv8MNB8bC8MA08bJ8MAy8bK8MAt8bO8MAC8bQ8MLs8zYN8dAO8MtM808MgK8wTB877MK5d808zast8cge8K4d808zMoM87cuvi87czasv8cge8zazQ8cge8zVMk8MQC8K5s808Cic87MCim87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  },
+  "issue": "WoWhead characters: colors do not match."
+}

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-marauder",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?marauder#fl80z0zN89c8ko86y8V586h8oM86C8oc86Q8om8638fb8M2k8fa8M1O8zY48dTo8MtC808fr8M2w8ff8M2N8fd8M2b8oV8zzV877hSXK8082My8082N38MzG87mSXX808SXQ808SXS8082AM8MzG8SXW8082bB87M2bB87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

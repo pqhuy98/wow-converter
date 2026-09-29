@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-black-dh",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?black-dh#fm8zb0zN89c8X8rI8W8dZ8Y8rt8Z8rX8bn8MIi8bx8MIS8bl8MNU8bF8MAs858fD8bU8MLa8qP8MfC818fa8bW8MT28zYA8dAU8bh8MuC8bb8Muf8bw8Mut8br8MuA8Mtc80848fL8oy8fq838MLZ874FKk87VzaUr87kzoyR87c30N808vxh808HPT87MHPT87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

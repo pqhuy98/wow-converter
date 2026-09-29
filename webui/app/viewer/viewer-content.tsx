@@ -22,6 +22,8 @@ function Viewer() {
   const router = useRouter();
   const modelPath = searchParams.get('model');
   const source = searchParams.get('source') ?? 'export';
+  const shot = searchParams.get('shot') === '1';
+  const shotSequence = searchParams.get('seq') ?? undefined;
 
   useEffect(() => {
     const pageTitle = modelPath
@@ -60,7 +62,7 @@ function Viewer() {
 
   return (
     <div className="h-screen w-screen bg-background relative">
-      <div className="absolute top-4 left-4 z-10">
+      {!shot && <div className="absolute top-4 left-4 z-10">
         <Button
           variant="secondary"
           size="sm"
@@ -70,8 +72,14 @@ function Viewer() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-      </div>
-      <ModelViewerUi modelPath={decodeURIComponent(modelPath)} alwaysFullscreen={true} source={source as 'export' | 'browse'} />
+      </div>}
+      <ModelViewerUi
+        modelPath={decodeURIComponent(modelPath)}
+        alwaysFullscreen={true}
+        source={source as 'export' | 'browse'}
+        shot={shot}
+        shotSequence={shotSequence}
+      />
     </div>
   );
 }

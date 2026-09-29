@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-undead-rogue",
+  "suite": "classic",
+  "case": {
+    "base": "https://www.wowhead.com/mop-classic/dressing-room?undead-rogue#fV80m0zN89c868VbW8zz8Vb38zM8Rja8zc8Vdi8zm8Vdj877vdTV87cdxz87VdAJ808dlh808dls808dlT808dLC808fck87MdCt87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "npc-32678-emeline-fizzlefry",
+  "suite": "classic",
+  "case": {
+    "base": "https://www.wowhead.com/mop-classic/npc=32678/emeline-fizzlefry",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

@@ -516,7 +516,7 @@ func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *Export
 		case wowhead.ZamTypeObject:
 			npcMeta, err = wowhead.FetchObjectMeta(e.HTTP, metaExpansion, zam.DisplayID)
 		case wowhead.ZamTypeDressingRoom:
-			npcMeta, err = wowhead.DecodeDressingRoom(e.HTTP, zam.Expansion, zam.Hash)
+			npcMeta, err = wowhead.DecodeDressingRoom(e.HTTP, metaExpansion, zam.Hash)
 		default:
 			return nil, fmt.Errorf("unallowed base zam type: %s", zam.Type)
 		}
@@ -536,11 +536,7 @@ func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *Export
 		if zam.Type == wowhead.ZamTypeNPC && charMeta.Character == nil {
 			return nil, fmt.Errorf("creature display %d: no model from wowhead or CASC DB2", zam.DisplayID)
 		}
-		exportExpansion := metaExpansion
-		if zam.Type == wowhead.ZamTypeDressingRoom {
-			exportExpansion = zam.Expansion
-		}
-		return ExportCharacterAsMdl(exportCtx, charMeta, exportExpansion, char.KeepCinematic, char.AttackTag)
+		return ExportCharacterAsMdl(exportCtx, charMeta, metaExpansion, char.KeepCinematic, char.AttackTag)
 	default:
 		return nil, fmt.Errorf("unknown base type: %s", char.Base.Type)
 	}

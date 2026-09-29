@@ -4,6 +4,7 @@ const isDev = process.env.NODE_ENV === 'development';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  devIndicators: false,
   allowedDevOrigins: ['localhost:3001', '127.0.0.1:3001'],
   // Static export for production builds only — dev needs rewrites to proxy /api to Express.
   ...(isDev ? {} : { output: 'export' }),

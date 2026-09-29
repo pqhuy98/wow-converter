@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-orc-warrior",
+  "suite": "classic",
+  "case": {
+    "base": "https://www.wowhead.com/mop-classic/dressing-room?orc-warrior#fM80m0zN89c8u8VkZ8G8VRs8I8VRh8N8VRp8A8VRe877gyxZ808yx2808zRZm808ytM87VtVQ808ytz808tmw808yx1808tVb808tMM87MtLs87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

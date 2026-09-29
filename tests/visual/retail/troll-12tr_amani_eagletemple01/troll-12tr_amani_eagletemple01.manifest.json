@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "slug": "troll-12tr_amani_eagletemple01",
+  "suite": "retail",
+  "issue": "WMO: buildings from latest expansions have black spots on their textures.",
+  "case": {
+    "base": "local::world/wmo/expansion11/troll/12tr_amani_eagletemple01.wmo",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}
