@@ -19,6 +19,9 @@ type Source struct {
 	Kind       Kind
 	FileDataID int
 	PNG        []byte
+	// Opaque forces alpha to 255 before BLP1 quantization. Set for WMO
+	// materials whose blend mode does not use texture alpha.
+	Opaque bool
 }
 
 var (

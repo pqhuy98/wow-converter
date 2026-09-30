@@ -2,7 +2,6 @@
   "version": 1,
   "slug": "void-12vd_void_pylon01",
   "suite": "retail",
-  "issue": "WMO: buildings from latest expansions have black spots on their textures.",
   "case": {
     "base": "local::world/wmo/expansion11/void/12vd_void_pylon01.wmo",
     "weaponR": "",
@@ -14,7 +13,7 @@
     "formatVersion": "1000"
   },
   "shot": {
-    "sequence": "",
+    "sequence": "Stand 1",
     "tile": [
       640,
       400
@@ -35,5 +34,6 @@
   "diff": {
     "thresholdPercent": 1,
     "channelDelta": 4
-  }
+  },
+  "issue": "WMO: buildings from latest expansions have black spots on their textures."
 }

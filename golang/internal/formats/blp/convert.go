@@ -26,6 +26,10 @@ type EncodeInput struct {
 	PNG      []byte
 	BLP2     []byte
 	ResizeTo *Size
+	// Opaque keeps RGB on pixels whose source alpha is 0. WMO blend mode 0
+	// stores the albedo that way; the quantizer otherwise builds its palette
+	// only from visible pixels and the surface goes black.
+	Opaque bool
 }
 
 // Size holds width and height dimensions.
@@ -59,7 +63,26 @@ func ConvertTextureToBlp(input EncodeInput, blpPath string) error {
 			pngData = resized
 		}
 	}
+	if input.Opaque {
+		forced, err := forcePNGOpaque(pngData)
+		if err != nil {
+			return err
+		}
+		pngData = forced
+	}
 	return ConvertPngToBlp(pngData, blpPath)
+}
+
+// forcePNGOpaque sets every pixel alpha to 255 so zero-alpha RGB survives quantization.
+func forcePNGOpaque(pngData []byte) ([]byte, error) {
+	data, width, height, err := decodePNGToRGBA(pngData)
+	if err != nil {
+		return nil, err
+	}
+	for i := 3; i < len(data); i += 4 {
+		data[i] = 255
+	}
+	return pngwriter.EncodeRGBA(data, width, height)
 }
 
 // ConvertPngToBlp converts PNG bytes to a BLP1 file using the native C++ encoder

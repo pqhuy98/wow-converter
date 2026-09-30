@@ -12,6 +12,7 @@ type MessageTask = {
   byteLength: number,
   kind: 'png' | 'blp2',
   resizeTo?: { width: number, height: number },
+  opaque?: boolean,
   blpPath: string,
 };
 type MessageShutdown = {type: 'shutdown'};
@@ -45,7 +46,7 @@ function run() {
 
     void (async () => {
       try {
-        await convertTextureToBlp({ [msg.kind]: data, resizeTo: msg.resizeTo }, blpPath);
+        await convertTextureToBlp({ [msg.kind]: data, resizeTo: msg.resizeTo, opaque: msg.opaque }, blpPath);
         parentPort!.postMessage({ type: 'done', id, success: true });
       } catch (error: unknown) {
         parentPort!.postMessage({

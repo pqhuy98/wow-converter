@@ -44,6 +44,8 @@ export interface BlpConvertItem {
   blp2?: Buffer;
   /** Optional downscale applied before BLP1 encoding. */
   resizeTo?: { width: number, height: number };
+  /** Keep RGB on zero-alpha pixels. */
+  opaque?: boolean;
   blpPath: string;
 }
 
@@ -63,7 +65,7 @@ export async function pngsToBlps(items: BlpConvertItem[]): Promise<void> {
     const { convertTextureToBlp } = await import('./blp.convert');
     for (const item of items) {
       const { data, kind } = await resolveItemInput(item);
-      await convertTextureToBlp({ [kind]: data, resizeTo: item.resizeTo }, item.blpPath);
+      await convertTextureToBlp({ [kind]: data, resizeTo: item.resizeTo, opaque: item.opaque }, item.blpPath);
     }
     return;
   }
@@ -75,7 +77,7 @@ export async function pngsToBlps(items: BlpConvertItem[]): Promise<void> {
 
   const promises: Promise<void>[] = items.map(async (item) => {
     const { data, kind } = await resolveItemInput(item);
-    return pool.submit({ data, kind, resizeTo: item.resizeTo }, item.blpPath);
+    return pool.submit({ data, kind, resizeTo: item.resizeTo, opaque: item.opaque }, item.blpPath);
   });
 
   await Promise.all(promises);

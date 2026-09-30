@@ -148,7 +148,13 @@ func resolveWmoTextures(
 				continue
 			}
 			relTex := relPath(exportRoot, texPath)
-			texturesource.Register(relTex, texturesource.Source{Kind: texturesource.KindBLP, FileDataID: fileDataID})
+			opaque := material.BlendMode == 0
+			if prev, ok := texturesource.Get(relTex); ok && !prev.Opaque {
+				opaque = false
+			}
+			texturesource.Register(relTex, texturesource.Source{
+				Kind: texturesource.KindBLP, FileDataID: fileDataID, Opaque: opaque,
+			})
 
 			mtlMaterials = append(mtlMaterials, mtl.Material{Name: matName, MapKd: texFile})
 			textureMap[fileDataID] = textureMapEntry{matPathRelative: texFile, matPath: texPath, matName: matName}

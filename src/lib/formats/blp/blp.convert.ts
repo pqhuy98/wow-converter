@@ -73,6 +73,8 @@ export interface BlpEncodeInput {
   blp2?: Buffer;
   /** Optional downscale applied to the PNG before BLP1 encoding. */
   resizeTo?: { width: number; height: number };
+  /** Keep RGB on zero-alpha pixels. Opaque WMO materials store albedo that way. */
+  opaque?: boolean;
 }
 
 /**
@@ -88,7 +90,8 @@ export async function convertTextureToBlp(input: BlpEncodeInput, blpPath: string
     if (!input.blp2) throw new Error('convertTextureToBlp: either png or blp2 input is required');
     const { BLPImage } = await import('@/lib/wow/formats/blp/blp');
     const { BufferWrapper } = await import('@/lib/wow/formats/buffer');
-    png = new BLPImage(new BufferWrapper(input.blp2)).toPNG(0b1111).raw;
+    const mask = input.opaque ? 0b0111 : 0b1111;
+    png = new BLPImage(new BufferWrapper(input.blp2)).toPNG(mask).raw;
   }
   if (input.resizeTo) {
     const { resizePng } = await import('../png');

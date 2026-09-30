@@ -10,6 +10,7 @@ export type BlpTaskInput = {
   data: Buffer,
   kind: 'png' | 'blp2',
   resizeTo?: { width: number, height: number },
+  opaque?: boolean,
 };
 
 type Task = {
@@ -28,6 +29,7 @@ type WorkerTaskMessage = {
   byteLength: number,
   kind: 'png' | 'blp2',
   resizeTo?: { width: number, height: number },
+  opaque?: boolean,
   blpPath: string,
 };
 type WorkerDoneMessage = { type: 'done', id: number, success: boolean, error?: string };
@@ -152,6 +154,7 @@ export class BlpWorkerPool {
         byteLength: data.byteLength,
         kind: task.input.kind,
         resizeTo: task.input.resizeTo,
+        opaque: task.input.opaque,
         blpPath: task.blpPath,
       };
       // Transfer ownership of the ArrayBuffer to avoid copying memory

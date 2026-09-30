@@ -27,6 +27,9 @@ import { Button } from '@/components/ui/button';
 import { useServerConfig } from '../../server-config';
 import { TooltipHelp } from '../tooltip-help';
 import { CutBox, cutBoxFromInstanceBounds, CutBoxOrthoView } from './cut-box-view';
+import {
+  frameShotCamera, readMdxExtents, usefulExtent, type ExtentBox, type ShotExtents,
+} from './shot-frame';
 
 interface ModelViewerProps {
   modelPath?: string
@@ -184,6 +187,7 @@ export default function ModelViewerUi({
 
   // Track loaded asset files for download
   const baseUrlRef = useRef<string>('/api/assets');
+  const shotExtentsRef = useRef<ShotExtents | null>(null);
   const loadedFilesRef = useRef<Set<string>>(new Set());
   const [loadedCount, setLoadedCount] = useState<number>(0);
   useEffect(() => {
@@ -309,6 +313,15 @@ export default function ModelViewerUi({
       // Path solver so the viewer fetches every dependant file via our assets route
       const base = baseUrlRef.current;
       const pathSolver = (src: unknown) => `${base}/${normalizePath(src as string)}`;
+      if (shot) {
+        shotExtentsRef.current = null;
+        try {
+          const res = await fetch(`${base}/${normalizePath(modelPath)}`);
+          if (res.ok) shotExtentsRef.current = readMdxExtents(await res.arrayBuffer());
+        } catch {
+          shotExtentsRef.current = null;
+        }
+      }
 
       // Load the model (assumed to be in MDX|MDL format)
       const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver);
@@ -667,12 +680,12 @@ export default function ModelViewerUi({
       if (shot && seq) {
         inst.timeScale = 0;
         const scene = sceneRef.current;
-        if (scene) applyShotView(scene, inst, 'front');
+        if (scene) applyShotView(scene, inst, 'front', shotExtentsRef.current);
         window.__shotView = (name: string) => {
           const liveScene = sceneRef.current;
           const liveInst = instanceRef.current;
           if (!liveScene || !liveInst) return '';
-          applyShotView(liveScene, liveInst, name);
+          applyShotView(liveScene, liveInst, name, shotExtentsRef.current);
           document.documentElement.dataset.viewerView = name;
           return name;
         };
@@ -1207,13 +1220,25 @@ function settleShotPose(scene: Scene, inst: MdxModelInstance, targetFrame: numbe
   }
 }
 
+function shotExtentBox(extents: ShotExtents, inst: MdxModelInstance): ExtentBox | null {
+  const seq = inst.sequence >= 0 ? extents.sequences[inst.sequence] : undefined;
+  if (seq && usefulExtent(seq)) return seq;
+  if (usefulExtent(extents.model)) return extents.model;
+  return null;
+}
+
 /** Model faces +X. `left` looks from the model's left toward its right. */
-function applyShotView(scene: Scene, inst: MdxModelInstance, view: string): void {
+function applyShotView(scene: Scene, inst: MdxModelInstance, view: string, extents: ShotExtents | null): void {
+  const offset = shotViewOffset(view);
+  const box = extents ? shotExtentBox(extents, inst) : null;
+  if (box) {
+    frameShotCamera(scene.camera, box, offset, extents?.points);
+    return;
+  }
   const bounds = inst.getBounds();
   const target = vec3.fromValues(bounds.x, bounds.y, bounds.z);
   const fov = scene.camera.fov > 0 ? scene.camera.fov : Math.PI / 4;
   const distance = Math.max(bounds.r * 2.2, (bounds.r / Math.sin(fov / 2)) * 1.35);
-  const offset = shotViewOffset(view);
   scene.camera.moveToAndFace(
     vec3.fromValues(target[0] + distance * offset[0], target[1] + distance * offset[1], target[2] + distance * offset[2]),
     target,

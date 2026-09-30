@@ -10,7 +10,7 @@
  */
 import path from 'path';
 
-import { registerTextureSource } from '@/lib/converter/common/texture-source';
+import { getTextureSource, registerTextureSource } from '@/lib/converter/common/texture-source';
 import { assembleWowModel } from '@/lib/converter/wow-model/assemble';
 import { AnimationFile } from '@/lib/converter/wow-model/bundle/animation';
 import { M2MetadataFile } from '@/lib/converter/wow-model/bundle/metadata';
@@ -152,7 +152,12 @@ async function resolveWmoTextures(
         // skipped textures whose CASC read failed). The raw bytes land in the
         // shared cache and are reused for BLP encoding.
         await getRawWowFile(fileDataID);
-        registerTextureSource(path.relative(exportRoot, texPath), { kind: 'blp', fileDataID });
+        const rel = path.relative(exportRoot, texPath);
+        const prev = getTextureSource(rel);
+        let opaque = material.blendMode === 0;
+        if (prev?.kind === 'blp' && prev.opaque === false) opaque = false;
+        if (material.blendMode !== 0) opaque = false;
+        registerTextureSource(rel, { kind: 'blp', fileDataID, opaque });
 
         mtlMaterials.push({ name: matName, map_Kd: texFile });
         textureMap.set(fileDataID, { matPathRelative: texFile, matPath: texPath, matName });

@@ -14,6 +14,7 @@ type ConvertItem struct {
 	PNG      []byte
 	BLP2     []byte
 	ResizeTo *Size
+	Opaque   bool
 	BlpPath  string
 }
 
@@ -55,7 +56,7 @@ func PngsToBlps(items []ConvertItem) error {
 		if err != nil {
 			return err
 		}
-		encode := EncodeInput{ResizeTo: item.ResizeTo}
+		encode := EncodeInput{ResizeTo: item.ResizeTo, Opaque: item.Opaque}
 		switch input.kind {
 		case "png":
 			encode.PNG = input.data

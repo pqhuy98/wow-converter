@@ -200,7 +200,12 @@ export class AssetManager {
 
         if (source?.kind === 'blp' && rawBlp2) {
           // Decode + resize + encode all happen in the worker.
-          return { exportedPath: blpPath, item: { blp2: rawBlp2, resizeTo, blpPath } };
+          return {
+            exportedPath: blpPath,
+            item: {
+              blp2: rawBlp2, resizeTo, blpPath, opaque: source.opaque,
+            },
+          };
         }
         if (source?.kind === 'png') {
           // Copy so transferring the buffer to a worker doesn't detach the registry's copy.

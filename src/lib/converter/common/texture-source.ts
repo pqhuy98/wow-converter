@@ -10,7 +10,7 @@
 import path from 'path';
 
 export type TextureSource =
-  | { kind: 'blp'; fileDataID: number }
+  | { kind: 'blp'; fileDataID: number; opaque?: boolean }
   | { kind: 'png'; png: Buffer };
 
 const sources = new Map<string, TextureSource>();
