@@ -34,7 +34,7 @@ function parseArgs(argv: readonly string[]): ShotOptions {
     else if (!arg.startsWith('--') && model === '') model = arg;
   }
   if (model === '') {
-    throw new Error('usage: bun scripts/shot-export.ts <model-path> [--seq Stand] [--view front] [--out dir] [--base http://127.0.0.1:3001]');
+    throw new Error('usage: bun .cursor/skills/shot-export-wow-converter/shot-export.ts <model-path> [--seq Stand] [--view front] [--out dir] [--base http://127.0.0.1:3001]');
   }
   return {
     model, seq, out, base, view,

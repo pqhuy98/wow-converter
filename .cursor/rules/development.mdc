@@ -26,7 +26,7 @@ alwaysApply: false
   ```
 - Screenshots are mandatory in PR to provide proof of change correctness. Use Playwright MCP to make screenshot under `.playwright-mcp/`; copy into `docs/` before commit. Every change in PR must have a corresponding screenshot.
 - When using playwright MCP to export model, fill in the fields, click Export Character and wait for text `Export Successful` 10s then 20s then 40s. If taking more than 40s then check browser error message.
-- When taking a screenshot of an exported model, run `bun scripts/shot-export.ts <asset-path>` (server on port 3001) and read the PNG it prints. Optional `--seq Attack`. Do not drive the viewer by hand.
+- When taking a screenshot of an exported model, run `bun .cursor/skills/shot-export-wow-converter/shot-export.ts <asset-path>` (server on port 3001) and read the PNG it prints. Optional `--seq Attack`. Do not drive the viewer by hand. A pasted wowhead.com URL is a comparison: follow `shot-export-wowhead` and `shot-export-wow-converter`, then read both PNGs.
 - Visual snapshots guard conversion changes. The catalog is `RetailCases` and `ClassicCases` in `golang/internal/testcases/cases.go`. `npm run dev` must already be on port 3001. This suite is not part of `bun test`. Retail cases use the local `wow` product. Classic cases use `wow_classic`. The runner switches the loaded product and restores the one it found at start.
   - Compare: `bun run test:visual`. One case: `bun run test:visual -- --suite=retail --slug=<slug>`.
   - Refresh ground truth: `bun run test:visual:update`. One case: `bun run test:visual:update -- --slug=<slug>`. Update rewrites the expected image and the recorded sequence. It keeps `diff.thresholdPercent` and `diff.channelDelta`.
