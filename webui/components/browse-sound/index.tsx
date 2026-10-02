@@ -1,0 +1,403 @@
+'use client';
+
+import { CaptionsIcon, DownloadIcon, Music2Icon, PackageIcon } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+
+import { FileRow, VirtualListBox } from '@/components/common/listbox';
+import { useServerConfig } from '@/components/server-config';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Card, CardContent, CardHeader, CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { withCascBuild } from '@/lib/api/casc-cache';
+import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
+import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
+import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
+
+type FileEntry = { fileDataID: number; fileName: string };
+
+const OVERSCAN = 8;
+const CONTAINER_PADDING = 4;
+/** Must match maxSoundZipFiles in golang/internal/server/api/sound.go. */
+const MAX_ZIP_FILES = 1000;
+
+const suggestions = ['sound/creature/', 'sound/music/'] as const;
+const AUTO_PLAY_KEY = 'browse-sound-autoplay';
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const markClass = 'bg-yellow-200 rounded px-0.5 text-neutral-950';
+
+function Highlighted({
+  text,
+  regex,
+  words,
+}: {
+  text: string;
+  regex: RegExp | null;
+  words: Set<string>;
+}) {
+  if (!regex) return text;
+  const parts = text.split(regex);
+  return parts.map((part, idx) => (
+    words.has(part.toLowerCase())
+      ? <mark key={idx} className={markClass}>{part}</mark>
+      : <span key={idx}>{part}</span>
+  ));
+}
+
+function transcriptHasEveryWord(sub: string, words: readonly string[]): boolean {
+  const lc = sub.toLowerCase();
+  return words.every((word) => lc.includes(word.toLowerCase()));
+}
+
+function TranscriptBadge({ highlighted }: { highlighted: boolean }) {
+  const iconClass = highlighted
+    ? 'bg-yellow-200 text-neutral-950'
+    : 'text-muted-foreground';
+  return (
+    <span className={`ml-1.5 inline-flex shrink-0 select-none items-center rounded p-0.5 ${iconClass}`}>
+      <CaptionsIcon className="h-3.5 w-3.5" />
+    </span>
+  );
+}
+
+export default function BrowseSoundPage() {
+  const { buildKey } = useServerConfig();
+  const [allFiles, setAllFiles] = useState<FileEntry[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [selected, setSelected] = useState<FileEntry | null>(null);
+  const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(null);
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [searchTranscript, setSearchTranscript] = useState(false);
+  const [transcripts, setTranscripts] = useState<ReadonlyMap<number, string>>(() => new Map());
+  const [playNonce, setPlayNonce] = useState(0);
+  const [isZipping, setIsZipping] = useState(false);
+  const [zipError, setZipError] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setAutoPlay(localStorage.getItem(AUTO_PLAY_KEY) === '1');
+  }, []);
+
+  useEffect(() => {
+    setAllFiles([]);
+    setLoadError(null);
+    fetch(withCascBuild('/api/sound', buildKey))
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Failed to fetch sound list (${res.status})`);
+        const files: FileEntry[] = await res.json();
+        if (files.length === 0) throw new Error('No sound files found');
+        setAllFiles(files);
+      })
+      .catch((e: Error) => setLoadError(e.message));
+  }, [buildKey]);
+
+  useEffect(() => {
+    fetch('/api/sound/transcripts')
+      .then(async (res) => {
+        if (!res.ok) return;
+        const body: Record<string, string> = await res.json();
+        const next = new Map<number, string>();
+        for (const [id, sub] of Object.entries(body)) {
+          const fileId = Number(id);
+          if (fileId > 0 && sub) next.set(fileId, sub);
+        }
+        setTranscripts(next);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const queryWords = useMemo(() => debouncedQuery.trim().split(/ +/).filter(Boolean), [debouncedQuery]);
+
+  const filtered = useMemo(() => {
+    if (queryWords.length === 0) return allFiles;
+    const words = queryWords.map((w) => w.toLowerCase());
+    return allFiles.filter((f) => {
+      const nameLc = f.fileName.toLowerCase();
+      const idStr = String(f.fileDataID);
+      const sub = searchTranscript ? (transcripts.get(f.fileDataID) ?? '').toLowerCase() : '';
+      return words.every((w) => nameLc.includes(w) || idStr.includes(w) || sub.includes(w));
+    });
+  }, [allFiles, queryWords, searchTranscript, transcripts]);
+
+  const highlightRegex = useMemo(
+    () => (queryWords.length === 0 ? null : new RegExp(`(${queryWords.map(escapeRegExp).join('|')})`, 'gi')),
+    [queryWords],
+  );
+  const lowerWordsSet = useMemo(() => new Set(queryWords.map((w) => w.toLowerCase())), [queryWords]);
+
+  useScrollResetOnSearchChange({
+    containerRef: listRef,
+    search: `${debouncedQuery}\n${searchTranscript ? '1' : '0'}`,
+    isPending: !!pendingScrollToPath,
+  });
+
+  const handleSelect = useCallback((file: FileEntry) => {
+    setSelected(file);
+    if (localStorage.getItem(AUTO_PLAY_KEY) === '1') setPlayNonce((n) => n + 1);
+  }, []);
+
+  usePendingScrollToItem<FileEntry>({
+    items: filtered,
+    containerRef: listRef,
+    getRowHeight: () => FileRow.ROW_HEIGHT,
+    contentPadding: CONTAINER_PADDING,
+    matchKey: (f) => f.fileName,
+    pendingKey: pendingScrollToPath,
+    setPendingKey: setPendingScrollToPath,
+    onSelect: handleSelect,
+  });
+
+  const resetLocalState = useCallback(() => {
+    setQuery('');
+    setDebouncedQuery('');
+    setSelected(null);
+    setPendingScrollToPath(null);
+  }, []);
+
+  useSearchSelectUrlSync({
+    basePath: '/browse-sound',
+    search: query,
+    setSearch: setQuery,
+    setDebouncedSearch: setDebouncedQuery,
+    selectedPath: selected?.fileName ?? null,
+    pendingScrollPath: pendingScrollToPath,
+    setPendingScrollPath: setPendingScrollToPath,
+    resetLocalState,
+  });
+
+  const applySuggestion = (s: typeof suggestions[number]) => {
+    const v = `${s} `;
+    setQuery(v);
+    setDebouncedQuery(v);
+    const el = inputRef.current;
+    if (el) {
+      el.focus();
+      setTimeout(() => el.setSelectionRange(v.length, v.length), 0);
+    }
+  };
+
+  const downloadZip = async () => {
+    setIsZipping(true);
+    setZipError(null);
+    try {
+      const resp = await fetch('/api/sound/zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileDataIDs: filtered.map((f) => f.fileDataID) }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error ?? `Download failed with ${resp.status}`);
+      }
+      const url = URL.createObjectURL(await resp.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sounds.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setZipError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
+  const canZip = filtered.length > 0 && filtered.length <= MAX_ZIP_FILES;
+  const selectedUrl = selected ? withCascBuild(`/api/sound/${selected.fileDataID}`, buildKey) : undefined;
+  const selectedTranscript = selected ? transcripts.get(selected.fileDataID) : undefined;
+
+  return (
+    <TooltipProvider>
+    <div className="h-full p-4 flex flex-col overflow-x-hidden">
+      <div className="mx-auto flex-1 flex flex-col w-full max-w-full">
+        <div className="flex flex-col lg:flex-row gap-6 h-full min-w-0" style={{ height: 'calc(100vh - 125px)' }}>
+          {/* Left: list */}
+          <div className="lg:w-1/3 w-full lg:h-full h-[40vh] overflow-hidden min-w-0">
+            <Card className="h-full flex flex-col min-w-0">
+              <CardHeader className="flex flex-row justify-between items-center py-2 px-3 pb-0 pt-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Music2Icon className="w-4 h-4" />
+                  Browse Sound Files
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col flex-1 overflow-hidden p-3 min-w-0">
+                <div className="relative w-full mb-2">
+                  <Input
+                    placeholder="Search sound, e.g. 'sound/creature/illidan'..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setQuery('');
+                        setDebouncedQuery('');
+                      }
+                    }}
+                    ref={inputRef}
+                    className="w-full pr-10 sm:pr-[268px]"
+                  />
+                  <div className="absolute inset-y-0 right-1.5 flex items-center gap-1.5 z-20">
+                    <div className="hidden sm:flex items-center gap-1.5 pointer-events-none">
+                      {suggestions.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
+                          onClick={() => applySuggestion(s)}
+                          title={`Search for ${s}`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-pressed={searchTranscript}
+                            className={`rounded border border-border p-1 pointer-events-auto ${searchTranscript ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-accent'}`}
+                            onClick={() => setSearchTranscript((on) => !on)}
+                          >
+                            <CaptionsIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">Search phrase by generated transcript</TooltipContent>
+                      </Tooltip>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 mb-2 text-xs text-muted-foreground">
+                  <span>{loadError ?? (allFiles.length === 0 ? 'Loading sound list...' : `${filtered.length.toLocaleString()} files`)}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      Auto-play
+                      <span className="relative inline-block h-3.5 w-6 shrink-0">
+                        <Switch
+                          className="absolute left-0 top-0 origin-top-left scale-[0.55]"
+                          checked={autoPlay}
+                          onCheckedChange={(on) => {
+                            setAutoPlay(on);
+                            localStorage.setItem(AUTO_PLAY_KEY, on ? '1' : '0');
+                          }}
+                          aria-label="Auto-play"
+                        />
+                      </span>
+                    </label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={!canZip || isZipping}
+                      onClick={() => void downloadZip()}
+                      title={canZip ? 'Download all listed files as a zip' : `Narrow the search to at most ${MAX_ZIP_FILES} files to download them as a zip`}
+                    >
+                      <PackageIcon />
+                      {isZipping ? 'Zipping...' : 'Download all (.zip)'}
+                    </Button>
+                  </div>
+                </div>
+                {zipError && <p className="text-xs text-destructive mb-2">{zipError}</p>}
+                <VirtualListBox<FileEntry>
+                  items={filtered}
+                  listKey={`${debouncedQuery}\n${searchTranscript ? '1' : '0'}`}
+                  containerRef={listRef}
+                  containerClassName="overflow-y-scroll overflow-x-auto border rounded-md bg-background flex-1"
+                  contentPadding={CONTAINER_PADDING}
+                  overscan={OVERSCAN}
+                  getRowKey={(f) => f.fileDataID}
+                  fixedRowHeight={FileRow.ROW_HEIGHT}
+                  renderRow={(file, index, style) => {
+                    const isSelected = selected === file;
+                    const sub = transcripts.get(file.fileDataID);
+                    const matchedByTranscript = searchTranscript
+                      && queryWords.length > 0
+                      && sub !== undefined
+                      && transcriptHasEveryWord(sub, queryWords);
+                    return (
+                      <FileRow
+                        file={file}
+                        index={index}
+                        isSelected={isSelected}
+                        isBusy={false}
+                        highlightRegex={highlightRegex}
+                        lowerWordsSet={lowerWordsSet}
+                        clickWhenSelected={autoPlay}
+                        onClick={handleSelect}
+                        style={style}
+                        nameExtra={sub ? <TranscriptBadge highlighted={matchedByTranscript} /> : undefined}
+                        nameTooltip={sub ? (
+                          <Highlighted
+                            text={sub}
+                            regex={queryWords.length > 0 ? highlightRegex : null}
+                            words={lowerWordsSet}
+                          />
+                        ) : undefined}
+                      />
+                    );
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right: player */}
+          <div className="lg:w-2/3 w-full h-full overflow-y-auto p-0 relative min-w-0">
+            {selected && selectedUrl ? (
+              <div className="h-full overflow-auto bg-secondary">
+                <div className="mx-auto flex w-full max-w-xl flex-col gap-5 px-8 py-8">
+                  <p className="min-w-0 break-all font-mono text-sm leading-5">
+                    <span className="inline-block max-w-full break-all align-bottom">{selected.fileName}</span>
+                    <span className="inline-block select-none px-0.5" aria-hidden>{'\u00a0'}</span>
+                    <span className="inline-block align-bottom text-yellow-600">[{selected.fileDataID}]</span>
+                  </p>
+                  {selectedTranscript && (
+                    <p className="rounded-md bg-background px-4 py-3 text-lg leading-7">
+                      <Highlighted
+                        text={selectedTranscript}
+                        regex={searchTranscript ? highlightRegex : null}
+                        words={lowerWordsSet}
+                      />
+                    </p>
+                  )}
+                  <audio key={`${selected.fileDataID}-${playNonce}`} src={selectedUrl} controls autoPlay={autoPlay} className="w-full" />
+                  <Button asChild variant="outline" size="sm" className="w-fit">
+                    <a href={`${selectedUrl}${selectedUrl.includes('?') ? '&' : '?'}download=1`} download>
+                      <DownloadIcon />
+                      Download {selected.fileName.slice(selected.fileName.lastIndexOf('.'))}
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="absolute inset-0 bg-secondary flex items-center justify-center text-muted-foreground">
+                <p>Select a sound to play</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+    </TooltipProvider>
+  );
+}

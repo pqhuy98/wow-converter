@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Box, Clock, Image, Map, Search,
+  Box, Clock, Image, Map, Music2, Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WowConfigHeaderButton } from '../wow-config/wow-config-header-button';
 import { ThemeToggle } from './theme-toggle';
 
-type ActiveTab = 'export' | 'browse' | 'browse-texture' | 'recents' | 'maps';
+type ActiveTab = 'export' | 'browse' | 'browse-texture' | 'browse-sound' | 'recents' | 'maps';
 
 function getActiveTab(pathname: string): ActiveTab | null {
   if (pathname.startsWith('/setup')) {
@@ -19,6 +19,9 @@ function getActiveTab(pathname: string): ActiveTab | null {
   }
   if (pathname.startsWith('/browse-texture')) {
     return 'browse-texture';
+  }
+  if (pathname.startsWith('/browse-sound')) {
+    return 'browse-sound';
   }
   if (pathname.startsWith('/browse')) {
     return 'browse';
@@ -53,6 +56,9 @@ export default function SiteHeader() {
             <Link href="/browse-texture" className={`p-2 rounded-md ${activeTab === 'browse-texture' ? 'bg-primary/20' : 'hover:bg-accent'}`} title="Browse Textures">
               <Image className="w-5 h-5" />
             </Link>
+            <Link href="/browse-sound" className={`p-2 rounded-md ${activeTab === 'browse-sound' ? 'bg-primary/20' : 'hover:bg-accent'}`} title="Browse Sounds">
+              <Music2 className="w-5 h-5" />
+            </Link>
             <Link href="/maps" className={`p-2 rounded-md ${activeTab === 'maps' ? 'bg-primary/20' : 'hover:bg-accent'}`} title="Maps">
               <Map className="w-5 h-5" />
             </Link>
@@ -80,6 +86,12 @@ export default function SiteHeader() {
                 <Link href="/browse-texture" className="flex items-center justify-center">
                   <Image className="w-5 h-5" />
                   <span className="ml-2">Textures</span>
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="browse-sound" asChild className="px-3" title="Browse Sounds">
+                <Link href="/browse-sound" className="flex items-center justify-center">
+                  <Music2 className="w-5 h-5" />
+                  <span className="ml-2">Sounds</span>
                 </Link>
               </TabsTrigger>
               <TabsTrigger value="maps" asChild className="px-3" title="Maps">

@@ -14,7 +14,7 @@ notes.txt
 target
 dist
 dist-go
-*.zip
+/*.zip
 maps/*
 !maps/test-*.w3x/
 maps/test-*.w3x/*.mdx

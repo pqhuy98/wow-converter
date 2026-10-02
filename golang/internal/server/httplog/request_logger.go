@@ -10,6 +10,8 @@ import (
 // loggedRoutes lists every API route template. true = log (important writes only).
 var loggedRoutes = map[string]bool{
 	// /api
+	"GET /docs":                                  false,
+	"GET /docs/openapi.yaml":                     false,
 	"GET /api/get-config":                        false,
 	"GET /api/browse":                            false,
 	"GET /api/browse/model-skins":                false,

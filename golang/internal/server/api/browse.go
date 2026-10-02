@@ -275,9 +275,14 @@ func registerBrowse(r Router, d *Deps) {
 			sendError(w, http.StatusBadRequest, `q must be "model" or "texture"`)
 			return
 		}
-		snapshot := indexes.snapshot(q)
+		search, err := listfileSearchQuery(req.URL.Query().Get("search"), d.Config.IsSharedHosting)
+		if err != nil {
+			sendError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		snapshot := filterListfileSearch(indexes.snapshot(q), search)
 		buildKey := d.BuildKey(req.Context())
-		etag := etagFromParts("browse", buildKey, q, strconv.Itoa(len(snapshot)))
+		etag := etagFromParts("browse", buildKey, q, search, strconv.Itoa(len(snapshot)))
 		if matchNotModified(req, etag) {
 			writeNotModified(w, etag)
 			return

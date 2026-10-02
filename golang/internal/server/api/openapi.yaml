@@ -1,0 +1,1714 @@
+openapi: 3.0.3
+info:
+  title: wow-converter
+  version: "1.1.0"
+  description: |
+    This server reads a World of Warcraft installation and hands you the files.
+    Model, icon, and map calls convert those files into the formats Warcraft III uses.
+    Sound calls do not convert anything. They return the original audio.
+    GET /api/sound/transcripts is a separate list of spoken lines for those files.
+
+    There is no login. Anyone who can open the port can call every endpoint.
+    A server you run yourself listens on 127.0.0.1 port 3001 unless HOST or PORT was changed.
+    A public shared server listens on every interface and refuses calls that would
+    change the game install, delete files, or build a map.
+
+    ## How a call looks
+
+    Send JSON as application/json. File paths inside the game use forward slashes.
+    When a path is part of the URL, it is the remainder of that URL and it contains slashes.
+    Percent-encoding those slashes is accepted.
+
+    Lists are not paginated. Pass search to keep the body small. An empty search is the whole catalog.
+
+    A 200 that is audio, PNG, or a zip is the file itself, not JSON. A failure on that same URL is JSON.
+    Read the status code before deciding how to read the body. 304 means the body you already have is still current, and this response has no body.
+
+    Opening an edition, and the first list after that, can take minutes. A client that gives up after a few seconds will fail a call that is still working.
+
+    Model export and map generation answer with a job object before the work is done.
+    Read id from that object and pass it to the status URL. Nothing is pushed to you.
+    Keep reading the status URL until status is done, failed, or cancelled.
+    pending means it is waiting for the one running job of that kind. processing means it is running.
+    404 on a status URL means that id is unknown or has expired.
+
+    ## Open a game edition first
+
+    Retail, Classic, and the public test realms are different sets of files.
+    Lists and exports read whichever edition is currently open, and they fail until one is.
+
+    GET /api/wow-config/status is the ready check. cascLoading is true while an edition is still opening.
+    cascLoaded is true when it is open and safe to call. error is set when the last open attempt failed.
+
+    To open one, list what is available, then POST /api/wow-config/apply.
+    That call blocks until the edition is open, which can take a while, so poll status if you need progress.
+    Switching editions drops the in-memory file lists. The next list call rebuilds them and can take several seconds.
+    Later calls for the same edition are fast.
+
+    ## Two kinds of server
+
+    GET /api/get-config field isSharedHosting tells you which kind you reached.
+
+    A desktop server is one you run. It can read a game folder on that machine, write maps, and delete exports.
+
+    A shared server is a locked public instance. It returns 403 if you try to change the game edition,
+    clear the download cache, count creatures, generate a map, or pass search on a file list.
+    It returns 400 if you try to delete exports.
+    It also hides the folder where files were written, and it stops a model export after 2 minutes instead of 5.
+
+    ## Long work is a job
+
+    Model export and map generation return immediately with an id. Poll the status URL until
+    status is done, failed, or cancelled. Only one job of each kind runs at a time. Further requests wait.
+    Timestamps are Unix time in milliseconds.
+
+    You can read a finished model job for 5 minutes and a finished map job for 10 minutes.
+    After that the id returns 404. A model export that runs too long fails (5 minutes, or 2 on a shared server).
+    A map that runs longer than 2 hours fails. You can cancel a map job while it is waiting or running.
+
+    ## Finding a file
+
+    A file in a list has two ids. fileName is its path inside the game, with forward slashes.
+    fileDataID is the integer the game uses for that same file. Later calls take one or the other.
+
+    GET /api/browse and GET /api/sound take search. Split it on spaces.
+    Every word must appear in the path or in the decimal file id. Case does not matter.
+    Leave search out and you get the whole catalog. Model and texture catalogs are tens of megabytes.
+    That search does not look at spoken lines. Those are GET /api/sound/transcripts.
+
+    ## Caching
+
+    List, image, and sound bodies are safe to cache only for the edition that produced them.
+    Copy buildKey from GET /api/get-config and send it as the build query.
+    When you switch editions, buildKey changes, so old URLs no longer match.
+    A response may include ETag. Send it back as If-None-Match to get 304 when the body is unchanged.
+
+    ## Errors
+
+    A failure is JSON with an error string and status 400, 403, 404, 409, or 500.
+    A body that fails field checks is 400 and also has an issues array of strings.
+    A JSON body larger than 4 MiB is 413.
+
+servers:
+  - url: /
+    description: The server that served this document.
+  - url: http://127.0.0.1:3001
+    description: A desktop server on the default port. HOST and PORT can change the address.
+tags:
+  - name: Server
+    description: What this process will and will not do.
+  - name: Game data
+    description: Open a game edition so the other calls have files to read.
+  - name: Browse
+    description: Find a 3D model or an image inside the open edition.
+  - name: Sounds
+    description: Find and download the original audio, and read a spoken line when one exists. Audio is not converted.
+  - name: Character export
+    description: Convert one creature, player, or item into a Warcraft III model.
+  - name: Textures
+    description: Preview an image as PNG, or write a Warcraft III icon.
+  - name: Maps
+    description: List continents and, on a desktop server, build a Warcraft III map from a rectangle of terrain.
+  - name: Files
+    description: Download files this server has already written.
+
+paths:
+  /api/get-config:
+    get:
+      tags: [Server]
+      summary: What this server will allow
+      description: |
+        Call this first so you know which later calls will be refused.
+        isSharedHosting is true on a locked public server. See the overview.
+        buildKey names the open game edition. Send it as build on cached reads so a switch of edition does not reuse stale files.
+        exportAssetDir is the folder on this machine where converted files are written.
+      operationId: getConfig
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Current server settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerConfig'
+
+  /api/wow-config/status:
+    get:
+      tags: [Game data]
+      summary: Whether a game edition is open
+      description: |
+        Lists and exports have nothing to read until an edition is open. Poll this after startup, apply, or reset.
+        Wait until cascLoading is false. Then cascLoaded must be true.
+        cascLoadingMessage is a one-line progress string while it is still opening.
+        error is why the last open attempt failed, or null when it succeeded.
+        products and regions are the codes you may send to apply and discover-remote.
+      operationId: getWowConfigStatus
+      responses:
+        '200':
+          description: Load state.
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              description: Always no-store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WowConfigStatus'
+
+  /api/wow-config/cache-size:
+    get:
+      tags: [Game data]
+      summary: How much downloaded game data is on disk
+      description: |
+        Use this before clear-cache so you know what you are about to delete.
+        Desktop server only. A shared server returns 403.
+        bytes is the size of the download cache.
+      operationId: getCacheSize
+      responses:
+        '200':
+          description: Cache size.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bytes]
+                properties:
+                  bytes: { type: integer, format: int64 }
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+
+  /api/wow-config/discover-local:
+    post:
+      tags: [Game data]
+      summary: List editions installed on this machine
+      description: |
+        Use this when the game is already installed on the server machine and you need the edition code for apply.
+        installDirectory is the absolute path of that install folder.
+        The returned Product values are what you send as product with mode local.
+        A shared server returns 403, because it is not allowed to look at a local install.
+      operationId: discoverLocal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [installDirectory]
+              properties:
+                installDirectory:
+                  type: string
+                  description: Absolute path on the server machine.
+      responses:
+        '200':
+          description: Builds found in that folder.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildList'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/ConfigLocked'
+
+  /api/wow-config/discover-remote:
+    post:
+      tags: [Game data]
+      summary: List editions you can download
+      description: |
+        Use this when the server has no local game install and should download one.
+        regionTag is a public download region from the status regions list, such as eu or us.
+        A shared server returns 403.
+      operationId: discoverRemote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [regionTag]
+              properties:
+                regionTag:
+                  type: string
+                  enum: [eu, us, kr, tw, cn]
+      responses:
+        '200':
+          description: Builds published for that region.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildList'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/ConfigLocked'
+
+  /api/wow-config/apply:
+    post:
+      tags: [Game data]
+      summary: Open a game edition
+      description: |
+        Nothing else works until an edition is open. This is the call that opens one.
+        mode local reads installDirectory on this machine. mode remote downloads the edition for regionTag.
+        product is a code from status, such as wow for the current game or wow_classic for Classic.
+        The call returns only when the edition is open, which can take a while. Poll status for progress.
+        A shared server returns 403.
+      operationId: applyWowConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WowConfigApply'
+      responses:
+        '200':
+          description: The edition is open. status is the same object as GET /api/wow-config/status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cascInfo:
+                    $ref: '#/components/schemas/CascInfo'
+                  status:
+                    $ref: '#/components/schemas/WowConfigStatus'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/ConfigLocked'
+
+  /api/wow-config/reset:
+    post:
+      tags: [Game data]
+      summary: Close the game edition
+      description: |
+        Use this to drop the open edition and go back to the not-ready state.
+        Lists and exports fail until you apply again. No body.
+        A shared server returns 403.
+      operationId: resetWowConfig
+      responses:
+        '200':
+          description: Status after reset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WowConfigStatus'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/ConfigLocked'
+
+  /api/wow-config/clear-cache:
+    post:
+      tags: [Game data]
+      summary: Delete downloaded game data
+      description: |
+        Use this to free disk after a remote download. It also closes the open edition, so you must apply again afterwards.
+        Desktop server only. No body.
+      operationId: clearCache
+      responses:
+        '200':
+          description: Status after the cache was cleared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WowConfigStatus'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+
+  /api/wow-config/pick-local-folder:
+    post:
+      tags: [Game data]
+      summary: Ask someone at the server to pick a folder
+      description: |
+        This opens a native folder dialog on the computer running the server and blocks until that dialog is closed.
+        A remote caller cannot see or click it. Send installDirectory to discover-local instead.
+        If the person dismisses the dialog, the body is cancelled true.
+        A shared server returns 403.
+      operationId: pickLocalFolder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                installDirectory:
+                  type: string
+                  description: Folder the dialog opens in.
+      responses:
+        '200':
+          description: Chosen folder, or a cancellation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  installDirectory: { type: string }
+                  cancelled: { type: boolean }
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/ConfigLocked'
+
+  /api/browse:
+    get:
+      tags: [Browse]
+      summary: List 3D models or images
+      description: |
+        Use this to find the path or numeric id of a model or image before you export or preview it.
+        q=model returns 3D models. Low-detail copies and split pieces of a building are left out.
+        q=texture returns images. Send search. An empty search is the whole catalog and is very large.
+        Requires an open game edition.
+      operationId: browseFiles
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [model, texture]
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Matching files, sorted by path.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GameFile'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/browse/model-skins:
+    get:
+      tags: [Browse]
+      summary: Texture variants of one model
+      description: |
+        One mesh often has several looks (a recolor, a different outfit). Use this to list them before export.
+        fileDataID is the model's id from GET /api/browse.
+        Each row's id is what you send as skinId. localRef is a path you can send as a local model source.
+        This response is not cached.
+      operationId: browseModelSkins
+      parameters:
+        - name: fileDataID
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Skins for that model.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fileDataID, fileName, skins]
+                properties:
+                  fileDataID: { type: integer }
+                  fileName: { type: string }
+                  skins:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ModelSkin'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: That id is not in the model catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/sound:
+    get:
+      tags: [Sounds]
+      summary: List original audio files
+      description: |
+        Use this to find a sound, then stream or zip it. The bytes are the game's own .mp3, .ogg, or .wav. Nothing is converted.
+        Send search. An empty search returns every sound, which is large.
+        Requires an open game edition.
+      operationId: listSounds
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Matching sounds, sorted by path.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GameFile'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/sound/transcripts:
+    get:
+      tags: [Sounds]
+      summary: Spoken lines for sound files
+      description: |
+        Call this once and keep the map. Keys are file data ids, as strings because JSON object keys are strings.
+        The value is the spoken line. A file with no line is absent.
+        This does not read the open game edition, and it ignores search and build.
+
+        The server reads resources/transcripts.final.zip at startup. The zip holds transcripts.final.jsonl.
+        Each line in that file is {"id": 554181, "text": "Bow to your master.", "ai": 1}.
+        ai 0 means the words are the game's own BroadcastText. ai 1 means they were generated.
+        When both exist, the file stores the game line. This response drops ai and returns only the text.
+
+        A missing zip still returns 200 with an empty object.
+        The response has an ETag. Send it as If-None-Match to get 304 when the map has not changed.
+      operationId: listSoundTranscripts
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: File data id to spoken line.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: string }
+              example:
+                "554181": "Bow to your master."
+                "558782": "BY FIRE BE PURGED!"
+        '304':
+          $ref: '#/components/responses/NotModified'
+
+  /api/sound/{fileDataID}:
+    get:
+      tags: [Sounds]
+      summary: Play or save one sound
+      description: |
+        Returns the original audio so a player can stream it. Range requests work, so seeking works.
+        download=1 adds a save-as header that uses the file's own name.
+        The id must come from the sound list. This route will not serve models or images.
+      operationId: getSound
+      parameters:
+        - name: fileDataID
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: download
+          in: query
+          schema: { type: string, enum: ['1'] }
+          description: Set to 1 to download instead of playing inline.
+        - $ref: '#/components/parameters/Build'
+      responses:
+        '200':
+          description: Audio bytes.
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+            audio/ogg: { schema: { type: string, format: binary } }
+            audio/wav: { schema: { type: string, format: binary } }
+        '206':
+          description: A byte range of the audio.
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/sound/zip:
+    post:
+      tags: [Sounds]
+      summary: Download many sounds as one zip
+      description: |
+        Use this when you want the files on disk, not a player. Send 1 to 1000 ids from the sound list.
+        Paths inside sounds.zip match the paths from the list.
+        A file that is not in the sound list, or whose bytes cannot be read, is left out of the zip.
+      operationId: zipSounds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileDataIDs]
+              properties:
+                fileDataIDs:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Zip archive named sounds.zip.
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '400':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/export/character:
+    post:
+      tags: [Character export]
+      summary: Convert one model to Warcraft III
+      description: |
+        Use this to turn one creature, player, or item into a Warcraft III model plus the images it needs.
+        The 200 body is a job object, not the model. Read id from it and poll GET /api/export/character/status/{jobId}.
+        If cascLoaded is false, this returns 500. Check status before queueing.
+
+        base says which model. type wowhead takes a public Wowhead page URL, such as a creature or item page.
+        type displayID takes that appearance's numeric id as a string.
+        type local takes a path from the browse list, such as a skin localRef. It must be relative and must not contain .. .
+
+        outputFileName is the file name to write, without an extension and without .. . The server adds .mdx or .mdl.
+        format mdx is the binary model. format mdl is the same model as text, which is easier to diff.
+        formatVersion 1000 is the current Warcraft III model version. 800 is the older one. Omit it for 1000.
+
+        isBrowse writes a preview into a separate folder served at /api/browse-assets/.
+        A desktop server deletes that folder on startup. Leave isBrowse false to keep the files under /api/assets/.
+        On a shared server, and for every preview, a repeat of the same request returns the existing job instead of starting another,
+        and the written name gets a stable suffix so two different requests do not overwrite each other.
+
+        optimization is required, but an empty object is valid. Omitted flags then use the defaults below.
+        The optimization object shrinks the model. By default the server sorts animations and drops unused vertices, nodes, materials, and images.
+        allMaterialsUnshaded defaults to false. Set it true to strip lighting from every surface.
+        maxTextureSize, when set, shrinks images so neither side is larger than 256, 512, or 1024.
+      operationId: exportCharacter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterExportRequest'
+            example:
+              character:
+                base:
+                  type: wowhead
+                  value: "https://www.wowhead.com/npc=36597/the-lich-king"
+                inGameMovespeed: 270
+              outputFileName: lich-king
+              optimization: {}
+              format: mdx
+      responses:
+        '200':
+          description: The queued job, or the existing job when the request was deduplicated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterJob'
+        '400':
+          description: Field errors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          description: Game data is not ready, or the export failed before a job was queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/export/character/status/{jobId}:
+    get:
+      tags: [Character export]
+      summary: Read a model-export job
+      description: |
+        Poll this until status is done, failed, or cancelled. pending means it is waiting. processing means it is running.
+        While it is running, logs is the text written so far.
+        When it is done, result lists the files. Download them with POST /api/download or GET /api/assets/{path}.
+        The id stops working 5 minutes after the job finishes.
+      operationId: getCharacterExportStatus
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterJob'
+        '404':
+          description: Unknown id, or the job has already expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/export/character/recent:
+    get:
+      tags: [Character export]
+      summary: Exports that finished earlier
+      description: |
+        Use this to find a model you already converted, including after a restart.
+        Up to 500 kept exports, newest first. Previews (isBrowse) are not in this list.
+        Each item includes the request you sent and, if it succeeded, the files it wrote.
+      operationId: recentCharacterExports
+      responses:
+        '200':
+          description: Recent jobs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterJobRecord'
+
+  /api/export/character/demos:
+    get:
+      tags: [Character export]
+      summary: Sample models a public server prepared
+      description: |
+        A shared server starts a few example conversions when it boots, so a visitor has something to download.
+        This returns only the ones that have finished. A desktop server returns an empty list.
+      operationId: characterExportDemos
+      responses:
+        '200':
+          description: Finished demo jobs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterJob'
+
+  /api/export/character/check-local-file:
+    get:
+      tags: [Character export]
+      summary: Check a model path before you export it
+      description: |
+        Call this before a local export so a typo fails here instead of inside a job.
+        ok is true when that path is a model in the open edition.
+        When it is not, similarFiles lists close paths. A missing or unsafe path is ok false and an empty list, not an error.
+      operationId: checkLocalFile
+      parameters:
+        - name: localPath
+          in: query
+          schema: { type: string }
+          description: Path from the browse list, the same string you would send as a local model source.
+      responses:
+        '200':
+          description: Whether the path resolves.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, similarFiles]
+                properties:
+                  ok: { type: boolean }
+                  similarFiles:
+                    type: array
+                    items: { type: string }
+
+  /api/export/character/clean:
+    post:
+      tags: [Character export]
+      summary: Delete every exported file
+      description: |
+        Wipes both the kept exports and the preview folder, and clears the recent list.
+        A shared server returns 400. A desktop server also returns an error when exports were configured to live somewhere other than the default folder.
+        No body.
+      operationId: cleanExports
+      responses:
+        '200':
+          description: Exports were deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/texture/png/{path}:
+    get:
+      tags: [Textures]
+      summary: Preview one image as PNG
+      description: |
+        Browsers cannot show the game's image format. This decodes one image to PNG so you can look at it.
+        path is the image path from the texture list. The .blp suffix is optional.
+        Add mode=icon only for ability and item icons, whose paths start with interface/icons/.
+        Then size is required. style picks which generation of icon border to draw and defaults to classic-hd-2.0.
+        frame picks the border itself and defaults to none, which means no border.
+        resizeMode defaults to normal. ai uses an upscaler instead of a plain resize.
+        Send build so the browser can cache this edition's image.
+      operationId: texturePng
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+          description: Image path from the texture list. Relative, with no .. and no leading slash.
+        - name: mode
+          in: query
+          schema: { type: string, enum: [icon] }
+        - name: size
+          in: query
+          schema: { type: string, enum: ['64x64', '128x128', '256x256', original] }
+          description: Required when mode is icon. Pixel size of the icon, or original to keep the source size.
+        - name: style
+          in: query
+          schema: { type: string, enum: [classic-sd, reforged-hd, classic-hd-2.0] }
+        - name: frame
+          in: query
+          schema:
+            type: string
+            enum: [btn, disbtn, pas, dispas, atc, disatc, att, upg, ssh, ssp, none]
+        - name: resizeMode
+          in: query
+          schema: { type: string, enum: [normal, ai] }
+        - name: extras
+          in: query
+          schema: { type: string }
+          description: JSON object. Set crop to true to trim empty edges before resizing.
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: PNG bytes.
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/texture/blp:
+    post:
+      tags: [Textures]
+      summary: Write images as Warcraft III icons
+      description: |
+        Use this when you want files on disk, not a preview. Warcraft III icons are .blp images, often with a button border.
+        Each item is one image. Without options, the image is written as a .blp next to other exports.
+        With options, texturePath must start with interface/icons/ and the server resizes it and draws the border you asked for.
+        outputPath is optional. If the icon has a border other than none, outputPath must be a file name with no slashes.
+        Two items that would write the same path are written once.
+        outputDirectory, the folder on this machine, is left out on a shared server.
+      operationId: exportTexturesBlp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/TextureExportItem'
+      responses:
+        '200':
+          description: Files written.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, paths]
+                properties:
+                  count: { type: integer }
+                  paths:
+                    type: array
+                    items: { type: string }
+                  outputDirectory:
+                    type: string
+                    description: Present only on a desktop server.
+        '400':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+
+  /api/maps:
+    get:
+      tags: [Maps]
+      summary: List continents and dungeons
+      description: |
+        Use this to learn a map's short name before you ask for its tiles or minimap.
+        One row per map that has terrain. dir is the name you put in the other map URLs. It is not the numeric id.
+        Requires an open game edition. The first call after opening an edition can be slow.
+      operationId: listMaps
+      parameters:
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Maps.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MapSummary'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/maps/{map}/wdt-mask:
+    get:
+      tags: [Maps]
+      summary: Which terrain cells exist
+      description: |
+        A map is a 64 by 64 grid. Use this to see which cells have terrain before you generate or show a minimap.
+        size is always 64. Each tile is an x and y from 0 to 63. hasTexture is true when that cell has a minimap image.
+        A map with no terrain returns an empty tiles array.
+      operationId: mapTileMask
+      parameters:
+        - $ref: '#/components/parameters/MapDir'
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Tile mask.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [map, size, tiles]
+                properties:
+                  map: { type: string }
+                  size: { type: integer, example: 64 }
+                  tiles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MapTileInfo'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/maps/{map}/minimap/{x}/{y}:
+    get:
+      tags: [Maps]
+      summary: One minimap cell as PNG
+      description: |
+        Use this to draw a map preview. x and y are the cell from the tile list, 0 to 63.
+        404 when that cell has no minimap image. Send build so the image can be cached for this edition.
+      operationId: mapMinimapTile
+      parameters:
+        - $ref: '#/components/parameters/MapDir'
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0, maximum: 63 }
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0, maximum: 63 }
+        - $ref: '#/components/parameters/Build'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: PNG tile.
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/maps/{map}/creatures-check:
+    post:
+      tags: [Maps]
+      summary: How many NPCs sit on these cells
+      description: |
+        Use this before generating a map if you want to know whether NPC placements will be included.
+        It counts spawns whose position falls in the given cells. It does not start a build.
+        Duplicate cells are counted once. If spawn data is not installed, the count is 0 and hasCreatures is false.
+        Desktop server only.
+      operationId: checkMapCreatures
+      parameters:
+        - $ref: '#/components/parameters/MapDir'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tiles]
+              properties:
+                tiles:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/TileCoord'
+      responses:
+        '200':
+          description: Creature count for those tiles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hasCreatures, creatureCount, checkedTiles]
+                properties:
+                  hasCreatures: { type: boolean }
+                  creatureCount: { type: integer }
+                  checkedTiles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TileCoord'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+        '404':
+          description: Unknown map directory.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/maps/{map}/generate-wc3:
+    post:
+      tags: [Maps]
+      summary: Build a Warcraft III map from terrain cells
+      description: |
+        Use this to turn a rectangle of terrain into a Warcraft III map file. Desktop server only. A shared server returns 403.
+        The 200 body is a job object, not the map. Read id from it and poll GET /api/maps/generate-wc3/status/{jobId}.
+        Only one map build runs at a time. Cancel it with POST /api/maps/generate-wc3/halt/{jobId}.
+        A build that runs longer than 2 hours fails.
+
+        tiles are cells from the 64 by 64 grid, x and y from 0 to 63. Duplicates are dropped.
+        quality is how large the baked ground image is, in pixels on a side: 512 up to 16384. 0 keeps the source size.
+        mapSaveName becomes the file name. The server strips characters that are not safe in a file name and rejects a result longer than 128 characters.
+        clampLower and clampUpper are fractions from 0 to 1, and the upper one must be at least the lower one.
+        They cut off the shortest and tallest parts of the height range so a few spikes do not flatten the rest of the terrain.
+        autoClampPercent defaults to true and picks those fractions for you.
+        includeBuildingInteriors defaults to true. Set it false to leave out the inside of buildings.
+        unitScale must be greater than 0. It multiplies how big objects are relative to the terrain. mapAngleDeg rotates the whole map, in degrees.
+        freshExport true rebuilds those cells even when a previous build already wrote them.
+        A JSON field this schema does not list is rejected.
+      operationId: generateWc3Map
+      parameters:
+        - $ref: '#/components/parameters/MapDir'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MapGenerateRequest'
+            example:
+              tiles: [{ x: 22, y: 22 }]
+              quality: 1024
+              mapSaveName: Northrend
+              clampLower: 0
+              clampUpper: 1
+              autoClampPercent: true
+              mapAngleDeg: 0
+              unitScale: 1
+              freshExport: false
+              creatures: { enable: false, allAreDoodads: false }
+      responses:
+        '200':
+          description: The queued job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapJob'
+        '400':
+          description: Field errors. An unknown map directory is 404.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/maps/generate-wc3/status/{jobId}:
+    get:
+      tags: [Maps]
+      summary: Read a map-build job
+      description: |
+        Poll this until status is done, failed, or cancelled. Desktop server only.
+        While it runs, progress.percent is 0 to 100, progress.phase is the current stage, and currentTile is the cell being written.
+        When it is done, result.outputDir is the folder on this machine, and succeeded and failed list the cells.
+        The id stops working 10 minutes after the job finishes.
+      operationId: getMapGenerateStatus
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapJob'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /api/maps/generate-wc3/halt/{jobId}:
+    post:
+      tags: [Maps]
+      summary: Cancel a map build
+      description: |
+        Stops a job that is waiting or running. Desktop server only.
+        409 when the job has already finished. The body is the status after the cancel.
+      operationId: haltMapGenerate
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Status after cancellation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapJob'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: The job is no longer active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/maps/generate-wc3/active:
+    get:
+      tags: [Maps]
+      summary: Map builds still in progress
+      description: |
+        Use this to find a job id after you lost the response that created it.
+        Desktop server only. Empty when nothing is waiting or running. Oldest first.
+      operationId: activeMapGenerations
+      responses:
+        '200':
+          description: Active jobs, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MapJob'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+
+  /api/download:
+    post:
+      tags: [Files]
+      summary: Download exported files as one zip
+      description: |
+        Use this to take home the files a model or icon export wrote.
+        files are the relative paths from that result. source browse reads the preview folder. Anything else, including omitting source, reads the kept-export folder.
+        The zip is named after the first model in the list, or assets.zip when there is no model.
+        A missing file, or a path that leaves the export folder, is 400.
+      operationId: downloadAssets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  minItems: 1
+                  items: { type: string }
+                source:
+                  type: string
+                  enum: [export, browse]
+                  description: Defaults to the normal export folder.
+      responses:
+        '200':
+          description: Zip of the requested files.
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '400':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+
+  /api/assets/{path}:
+    get:
+      tags: [Files]
+      summary: Download one kept export
+      description: |
+        Use this when you want a single file instead of a zip.
+        path is the relative path from an export result, in the kept-export folder. 404 when it is not there.
+      operationId: getExportedAsset
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File bytes.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '404':
+          description: File not found.
+
+  /api/browse-assets/{path}:
+    get:
+      tags: [Files]
+      summary: Download one preview export
+      description: |
+        Same as /api/assets, but for a conversion you marked as a preview with isBrowse true.
+        A desktop server deletes this folder when it starts, so these files do not survive a restart.
+      operationId: getBrowseAsset
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File bytes.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '404':
+          description: File not found.
+
+components:
+  parameters:
+    Search:
+      name: search
+      in: query
+      description: |
+        Why: the full catalog is tens of megabytes. How: words separated by spaces.
+        Every word must appear in the file path or in the decimal file id. Case is ignored.
+        Leave it out to get the full catalog.
+        A shared server returns 403 when search is set. File lists there are only available unfiltered.
+      schema: { type: string }
+    Build:
+      name: build
+      in: query
+      description: |
+        Why: a cached image from one game edition must not be reused after you open another.
+        How: send buildKey from GET /api/get-config. When the edition changes, this value changes.
+      schema: { type: string }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: ETag from an earlier response of the same URL. If the body is unchanged the server returns 304.
+      schema: { type: string }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string }
+    MapDir:
+      name: map
+      in: path
+      required: true
+      description: Short map name from GET /api/maps field dir, for example northrend. Not the numeric id.
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: Request failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotModified:
+      description: The cached copy is still current.
+    DesktopOnly:
+      description: Shared hosting refuses this call.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: This feature is only available in the desktop app, not on shared hosting.
+    ConfigLocked:
+      description: A shared server refuses changes to the open game edition.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: WoW installation cannot be changed in shared hosting mode.
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    ValidationError:
+      type: object
+      required: [error, issues]
+      properties:
+        error: { type: string, example: Invalid request body }
+        issues:
+          type: array
+          items: { type: string }
+    ServerConfig:
+      type: object
+      properties:
+        exportAssetDir:
+          type: string
+          description: Folder on this machine where converted files are written.
+        isSharedHosting:
+          type: boolean
+          description: True on a locked public server. Those servers refuse install changes, map builds, and deleting exports.
+        isDev: { type: boolean, description: True when this process was started for development. }
+        isClassic:
+          type: boolean
+          description: True when the open edition is Classic rather than the current game. The files and models differ.
+        buildKey:
+          type: string
+          description: Identifies the open edition. Empty when none is open. Send it as the build query on cached reads.
+        mapGenerateHalt:
+          type: boolean
+          description: True when a running map build can be cancelled.
+    Product:
+      type: object
+      description: |
+        One game edition this server can open. Product is the code you send to apply, such as wow.
+        Title is the display name. Tag is a short label such as Retail or Classic.
+      properties:
+        Product: { type: string, example: wow }
+        Title: { type: string, example: World of Warcraft }
+        Tag: { type: string, example: Retail }
+    WowConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [local, remote]
+          description: local reads a folder on this machine. remote downloads the edition.
+        product:
+          type: string
+          description: Edition code, such as wow or wow_classic.
+        installDirectory:
+          type: string
+          description: Absolute path of the game folder. Set when mode is local.
+        regionTag:
+          type: string
+          description: Download region, such as eu or us. Set when mode is remote.
+    CascInfo:
+      type: object
+      description: Which edition is open, and whether it was read from disk or downloaded.
+      properties:
+        type: { type: string, description: local if read from a folder on this machine, remote if downloaded. }
+        buildName: { type: string, description: Human-readable name of the open edition, including its version. }
+        build:
+          type: object
+          properties:
+            Product: { type: string }
+            Version: { type: string }
+            VersionsName: { type: string }
+    WowConfigStatus:
+      type: object
+      properties:
+        needsSetup:
+          type: boolean
+          description: True until an edition has been chosen. Lists and exports are not ready.
+        configuredFromEnv:
+          type: boolean
+          description: True when the edition was chosen by the server's own configuration, not by this API. You may still be unable to change it.
+        cascLoaded:
+          type: boolean
+          description: True when an edition is open. This is the ready flag for lists and exports.
+        cascLoading:
+          type: boolean
+          description: True while an edition is still opening. Wait until this is false, then check cascLoaded.
+        cascLoadingMessage:
+          type: string
+          description: One-line progress text while cascLoading is true.
+        wowDataServerReachable:
+          type: boolean
+          description: True when this process can read game files at all. False means even status details may be missing.
+        config:
+          $ref: '#/components/schemas/WowConfig'
+        cascInfo:
+          $ref: '#/components/schemas/CascInfo'
+        error:
+          type: string
+          nullable: true
+          description: Why the last attempt to open an edition failed. Null when the last attempt succeeded.
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        regions:
+          type: array
+          items: { type: string }
+          example: [eu, us, kr, tw, cn]
+    WowConfigApply:
+      type: object
+      required: [mode, product]
+      properties:
+        mode: { type: string, enum: [local, remote] }
+        product:
+          type: string
+          description: Edition code from the status products list, such as wow or wow_classic.
+        installDirectory:
+          type: string
+          description: Required when mode is local. Absolute path of the game folder on this machine.
+        regionTag:
+          type: string
+          description: Required when mode is remote. A region from the status regions list.
+          enum: [eu, us, kr, tw, cn]
+    BuildSummary:
+      type: object
+      properties:
+        Product: { type: string }
+        Region: { type: string }
+        VersionsName: { type: string }
+    BuildList:
+      type: object
+      properties:
+        builds:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuildSummary'
+    GameFile:
+      type: object
+      required: [fileDataID, fileName]
+      properties:
+        fileDataID:
+          type: integer
+          description: The integer the game uses for this file. Pass it to the sound routes.
+        fileName:
+          type: string
+          description: Path inside the game, with forward slashes. Pass it to texture preview and as a local model source.
+    ModelSkin:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Send this as skinId when exporting. Empty means the default look.
+        label: { type: string, description: Short name of this look, for display. }
+        localRef:
+          type: string
+          description: Path to send as a local model source if you want this look specifically.
+    ModelRef:
+      type: object
+      required: [type, value]
+      properties:
+        type:
+          type: string
+          enum: [local, wowhead, displayID]
+          description: |
+            local is a path from the browse list. wowhead is a Wowhead page URL for a creature or item.
+            displayID is that appearance's numeric id, as text.
+        value: { type: string, description: The path, URL, or id, depending on type. }
+    AttachItem:
+      type: object
+      required: [path]
+      properties:
+        path:
+          $ref: '#/components/schemas/ModelRef'
+        scale: { type: number }
+    Mount:
+      type: object
+      required: [path]
+      properties:
+        path:
+          $ref: '#/components/schemas/ModelRef'
+        scale: { type: number }
+        seatOffset:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { type: number }
+          description: X, Y, Z offset of the rider.
+        animation: { type: string }
+    Character:
+      type: object
+      required: [base, inGameMovespeed]
+      properties:
+        base:
+          $ref: '#/components/schemas/ModelRef'
+        inGameMovespeed:
+          type: number
+          description: |
+            How fast this creature moves in the source game, in that game's speed units.
+            The walk animation is timed to match it.
+        attackTag:
+          type: string
+          enum: ['', Auto, 1H, 2H, 2HL, Unarmed, Bow, Rifle, Thrown]
+          description: Which weapon animation set to keep. Empty or Auto lets the server choose. 1H is one-handed, 2H two-handed, 2HL a long two-hander.
+        size:
+          type: string
+          enum: [small, medium, large, hero, semi-giant, giant]
+          description: A named size preset for how big the model is in Warcraft III.
+        scale: { type: number, description: Extra multiplier on top of size. 1 leaves the preset unchanged. }
+        keepCinematic: { type: boolean }
+        noDecay: { type: boolean }
+        forceSheathed: { type: boolean }
+        withCollision: { type: boolean }
+        particlesDensity: { type: number }
+        portraitCameraSequenceName: { type: string }
+        attachItems:
+          type: object
+          description: |
+            Extra models stuck to sockets on the body, such as a weapon or shield.
+            Each key is a socket number as text. Common ones are 0 shield, 1 right hand, 2 left hand.
+          additionalProperties:
+            $ref: '#/components/schemas/AttachItem'
+        mount:
+          $ref: '#/components/schemas/Mount'
+    CharacterOptimization:
+      type: object
+      properties:
+        sortSequences: { type: boolean, default: true }
+        allMaterialsUnshaded: { type: boolean, default: false }
+        removeUnusedVertices: { type: boolean, default: true }
+        removeUnusedNodes: { type: boolean, default: true }
+        removeUnusedMaterialsTextures: { type: boolean, default: true }
+        maxTextureSize: { type: string, enum: ['256', '512', '1024'] }
+    CharacterExportRequest:
+      type: object
+      required: [character, outputFileName, optimization, format]
+      properties:
+        character:
+          $ref: '#/components/schemas/Character'
+        outputFileName:
+          type: string
+          description: File name to write, without an extension. Relative, and it must not contain .. .
+        optimization:
+          $ref: '#/components/schemas/CharacterOptimization'
+        format:
+          type: string
+          enum: [mdx, mdl]
+          description: mdx is the binary Warcraft III model. mdl is the same model as text.
+        formatVersion:
+          type: string
+          enum: ['800', '1000']
+          default: '1000'
+          description: 1000 is the current model version. 800 is the older one. Omit this field for 1000.
+        isBrowse:
+          type: boolean
+          description: |
+            True writes a preview into a separate folder that a desktop server deletes on startup, and skips the recent list.
+            False keeps the files.
+        skinId:
+          type: string
+          description: Which texture variant to export. The id from GET /api/browse/model-skins. Omit it for the default look.
+    ExportedFile:
+      type: object
+      properties:
+        path: { type: string, description: Relative path to pass to /api/download or /api/assets. }
+        size: { type: integer, format: int64, description: Size in bytes. }
+    ModelStats:
+      type: object
+      description: |
+        How big the written model is. Keys are counts such as vertices, faces, bones, and sequences.
+        formatVersion is 800 or 1000, the Warcraft III model version that was written.
+      additionalProperties: { type: integer }
+    CharacterExportResult:
+      type: object
+      properties:
+        exportedModels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportedFile'
+        exportedTextures:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportedFile'
+        modelStats:
+          $ref: '#/components/schemas/ModelStats'
+        outputDirectory:
+          type: string
+          description: Folder on this machine. Left out on a shared server, which does not reveal local paths.
+        versionId: { type: string, description: Same as the job id. }
+    CharacterJob:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [pending, processing, done, failed, cancelled] }
+        position: { type: integer, description: Place in the queue while pending. }
+        result:
+          $ref: '#/components/schemas/CharacterExportResult'
+        error: { type: string }
+        submittedAt: { type: integer, format: int64 }
+        startedAt: { type: integer, format: int64 }
+        finishedAt: { type: integer, format: int64 }
+        logs:
+          type: array
+          description: Present only while status is processing.
+          items: { type: string }
+    CharacterJobRecord:
+      allOf:
+        - $ref: '#/components/schemas/CharacterJob'
+        - type: object
+          properties:
+            request:
+              $ref: '#/components/schemas/CharacterExportRequest'
+    IconOptions:
+      type: object
+      required: [size]
+      properties:
+        size: { type: string, enum: ['64x64', '128x128', '256x256', original] }
+        style: { type: string, enum: [classic-sd, reforged-hd, classic-hd-2.0], default: classic-hd-2.0 }
+        frame:
+          type: string
+          enum: [btn, disbtn, pas, dispas, atc, disatc, att, upg, ssh, ssp, none]
+          default: none
+          description: |
+            Which Warcraft III button border to draw. none means no border.
+            btn is the normal square button, disbtn its disabled state, pas a passive icon, atc an autocast border, att an attack target, upg an upgrade arrow.
+        resizeMode: { type: string, enum: [normal, ai], default: normal }
+        extras:
+          type: object
+          properties:
+            crop: { type: boolean }
+    TextureExportItem:
+      type: object
+      required: [texturePath]
+      properties:
+        texturePath:
+          type: string
+          description: |
+            Image path from the texture list. When options is set, it must be an icon path starting with interface/icons/.
+        options:
+          $ref: '#/components/schemas/IconOptions'
+        outputPath:
+          type: string
+          description: |
+            Where to write the file, relative to the export folder. If the icon has a border other than none, this must be a file name with no slashes.
+    MapSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        dir:
+          type: string
+          description: Short name to put in the other map URLs. Not the numeric id.
+        name:
+          description: Display name. Either a string, or an object whose keys are locale codes and whose values are strings.
+        expansionID:
+          description: Which expansion this map belongs to, when the edition provides that number.
+    TileCoord:
+      type: object
+      required: [x, y]
+      properties:
+        x: { type: integer, minimum: 0, maximum: 63 }
+        y: { type: integer, minimum: 0, maximum: 63 }
+    MapTileInfo:
+      type: object
+      properties:
+        x: { type: integer }
+        y: { type: integer }
+        hasTexture: { type: boolean }
+    MapGenerateRequest:
+      type: object
+      required: [tiles, quality, mapSaveName, clampLower, clampUpper, mapAngleDeg, unitScale, freshExport, creatures]
+      properties:
+        tiles:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TileCoord'
+        quality: { type: integer, enum: [0, 512, 1024, 2048, 4096, 8192, 16384] }
+        mapSaveName: { type: string }
+        clampLower: { type: number, minimum: 0, maximum: 1 }
+        clampUpper: { type: number, minimum: 0, maximum: 1 }
+        autoClampPercent: { type: boolean, default: true }
+        includeBuildingInteriors: { type: boolean, default: true }
+        mapAngleDeg: { type: number }
+        unitScale: { type: number, minimum: 0, description: Must be greater than 0. }
+        freshExport: { type: boolean }
+        creatures:
+          type: object
+          required: [enable, allAreDoodads]
+          properties:
+            enable:
+              type: boolean
+              description: Place NPC spawns on the map. Requires spawn data to be installed, or nothing is placed.
+            allAreDoodads:
+              type: boolean
+              description: Place those NPCs as static scenery instead of units that can be selected.
+    MapJob:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [pending, processing, done, failed, cancelled] }
+        position: { type: integer }
+        mapSaveName: { type: string }
+        mapDir: { type: string }
+        queuePending: { type: integer, description: How many map jobs are still waiting. }
+        error: { type: string }
+        submittedAt: { type: integer, format: int64 }
+        startedAt: { type: integer, format: int64 }
+        finishedAt: { type: integer, format: int64 }
+        progress:
+          $ref: '#/components/schemas/MapProgress'
+        result:
+          $ref: '#/components/schemas/MapGenerateResult'
+    MapProgress:
+      type: object
+      properties:
+        completedSteps: { type: integer }
+        totalSteps: { type: integer }
+        percent: { type: integer }
+        phase: { type: string }
+        tileIndex: { type: integer }
+        tileCount: { type: integer }
+        stepsPerTile: { type: integer }
+        currentTile:
+          $ref: '#/components/schemas/TileCoord'
+        taskName: { type: string }
+        creatureCompleted: { type: integer }
+        creatureTotal: { type: integer }
+    MapGenerateResult:
+      type: object
+      properties:
+        id: { type: string }
+        map: { type: string }
+        mapID: { type: integer }
+        mapSaveName: { type: string }
+        outputDir:
+          type: string
+          description: Folder on this machine that holds the generated map.
+        quality: { type: integer, description: Pixel size of the baked ground image. 0 means the source size was kept. }
+        total: { type: integer, description: How many terrain cells were requested. }
+        succeeded:
+          type: array
+          items:
+            type: object
+            properties:
+              tileX: { type: integer }
+              tileY: { type: integer }
+        failed:
+          type: array
+          items:
+            type: object
+            properties:
+              tileX: { type: integer }
+              tileY: { type: integer }
+              error: { type: string }

@@ -42,6 +42,7 @@ func NewServer(d *Deps) *Server {
 	apiRouter := chi.NewRouter()
 	registerGetConfig(apiRouter, d)
 	registerBrowse(apiRouter, d)
+	registerSound(apiRouter, d)
 	registerDownload(apiRouter, d)
 	registerWowConfig(apiRouter, d)
 	registerMaps(apiRouter, d)
@@ -63,6 +64,7 @@ func NewServer(d *Deps) *Server {
 	}
 
 	root.Mount("/api", apiRouter)
+	registerDocs(root)
 
 	uiDir := resolveUIDir()
 	withUI := registerWebUI(root, d, uiDir)

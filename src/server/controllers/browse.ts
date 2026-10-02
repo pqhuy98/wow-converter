@@ -4,6 +4,7 @@ import { getModelSkinOptions } from '@/lib/converter/character/utils';
 import { getListFiles, registerListfileClearHook } from '@/lib/wow/listfile-cache';
 import { isDirectListfileClient, tryInProcessListfileClient } from '@/lib/wow-data-client/direct-listfile';
 import { FileEntry, wowDataClient } from '@/lib/wow-data-client/wow-data-client';
+import { assertDesktopOnly, desktopOnlyStatus } from '@/server/shared-hosting';
 import {
   applyCascBuildCache, etagFromParts, matchNotModified, writeNotModified,
 } from '@/server/utils/casc-cache';
@@ -106,9 +107,19 @@ export function ControllerBrowse(router: express.Router) {
       } else if (q === 'texture') {
         result = textureFiles ?? [];
       }
+      const search = typeof req.query.search === 'string' ? req.query.search : '';
+      if (search.trim()) {
+        try {
+          assertDesktopOnly();
+        } catch (e) {
+          const err = e instanceof Error ? e : new Error(String(e));
+          return res.status(desktopOnlyStatus(err)).json({ error: err.message });
+        }
+      }
+      result = filterListfileSearch(result, search);
 
       const buildKey = wowDataClient.cascInfo?.buildKey ?? '';
-      const etag = etagFromParts('browse', buildKey, q, String(result.length));
+      const etag = etagFromParts('browse', buildKey, q, search, String(result.length));
       if (matchNotModified(req, etag)) {
         applyCascBuildCache(res, req, buildKey, etag);
         return writeNotModified(res, etag);
@@ -141,5 +152,16 @@ export function ControllerBrowse(router: express.Router) {
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
+  });
+}
+
+// Same word matching as the browse pages: every word must appear in the path or the file id.
+function filterListfileSearch(files: FileEntry[], search: string): FileEntry[] {
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return files;
+  return files.filter((f) => {
+    const name = f.fileName.toLowerCase();
+    const id = String(f.fileDataID);
+    return words.every((w) => name.includes(w) || id.includes(w));
   });
 }

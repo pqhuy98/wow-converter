@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,4 +78,44 @@ func resetListFileCache() {
 
 func init() {
 	runtimecache.RegisterConverterClearHook(resetListFileCache)
+}
+
+// listfileSearchQuery rejects a non-empty search on a shared server.
+// A blank search is the full catalog and is allowed everywhere.
+func listfileSearchQuery(search string, isSharedHosting bool) (string, error) {
+	if strings.TrimSpace(search) == "" {
+		return "", nil
+	}
+	if err := assertDesktopOnly(isSharedHosting); err != nil {
+		return "", err
+	}
+	return search, nil
+}
+
+// filterListfileSearch keeps entries where every word appears in the file name or the file id.
+// Words split on whitespace and match case-insensitively, the same way the browse pages search.
+// An empty search returns the list unchanged.
+func filterListfileSearch(files []casc.ListfileEntry, search string) []casc.ListfileEntry {
+	words := strings.Fields(strings.ToLower(search))
+	if len(words) == 0 {
+		return files
+	}
+	out := make([]casc.ListfileEntry, 0)
+	for _, f := range files {
+		id := strconv.Itoa(f.FileDataID)
+		name := strings.ToLower(f.FileName)
+		if listfileHasEveryWord(name, id, words) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func listfileHasEveryWord(name, id string, words []string) bool {
+	for _, w := range words {
+		if !strings.Contains(name, w) && !strings.Contains(id, w) {
+			return false
+		}
+	}
+	return true
 }
