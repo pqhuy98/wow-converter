@@ -21,6 +21,7 @@ const PAPERDOLL_SLOTS = {
   11: EquipmentSlot.Feet,
   12: EquipmentSlot.MainHand,
   13: EquipmentSlot.OffHand,
+  14: EquipmentSlot.Robe,
 };
 
 export async function decodeDressingRoom(expansion: ZamExpansion, hash: string): Promise<CharacterData> {
@@ -44,6 +45,7 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
       class: number,
       gender: number,
       mount: number,
+      separateShoulders?: number,
     },
     custChoices: {
       [key: string]: { optionId: number, choiceId: number };
@@ -94,6 +96,7 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
       CreatureGeosetData: [],
     },
     Equipment: equipments,
+    SeparateShoulders: Boolean(data.settings.separateShoulders),
     ItemEffects: (await Promise.all(Object.entries(itemVisuals).map(async ([slotId, visualId]) => {
       const itemVisual = await fetchItemVisualMeta({ expansion, type: 'itemvisual', visualId });
       const model = itemVisual.Model || itemVisual.ItemEffects?.[0].Model;

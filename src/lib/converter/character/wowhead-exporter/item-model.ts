@@ -129,6 +129,7 @@ export function computeZamMeshId(group: number, offset: number | undefined): num
 }
 
 export type EquipmentSlotData = {
+  shoulderSide?: number;
   slotId: EquipmentSlot;
   data: ItemMetata;
 }
@@ -351,6 +352,7 @@ export async function processItemData(url: ItemZamUrl, targetRace: number, targe
 
 // From viewer.min.js
 const raceGenderFallback = {
+  91: [86, 0, 86, 1, 86, 0, 86, 1],
   86: [4, 0, 4, 1, 4, 0, 4, 1],
   85: [84, 0, 84, 1, 84, 0, 84, 1],
   84: [3, 0, 3, 1, 3, 0, 3, 1],

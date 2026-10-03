@@ -35,19 +35,19 @@ type Mount struct {
 
 // Character holds export configuration for a WoW character or creature.
 type Character struct {
-	Base                       Ref                    `json:"base"`
-	AttackTag                  animmap.AttackTag      `json:"attackTag,omitempty"`
-	KeepCinematic              bool                   `json:"keepCinematic,omitempty"`
-	InGameMovespeed            float64                `json:"inGameMovespeed"`
-	Size                       string                 `json:"size,omitempty"`
-	Scale                      float64                `json:"scale,omitempty"`
-	AttachItems                map[string]AttachItem  `json:"attachItems,omitempty"`
-	NoDecay                    bool                   `json:"noDecay,omitempty"`
-	ParticlesDensity           *float64               `json:"particlesDensity,omitempty"`
-	PortraitCameraSequenceName string                 `json:"portraitCameraSequenceName,omitempty"`
-	Mount                      *Mount                 `json:"mount,omitempty"`
-	ForceSheathed              bool                   `json:"forceSheathed,omitempty"`
-	WithCollision              bool                   `json:"withCollision,omitempty"`
+	Base                       Ref                   `json:"base"`
+	AttackTag                  animmap.AttackTag     `json:"attackTag,omitempty"`
+	KeepCinematic              bool                  `json:"keepCinematic,omitempty"`
+	InGameMovespeed            float64               `json:"inGameMovespeed"`
+	Size                       string                `json:"size,omitempty"`
+	Scale                      float64               `json:"scale,omitempty"`
+	AttachItems                map[string]AttachItem `json:"attachItems,omitempty"`
+	NoDecay                    bool                  `json:"noDecay,omitempty"`
+	ParticlesDensity           *float64              `json:"particlesDensity,omitempty"`
+	PortraitCameraSequenceName string                `json:"portraitCameraSequenceName,omitempty"`
+	Mount                      *Mount                `json:"mount,omitempty"`
+	ForceSheathed              bool                  `json:"forceSheathed,omitempty"`
+	WithCollision              bool                  `json:"withCollision,omitempty"`
 }
 
 // LocalRef creates a local file ref.
@@ -80,16 +80,16 @@ func itoa(n int) string {
 
 // ExportContext carries per-export state.
 type ExportContext struct {
-	AssetManager        *common.AssetManager
-	Config              config.Config
-	OutputFile          string
-	WowClient           client.Client
-	Wowhead             WowheadClient
-	HTTP                *wowhead.HTTPClient
+	AssetManager         *common.AssetManager
+	Config               config.Config
+	OutputFile           string
+	WowClient            client.Client
+	Wowhead              WowheadClient
+	HTTP                 *wowhead.HTTPClient
 	WeaponInventoryTypes [2]*int
-	ForceSheathed       bool
-	WithCollision       bool
-	LocalModelSkinID    string
+	ForceSheathed        bool
+	WithCollision        bool
+	LocalModelSkinID     string
 }
 
 // WowheadHTTP returns the wowhead HTTP client for meta fetches.
@@ -186,19 +186,20 @@ type ZamURL struct {
 
 // CharacterData is creature/character meta from wowhead.
 type CharacterData struct {
-	Model        *int
-	Textures     map[string]int
-	Character    *wowhead.CharacterMeta
-	Creature     *CreatureMeta
-	Equipment    map[string]int
-	TextureFiles map[string][]wowhead.FileEntry
-	ItemEffects  []wowhead.ItemEffect
+	Model             *int
+	Textures          map[string]int
+	Character         *wowhead.CharacterMeta
+	Creature          *CreatureMeta
+	Equipment         map[string]int
+	SeparateShoulders bool
+	TextureFiles      map[string][]wowhead.FileEntry
+	ItemEffects       []wowhead.ItemEffect
 }
 
 // CreatureMeta holds creature geoset data.
 type CreatureMeta struct {
-	CreatureGeosetData       []GeosetEntry
-	CreatureCustomizations   []wowhead.Customization
+	CreatureGeosetData     []GeosetEntry
+	CreatureCustomizations []wowhead.Customization
 }
 
 // GeosetEntry is a creature geoset selection.

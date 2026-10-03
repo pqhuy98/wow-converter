@@ -578,6 +578,7 @@ func convertWowheadCharacterData(meta wowhead.CharacterData) CharacterData {
 	out := CharacterData{
 		Model: meta.Model, Textures: meta.Textures, Character: meta.Character,
 		Equipment: meta.Equipment, TextureFiles: meta.TextureFiles, ItemEffects: meta.ItemEffects,
+		SeparateShoulders: meta.SeparateShoulders,
 	}
 	if meta.Creature != nil {
 		out.Creature = &CreatureMeta{

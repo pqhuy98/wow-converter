@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-haranir-hair-highlights",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room#fzn80k0zg89c8Mex8ih58Meg8wev8MeC8iu38MeD8iAN8MeF8iur8MeP8iu28MeW8ihA8Mee8wgE8MeH8wg48MeX8weg8Mv28wOQ8MBK8iTL8MBP8ijr8MBS8iy08MBW8iyA8MBX8iyv8MB28ig38MeU8weI8MeY8ijU8MBQ8inU8MBU8iyI8Mev8wgB8MeJ8weo8MeK8inv8Mv58wO18MBC8iAw8MBY8itg8MB38ieE8MB48ieG877wz",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

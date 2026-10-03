@@ -98,14 +98,22 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
   const equipmentSlots: EquipmentSlotData[] = [];
 
   const slotIds = Object.values(EquipmentSlot).filter((v) => typeof v === 'number') as number[];
-  for (const slotId of slotIds) {
+  for (let slotId of slotIds) {
     const itemId = metadata.Equipment?.[slotId.toString()];
     if (!itemId) continue;
+    let shoulderSide: number | undefined;
+    if (metadata.SeparateShoulders) {
+      if (slotId === EquipmentSlot.Shoulder) shoulderSide = 1;
+      else if (slotId === EquipmentSlot.Robe) {
+        slotId = EquipmentSlot.Shoulder;
+        shoulderSide = 0;
+      }
+    }
     try {
       const itemData = await processItemData({
         expansion, type: 'item', displayId: itemId, slotId,
       }, race, gender, clazz);
-      equipmentSlots.push({ slotId, data: itemData });
+      equipmentSlots.push({ slotId, data: itemData, shoulderSide });
     } catch (e) {
       console.error(chalk.red(`Failed to process item ${itemId} for slot ${slotId}: ${e}`));
       continue;
@@ -211,12 +219,10 @@ async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, me
   }
 
   const textureTypeToImage: Record<number, string> = {};
-  if (replaceableTextures[1]) {
-    for (const t of charMdl.textures) {
-      if (t.wowData.type === 1 && t.image !== '') {
-        textureTypeToImage[t.wowData.type] = t.image;
-        delete replaceableTextures[t.wowData.type];
-      }
+  for (const t of charMdl.textures) {
+    if (replaceableTextures[t.wowData.type] && t.image !== '') {
+      textureTypeToImage[t.wowData.type] = t.image;
+      delete replaceableTextures[t.wowData.type];
     }
   }
   const debug = false;
@@ -384,8 +390,9 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
     InventoryType.RANGED,
   ].includes(s.data.inventoryType));
 
-  for (const [slotId, attachmentIds] of Object.entries(attachmentList)) {
-    const slot = equipmentSlots.find((s) => s.slotId === Number(slotId));
+  for (const slot of equipmentSlots) {
+    const slotId = slot.slotId;
+    const attachmentIds = attachmentList[slotId];
     if (slot) {
       if (isWeapon(slot)) {
         if (Number(slotId) === EquipmentSlot.MainHand) ctx.weaponInventoryTypes[0] ??= slot.data.inventoryType;
@@ -393,6 +400,10 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
       }
       for (let i = 0; i < slot.data.modelFiles.length; i++) {
         let attachmentId = attachmentIds[i] ?? attachmentIds[0] ?? undefined;
+        if (slot.shoulderSide !== undefined) {
+          if (slot.data.modelFiles[i].componentId !== slot.shoulderSide) continue;
+          attachmentId = slot.shoulderSide === 0 ? WoWAttachmentID.ShoulderLeft : WoWAttachmentID.ShoulderRight;
+        }
         if (Number(slotId) === EquipmentSlot.OffHand && slot.data.inventoryType === InventoryType.SHIELD) {
           attachmentId = WoWAttachmentID.Shield;
         }

@@ -112,6 +112,18 @@ func prepareCharacterExport(ctx *ExportContext, metadata CharacterData, expansio
 		if itemID == 0 {
 			continue
 		}
+		var shoulderSide *int
+		if metadata.SeparateShoulders {
+			if slotID == wowhead.SlotShoulder {
+				side := 1
+				shoulderSide = &side
+			} else if slotID == wowhead.SlotRobe {
+				// Dressing-room slot 14 maps to 20, but holds the left shoulder.
+				slotID = wowhead.SlotShoulder
+				side := 0
+				shoulderSide = &side
+			}
+		}
 		slot := int(slotID)
 		zam := wowhead.ZamURL{Expansion: expansion, Type: wowhead.ZamTypeItem, DisplayID: itemID, SlotID: &slot}
 		itemData, err := ProcessItemData(ctx.WowheadHTTP(), expansion, zam, race, gender, clazz)
@@ -119,7 +131,7 @@ func prepareCharacterExport(ctx *ExportContext, metadata CharacterData, expansio
 			log.Printf("Failed to process item %d for slot %d: %v", itemID, slotID, err)
 			continue
 		}
-		equipmentSlots = append(equipmentSlots, EquipmentSlotData{SlotID: slotID, Data: itemData})
+		equipmentSlots = append(equipmentSlots, EquipmentSlotData{SlotID: slotID, Data: itemData, ShoulderSide: shoulderSide})
 	}
 	log.Printf("Equipments: %v", slotNames(equipmentSlots))
 
@@ -275,15 +287,7 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 		}
 	}
 
-	textureTypeToImage := map[int]string{}
-	if replaceableTextures["1"] != 0 {
-		for _, t := range charMdl.Textures {
-			if t.WowData.Type == 1 && t.Image != "" {
-				textureTypeToImage[t.WowData.Type] = t.Image
-				delete(replaceableTextures, "1")
-			}
-		}
-	}
+	textureTypeToImage := reuseBakedCustomizationTextures(charMdl, replaceableTextures)
 
 	for _, fileDataID := range collectionOrder {
 		entry := collections[fileDataID]
@@ -311,6 +315,19 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 	return nil
 }
 
+// Collections share the base character's composited textures, including hair highlights.
+func reuseBakedCustomizationTextures(charMdl *mdl.MDL, replaceableTextures map[string]int) map[int]string {
+	images := map[int]string{}
+	for _, t := range charMdl.Textures {
+		key := strconv.Itoa(t.WowData.Type)
+		if replaceableTextures[key] != 0 && t.Image != "" {
+			images[t.WowData.Type] = t.Image
+			delete(replaceableTextures, key)
+		}
+	}
+	return images
+}
+
 func attachEquipmentsWithModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []EquipmentSlotData, metadata CharacterData) error {
 	collectionTemplates := map[int]*commonModel{}
 	attachmentList := map[wowhead.EquipmentSlot][]animmap.WoWAttachmentID{
@@ -333,13 +350,6 @@ func attachEquipmentsWithModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSl
 		wowhead.SlotHoldable:    {animmap.WoWAttachmentHandRight},
 		wowhead.SlotRangedRight: {animmap.WoWAttachmentHandLeft},
 	}
-	attachmentSlotOrder := []wowhead.EquipmentSlot{
-		wowhead.SlotHead, wowhead.SlotShoulder, wowhead.SlotShirt, wowhead.SlotChest,
-		wowhead.SlotWaist, wowhead.SlotLegs, wowhead.SlotFeet, wowhead.SlotWrist,
-		wowhead.SlotHands, wowhead.SlotMainHand, wowhead.SlotOffHand, wowhead.SlotShield,
-		wowhead.SlotRanged, wowhead.SlotCloak, wowhead.SlotTabard, wowhead.SlotRobe,
-		wowhead.SlotHoldable, wowhead.SlotRangedRight,
-	}
 
 	isWeapon := func(slot EquipmentSlotData) bool {
 		switch slot.Data.InventoryType {
@@ -361,19 +371,11 @@ func attachEquipmentsWithModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSl
 		}
 	}
 
-	for _, slotID := range attachmentSlotOrder {
+	for slotIndex := range equipmentSlots {
+		slot := &equipmentSlots[slotIndex]
+		slotID := slot.SlotID
 		attachmentIDs, ok := attachmentList[slotID]
 		if !ok {
-			continue
-		}
-		var slot *EquipmentSlotData
-		for i := range equipmentSlots {
-			if equipmentSlots[i].SlotID == slotID {
-				slot = &equipmentSlots[i]
-				break
-			}
-		}
-		if slot == nil {
 			continue
 		}
 		if isWeapon(*slot) {
@@ -392,6 +394,15 @@ func attachEquipmentsWithModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSl
 			}
 			if i < len(attachmentIDs) {
 				attachmentID = attachmentIDs[i]
+			}
+			if slot.ShoulderSide != nil {
+				if slot.Data.ModelFiles[i].ComponentID != *slot.ShoulderSide {
+					continue
+				}
+				attachmentID = animmap.WoWAttachmentShoulderLeft
+				if *slot.ShoulderSide == 1 {
+					attachmentID = animmap.WoWAttachmentShoulderRight
+				}
 			}
 			if slotID == wowhead.SlotOffHand && slot.Data.InventoryType == InventoryShield {
 				attachmentID = animmap.WoWAttachmentShield

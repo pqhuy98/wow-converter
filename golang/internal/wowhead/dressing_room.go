@@ -139,7 +139,8 @@ func DecodeDressingRoom(client *HTTPClient, expansion Expansion, hash string) (C
 			CreatureCustomizations: customizations,
 			CreatureGeosetData:     nil,
 		},
-		Equipment:   equipments,
-		ItemEffects: itemEffects,
+		Equipment:         equipments,
+		SeparateShoulders: data.Settings["separateShoulders"] != 0,
+		ItemEffects:       itemEffects,
 	}, nil
 }

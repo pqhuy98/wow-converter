@@ -42,13 +42,14 @@ type GeosetEntry struct {
 
 // CharacterData is wowhead/zam character or creature meta JSON.
 type CharacterData struct {
-	Model        *int           `json:"Model"`
-	Textures     map[string]int `json:"Textures"`
-	Character    *CharacterMeta `json:"Character"`
-	Creature     *CreatureMeta  `json:"Creature"`
-	Equipment    map[string]int `json:"Equipment"`
-	TextureFiles map[string][]FileEntry `json:"TextureFiles"`
-	ItemEffects  []ItemEffect   `json:"ItemEffects"`
+	Model             *int                   `json:"Model"`
+	Textures          map[string]int         `json:"Textures"`
+	Character         *CharacterMeta         `json:"Character"`
+	Creature          *CreatureMeta          `json:"Creature"`
+	Equipment         map[string]int         `json:"Equipment"`
+	SeparateShoulders bool                   `json:"SeparateShoulders,omitempty"`
+	TextureFiles      map[string][]FileEntry `json:"TextureFiles"`
+	ItemEffects       []ItemEffect           `json:"ItemEffects"`
 }
 
 // FetchNpcMeta fetches NPC meta JSON from zam modelviewer.

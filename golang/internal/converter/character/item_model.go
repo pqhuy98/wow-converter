@@ -94,8 +94,9 @@ func ComputeZamMeshId(group int, offset *int) int {
 
 // EquipmentSlotData pairs slot id with processed item metadata.
 type EquipmentSlotData struct {
-	SlotID wowhead.EquipmentSlot
-	Data   ItemMetadata
+	SlotID       wowhead.EquipmentSlot
+	Data         ItemMetadata
+	ShoulderSide *int // Attachment components: 0 is left, 1 is right.
 }
 
 // GetGeosetIdsFromEquipments derives geoset ids from equipped items.
@@ -397,6 +398,7 @@ func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targ
 }
 
 var raceGenderFallback = map[int][8]int{
+	91: {86, 0, 86, 1, 86, 0, 86, 1},
 	86: {4, 0, 4, 1, 4, 0, 4, 1}, 85: {84, 0, 84, 1, 84, 0, 84, 1},
 	84: {3, 0, 3, 1, 3, 0, 3, 1}, 77: {5, 1, 0, -1, 5, 0, 0, -1},
 	76: {10, 0, 1, 1, 10, 0, 1, 1}, 75: {10, 0, 1, 1, 10, 0, 1, 1},

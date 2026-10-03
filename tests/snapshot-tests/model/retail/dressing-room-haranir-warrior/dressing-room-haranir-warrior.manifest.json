@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-haranir-warrior",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room#fze80z0zg89c8Mex8wgj8Meg8wge8MeC8wgU8MeD8wgX8MeF8wg28MeP8we28MeW8wen8Mee8wgv8MeH8weL8MeX8weg8Mv28wOQ8MBK8iTL8MBP8ij08MBS8inY8MBW8iyA8MBX8iyt8MB28ig48MeU8weG8MeY8we18MBQ8inQ8MBU8iyh8Mev8wgl8MeJ8weM8MeK8inv8Mv58wO18MBC8iAd8MBY8itx8MB38ieF8MB48ieh87JzblY808zblW808zasu8cge8zbl287kzblZ808zblU808zblX808zbl1808ZCM87MzrCG87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

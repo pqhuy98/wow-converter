@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "slug": "dressing-room-haranir-separate-shoulders",
+  "suite": "retail",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room#fzn80k0zg89c8Mex8wgy8Meg8weT8MeC8wgU8MeD8wgX8MeF8wg28MeP8web8MeW8wen8Mee8weE8MeH8we08MeX8weg8Mv28wOQ8MBK8iTL8MBP8ij08MBS8inY8MBW8iyA8MBX8iyt8MB28igY8MeU8wet8MeY8we18MBQ8inQ8MBU8iyh8Mev8wej8MeJ8weV8MeK8wek8Mv58wO18MBC8iAd8MBY8ite8MB38iee8MB48ieh87OzmA7MzmnK808zmNJ87kzmNS808zbzZ808zmN18082mN808zmlm87Mzmlm87MzbzW87cz",
+    "weaponR": "",
+    "weaponL": "",
+    "size": ""
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

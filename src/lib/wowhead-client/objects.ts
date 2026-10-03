@@ -55,6 +55,7 @@ export interface CharacterData {
   Character?: CharacterMeta;
   Creature?: CreatureMeta;
   Equipment?: EquipmentMap;
+  SeparateShoulders?: boolean;
   TextureFiles?: TextureFilesMap;
   ItemEffects?: {
     Slot: number
