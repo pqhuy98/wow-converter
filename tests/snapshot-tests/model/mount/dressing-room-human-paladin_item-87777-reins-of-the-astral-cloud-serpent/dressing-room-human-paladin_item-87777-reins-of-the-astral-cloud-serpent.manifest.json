@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "slug": "dressing-room-human-paladin_item-87777-reins-of-the-astral-cloud-serpent",
+  "suite": "mount",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?human-paladin#fz80z0zN89c8d8zA8k58zdn8fG8M3m8a8mvR8sc8zyb8b8zxA8q8zno8fh8M2Y8fu8M3q8s8zjP877LWjs8zpa87MWT48zpa87MPie808OQL808PYC808X2U808Uio808X31808JzI87M1kr87o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": "hero",
+    "mount": "https://www.wowhead.com/item=87777/reins-of-the-astral-cloud-serpent#modelviewer",
+    "mountScale": 0.5
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
-	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/runtime"
+	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
 
 const (
@@ -22,8 +22,14 @@ type RootType struct {
 	LocaleFlags  uint32
 }
 
-// RootEntry maps rootTypeIdx -> content key.
-type RootEntry map[int]CascKey
+// RootRecord is one root-file variant of a fileDataID.
+type RootRecord struct {
+	TypeIdx int
+	Key     CascKey
+}
+
+// RootEntry lists a fileDataID's variants in root-file order.
+type RootEntry []RootRecord
 
 // CASC is the interface for local and remote CASC sources.
 type CASC interface {
@@ -49,18 +55,18 @@ type CASC interface {
 
 // BaseCASC contains shared CASC state and logic.
 type BaseCASC struct {
-	EncodingTable    *EncodingTable
-	RootTypesList    []RootType
-	RootEntriesMap   map[int]RootEntry
-	IsRemoteSource   bool
-	Loaded           bool
-	LocaleValue      int
-	ProgressTracker  runtime.Progress
-	BuildConfigData  CDNConfigEntries
-	CDNConfigData    CDNConfigEntries
-	BuildsList       []VersionConfigEntry
-	CurrentBuild     VersionConfigEntry
-	CacheStore       *BuildCache
+	EncodingTable   *EncodingTable
+	RootTypesList   []RootType
+	RootEntriesMap  map[int]RootEntry
+	IsRemoteSource  bool
+	Loaded          bool
+	LocaleValue     int
+	ProgressTracker runtime.Progress
+	BuildConfigData CDNConfigEntries
+	CDNConfigData   CDNConfigEntries
+	BuildsList      []VersionConfigEntry
+	CurrentBuild    VersionConfigEntry
+	CacheStore      *BuildCache
 }
 
 // NewBaseCASC creates base CASC state.
@@ -71,25 +77,25 @@ func NewBaseCASC(isRemote bool) *BaseCASC {
 		locale = LocaleEnUS
 	}
 	return &BaseCASC{
-		EncodingTable:    newEncodingTable(16, 16),
-		RootEntriesMap:   map[int]RootEntry{},
-		IsRemoteSource:   isRemote,
-		LocaleValue:      locale,
-		ProgressTracker:  runtime.CreateProgress(0),
+		EncodingTable:   newEncodingTable(16, 16),
+		RootEntriesMap:  map[int]RootEntry{},
+		IsRemoteSource:  isRemote,
+		LocaleValue:     locale,
+		ProgressTracker: runtime.CreateProgress(0),
 	}
 }
 
-func (b *BaseCASC) IsRemote() bool            { return b.IsRemoteSource }
-func (b *BaseCASC) IsLoaded() bool            { return b.Loaded }
-func (b *BaseCASC) Locale() int               { return b.LocaleValue }
-func (b *BaseCASC) EncodingEntryCount() int { return b.EncodingTable.len() }
-func (b *BaseCASC) RootTypes() []RootType     { return b.RootTypesList }
+func (b *BaseCASC) IsRemote() bool                 { return b.IsRemoteSource }
+func (b *BaseCASC) IsLoaded() bool                 { return b.Loaded }
+func (b *BaseCASC) Locale() int                    { return b.LocaleValue }
+func (b *BaseCASC) EncodingEntryCount() int        { return b.EncodingTable.len() }
+func (b *BaseCASC) RootTypes() []RootType          { return b.RootTypesList }
 func (b *BaseCASC) RootEntries() map[int]RootEntry { return b.RootEntriesMap }
-func (b *BaseCASC) BuildConfig() CDNConfigEntries { return b.BuildConfigData }
-func (b *BaseCASC) CDNConfig() CDNConfigEntries { return b.CDNConfigData }
-func (b *BaseCASC) Builds() []VersionConfigEntry { return b.BuildsList }
-func (b *BaseCASC) Build() VersionConfigEntry { return b.CurrentBuild }
-func (b *BaseCASC) Cache() *BuildCache        { return b.CacheStore }
+func (b *BaseCASC) BuildConfig() CDNConfigEntries  { return b.BuildConfigData }
+func (b *BaseCASC) CDNConfig() CDNConfigEntries    { return b.CDNConfigData }
+func (b *BaseCASC) Builds() []VersionConfigEntry   { return b.BuildsList }
+func (b *BaseCASC) Build() VersionConfigEntry      { return b.CurrentBuild }
+func (b *BaseCASC) Cache() *BuildCache             { return b.CacheStore }
 
 // ResetForLoad clears parsed index state before reloading.
 func (b *BaseCASC) ResetForLoad() {
@@ -104,8 +110,8 @@ func (b *BaseCASC) GetValidRootEntries() []int {
 	var entries []int
 	for fileDataID, entry := range b.RootEntriesMap {
 		include := false
-		for rootTypeIdx := range entry {
-			rootType := b.RootTypesList[rootTypeIdx]
+		for _, rec := range entry {
+			rootType := b.RootTypesList[rec.TypeIdx]
 			if (rootType.LocaleFlags&uint32(b.LocaleValue)) != 0 && (rootType.ContentFlags&uint32(ContentLowViolence)) == 0 {
 				include = true
 				break
@@ -159,9 +165,11 @@ func (b *BaseCASC) FileExists(fileDataID int) bool {
 }
 
 func (b *BaseCASC) selectRootContentKey(root RootEntry) CascKey {
+	// Within a tier, a HighRes variant wins over the first match: a low-res texture cannot be upscaled back.
 	pick := func(requireLocale, skipLowViolence bool) CascKey {
-		for rootTypeIdx, key := range root {
-			rootType := b.RootTypesList[rootTypeIdx]
+		var first CascKey
+		for _, rec := range root {
+			rootType := b.RootTypesList[rec.TypeIdx]
 			if skipLowViolence && (rootType.ContentFlags&uint32(ContentLowViolence)) != 0 {
 				continue
 			}
@@ -171,9 +179,14 @@ func (b *BaseCASC) selectRootContentKey(root RootEntry) CascKey {
 			if requireLocale && (rootType.LocaleFlags&uint32(b.LocaleValue)) == 0 {
 				continue
 			}
-			return key
+			if (rootType.ContentFlags & uint32(ContentHighResTexture)) != 0 {
+				return rec.Key
+			}
+			if first == "" {
+				first = rec.Key
+			}
 		}
-		return ""
+		return first
 	}
 	if key := pick(true, true); key != "" {
 		return key
@@ -301,14 +314,10 @@ func (b *BaseCASC) ParseRootFile(data *buffer.Buffer, hash string) (int, error) 
 				fileDataIDs[i] = nextID
 				fileDataID = nextID + 1
 			}
+			typeIdx := len(b.RootTypesList)
 			for i := 0; i < numRecords; i++ {
 				fdid := fileDataIDs[i]
-				entry := b.RootEntriesMap[fdid]
-				if entry == nil {
-					entry = RootEntry{}
-					b.RootEntriesMap[fdid] = entry
-				}
-				entry[len(b.RootTypesList)] = CascKey(root.ReadBinaryKey(16))
+				b.RootEntriesMap[fdid] = append(b.RootEntriesMap[fdid], RootRecord{TypeIdx: typeIdx, Key: CascKey(root.ReadBinaryKey(16))})
 			}
 			if !(allowNamelessFiles && (contentFlags&uint32(ContentNoNameHash)) != 0) {
 				root.Move(8 * numRecords)
@@ -328,16 +337,12 @@ func (b *BaseCASC) ParseRootFile(data *buffer.Buffer, hash string) (int, error) 
 				fileDataIDs[i] = nextID
 				fileDataID = nextID + 1
 			}
+			typeIdx := len(b.RootTypesList)
 			for i := 0; i < numRecords; i++ {
 				key := CascKey(root.ReadBinaryKey(16))
 				root.Move(8)
 				fdid := fileDataIDs[i]
-				entry := b.RootEntriesMap[fdid]
-				if entry == nil {
-					entry = RootEntry{}
-					b.RootEntriesMap[fdid] = entry
-				}
-				entry[len(b.RootTypesList)] = key
+				b.RootEntriesMap[fdid] = append(b.RootEntriesMap[fdid], RootRecord{TypeIdx: typeIdx, Key: key})
 			}
 			b.RootTypesList = append(b.RootTypesList, RootType{ContentFlags: contentFlags, LocaleFlags: localeFlags})
 		}

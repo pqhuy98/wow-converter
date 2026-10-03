@@ -10,7 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"runtime"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -72,7 +73,7 @@ func registerExportCharacter(r Router, d *Deps) {
 
 	var queue *util.JobQueue[exportCharacterRequest, exportCharacterResponse]
 	queue = util.NewJobQueue(util.QueueConfig[exportCharacterRequest, exportCharacterResponse]{
-		Concurrency:    1,
+		Concurrency:    4,
 		MaxPendingJobs: 100,
 		JobTTL:         5 * time.Minute,
 		JobTimeout:     timeout,
@@ -279,6 +280,14 @@ func optimizationBool(v *bool, defaultVal bool) bool {
 }
 
 func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (exportCharacterResponse, error) {
+	var exporter *character.CharacterExporter
+	defer func() {
+		// The parsed model stays on this exporter until the handler returns. Drop it and
+		// give the idle pages back so the next export does not sit on top of the last one.
+		exporter = nil
+		runtime.GC()
+		debug.FreeOSMemory()
+	}()
 	startedAt := time.Now()
 	requestJSON, _ := json.MarshalIndent(req, "", "  ")
 	log.Printf("Start exporting %s: %s", req.OutputFileName, ansi.Gray(string(requestJSON)))
@@ -304,7 +313,7 @@ func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (expo
 		return exportCharacterResponse{}, err
 	}
 
-	exporter := character.NewCharacterExporter(cfg, d.Client)
+	exporter = character.NewCharacterExporter(cfg, d.Client)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
@@ -372,9 +381,7 @@ func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (expo
 		}
 		resp.ExportedTextures = append(resp.ExportedTextures, exportAssetInfo{Path: filepath.ToSlash(rel), Size: info.Size()})
 	}
-	sort.Slice(resp.ExportedTextures, func(i, j int) bool {
-		return stringsort.Less(resp.ExportedTextures[i].Path, resp.ExportedTextures[j].Path)
-	})
+	stringsort.SortBy(resp.ExportedTextures, func(info exportAssetInfo) string { return info.Path })
 	if !d.Config.IsSharedHosting {
 		resp.OutputDirectory = outDir
 	}

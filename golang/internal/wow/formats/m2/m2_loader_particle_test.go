@@ -1,3 +1,5 @@
+//go:build module
+
 package m2
 
 import (
@@ -13,9 +15,6 @@ import (
 )
 
 func TestBloodboilParticleEmitters(t *testing.T) {
-	if os.Getenv("WOW_CASC_TEST") == "" {
-		t.Skip("set WOW_CASC_TEST=1 to run CASC-backed loader tests")
-	}
 	base := os.Getenv("WOW_DATA_SERVER_URL")
 	if base == "" {
 		base = "http://127.0.0.1:17753"

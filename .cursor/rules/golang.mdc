@@ -1,0 +1,57 @@
+---
+description: Go pitfalls for wow-converter. Think about these first when encounter bugs
+alwaysApply: true
+---
+# Go pitfalls
+
+## Encountered in the past
+
+These issues we encountered several times in the past, think about these first when you encounter bugs. Mutations that do not stick, and results that change between runs.
+
+### Copy vs reference
+
+Bugs appear when one code path mutates a struct while another still holds an older copy.
+
+- **Immutable snapshot → value type.** Pass `config.Config`, `MapExportConfig` by value only for one-shot read-only use (e.g. `NewWc3Converter(*cfg)` at export time).
+- **Mutable session config → single pointer owner.** If anything may mutate config during a run (`AutoChooseClampPercent`, API overrides), store `*MapExportConfig` on `MapExporter` and pass the same pointer from the caller. Never manually sync copies (`exporter.MapExportConfig = mapCfg`).
+- **Factory methods that callers mutate → return pointers.** Example: `AddDoodadType() *DoodadType`, not a struct value.
+- **Graph nodes (materials, textures, global sequences) → `[]*T` on `mdl.MDL`.** Append shared pointers; wire edges at creation (`storeMaterial`, `storeMdlTexture`, `getGS`). No separate relink fixup passes.
+- **Merge remapping** in `mergeItemObjects` updates pointers when combining graphs — that is required merge logic, not a copy bug workaround.
+
+Red flags:
+
+- Constructor takes `T` but a helper takes `*T` and mutates it.
+- `cfg := e.SomeConfig` then later `e.SomeConfig = cfg` to "sync".
+- `append(slice, *item)` into a struct slice while other code keeps `&item`.
+- Map/slice lookup returns a value, caller mutates fields on the returned struct.
+
+```go
+exporter := NewMapExporter(cfg, &mapCfg, client)
+AutoChooseClampPercent(exporter, unitScale) // mutates exporter.MapExportConfig in place
+```
+
+```go
+// manual sync = design smell
+exporter := NewMapExporter(cfg, mapCfg, client)
+AutoChooseClampPercent(exporter, &mapCfg, unitScale)
+exporter.MapExportConfig = mapCfg
+```
+
+### Map iteration order
+
+`range` over a map visits keys in a random order. It changes between runs and between loops in one process. A key lookup stays O(1); only ranging is unordered.
+
+- Do not range a map and keep the first match when the choice must be stable (content key, file variant, export order, tests, cached bytes).
+- Store an ordered slice when order matters. Keep a map beside it only for lookup by key.
+- Classic CASC root variants are `[]RootRecord` for this reason. One fileDataID has a high-res entry (`ContentHighResTexture`) and a low-res twin; ranging `map[int]CascKey` picked one at random, so the same build wrote 1024 and 256 textures. `selectRootContentKey` walks the slice and prefers the high-res entry.
+
+## Not encountered yet
+
+Shared memory, nil checks, and races that have not shown up as bugs here. This module is Go 1.25, so the pre-1.22 loop-variable capture (`v := v` inside the loop) is already fixed. Do not add that workaround.
+
+- **Slice backing array.** A reslice shares the array. `append` reuses that capacity and overwrites the parent, or reallocates so the caller's header never sees the new elements. Reassign `s = append(s, x)`. Detach with `s[:len(s):len(s)]` or `copy` before returning a small window of a large buffer. ([slices](https://go.dev/blog/slices-intro))
+- **nil map vs nil slice.** Appending to a nil slice is fine. Writing a nil map panics. A missing key reads back as the zero value, so use the comma-ok form when a stored zero is meaningful.
+- **Nil pointer in an interface.** `var p *T = nil; var i any = p` makes `i != nil`. An `error` that holds a nil `*MyError` still fails `err != nil`. ([FAQ](https://go.dev/doc/faq#nil_error))
+- **`defer` runs at function return, and its arguments are evaluated now.** A `defer` inside a loop holds every resource until the function returns. `defer f(x)` captures `x` at the defer statement.
+- **Maps are not safe for concurrent use.** A concurrent read and write crashes the process. Guard the map, or use `sync.Map`.
+- **`for _, v := range` copies the element.** Assigning to `v` does not change the slice or array. Store a pointer in the slice when the loop must mutate the element.

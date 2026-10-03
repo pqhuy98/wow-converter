@@ -30,6 +30,7 @@ import { CutBox, cutBoxFromInstanceBounds, CutBoxOrthoView } from './cut-box-vie
 import {
   frameShotCamera, readMdxExtents, usefulExtent, type ExtentBox, type ShotExtents,
 } from './shot-frame';
+import { freezeShotPose, settleShotPose } from './shot-pose';
 
 interface ModelViewerProps {
   modelPath?: string
@@ -188,6 +189,7 @@ export default function ModelViewerUi({
   // Track loaded asset files for download
   const baseUrlRef = useRef<string>('/api/assets');
   const shotExtentsRef = useRef<ShotExtents | null>(null);
+  const shotPoseRef = useRef<{ inst: MdxModelInstance; seq: number } | null>(null);
   const loadedFilesRef = useRef<Set<string>>(new Set());
   const [loadedCount, setLoadedCount] = useState<number>(0);
   useEffect(() => {
@@ -274,6 +276,8 @@ export default function ModelViewerUi({
     const canvas = canvasRef.current;
     // reset loaded asset tracker on new load
     loadedFilesRef.current = new Set();
+    shotPoseRef.current = null;
+    if (shot) delete document.documentElement.dataset.viewerReady;
 
     viewer.clear();
     const scene = viewer.addScene();
@@ -331,7 +335,7 @@ export default function ModelViewerUi({
         return;
       }
       modelInstance = model.addInstance();
-      if (shot) modelInstance.timeScale = 0;
+      if (shot) freezeShotPose(modelInstance);
       modelRef.current = model;
       try {
         const cams = model.cameras;
@@ -669,10 +673,23 @@ export default function ModelViewerUi({
 
   const [progress, setProgress] = useState(0);
 
-  // Apply sequence when currentSeq updates
+  // Apply sequence when currentSeq updates.
+  // setSequence rewinds frame to the interval start. A shot pose is settled once per instance.
   useEffect(() => {
     const inst = instanceRef.current;
-    if (inst) {
+    const pose = shotPoseRef.current;
+    const settled = Boolean(shot && inst && pose?.inst === inst && pose.seq === currentSeq);
+    const bindShotView = (): void => {
+      window.__shotView = (name: string) => {
+        const liveScene = sceneRef.current;
+        const liveInst = instanceRef.current;
+        if (!liveScene || !liveInst) return '';
+        applyShotView(liveScene, liveInst, name, shotExtentsRef.current);
+        document.documentElement.dataset.viewerView = name;
+        return name;
+      };
+    };
+    if (inst && !settled) {
       inst.setSequence(currentSeq);
       // 0 = loop based on model, 1 = never loop, 2 = always loop (see mdx impl)
       inst.sequenceLoopMode = 0;
@@ -681,16 +698,12 @@ export default function ModelViewerUi({
         inst.timeScale = 0;
         const scene = sceneRef.current;
         if (scene) applyShotView(scene, inst, 'front', shotExtentsRef.current);
-        window.__shotView = (name: string) => {
-          const liveScene = sceneRef.current;
-          const liveInst = instanceRef.current;
-          if (!liveScene || !liveInst) return '';
-          applyShotView(liveScene, liveInst, name, shotExtentsRef.current);
-          document.documentElement.dataset.viewerView = name;
-          return name;
-        };
+        bindShotView();
       }
       setProgress(0);
+    } else if (shot && inst) {
+      inst.timeScale = 0;
+      bindShotView();
     }
     if (cameraSessionKey) {
       const anim = animationSessionRef.current;
@@ -698,7 +711,7 @@ export default function ModelViewerUi({
       anim.sequenceIndex = currentSeq;
       anim.sequenceName = sequences[currentSeq]?.name ?? anim.sequenceName;
     }
-    if (!shot || !inst || !viewer) return undefined;
+    if (!shot || !inst || !viewer || settled) return undefined;
     let cancelled = false;
     delete document.documentElement.dataset.viewerReady;
     void (async () => {
@@ -715,12 +728,15 @@ export default function ModelViewerUi({
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       });
-      if (cancelled) return;
+      if (cancelled || live == null || instanceRef.current !== live) return;
+      shotPoseRef.current = { inst: live, seq: currentSeq };
       document.documentElement.dataset.viewerSequence = sequences[currentSeq]?.name ?? '';
       document.documentElement.dataset.viewerReady = '1';
     })();
     return () => {
       cancelled = true;
+      const published = shotPoseRef.current?.inst === inst && shotPoseRef.current.seq === currentSeq;
+      if (!published) delete document.documentElement.dataset.viewerReady;
     };
   }, [currentSeq, cameraSessionKey, sequences, shot, viewer]);
 
@@ -1178,46 +1194,6 @@ export default function ModelViewerUi({
       </div>}
     </div>
   );
-}
-
-const SHOT_STEP_S = 1 / 60;
-
-/** Same generator the viewer already ships, with a fixed seed for shot captures. */
-function seededRandom(seed: number): () => number {
-  return () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
-}
-
-/**
- * Play from the sequence start to `targetFrame` at a fixed 60Hz step, then stop the clock.
- * Particle spread uses a seeded Math.random for the duration of the replay.
- */
-function settleShotPose(scene: Scene, inst: MdxModelInstance, targetFrame: number): void {
-  inst.clearEmittedObjects();
-  inst.timeScale = 1;
-  scene.emittedObjectUpdater.update(0);
-  inst.setSequence(inst.sequence);
-  for (const emitter of inst.particleEmitters2) emitter.lastEmissionKey = -1;
-  inst.timeScale = 0;
-  const random = Math.random;
-  Math.random = seededRandom(1);
-  try {
-    inst.timeScale = 1;
-    let guard = 0;
-    while (inst.frame + 1e-3 < targetFrame && guard < 20000) {
-      const dt = Math.min(SHOT_STEP_S, (targetFrame - inst.frame) / 1000);
-      if (dt <= 0) break;
-      inst.updateAnimations(dt);
-      scene.emittedObjectUpdater.update(dt);
-      guard += 1;
-    }
-    inst.frame = targetFrame;
-  } finally {
-    inst.timeScale = 0;
-    Math.random = random;
-  }
 }
 
 function shotExtentBox(extents: ShotExtents, inst: MdxModelInstance): ExtentBox | null {

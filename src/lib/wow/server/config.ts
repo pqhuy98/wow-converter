@@ -35,6 +35,7 @@ export interface WowReaderConfig {
   removePathSpacesCopy: boolean;
   exportTextureFormat: string;
   exportModelFormat: string;
+  maxTextureSize: number;
   exportChannelMask: number;
   exportM2Bones: boolean;
   exportM2Meta: boolean;
@@ -106,6 +107,7 @@ export const wowConfig: WowReaderConfig = {
   removePathSpacesCopy: true,
   exportTextureFormat: 'PNG',
   exportModelFormat: 'OBJ',
+  maxTextureSize: 512,
   exportChannelMask: 15,
   exportM2Bones: true,
   exportM2Meta: true,

@@ -1,9 +1,10 @@
 /** Save a PNG of the Wowhead model-viewer canvas. The toolbar and page stay out of the shot. */
 import { type ChildProcess, spawn, spawnSync } from 'child_process';
-import { existsSync, mkdirSync, rmSync } from 'fs';
-import { mkdtemp, writeFile } from 'fs/promises';
+import { existsSync, mkdirSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
+import sharp from 'sharp';
 
 const WIDTH = 1440;
 const HEIGHT = 900;
@@ -50,6 +51,9 @@ const SAMPLE = `
     view: window.__whWantView || '',
     anim: window.__whAnim || '',
     dist: 0,
+    fitN: 0,
+    span: 0,
+    mid: 0,
   };
   if (!renderer || !renderer.canvas) return Object.assign(base, { phase: 'no-viewer' });
   const actor = renderer.actors && renderer.actors[0];
@@ -65,52 +69,123 @@ const SAMPLE = `
     renderer.clearColor[2] = 0.15;
     renderer.fov = 45;
     renderer.onResize(1440, 900, 1440 / 900);
-    renderer.__whPan = {
-      t: [renderer.translation[0], renderer.translation[1], renderer.translation[2]],
-      m: [renderer.translationFromModel[0], renderer.translationFromModel[1], renderer.translationFromModel[2]],
-      target: [renderer.target[0], renderer.target[1], renderer.target[2]],
-    };
+    const clock0 = model.C && model.C.d;
+    window.__whTimeUnit = clock0 && typeof clock0.c === 'number' && clock0.c > 0 && clock0.c <= 1 ? 'frac' : 'ms';
+    const bind = actor.getBounds && actor.getBounds();
+    const bindSpan = bind && bind[0] && bind[1]
+      ? Math.abs(bind[1][0] - bind[0][0]) + Math.abs(bind[1][1] - bind[0][1]) + Math.abs(bind[1][2] - bind[0][2])
+      : 0;
+    if (bind && bindSpan > 0.01) {
+      window.__whBind = [
+        [bind[0][0], bind[0][1], bind[0][2]],
+        [bind[1][0], bind[1][1], bind[1][2]],
+      ];
+    }
     const origDraw = renderer.updateCamera.bind(renderer);
     renderer.updateCamera = function() {
-      const view = window.__whWantView;
-      const saved = renderer.__whPan;
-      if (view === 'top' || view === 'bottom') {
-        const center = boundsCenter(actor);
-        if (center) {
-          renderer.target[0] = center[0];
-          renderer.target[1] = center[1];
-          renderer.target[2] = center[2];
-        }
-        renderer.translation[0] = 0;
-        renderer.translation[1] = 0;
-        renderer.translation[2] = 0;
-        renderer.translationFromModel[0] = 0;
-        renderer.translationFromModel[1] = 0;
-        renderer.translationFromModel[2] = 0;
-      } else if (saved) {
-        renderer.target[0] = saved.target[0];
-        renderer.target[1] = saved.target[1];
-        renderer.target[2] = saved.target[2];
-        renderer.translation[0] = saved.t[0];
-        renderer.translation[1] = saved.t[1];
-        renderer.translation[2] = saved.t[2];
-        renderer.translationFromModel[0] = saved.m[0];
-        renderer.translationFromModel[1] = saved.m[1];
-        renderer.translationFromModel[2] = saved.m[2];
-      }
+      const view = window.__whWantView || 'front';
+      const box = window.__whBind;
       origDraw();
-      if (view !== 'top' && view !== 'bottom') return;
-      const dist = renderer.distance * Math.pow(renderer.zoom.rateStep + 1, -renderer.zoom.current);
-      const sign = view === 'top' ? 1 : -1;
-      const eye = [renderer.target[0], renderer.target[1], renderer.target[2] + sign * dist];
-      lookAt(renderer.viewMatrix, eye, renderer.target, [0, 1, 0]);
-      mul(renderer.viewMatrix, renderer.panningMatrix, renderer.viewMatrix);
-      renderer.eye[0] = eye[0];
-      renderer.eye[1] = eye[1];
-      renderer.eye[2] = eye[2];
+      if (box) {
+        const target = [
+          (box[0][0] + box[1][0]) / 2,
+          (box[0][1] + box[1][1]) / 2,
+          (box[0][2] + box[1][2]) / 2,
+        ];
+        renderer.zoom.current = 0;
+        renderer.zoom.target = 0;
+        const savedCam = window.__whSaved && window.__whSaved[view];
+        let dist = savedCam
+          ? savedCam.dist
+          : fitDist(view, target, boxCorners(box[0], box[1]), renderer.azimuth, renderer.zenith, renderer.fov || 45) * (window.__whScale || 1);
+        if (!savedCam) {
+          const fov = ((renderer.fov || 45) > 3 ? (renderer.fov || 45) : 45) * Math.PI / 180;
+          const tan = Math.tan(fov / 2);
+          const eye0 = eyeFor(view, target, dist, renderer.azimuth, renderer.zenith);
+          const up0 = view === 'top' || view === 'bottom' ? [0, 1, 0] : [0, 0, 1];
+          let zx = eye0[0] - target[0];
+          let zy = eye0[1] - target[1];
+          let zz = eye0[2] - target[2];
+          const zlen = Math.hypot(zx, zy, zz) || 1;
+          zx /= zlen; zy /= zlen; zz /= zlen;
+          let rx = up0[1] * zz - up0[2] * zy;
+          let ry = up0[2] * zx - up0[0] * zz;
+          let rz = up0[0] * zy - up0[1] * zx;
+          const rlen = Math.hypot(rx, ry, rz) || 1;
+          rx /= rlen; ry /= rlen; rz /= rlen;
+          const ux = zy * rz - zz * ry;
+          const uy = zz * rx - zx * rz;
+          const uz = zx * ry - zy * rx;
+          const shiftX = (window.__whPanX || 0) * 2 * dist * tan * (1440 / 900);
+          const shiftY = -(window.__whPanY || 0) * 2 * dist * tan;
+          target[0] += rx * shiftX + ux * shiftY;
+          target[1] += ry * shiftX + uy * shiftY;
+          target[2] += rz * shiftX + uz * shiftY;
+        } else {
+          target[0] = savedCam.target[0];
+          target[1] = savedCam.target[1];
+          target[2] = savedCam.target[2];
+        }
+        renderer.distance = dist;
+        renderer.target[0] = target[0];
+        renderer.target[1] = target[1];
+        renderer.target[2] = target[2];
+        window.__whPlaced = { view, dist, target: [target[0], target[1], target[2]] };
+        const eye = eyeFor(view, target, dist, renderer.azimuth, renderer.zenith);
+        const up = view === 'top' || view === 'bottom' ? [0, 1, 0] : [0, 0, 1];
+        lookAt(renderer.viewMatrix, eye, target, up);
+        renderer.eye[0] = eye[0];
+        renderer.eye[1] = eye[1];
+        renderer.eye[2] = eye[2];
+      }
+      // Converter SD light: one world-up light, then clamp(N·up + 0.7, 0, 1). Wowhead clamps ambient + primary * max(N·L, 0) to 1, so ambient 0.7 and primary 1 is that same curve. Normals are view-space, so the light direction is world +Z through the view matrix.
+      const bag = renderer.gxDevice && renderer.gxDevice.i;
+      const viewM = renderer.viewMatrix;
+      if (bag && viewM && bag.uAmbientColor && bag.uPrimaryColor && bag.uSecondaryColor && bag.uLightDir1) {
+        let ux = viewM[8];
+        let uy = viewM[9];
+        let uz = viewM[10];
+        const ulen = Math.hypot(ux, uy, uz) || 1;
+        ux /= ulen;
+        uy /= ulen;
+        uz /= ulen;
+        bag.uAmbientColor[0] = 0.7;
+        bag.uAmbientColor[1] = 0.7;
+        bag.uAmbientColor[2] = 0.7;
+        bag.uPrimaryColor[0] = 1;
+        bag.uPrimaryColor[1] = 1;
+        bag.uPrimaryColor[2] = 1;
+        bag.uSecondaryColor[0] = 0;
+        bag.uSecondaryColor[1] = 0;
+        bag.uSecondaryColor[2] = 0;
+        bag.uLightDir1[0] = ux;
+        bag.uLightDir1[1] = uy;
+        bag.uLightDir1[2] = uz;
+        for (const key of Object.keys(bag)) {
+          if (!/spec/i.test(key)) continue;
+          const value = bag[key];
+          if (value && typeof value.length === 'number' && value.length >= 3) {
+            value[0] = 0;
+            value[1] = 0;
+            value[2] = 0;
+          } else if (typeof value === 'number') {
+            bag[key] = 0;
+          }
+        }
+      }
     };
     const origAnim = model.aX.bind(model);
-    model.aX = function(state, _dt) { return origAnim(state, 0); };
+    model.aX = function(state, _dt) {
+      const clock = model.C && model.C.d;
+      if (clock && typeof window.__whTime === 'number') clock.c = window.__whTime;
+      if (model.C && typeof window.__whTime === 'number') {
+        model.C.a = 1;
+        model.C.b = 0;
+      }
+      const result = origAnim(state, 0);
+      if (clock && typeof window.__whTime === 'number') clock.c = window.__whTime;
+      return result;
+    };
     window.__whInit = true;
     return Object.assign(base, { phase: 'init' });
   }
@@ -126,9 +201,7 @@ const SAMPLE = `
   }
   window.__whAnim = picked.f;
   const playing = model.C && model.C.d && model.C.d.e && model.C.d.e.f;
-  if (playing !== picked.f) actor.setAnimation(picked.f, false);
-  if (model.C && model.C.d) model.C.d.c = picked.l / 2;
-
+  const len = typeof picked.l === 'number' ? picked.l : 0;
   const view = window.__whWantView || 'front';
   const orbit = {
     front: [Math.PI * 1.5, Math.PI / 2],
@@ -139,11 +212,80 @@ const SAMPLE = `
   const pair = orbit[view] || orbit.front;
   renderer.azimuth = pair[0];
   renderer.zenith = pair[1];
-  renderer.zoom.current = 1;
-  renderer.zoom.target = 1;
-  const size = boundsSize(actor);
-  if (size) renderer.distance = orbitDistance(view, size, renderer.fov, 1440 / 900);
-  base.dist = Math.round(renderer.distance * 10) / 10;
+  renderer.zoom.current = 0;
+  renderer.zoom.target = 0;
+  if (window.__whFitView !== view) {
+    window.__whFitView = view;
+    if (!window.__whSaved || !window.__whSaved[view]) {
+      window.__whScale = 1;
+      window.__whPanX = 0;
+      window.__whPanY = 0;
+      window.__whFitN = 0;
+      window.__whFill = 0;
+      window.__whW = 0;
+      window.__whH = 0;
+      window.__whCx = undefined;
+      window.__whCy = undefined;
+      window.__whEdgeX = 0;
+      window.__whEdgeY = 0;
+      window.__whFitSeq = -1;
+    }
+  }
+  const saved = window.__whSaved && window.__whSaved[view];
+  if (saved) {
+    if (playing !== picked.f) actor.setAnimation(picked.f, true);
+    window.__whTime = window.__whTimeUnit === 'frac' || len <= 2 ? 0.5 : len / 2;
+    if (model.C && model.C.d) {
+      model.C.d.c = window.__whTime;
+      model.C.a = 1;
+      model.C.b = 0;
+    }
+  } else {
+    const current = model.C && model.C.d && model.C.d.e;
+    const curLen = current && typeof current.l === 'number' ? current.l : 0;
+    window.__whTime = curLen > 2 ? curLen / 2 : 0;
+    if (model.C && model.C.d && window.__whTime) model.C.d.c = window.__whTime;
+    if (window.__whSeq !== window.__whFitSeq) {
+      window.__whFitSeq = window.__whSeq;
+      const aim0 = window.__whAim;
+      const useH0 = !aim0 || aim0.h >= aim0.w;
+      const clipped = useH0 ? window.__whEdgeY : window.__whEdgeX;
+      if (clipped) {
+        window.__whScale = Math.min(3, (window.__whScale || 1) * 1.12);
+      } else {
+        const cx = window.__whCx;
+        const cy = window.__whCy;
+        const aim = aim0;
+        const useH = useH0;
+        const got = useH ? (window.__whH || 0) : (window.__whW || 0);
+        const goal = aim ? (useH ? aim.h : aim.w) : 0.92;
+        const goalCx = aim ? aim.cx : 0.5;
+        const goalCy = aim ? aim.cy : 0.5;
+        if (got > 0.2 && goal > 0.2 && typeof cx === 'number' && typeof cy === 'number') {
+          const ratio = got / goal;
+          window.__whScale = Math.max(0.25, Math.min(3, (window.__whScale || 1) * Math.sqrt(ratio)));
+          window.__whPanX = (window.__whPanX || 0) + (cx - goalCx) * 0.85;
+          window.__whPanY = (window.__whPanY || 0) + (cy - goalCy) * 0.85;
+          window.__whFitN = (window.__whFitN || 0) + 1;
+          const close = Math.abs(got - goal) <= 0.006 && Math.abs(cx - goalCx) < 0.006 && Math.abs(cy - goalCy) < 0.006;
+          if (close) {
+            const placed = window.__whPlaced;
+            if (placed && placed.view === view) {
+              window.__whSaved = window.__whSaved || {};
+              window.__whSaved[view] = { dist: placed.dist, target: placed.target };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  base.dist = Math.round((renderer.distance || 0) * 10) / 10;
+  base.fitN = window.__whSaved && window.__whSaved[view] ? 100 : (window.__whFitN || 0);
+  base.span = Math.round((window.__whFill || 0) * 100) / 100;
+  base.mid = window.__whTime || 0;
+  base.unit = window.__whTimeUnit || '';
+  base.len = len;
 
   if (window.__whMeasuring) return Object.assign(base, { phase: 'measuring', anim: picked.f });
   if (window.__whShot) {
@@ -156,50 +298,47 @@ const SAMPLE = `
       full.width = img.width;
       full.height = img.height;
       const paint = full.getContext('2d');
+      let colored = 0;
       if (paint) {
         paint.fillStyle = 'rgb(38,38,38)';
         paint.fillRect(0, 0, full.width, full.height);
         paint.drawImage(img, 0, 0);
-      }
-      const tw = 80;
-      const th = 45;
-      const tmp = document.createElement('canvas');
-      tmp.width = tw;
-      tmp.height = th;
-      const ctx = tmp.getContext('2d');
-      let colored = 0;
-      let boxH = 0;
-      let boxW = 0;
-      if (ctx) {
-        ctx.drawImage(full, 0, 0, tw, th);
-        const data = ctx.getImageData(0, 0, tw, th).data;
-        let minY = th;
-        let maxY = -1;
-        let minX = tw;
-        let maxX = -1;
-        for (let y = 0; y < th; y++) {
-          for (let x = 0; x < tw; x++) {
-            const p = (y * tw + x) * 4;
-            const r = data[p];
-            const g = data[p + 1];
-            const b = data[p + 2];
-            const max = r > g ? (r > b ? r : b) : (g > b ? g : b);
-            const min = r < g ? (r < b ? r : b) : (g < b ? g : b);
-            if (max - min > 22 && max > 40) {
-              colored++;
-              if (y < minY) minY = y;
-              if (y > maxY) maxY = y;
-              if (x < minX) minX = x;
-              if (x > maxX) maxX = x;
-            }
+        const fw = full.width;
+        const fh = full.height;
+        const pixels = paint.getImageData(0, 0, fw, fh).data;
+        let meshMinX = fw;
+        let meshMinY = fh;
+        let meshMaxX = -1;
+        let meshMaxY = -1;
+        for (let y = 0; y < fh; y += 2) {
+          for (let x = 0; x < fw; x += 2) {
+            const p = (y * fw + x) * 4;
+            const r = pixels[p];
+            const g = pixels[p + 1];
+            const b = pixels[p + 2];
+            if (Math.abs(r - 38) <= 6 && Math.abs(g - 38) <= 6 && Math.abs(b - 38) <= 6) continue;
+            if (x < meshMinX) meshMinX = x;
+            if (y < meshMinY) meshMinY = y;
+            if (x > meshMaxX) meshMaxX = x;
+            if (y > meshMaxY) meshMaxY = y;
+            const hi = r > g ? (r > b ? r : b) : (g > b ? g : b);
+            const lo = r < g ? (r < b ? r : b) : (g < b ? g : b);
+            if (hi - lo > 22 && hi > 40) colored++;
           }
         }
-        if (maxY >= 0) boxH = (maxY - minY + 1) / th;
-        if (maxX >= 0) boxW = (maxX - minX + 1) / tw;
+        if (meshMaxY >= 0) {
+          window.__whW = (meshMaxX - meshMinX) / fw;
+          window.__whH = (meshMaxY - meshMinY) / fh;
+          window.__whFill = Math.max(window.__whW, window.__whH);
+          window.__whCx = (meshMinX + meshMaxX) / 2 / fw;
+          window.__whCy = (meshMinY + meshMaxY) / 2 / fh;
+          window.__whEdgeX = meshMinX <= 2 || meshMaxX >= fw - 4 ? 1 : 0;
+          window.__whEdgeY = meshMinY <= 2 || meshMaxY >= fh - 4 ? 1 : 0;
+          window.__whBox = Math.round(window.__whH * 100) / 100;
+          window.__whBoxW = Math.round(window.__whW * 100) / 100;
+        }
       }
       window.__whColored = colored;
-      window.__whBox = Math.round(boxH * 100) / 100;
-      window.__whBoxW = Math.round(boxW * 100) / 100;
       window.__whPng = paint ? full.toDataURL('image/png') : url;
       window.__whMeasuring = false;
       window.__whSeq = (window.__whSeq || 0) + 1;
@@ -215,56 +354,76 @@ const SAMPLE = `
     };
     renderer.makeDataURL = ['image/png'];
   }
-  return Object.assign(base, { phase: 'pending', anim: picked.f });
+  const live = model.C && model.C.d && model.C.d.e && model.C.d.e.f;
+  return Object.assign(base, { phase: 'pending', anim: live || picked.f });
 
   function pickAnim(rows, name) {
     const want = name.toLowerCase();
     const exact = rows.find((row) => row.f.toLowerCase() === want);
     if (exact) return exact;
-    const pref = rows.filter((row) => row.f.toLowerCase().startsWith(want));
-    if (pref.length === 1) return pref[0];
-    for (const tail of ['unarmed', '1h', '2h']) {
-      const hit = pref.find((row) => row.f.toLowerCase() === want + tail);
-      if (hit) return hit;
-    }
-    return pref[0] || null;
+    return rows.find((row) => row.f.toLowerCase().startsWith(want)) || null;
   }
 
-  function boundsCenter(unit) {
-    const pair = unit.getBounds && unit.getBounds();
-    if (!pair || !pair[0] || !pair[1]) return null;
+  function boxCorners(min, max) {
+    const corners = [];
+    for (const x of [min[0], max[0]]) {
+      for (const y of [min[1], max[1]]) {
+        for (const z of [min[2], max[2]]) corners.push([x, y, z]);
+      }
+    }
+    return corners;
+  }
+
+  function eyeFor(view, target, dist, azimuth, zenith) {
+    if (view === 'top') return [target[0], target[1], target[2] + dist];
+    if (view === 'bottom') return [target[0], target[1], target[2] - dist];
     return [
-      (pair[0][0] + pair[1][0]) / 2,
-      (pair[0][1] + pair[1][1]) / 2,
-      (pair[0][2] + pair[1][2]) / 2,
+      -dist * Math.sin(zenith) * Math.cos(azimuth) + target[0],
+      -dist * Math.sin(zenith) * Math.sin(azimuth) + target[1],
+      -dist * Math.cos(zenith) + target[2],
     ];
   }
 
-  function boundsSize(unit) {
-    const pair = unit.getBounds && unit.getBounds();
-    if (!pair || !pair[0] || !pair[1]) return null;
-    return {
-      x: Math.abs(pair[1][0] - pair[0][0]),
-      y: Math.abs(pair[1][1] - pair[0][1]),
-      z: Math.abs(pair[1][2] - pair[0][2]),
-    };
+  function ndcMax(viewM, fovDeg, aspect, points) {
+    const fov = fovDeg > 3 ? fovDeg * Math.PI / 180 : fovDeg;
+    const f = 1 / Math.tan(fov / 2);
+    let max = 0;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const x = viewM[0] * p[0] + viewM[4] * p[1] + viewM[8] * p[2] + viewM[12];
+      const y = viewM[1] * p[0] + viewM[5] * p[1] + viewM[9] * p[2] + viewM[13];
+      const z = viewM[2] * p[0] + viewM[6] * p[1] + viewM[10] * p[2] + viewM[14];
+      const clipW = -z;
+      if (clipW <= 1e-3) return Infinity;
+      const ndcX = Math.abs((f / aspect) * x / clipW);
+      const ndcY = Math.abs(f * y / clipW);
+      if (ndcX > max) max = ndcX;
+      if (ndcY > max) max = ndcY;
+    }
+    return max;
   }
 
-  function orbitDistance(view, size, fovDeg, aspect) {
-    const v = 2 * Math.tan((fovDeg * Math.PI / 180) / 2);
-    let vertical = size.z;
-    let horizontal = size.x;
-    let depth = size.y;
-    if (view === 'left' || view === 'right') {
-      horizontal = size.y;
-      depth = size.x;
-    } else if (view === 'top' || view === 'bottom') {
-      vertical = size.y;
-      horizontal = size.x;
-      depth = size.z;
+  function fitDist(view, target, corners, azimuth, zenith, fovDeg) {
+    const scratch = new Array(16);
+    const aspect = 1440 / 900;
+    const up = view === 'top' || view === 'bottom' ? [0, 1, 0] : [0, 0, 1];
+    const at = (dist) => {
+      lookAt(scratch, eyeFor(view, target, dist, azimuth, zenith), target, up);
+      return ndcMax(scratch, fovDeg, aspect, corners);
+    };
+    let lo = 0.05;
+    let hi = 4;
+    let guard = 0;
+    while (at(hi) > 0.92 && guard < 20) {
+      hi *= 1.7;
+      guard += 1;
     }
-    const fit = Math.max(1.2 * vertical / v, 1.2 * horizontal / (v * aspect));
-    return Math.max(fit, depth * 0.5 + 1.2, 2);
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (at(mid) <= 0.92) hi = mid;
+      else lo = mid;
+    }
+    return hi;
   }
 
   function lookAt(out, eye, center, up) {
@@ -294,16 +453,6 @@ const SAMPLE = `
     out[14] = -(zx * eye[0] + zy * eye[1] + zz * eye[2]);
     out[15] = 1;
   }
-
-  function mul(out, a, b) {
-    const r = new Array(16);
-    for (let col = 0; col < 4; col++) {
-      for (let row = 0; row < 4; row++) {
-        r[col * 4 + row] = a[row] * b[col * 4] + a[4 + row] * b[col * 4 + 1] + a[8 + row] * b[col * 4 + 2] + a[12 + row] * b[col * 4 + 3];
-      }
-    }
-    for (let i = 0; i < 16; i++) out[i] = r[i];
-  }
 })()
 `;
 
@@ -311,7 +460,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** Installer-recorded Edge path, including a non-default directory. Empty when the key is missing. */
+function edgeFromRegistry(): string {
+  if (process.platform !== 'win32') return '';
+  const keys = [
+    'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe',
+    'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe',
+  ];
+  for (const key of keys) {
+    let stdout = '';
+    try {
+      const result = spawnSync('reg', ['query', key, '/ve'], { encoding: 'utf8', windowsHide: true });
+      stdout = result.stdout ?? '';
+    } catch {
+      return '';
+    }
+    const exe = stdout.match(/REG_SZ\s+(.+)/)?.[1]?.trim() ?? '';
+    if (exe !== '' && existsSync(exe)) return exe;
+  }
+  return '';
+}
+
 function findBrowser(): string {
+  const edge = edgeFromRegistry();
+  if (edge !== '') {
+    console.info(`browser: Edge from registry (${edge})`);
+    return edge;
+  }
+  console.info('browser: Edge not in registry');
   const local = process.env.LOCALAPPDATA ?? '';
   const pf = process.env.ProgramFiles ?? 'C:\\Program Files';
   const pf86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)';
@@ -322,9 +498,67 @@ function findBrowser(): string {
     path.join(pf86, 'Microsoft/Edge/Application/msedge.exe'),
   ];
   for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
+    if (existsSync(candidate)) {
+      console.info(`browser: ${candidate}`);
+      return candidate;
+    }
+  }
+  for (const name of ['google-chrome', 'google-chrome-stable', 'chromium', 'microsoft-edge', 'chrome', 'msedge']) {
+    const found = Bun.which(name);
+    if (found) {
+      console.info(`browser: ${found}`);
+      return found;
+    }
   }
   throw new Error('Chrome or Edge is required');
+}
+
+const VIEW_ORD: Record<string, string> = {
+  front: '01',
+  back: '02',
+  left: '03',
+  right: '04',
+  top: '05',
+  bottom: '06',
+};
+
+async function converterAim(
+  outDir: string,
+  slug: string,
+  seq: string,
+  view: string,
+): Promise<{ cx: number; cy: number; w: number; h: number } | null> {
+  const ord = VIEW_ORD[view];
+  if (!ord) return null;
+  const file = path.join(outDir, `${slug}-${seq}-${ord}-${view}-converter.png`);
+  if (!existsSync(file)) return null;
+  const { data, info } = await sharp(file).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const width = info.width;
+  const height = info.height;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const i = (y * width + x) * 3;
+      const r = data[i] ?? 0;
+      const g = data[i + 1] ?? 0;
+      const b = data[i + 2] ?? 0;
+      if (Math.abs(r - 38) <= 6 && Math.abs(g - 38) <= 6 && Math.abs(b - 38) <= 6) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxY < 0) return null;
+  return {
+    cx: (minX + maxX) / 2 / width,
+    cy: (minY + maxY) / 2 / height,
+    w: (maxX - minX) / width,
+    h: (maxY - minY) / height,
+  };
 }
 
 function slugFromUrl(pageUrl: string): string {
@@ -397,13 +631,17 @@ async function devtoolsPort(proc: ChildProcess): Promise<number> {
 async function pageSocket(port: number): Promise<string> {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const list: unknown = await fetch(`http://127.0.0.1:${port}/json/list`).then((res) => res.json());
-    if (Array.isArray(list)) {
-      for (const entry of list) {
-        if (isRecord(entry) && entry.type === 'page' && typeof entry.webSocketDebuggerUrl === 'string') {
-          return entry.webSocketDebuggerUrl;
+    try {
+      const list: unknown = await fetch(`http://127.0.0.1:${port}/json/list`).then((res) => res.json());
+      if (Array.isArray(list)) {
+        for (const entry of list) {
+          if (isRecord(entry) && entry.type === 'page' && typeof entry.webSocketDebuggerUrl === 'string') {
+            return entry.webSocketDebuggerUrl;
+          }
         }
       }
+    } catch {
+      // Devtools is not accepting connections yet.
     }
     await Bun.sleep(50);
   }
@@ -416,6 +654,21 @@ function killBrowser(proc: ChildProcess): void {
     spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
   } else {
     proc.kill();
+  }
+}
+
+// One Chrome profile for every Wowhead shot. Leave it in place when the browser exits.
+function shotProfile(name: string): string {
+  const dir = path.join(tmpdir(), name);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+async function waitBrowserExit(proc: ChildProcess): Promise<void> {
+  killBrowser(proc);
+  for (let i = 0; i < 25; i++) {
+    if (proc.exitCode != null) return;
+    await Bun.sleep(200);
   }
 }
 
@@ -470,7 +723,7 @@ async function main(): Promise<void> {
   const pageUrl = args.url;
   const outDir = args.out !== '' ? args.out : path.join(import.meta.dir, 'out');
   const browser = findBrowser();
-  const profile = await mkdtemp(path.join(tmpdir(), 'wh-model-shot-'));
+  const profile = shotProfile('wh-model-shot');
   const proc = spawn(browser, [
     '--headless=new',
     '--remote-debugging-port=0',
@@ -521,12 +774,15 @@ async function main(): Promise<void> {
     mkdirSync(outDir, { recursive: true });
     const started = Date.now();
     for (const view of args.views) {
+      const aim = await converterAim(outDir, slugFromUrl(pageUrl), args.seq, view);
+      if (aim) console.log(`${view} aim cx ${aim.cx.toFixed(3)} cy ${aim.cy.toFixed(3)} w ${aim.w.toFixed(3)} h ${aim.h.toFixed(3)}`);
+      const aimJs = aim ? JSON.stringify(aim) : 'null';
       await cdp.send('Runtime.evaluate', {
-        expression: `window.__whWantView = ${JSON.stringify(view)}; window.__whWantSeq = ${JSON.stringify(args.seq)}; window.__whSeq = 0;`,
+        expression: `window.__whAim = ${aimJs}; window.__whWantView = ${JSON.stringify(view)}; window.__whWantSeq = ${JSON.stringify(args.seq)}; window.__whSeq = 0;`,
         returnByValue: true,
       });
       const deadline = Date.now() + READY_MS;
-      const history: { seq: number; colored: number; boxH: number }[] = [];
+      const history: { seq: number; colored: number; boxH: number; fitN: number }[] = [];
       let shot = '';
       let last = 'waiting';
       let anim = args.seq;
@@ -552,10 +808,15 @@ async function main(): Promise<void> {
         if (typeof value?.anim === 'string' && value.anim !== '') anim = value.anim;
         const span = Math.max(boxH, boxW);
         const dist = typeof value?.dist === 'number' ? value.dist : 0;
-        last = `${view} ${phase} seq ${seq} box ${span} colored ${colored} dist ${dist} anim ${anim}`;
+        const fitN = typeof value?.fitN === 'number' ? value.fitN : 0;
+        const framed = typeof value?.span === 'number' ? value.span : 0;
+        const mid = typeof value?.mid === 'number' ? value.mid : 0;
+        const unit = typeof value?.unit === 'string' ? value.unit : '';
+        const len = typeof value?.len === 'number' ? value.len : 0;
+        last = `${view} ${phase} seq ${seq} box ${span} frame ${framed} time ${mid} ${unit} len ${len} dist ${dist} anim ${anim}`;
         const prev = history[history.length - 1];
         if (!prev || prev.seq !== seq) {
-          history.push({ seq, colored, boxH: span });
+          history.push({ seq, colored, boxH: span, fitN });
           console.log(`${Date.now() - started}ms ${last}`);
         }
         const tail = history.slice(-3);
@@ -566,6 +827,7 @@ async function main(): Promise<void> {
         const stable = tail.length === 3
           && tail[0].seq > 0
           && tail[2].seq === tail[0].seq + 2
+          && tail.every((row) => row.fitN === fitN)
           && Math.min(...boxes) > 0.35
           && lo > 8
           && hi - lo < Math.max(40, hi * 0.15);
@@ -584,12 +846,7 @@ async function main(): Promise<void> {
     }
   } finally {
     page?.close();
-    killBrowser(proc);
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {
-      // The browser may still be releasing the profile directory.
-    }
+    await waitBrowserExit(proc);
   }
 }
 

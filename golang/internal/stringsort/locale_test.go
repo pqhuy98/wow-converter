@@ -1,6 +1,9 @@
 package stringsort
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func TestLessMatchesLocaleCompareCaseSensitivity(t *testing.T) {
 	// localeCompare puts lowercase before uppercase at the same prefix.
@@ -22,6 +25,24 @@ func TestLessMatchesLocaleComparePunctuation(t *testing.T) {
 	if Less(base, pristine) {
 		t.Fatalf("expected base variant after pristine: %q vs %q", base, pristine)
 	}
+}
+
+func TestLessConcurrent(t *testing.T) {
+	const workers = 8
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				if !Less("skin/a", "skin/b") || Less("skin/b", "skin/a") {
+					t.Error("concurrent Less disagreed with itself")
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestSortConcurrent(t *testing.T) {

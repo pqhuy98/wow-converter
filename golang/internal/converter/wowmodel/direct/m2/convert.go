@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
@@ -194,23 +195,55 @@ func BuildGeosetMaskForSkin(skin *m2.Skin, selected *ModelSkin) []m2export.Geose
 			extraSet[g] = struct{}{}
 		}
 	}
+	groupIDs := map[int]map[int]struct{}{}
+	groupHasDefault := map[int]bool{}
+	useDefault := selected == nil || len(selected.ExtraGeosets) == 0
+	if useDefault {
+		for _, mesh := range skin.SubMeshes {
+			id := int(mesh.SubmeshID)
+			group := id / 100
+			if groupIDs[group] == nil {
+				groupIDs[group] = map[int]struct{}{}
+			}
+			groupIDs[group][id] = struct{}{}
+			if geosetSuffixDefault(id) {
+				groupHasDefault[group] = true
+			}
+		}
+	}
 	mask := make([]m2export.GeosetMaskEntry, len(skin.SubMeshes))
 	for i, mesh := range skin.SubMeshes {
 		id := int(mesh.SubmeshID)
 		mask[i] = m2export.GeosetMaskEntry{ID: id, Checked: true}
-		if selected != nil && len(selected.ExtraGeosets) > 0 {
+		if !useDefault {
 			if id > 0 && id < 900 {
 				mask[i].Checked = false
 			}
 			if _, ok := extraSet[id]; ok {
 				mask[i].Checked = true
 			}
-		} else {
-			idStr := fmt.Sprintf("%d", id)
-			mask[i].Checked = strings.HasSuffix(idStr, "0") || strings.HasSuffix(idStr, "01")
+			continue
 		}
+		mask[i].Checked = defaultGeosetOn(id, groupIDs, groupHasDefault)
 	}
 	return mask
+}
+
+// geosetSuffixDefault is the wow.export UI rule: ids ending in 0 or 01.
+func geosetSuffixDefault(id int) bool {
+	idStr := strconv.Itoa(id)
+	return strings.HasSuffix(idStr, "0") || strings.HasSuffix(idStr, "01")
+}
+
+// defaultGeosetOn keeps suffix defaults, legacy section ids under 100, and a
+// group whose only variant is not a suffix default (for example 702).
+// Two non-default variants in one group stay off.
+func defaultGeosetOn(id int, groupIDs map[int]map[int]struct{}, groupHasDefault map[int]bool) bool {
+	if geosetSuffixDefault(id) || id < 100 {
+		return true
+	}
+	group := id / 100
+	return len(groupIDs[group]) == 1 && !groupHasDefault[group]
 }
 
 func resolveExportPath(exportRoot, fileName, skinName string) string {

@@ -10,7 +10,7 @@ import (
 )
 
 func registerWowConfig(r Router, d *Deps) {
-	svc := wowconfig.NewService(d.Client)
+	svc := wowconfig.NewService(d.Client, d.Config.IsSharedHosting)
 
 	r.Get("/wow-config/status", func(w http.ResponseWriter, req *http.Request) {
 		setNoStore(w)

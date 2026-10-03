@@ -6,9 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
-	apicasc "github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/converter/runtimecache"
+	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
+	"github.com/pqhuy98/wow-converter/internal/wow/archive/client"
+	apicasc "github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/env"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
@@ -112,6 +113,7 @@ func (l *Loader) finalizeLoad(casc archivecasc.CASC, buildIndex int) (apicasc.So
 	if err := casc.Load(buildIndex); err != nil {
 		return nil, err
 	}
+	_, _ = client.ExpireOtherRawBuildCaches(casc.GetBuildKey())
 	adapter := &SourceAdapter{CASC: casc}
 	server.GlobalRuntime.SetCasc(adapter)
 	if err := server.RunLoadFuncs(); err != nil {

@@ -17,10 +17,10 @@ const (
 
 // Config is the user-selected WoW data source.
 type Config struct {
-	Mode              Mode   `json:"mode"`
-	InstallDirectory  string `json:"installDirectory,omitempty"`
-	RegionTag         string `json:"regionTag,omitempty"`
-	Product           string `json:"product"`
+	Mode             Mode   `json:"mode"`
+	InstallDirectory string `json:"installDirectory,omitempty"`
+	RegionTag        string `json:"regionTag,omitempty"`
+	Product          string `json:"product"`
 }
 
 // BuildSummary mirrors CascBuildSummary from TS.
@@ -43,28 +43,29 @@ type InfoSummary struct {
 
 // Status is returned by GET /api/wow-config/status.
 type Status struct {
-	NeedsSetup               bool         `json:"needsSetup"`
-	ConfiguredFromEnv        bool         `json:"configuredFromEnv"`
-	CascLoaded               bool         `json:"cascLoaded"`
-	CascLoading              bool         `json:"cascLoading"`
-	CascLoadingMessage       string       `json:"cascLoadingMessage,omitempty"`
-	WowDataServerReachable   bool         `json:"wowDataServerReachable"`
-	Config                   *Config      `json:"config"`
-	CascInfo                 *InfoSummary `json:"cascInfo"`
-	Error                    *string      `json:"error"`
-	Products                 []constants.ProductInfo `json:"products"`
-	Regions                  []string     `json:"regions"`
+	NeedsSetup             bool                    `json:"needsSetup"`
+	ConfiguredFromEnv      bool                    `json:"configuredFromEnv"`
+	CascLoaded             bool                    `json:"cascLoaded"`
+	CascLoading            bool                    `json:"cascLoading"`
+	CascLoadingMessage     string                  `json:"cascLoadingMessage,omitempty"`
+	WowDataServerReachable bool                    `json:"wowDataServerReachable"`
+	Config                 *Config                 `json:"config"`
+	CascInfo               *InfoSummary            `json:"cascInfo"`
+	Error                  *string                 `json:"error"`
+	Products               []constants.ProductInfo `json:"products"`
+	Regions                []string                `json:"regions"`
+	OutputDirectory        string                  `json:"outputDirectory,omitempty"`
 }
 
 var (
-	stateMu              sync.RWMutex
-	memoryConfig         *Config
-	lastError            *string
-	applyInFlight        bool
-	memoryApplyAttempted bool
-	envApplyAttempted    bool
+	stateMu               sync.RWMutex
+	memoryConfig          *Config
+	lastError             *string
+	applyInFlight         bool
+	memoryApplyAttempted  bool
+	envApplyAttempted     bool
 	runtimeConfigOverride bool
-	prevCascLoaded       bool
+	prevCascLoaded        bool
 )
 
 // CDNRegions lists valid CDN region tags.

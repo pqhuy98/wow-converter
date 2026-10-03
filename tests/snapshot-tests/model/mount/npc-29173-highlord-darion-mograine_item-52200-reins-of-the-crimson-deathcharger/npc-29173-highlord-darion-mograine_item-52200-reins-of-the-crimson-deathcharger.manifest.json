@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "slug": "npc-29173-highlord-darion-mograine_item-52200-reins-of-the-crimson-deathcharger",
+  "suite": "mount",
+  "case": {
+    "base": "https://www.wowhead.com/wotlk/npc=29173/highlord-darion-mograine",
+    "weaponR": "https://www.wowhead.com/item=39344/slayer-of-the-lifeless",
+    "weaponL": "https://www.wowhead.com/item=39344/slayer-of-the-lifeless",
+    "size": "hero",
+    "mount": "https://www.wowhead.com/item=52200/reins-of-the-crimson-deathcharger"
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

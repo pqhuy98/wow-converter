@@ -143,6 +143,7 @@ paths:
         cascLoadingMessage is a one-line progress string while it is still opening.
         error is why the last open attempt failed, or null when it succeeded.
         products and regions are the codes you may send to apply and discover-remote.
+        outputDirectory is the absolute folder on this machine where character exports are written.
       operationId: getWowConfigStatus
       responses:
         '200':
@@ -1367,6 +1368,9 @@ components:
           type: array
           items: { type: string }
           example: [eu, us, kr, tw, cn]
+        outputDirectory:
+          type: string
+          description: Absolute folder on this machine where character exports are written.
     WowConfigApply:
       type: object
       required: [mode, product]

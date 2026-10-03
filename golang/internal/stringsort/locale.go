@@ -1,14 +1,20 @@
 package stringsort
 
 import (
+	"sync"
+
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )
 
-var englishCollator = collate.New(language.English)
+var (
+	englishCollator   = collate.New(language.English)
+	englishCollatorMu sync.Mutex
+)
 
-// Less matches JavaScript Array.sort with localeCompare for browse/list ordering.
-// The global collator is not safe for concurrent use; use NewEnglishCollator for parallel sorts.
+// Less matches JavaScript Array.sort with localeCompare for a single comparison.
+// Sort and SortBy are the path for a whole slice: each call owns a collator and compares keys.
+// CompareString mutates the collator, so this lock covers the remaining one-off callers.
 func Less(a, b string) bool {
 	if a == b {
 		return false
@@ -19,6 +25,8 @@ func Less(a, b string) bool {
 	if b == "" {
 		return false
 	}
+	englishCollatorMu.Lock()
+	defer englishCollatorMu.Unlock()
 	return englishCollator.CompareString(a, b) < 0
 }
 

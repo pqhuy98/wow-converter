@@ -1,7 +1,9 @@
 exported-assets
 exported-assets-browse
-tests/visual/**/*.actual.png
-tests/visual/**/*.diff.png
+tests/**/tmp/
+tests/snapshot-tests/model/**/*.actual.png
+tests/snapshot-tests/model/**/*.diff.png
+golang/test/**/tmp/
 tmp/
 recent-exports.json
 .playwright-mcp
@@ -19,7 +21,11 @@ maps/*
 !maps/test-*.w3x/
 maps/test-*.w3x/*.mdx
 maps/test-*.w3x/wow/**/*.blp
-tests/wow-native/out
+maps/test-*.w3x/visual-snapshot/
+maps/test-*.w3x/map-regression/
+maps/test-*.w3x/retail/
+maps/test-*.w3x/classic/
+maps/test-*.w3x/mount/
 # Go air dev reload
 golang/tmp/
 golang/build-errors.log
@@ -31,11 +37,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
-.parity-artifacts
-.parity-verify
-.compare-export
-.compare-export-ts
-
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 

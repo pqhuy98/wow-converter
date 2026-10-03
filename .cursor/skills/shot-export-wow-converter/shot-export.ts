@@ -1,8 +1,8 @@
 /* eslint-disable max-classes-per-file */
 /** Capture a PNG of an exported MDX from the local viewer. Uses the system browser. */
 import { type ChildProcess, spawn, spawnSync } from 'child_process';
-import { existsSync, mkdirSync, rmSync } from 'fs';
-import { mkdtemp, writeFile } from 'fs/promises';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 
@@ -49,7 +49,34 @@ function toAssetPath(input: string): string {
   return norm.replace(/^\.\//, '');
 }
 
+/** Installer-recorded Edge path, including a non-default directory. Empty when the key is missing. */
+function edgeFromRegistry(): string {
+  if (process.platform !== 'win32') return '';
+  const keys = [
+    'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe',
+    'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe',
+  ];
+  for (const key of keys) {
+    let stdout = '';
+    try {
+      const result = spawnSync('reg', ['query', key, '/ve'], { encoding: 'utf8', windowsHide: true });
+      stdout = result.stdout ?? '';
+    } catch {
+      return '';
+    }
+    const exe = stdout.match(/REG_SZ\s+(.+)/)?.[1]?.trim() ?? '';
+    if (exe !== '' && existsSync(exe)) return exe;
+  }
+  return '';
+}
+
 function findBrowser(): string {
+  const edge = edgeFromRegistry();
+  if (edge !== '') {
+    console.info(`browser: Edge from registry (${edge})`);
+    return edge;
+  }
+  console.info('browser: Edge not in registry');
   const local = process.env.LOCALAPPDATA ?? '';
   const pf = process.env.ProgramFiles ?? 'C:\\Program Files';
   const pf86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)';
@@ -66,12 +93,18 @@ function findBrowser(): string {
       path.join(pf86, 'Microsoft/Edge/Application/msedge.exe'),
     ];
   for (const candidate of absolute) {
-    if (existsSync(candidate)) return candidate;
+    if (existsSync(candidate)) {
+      console.info(`browser: ${candidate}`);
+      return candidate;
+    }
   }
   const names = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge'];
   for (const name of names) {
     const found = Bun.which(name);
-    if (found) return found;
+    if (found) {
+      console.info(`browser: ${found}`);
+      return found;
+    }
   }
   throw new Error('Chrome, Edge, or Chromium is required');
 }
@@ -173,12 +206,32 @@ async function waitUntilReady(cdp: Cdp, readyMs: number = READY_MS): Promise<str
   throw new Error('viewer did not become ready');
 }
 
+const browsers: ChildProcess[] = [];
+let browserCleanup = false;
+
+function trackBrowser(proc: ChildProcess): void {
+  browsers.push(proc);
+  if (browserCleanup) return;
+  browserCleanup = true;
+  process.on('exit', () => {
+    for (const browser of browsers) killBrowser(browser);
+  });
+}
+
 function killBrowser(proc: ChildProcess): void {
   if (proc.exitCode != null || proc.pid == null) return;
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
   } else {
     proc.kill();
+  }
+}
+
+async function waitBrowserExit(proc: ChildProcess): Promise<void> {
+  killBrowser(proc);
+  for (let i = 0; i < 25; i++) {
+    if (proc.exitCode != null) return;
+    await Bun.sleep(200);
   }
 }
 
@@ -196,14 +249,14 @@ export interface ShotCaptureRequest {
 export class ShotBrowser {
   private constructor(
     private readonly proc: ChildProcess,
-    private readonly profile: string,
     private readonly cdp: Cdp,
     private readonly page: WebSocket,
+    private readonly profile: string,
   ) {}
 
   static async open(width: number, height: number): Promise<ShotBrowser> {
     const browser = findBrowser();
-    const profile = await mkdtemp(path.join(tmpdir(), 'wow-shot-'));
+    const profile = mkdtempSync(path.join(tmpdir(), 'wow-shot-'));
     const proc = spawn(browser, [
       '--headless=new',
       '--remote-debugging-port=0',
@@ -218,64 +271,70 @@ export class ShotBrowser {
       '--ignore-gpu-blocklist',
       'about:blank',
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    trackBrowser(proc);
     try {
       const port = await devtoolsPort(proc);
       const page = await openSocket(await pageSocket(port));
       const cdp = new Cdp(page);
       await cdp.send('Page.enable');
-      return new ShotBrowser(proc, profile, cdp, page);
+      // Exported files are rewritten at the same URLs between captures and product switches.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+      return new ShotBrowser(proc, cdp, page, profile);
     } catch (err: unknown) {
-      killBrowser(proc);
-      try {
-        rmSync(profile, { recursive: true, force: true });
-      } catch {
-        // The browser may still be releasing the profile directory.
-      }
+      await waitBrowserExit(proc);
+      rmSync(profile, { recursive: true, force: true });
       throw err;
     }
   }
 
   async capture(opts: ShotCaptureRequest): Promise<{ sequence: string; views: Map<string, Buffer> }> {
-    const viewerUrl = new URL('/viewer', opts.base);
-    viewerUrl.searchParams.set('model', opts.model);
-    viewerUrl.searchParams.set('source', 'export');
-    viewerUrl.searchParams.set('shot', '1');
-    viewerUrl.searchParams.set('seq', opts.seq);
-    await this.cdp.send('Emulation.setDeviceMetricsOverride', {
-      width: opts.width,
-      height: opts.height,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
-    await this.cdp.send('Page.navigate', { url: viewerUrl.toString() });
-    const sequence = await waitUntilReady(this.cdp, opts.readyMs ?? READY_MS);
-    const views = new Map<string, Buffer>();
-    for (const view of opts.views) {
-      const switched = await this.cdp.send('Runtime.evaluate', {
-        expression: `window.__shotView && window.__shotView(${JSON.stringify(view)})`,
-        returnByValue: true,
+    try {
+      const viewerUrl = new URL('/viewer', opts.base);
+      viewerUrl.searchParams.set('model', opts.model);
+      viewerUrl.searchParams.set('source', 'export');
+      viewerUrl.searchParams.set('shot', '1');
+      viewerUrl.searchParams.set('seq', opts.seq);
+      await this.cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: opts.width,
+        height: opts.height,
+        deviceScaleFactor: 1,
+        mobile: false,
       });
-      const remote = isRecord(switched.result) ? switched.result : undefined;
-      if (remote?.value !== view) throw new Error(`viewer rejected view ${view}`);
+      await this.cdp.send('Page.navigate', { url: viewerUrl.toString() });
+      const sequence = await waitUntilReady(this.cdp, opts.readyMs ?? READY_MS);
       await this.cdp.send('Runtime.evaluate', {
-        expression: 'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
-        awaitPromise: true,
+        // Next's development issue indicator can appear after a model finishes loading.
+        expression: "document.head.insertAdjacentHTML('beforeend', '<style>nextjs-portal { display: none !important; }</style>')",
       });
-      const shot = await this.cdp.send('Page.captureScreenshot', { format: 'png' });
-      if (typeof shot.data !== 'string') throw new Error('screenshot had no data');
-      views.set(view, Buffer.from(shot.data, 'base64'));
+      const views = new Map<string, Buffer>();
+      for (const view of opts.views) {
+        const switched = await this.cdp.send('Runtime.evaluate', {
+          expression: `window.__shotView && window.__shotView(${JSON.stringify(view)})`,
+          returnByValue: true,
+        });
+        const remote = isRecord(switched.result) ? switched.result : undefined;
+        if (remote?.value !== view) throw new Error(`viewer rejected view ${view}`);
+        await this.cdp.send('Runtime.evaluate', {
+          expression: 'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
+          awaitPromise: true,
+        });
+        const shot = await this.cdp.send('Page.captureScreenshot', { format: 'png' });
+        if (typeof shot.data !== 'string') throw new Error('screenshot had no data');
+        views.set(view, Buffer.from(shot.data, 'base64'));
+      }
+      return { sequence, views };
+    } finally {
+      await this.cdp.send('Page.navigate', { url: 'about:blank' }).catch(() => {
+        // The page is already gone.
+      });
     }
-    return { sequence, views };
   }
 
   async close(): Promise<void> {
     this.page.close();
-    killBrowser(this.proc);
-    try {
-      rmSync(this.profile, { recursive: true, force: true });
-    } catch {
-      // The browser may still be releasing the profile directory.
-    }
+    await waitBrowserExit(this.proc);
+    rmSync(this.profile, { recursive: true, force: true });
   }
 }
 

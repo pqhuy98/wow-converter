@@ -15,10 +15,13 @@ const sharedHostingLocked = "WoW installation cannot be changed in shared hostin
 
 // Service wraps wow-data client operations for setup UI.
 type Service struct {
-	Client client.Client
+	Client          client.Client
+	isSharedHosting bool
 }
 
-func NewService(c client.Client) *Service { return &Service{Client: c} }
+func NewService(c client.Client, isSharedHosting bool) *Service {
+	return &Service{Client: c, isSharedHosting: isSharedHosting}
+}
 
 func (s *Service) FetchCascInfo(ctx context.Context) (*InfoSummary, error) {
 	info, err := s.Client.GetCASCInfo(ctx)
@@ -208,6 +211,9 @@ func (s *Service) GetStatus(ctx context.Context) Status {
 		Error:                  errVal,
 		Products:               constants.Products,
 		Regions:                CDNRegions,
+	}
+	if !s.isSharedHosting {
+		status.OutputDirectory = workspace.ResolveRepoPath("exported-assets")
 	}
 
 	if cfg := GetMemoryConfig(); cfg != nil && !cascLoaded && ShouldRetryMemoryApply() {

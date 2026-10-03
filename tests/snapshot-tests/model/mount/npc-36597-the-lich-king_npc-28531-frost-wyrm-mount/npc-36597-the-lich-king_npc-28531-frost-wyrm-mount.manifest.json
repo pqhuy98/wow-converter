@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "slug": "npc-36597-the-lich-king_npc-28531-frost-wyrm-mount",
+  "suite": "mount",
+  "case": {
+    "base": "https://www.wowhead.com/wotlk/npc=36597/the-lich-king",
+    "weaponR": "https://www.wowhead.com/classic/item=231885/frostmourne",
+    "weaponL": "",
+    "size": "hero",
+    "mount": "https://www.wowhead.com/wotlk/npc=28531/frost-wyrm-mount",
+    "mountScale": 0.75
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

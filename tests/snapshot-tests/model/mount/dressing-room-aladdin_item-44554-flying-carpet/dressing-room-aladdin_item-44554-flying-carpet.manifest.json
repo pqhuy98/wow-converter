@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "slug": "dressing-room-aladdin_item-44554-flying-carpet",
+  "suite": "mount",
+  "case": {
+    "base": "https://www.wowhead.com/dressing-room?aladdin#fz80o0zN89c8a8G8s8z8q8O8b8zc8fh8M2Q8d8zh8fu8M218sc8zya8MEt8wUK8fG8M238k58zGa8zYw8dAG8Mx2877iYsv808z4V808rMd808M2r87VM2u808mfH808MVv808M2Y808Y808CF87Mb3187o",
+    "weaponR": "",
+    "weaponL": "",
+    "size": "hero",
+    "mount": "https://www.wowhead.com/item=44554/flying-carpet",
+    "animation": "MountCrouch"
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

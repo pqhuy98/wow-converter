@@ -1,12 +1,14 @@
+//go:build module
+
 package bench
 
 import (
 	"crypto/sha256"
 	"runtime"
 
+	pngwriter "github.com/pqhuy98/wow-converter/internal/formats/png"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/adt"
-	pngwriter "github.com/pqhuy98/wow-converter/internal/formats/png"
 )
 
 func benchConcurrency() int {

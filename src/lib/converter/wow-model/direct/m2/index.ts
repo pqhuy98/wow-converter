@@ -55,6 +55,7 @@ function virtualExportPath(exportRoot: string, file: string): string {
 /** Port of wow.export's buildGeosetMaskForSkin (tab-models). */
 export function buildGeosetMaskForSkin(m2Skin: Skin, skin: Pick<ModelSkin, 'extraGeosets'> | undefined): GeosetMaskEntry[] {
   const extraSet = new Set(skin?.extraGeosets ?? []);
+  const groups = groupIDs(m2Skin);
   const mask = new Array<GeosetMaskEntry & { id: number }>(m2Skin.subMeshes.length);
 
   for (let i = 0; i < m2Skin.subMeshes.length; i++) {
@@ -68,13 +69,36 @@ export function buildGeosetMaskForSkin(m2Skin: Skin, skin: Pick<ModelSkin, 'extr
       if (id > 0 && id < 900) mask[i].checked = false;
       if (extraSet.has(id)) mask[i].checked = true;
     } else {
-      // Default selection logic mirrors UI: enable ids ending with '0' or '01'.
-      const idStr = id.toString();
-      mask[i].checked = (idStr.endsWith('0') || idStr.endsWith('01'));
+      mask[i].checked = defaultGeosetOn(id, groups);
     }
   }
 
   return mask;
+}
+
+function geosetSuffixDefault(id: number): boolean {
+  const idStr = id.toString();
+  return idStr.endsWith('0') || idStr.endsWith('01');
+}
+
+/** Distinct geoset ids per 100-group. */
+function groupIDs(skin: Skin): Map<number, Set<number>> {
+  const groups = new Map<number, Set<number>>();
+  for (const mesh of skin.subMeshes) {
+    const id = mesh.submeshID;
+    const group = Math.floor(id / 100);
+    const ids = groups.get(group) ?? new Set<number>();
+    ids.add(id);
+    groups.set(group, ids);
+  }
+  return groups;
+}
+
+/** Suffix defaults, legacy ids under 100, and a group with a single non-default variant. */
+function defaultGeosetOn(id: number, groups: Map<number, Set<number>>): boolean {
+  if (geosetSuffixDefault(id) || id < 100) return true;
+  const ids = groups.get(Math.floor(id / 100));
+  return ids?.size === 1;
 }
 
 /** Mirror of the legacy export path naming in exportFilesWithSkins. */

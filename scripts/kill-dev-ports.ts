@@ -14,11 +14,18 @@ const ports = process.argv.length > 2
   ? process.argv.slice(2).map((value) => Number(value)).filter((port) => Number.isFinite(port) && port > 0)
   : defaultPorts;
 
-for (const port of [...new Set(ports)]) {
-  killPort(port);
+if (import.meta.main) {
+  try {
+    for (const port of [...new Set(ports)]) {
+      killListeningPort(port);
+    }
+  } catch (error: unknown) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
 }
 
-function killPort(port: number): void {
+export function killListeningPort(port: number): void {
   const pids = process.platform === 'win32' ? windowsPortPids(port) : unixPortPids(port);
   for (const pid of pids) {
     if (pid === process.pid) continue;
@@ -27,7 +34,7 @@ function killPort(port: number): void {
       ? spawnSync('taskkill', ['/PID', String(pid), '/F'], { stdio: 'inherit' })
       : spawnSync('kill', ['-TERM', String(pid)], { stdio: 'inherit' });
     if (result.status != null && result.status !== 0) {
-      process.exit(result.status);
+      throw new Error(`failed to kill process ${pid} on port ${port}`);
     }
   }
 }

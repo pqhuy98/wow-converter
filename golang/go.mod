@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.3.0
-	golang.org/x/image v0.42.0
 	golang.org/x/text v0.40.0
 	modernc.org/sqlite v1.52.0
 )
@@ -31,6 +30,7 @@ require (
 	github.com/spf13/afero v1.14.0 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
 	github.com/tdewolff/parse/v2 v2.8.3 // indirect
+	golang.org/x/image v0.42.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	modernc.org/libc v1.72.3 // indirect

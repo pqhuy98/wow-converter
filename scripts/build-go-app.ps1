@@ -78,8 +78,18 @@ Copy-Item -Recurse -Force "resources" (Join-Path $distGo "resources")
 
 $zipPath = Join-Path $root "wow-converter.zip"
 Write-Host "Creating wow-converter.zip..."
-if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-Compress-Archive -Path (Join-Path $distGo "*") -DestinationPath $zipPath -Force
+# Defender can lock a just-copied zip for a moment. Retry rather than fail the bundle.
+for ($attempt = 1; $attempt -le 5; $attempt++) {
+    if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+    try {
+        Compress-Archive -Path (Join-Path $distGo "*") -DestinationPath $zipPath -Force
+        break
+    } catch {
+        if ($attempt -eq 5) { throw }
+        Write-Host "zip locked, retry $attempt..."
+        Start-Sleep -Seconds 2
+    }
+}
 
 Write-Host ""
 Write-Host "Done: dist-go/"

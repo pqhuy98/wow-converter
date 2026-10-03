@@ -162,72 +162,19 @@ golang/
 
 ## Tests
 
-### Unit tests (default)
+Unit (no WoW install):
 
 ```bash
-cd golang
 go test ./...
 ```
 
-Integration-tagged tests are excluded by default.
-
-### Integration tests
-
-Requires a running wow-data-server (TypeScript or Go) with CASC loaded on port `17753`:
+Module benchmarks (`//go:build module`) need `WOW_DATA_SERVER_URL`, or from the repo root `bun run test:module:bench` starts a Go data server and runs them:
 
 ```bash
-# Terminal 1 — start server with local WoW install
-CASC_LOCAL_WOW="D:/Programs/Blizzard Games/World of Warcraft" go run ./cmd/wow-data-server
-
-# Terminal 2 — run integration suite
-cd golang
-go test -tags integration ./test/integration/...
+go test -tags module -bench . -benchmem ./test/bench/...
 ```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WOW_DATA_SERVER_URL` | `http://127.0.0.1:17753` | Server under test |
-| `WOW_TS_REFERENCE_URL` | (unset) | Optional TS server for live Go-vs-TS parity |
-| `WOW_TS_CONVERTER_URL` | (unset) | TS converter used by the full Valiance Keep map parity test |
-| `WOW_GO_CONVERTER_URL` | (unset) | Go converter used by the full Valiance Keep map parity test |
-
-Integration tests **skip** (not fail) when the server is unreachable or CASC is not loaded.
-
-- `test/integration/casc_parity_test.go` — `GET /rest/cascFile` magic checks (M2 MD20/MD21, BLP1/BLP2, DB2 WDC) plus optional golden/TS byte parity
-- `test/integration/adt_parity_test.go` — `POST /rest/exportADT` for northrend tile `21_27` vs TS reference or golden manifest
-- `test/integration/map_generate_parity_test.go` — full four-tile Valiance Keep output from `examples/convert.ts`, TS disk pipeline vs Go in-memory pipeline; requires both converter URL variables and skips otherwise
-
-### Benchmarks
-
-```bash
-go test -bench=. -benchmem ./test/bench/...
-```
-
-Skips when wow-data-server is unavailable.
-
-### Snapshot harness
-
-Port of `tests/compare-snapshots.ts`:
-
-```bash
-go run ./test/verify/compare.go snapshot <dir> --out snapshot.json
-go run ./test/verify/compare.go compare snapshot.json <dir> --tolerance '\.png$' --max-delta 2
-go run ./test/verify/compare.go diff <dirA> <dirB> --tolerance '\.png$'
-```
-
-Golden placeholders live under `test/golden/`. Populate after capturing a known-good TS export:
-
-```bash
-go run ./test/verify/compare.go snapshot .cache/wow-export/maps/northrend \
-  --out test/golden/adt/northrend_21_27/manifest.json
-```
-
-Mount MDL parity (TS vs Go, requires two wow-data-server instances):
-
-```bash
-npm run parity:mount-mdl-loop
-go run ./test/cmd/test-export -mount -format mdl -limit 1 -offset 0
-```
+`bun run test:module` runs the same package without benchmarks.
 
 ## Go client
 

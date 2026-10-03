@@ -18,21 +18,21 @@ Do not guess from the final `.mdl` or `.mdx` diff alone. Work backward from the 
    Prefer a single focused case over the whole parity loop:
 
    ```powershell
-   bun scripts/retail-mdl-parity-loop.ts --case-idx=<N> --debug --diff-lines=80
+   bun tests/_deprecated-tests/mdl-parity/retail-mdl-parity-loop.ts --case-idx=<N> --debug --diff-lines=80
    ```
 
-   Use the full loop only after the focused case is fixed:
+   Use the full loop only after the focused case is fixed. Start the data servers first with `bun tests/_deprecated-tests/mdl-parity/start-parity-servers.ts`, then:
 
    ```powershell
-   bun run parity:mdl
+   bun tests/_deprecated-tests/mdl-parity/retail-mdl-parity-loop.ts
    ```
 
 2. Inspect the actual artifact diff first.
 
    Compare the generated files under:
 
-   - `.parity-artifacts/loop-ts-retail-mdl`
-   - `.parity-artifacts/loop-go-retail-mdl`
+   - `tests/_deprecated-tests/mdl-parity/tmp/loop-ts-retail-mdl`
+   - `tests/_deprecated-tests/mdl-parity/tmp/loop-go-retail-mdl`
 
    Identify the first meaningful mismatch:
 
@@ -154,8 +154,8 @@ After the fix, run:
 
 ```powershell
 go test ./internal/formats/mdl ./internal/converter/character
-bun scripts/retail-mdl-parity-loop.ts --case-idx=<N> --diff-lines=40
-bun run parity:mdl
+bun tests/_deprecated-tests/mdl-parity/retail-mdl-parity-loop.ts --case-idx=<N> --diff-lines=40
+bun tests/_deprecated-tests/mdl-parity/retail-mdl-parity-loop.ts
 ```
 
 ## Rules Of Thumb

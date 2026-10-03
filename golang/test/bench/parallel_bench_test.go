@@ -1,12 +1,14 @@
+//go:build module
+
 package bench
 
 import (
 	"strconv"
 	"testing"
 
+	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
-	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/formats/blp"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats"
@@ -14,9 +16,9 @@ import (
 
 const (
 	benchTextureCount = 32
-	benchPNGSize       = 128
-	benchChunkJobs     = 256
-	benchTileJobs      = 16
+	benchPNGSize      = 128
+	benchChunkJobs    = 256
+	benchTileJobs     = 16
 )
 
 func BenchmarkWorkerPool(b *testing.B) {

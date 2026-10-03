@@ -113,7 +113,7 @@ func GetAllSkinsForModel(fileDataID uint32) []casc.ModelSkin {
 	for _, skin := range byVariant {
 		out = append(out, skin)
 	}
-	sort.Slice(out, func(i, j int) bool { return stringsort.Less(out[i].Label, out[j].Label) })
+	stringsort.SortBy(out, func(skin casc.ModelSkin) string { return skin.Label })
 	return out
 }
 

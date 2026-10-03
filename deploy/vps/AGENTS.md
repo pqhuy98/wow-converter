@@ -70,4 +70,4 @@ Verify: `curl -sf http://127.0.0.1:3001/` and confirm `cascLoaded: true` from `c
 
 **502 / not ready** — bundled CASC load may still be running; check `journalctl -u wow-converter`.
 
-**Disk** — weekly `clean.sh` prunes `exported-assets`, `exported-assets-browse`, `recent-exports.json` only (keeps `.cache/wow` CASC data and `.cache/wow-export`). Maintenance/deploy wait up to **10 minutes** (`CASC_READY_WAIT_SECS`, default 600) for cold CASC load after restart.
+**Disk** — weekly `clean.sh` prunes `exported-assets`, `exported-assets-browse`, `recent-exports.json`, and `.cache/wow-export` (keeps `.cache/wow/casc`). When CASC finishes loading, raw file caches under `.cache/wow/data/<buildKey>` that have not been loaded or read for 14 days are removed. Other installs used inside that window stay. Maintenance/deploy wait up to **10 minutes** (`CASC_READY_WAIT_SECS`, default 600) for cold CASC load after restart.

@@ -10,9 +10,13 @@ func TestBuildGeosetMaskForSkinDefaultSuffixWhenNoExtraGeosets(t *testing.T) {
 	skin := &m2.Skin{
 		SubMeshes: []m2.SkinSubMesh{
 			{SubmeshID: 0},
+			{SubmeshID: 2},
 			{SubmeshID: 101},
 			{SubmeshID: 110},
 			{SubmeshID: 201},
+			{SubmeshID: 702},
+			{SubmeshID: 802},
+			{SubmeshID: 803},
 			{SubmeshID: 901},
 		},
 	}
@@ -21,10 +25,14 @@ func TestBuildGeosetMaskForSkinDefaultSuffixWhenNoExtraGeosets(t *testing.T) {
 	mask := BuildGeosetMaskForSkin(skin, selected)
 
 	want := map[int]bool{
-		0:   true, // ends with 0
-		101: true, // ends with 01
-		110: true, // ends with 0
-		201: true, // ends with 01
+		0:   true,  // ends with 0
+		2:   true,  // legacy section id
+		101: true,  // ends with 01
+		110: true,  // ends with 0
+		201: true,  // ends with 01
+		702: true,  // only variant in its group
+		802: false, // group has two non-default variants
+		803: false,
 		901: true, // ends with 01
 	}
 	for i, entry := range mask {

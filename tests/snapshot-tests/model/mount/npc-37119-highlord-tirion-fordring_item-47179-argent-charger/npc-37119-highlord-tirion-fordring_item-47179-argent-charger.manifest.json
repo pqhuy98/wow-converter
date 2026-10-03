@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "slug": "npc-37119-highlord-tirion-fordring_item-47179-argent-charger",
+  "suite": "mount",
+  "case": {
+    "base": "https://www.wowhead.com/wotlk/npc=37119/highlord-tirion-fordring#modelviewer",
+    "weaponR": "https://www.wowhead.com/item=120978/ashbringer",
+    "weaponL": "",
+    "size": "hero",
+    "mount": "https://www.wowhead.com/item=47179/argent-charger"
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

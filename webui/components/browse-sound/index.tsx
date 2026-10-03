@@ -1,6 +1,6 @@
 'use client';
 
-import { CaptionsIcon, DownloadIcon, Music2Icon, PackageIcon } from 'lucide-react';
+import { CaptionsIcon, DownloadIcon, Loader2, Music2Icon, PackageIcon } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -56,6 +56,35 @@ function Highlighted({
   ));
 }
 
+function SoundPlayer({ src, autoPlay }: { src: string; autoPlay: boolean }) {
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'failed'>('loading');
+
+  const markReady = (el: HTMLAudioElement) => {
+    const duration = el.duration;
+    if (Number.isFinite(duration) && duration > 0) setPhase('ready');
+  };
+
+  return (
+    <>
+      {phase === 'loading' && (
+        <div className="flex h-10 items-center" role="status" aria-label="Loading sound">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      {phase === 'failed' && <p className="text-sm text-destructive">Could not load this sound</p>}
+      <audio
+        src={src}
+        controls
+        autoPlay={autoPlay}
+        className={phase === 'ready' ? 'w-full' : 'hidden'}
+        onLoadedMetadata={(e) => markReady(e.currentTarget)}
+        onDurationChange={(e) => markReady(e.currentTarget)}
+        onError={() => setPhase('failed')}
+      />
+    </>
+  );
+}
+
 function transcriptHasEveryWord(sub: string, words: readonly string[]): boolean {
   const lc = sub.toLowerCase();
   return words.every((word) => lc.includes(word.toLowerCase()));
@@ -73,7 +102,7 @@ function TranscriptBadge({ highlighted }: { highlighted: boolean }) {
 }
 
 export default function BrowseSoundPage() {
-  const { buildKey } = useServerConfig();
+  const { buildKey, isSharedHosting } = useServerConfig();
   const [allFiles, setAllFiles] = useState<FileEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -90,8 +119,9 @@ export default function BrowseSoundPage() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    if (isSharedHosting) return;
     setAutoPlay(localStorage.getItem(AUTO_PLAY_KEY) === '1');
-  }, []);
+  }, [isSharedHosting]);
 
   useEffect(() => {
     setAllFiles([]);
@@ -153,8 +183,8 @@ export default function BrowseSoundPage() {
 
   const handleSelect = useCallback((file: FileEntry) => {
     setSelected(file);
-    if (localStorage.getItem(AUTO_PLAY_KEY) === '1') setPlayNonce((n) => n + 1);
-  }, []);
+    if (!isSharedHosting && localStorage.getItem(AUTO_PLAY_KEY) === '1') setPlayNonce((n) => n + 1);
+  }, [isSharedHosting]);
 
   usePendingScrollToItem<FileEntry>({
     items: filtered,
@@ -290,20 +320,22 @@ export default function BrowseSoundPage() {
                 <div className="flex items-center justify-between gap-2 mb-2 text-xs text-muted-foreground">
                   <span>{loadError ?? (allFiles.length === 0 ? 'Loading sound list...' : `${filtered.length.toLocaleString()} files`)}</span>
                   <div className="flex items-center gap-2 shrink-0">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      Auto-play
-                      <span className="relative inline-block h-3.5 w-6 shrink-0">
-                        <Switch
-                          className="absolute left-0 top-0 origin-top-left scale-[0.55]"
-                          checked={autoPlay}
-                          onCheckedChange={(on) => {
-                            setAutoPlay(on);
-                            localStorage.setItem(AUTO_PLAY_KEY, on ? '1' : '0');
-                          }}
-                          aria-label="Auto-play"
-                        />
-                      </span>
-                    </label>
+                    {!isSharedHosting && (
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        Auto-play
+                        <span className="relative inline-block h-3.5 w-6 shrink-0">
+                          <Switch
+                            className="absolute left-0 top-0 origin-top-left scale-[0.55]"
+                            checked={autoPlay}
+                            onCheckedChange={(on) => {
+                              setAutoPlay(on);
+                              localStorage.setItem(AUTO_PLAY_KEY, on ? '1' : '0');
+                            }}
+                            aria-label="Auto-play"
+                          />
+                        </span>
+                      </label>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -342,7 +374,7 @@ export default function BrowseSoundPage() {
                         isBusy={false}
                         highlightRegex={highlightRegex}
                         lowerWordsSet={lowerWordsSet}
-                        clickWhenSelected={autoPlay}
+                        clickWhenSelected={!isSharedHosting && autoPlay}
                         onClick={handleSelect}
                         style={style}
                         nameExtra={sub ? <TranscriptBadge highlighted={matchedByTranscript} /> : undefined}
@@ -380,7 +412,11 @@ export default function BrowseSoundPage() {
                       />
                     </p>
                   )}
-                  <audio key={`${selected.fileDataID}-${playNonce}`} src={selectedUrl} controls autoPlay={autoPlay} className="w-full" />
+                  <SoundPlayer
+                    key={`${selected.fileDataID}-${playNonce}`}
+                    src={selectedUrl}
+                    autoPlay={!isSharedHosting && autoPlay}
+                  />
                   <Button asChild variant="outline" size="sm" className="w-fit">
                     <a href={`${selectedUrl}${selectedUrl.includes('?') ? '&' : '?'}download=1`} download>
                       <DownloadIcon />

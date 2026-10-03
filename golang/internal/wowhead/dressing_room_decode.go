@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
 )
 
 //go:embed dressing_room_templates.json
@@ -89,20 +90,24 @@ type equipmentEntry struct {
 	Enchant   int `json:"enchant"`
 }
 
+var (
+	dressingRoomOnce sync.Once
+	dressingRoomErr  error
+)
+
 func initDressingRoomData() error {
-	if hashTemplates != nil {
-		return nil
-	}
-	if err := json.Unmarshal(dressingRoomTemplatesJSON, &hashTemplates); err != nil {
-		return err
-	}
-	if err := json.Unmarshal(raceGenderMapJSON, &raceGenderMap); err != nil {
-		return err
-	}
-	if err := json.Unmarshal(itemEnchantsJSON, &itemEnchantVisual); err != nil {
-		return err
-	}
-	return nil
+	dressingRoomOnce.Do(func() {
+		if err := json.Unmarshal(dressingRoomTemplatesJSON, &hashTemplates); err != nil {
+			dressingRoomErr = err
+			return
+		}
+		if err := json.Unmarshal(raceGenderMapJSON, &raceGenderMap); err != nil {
+			dressingRoomErr = err
+			return
+		}
+		dressingRoomErr = json.Unmarshal(itemEnchantsJSON, &itemEnchantVisual)
+	})
+	return dressingRoomErr
 }
 
 func getLatestTemplateVersion() int {

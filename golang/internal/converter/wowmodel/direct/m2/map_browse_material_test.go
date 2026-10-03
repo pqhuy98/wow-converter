@@ -1,23 +1,21 @@
+//go:build module
+
 package directm2
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/bootstrap"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
-	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
 func TestMapVsBrowseMaterialTextures(t *testing.T) {
-	if os.Getenv("WOW_INTEGRATION") == "" {
-		t.Skip("set WOW_INTEGRATION=1 to run")
-	}
 	_ = workspace.LoadEnvFile(filepath.Join(workspace.FindRepoRoot(), ".env"))
 
 	ctx := context.Background()

@@ -71,26 +71,21 @@ bun run dev
 
 The legacy TS server remains available as `bun run dev:ts` for wrapper-library compatibility work.
 
-### Parity checks
+### API checks
 
-Run the full Valiance Keep TS-versus-Go map comparison:
-
-```bash
-bun run parity:map
-```
-
-The command writes both outputs to `.parity-artifacts/map-output/{ts,go}`. Inspect
-a failed map comparison semantically with:
+Start the converter (`bun run dev`, or the unpacked desktop app), then:
 
 ```bash
-go -C golang run ./test/cmd/compare-map ../.parity-artifacts/map-output/ts ../.parity-artifacts/map-output/go
+bun run test:api
 ```
+
+The suite calls the converter already listening at `WOW_CONVERTER_URL` (default `http://127.0.0.1:3001`). It checks browse, export, maps, sounds, and textures on that process. It does not start a server. `bun run verify` boots the unpacked app and points the same suite at it.
 
 For MDL parity, start the two data servers in one terminal, then run the loop in another:
 
 ```bash
-bun scripts/start-parity-servers.ts
-bun run parity:mdl
+bun tests/_deprecated-tests/mdl-parity/start-parity-servers.ts
+bun tests/_deprecated-tests/mdl-parity/retail-mdl-parity-loop.ts
 ```
 
 Map exports use a bundled SQLite copy of AzerothCore world data (`bin/azerothcore-world.sqlite`) — no live MySQL/PostgreSQL is required at runtime. To refresh that file from your AzerothCore world database:

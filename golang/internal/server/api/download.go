@@ -51,15 +51,19 @@ func registerDownload(r Router, d *Deps) {
 			}
 		}
 
-		w.Header().Set("Content-Type", "application/zip")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+zipName+`"`)
-
-		zw := zip.NewWriter(w)
-		defer zw.Close()
-
+		// Open every file before writing a byte. A missing path must stay a JSON error,
+		// and zip.Writer.Close still emits an archive trailer after that error.
+		opened := make([]*os.File, 0, len(body.Files))
+		names := make([]string, 0, len(body.Files))
+		closeOpened := func() {
+			for _, f := range opened {
+				_ = f.Close()
+			}
+		}
 		for _, relativePath := range body.Files {
 			f, err := pathsafe.OpenRegularFileUnderBase(baseDir, relativePath)
 			if err != nil {
+				closeOpened()
 				if errors.Is(err, pathsafe.ErrInvalidPath) {
 					sendError(w, http.StatusBadRequest, "Invalid path")
 					return
@@ -71,21 +75,32 @@ func registerDownload(r Router, d *Deps) {
 				sendInternalError(w, err)
 				return
 			}
+			opened = append(opened, f)
+			names = append(names, downloadArchiveName(relativePath))
+		}
+		defer closeOpened()
 
-			archiveName := relativePath
-			ext := strings.ToLower(filepath.Ext(relativePath))
-			if ext == ".mdx" || ext == ".mdl" {
-				archiveName = versionSuffixRegex.ReplaceAllString(archiveName, ".$2")
-			}
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+zipName+`"`)
 
-			if err := addOpenFileToZip(zw, f, archiveName); err != nil {
-				_ = f.Close()
+		zw := zip.NewWriter(w)
+		defer zw.Close()
+		for i, f := range opened {
+			if err := addOpenFileToZip(zw, f, names[i]); err != nil {
 				sendInternalError(w, err)
 				return
 			}
-			_ = f.Close()
 		}
 	})
+}
+
+func downloadArchiveName(relativePath string) string {
+	archiveName := relativePath
+	ext := strings.ToLower(filepath.Ext(relativePath))
+	if ext == ".mdx" || ext == ".mdl" {
+		archiveName = versionSuffixRegex.ReplaceAllString(archiveName, ".$2")
+	}
+	return strings.ReplaceAll(archiveName, `\`, "/")
 }
 
 func addOpenFileToZip(zw *zip.Writer, f *os.File, archiveName string) error {
