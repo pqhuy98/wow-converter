@@ -168,13 +168,13 @@ Unit (no WoW install):
 go test ./...
 ```
 
-Module benchmarks (`//go:build module`) need `WOW_DATA_SERVER_URL`, or from the repo root `bun run test:module:bench` starts a Go data server and runs them:
+`//go:build integration_tests` files are compiled only with `-tags integration_tests`, so `go test ./...` never sees them. From the repo root, `bun run test:golang-integration` starts wow-data-server on `:18753` and runs those tests against it. `bun run verify` runs that suite immediately after the unit tests.
+
+Module benchmarks in `test/bench` use the same tag:
 
 ```bash
-go test -tags module -bench . -benchmem ./test/bench/...
+go test -tags integration_tests -bench . -benchmem ./test/bench/...
 ```
-
-`bun run test:module` runs the same package without benchmarks.
 
 ## Go client
 

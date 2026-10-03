@@ -1,4 +1,4 @@
-//go:build module
+//go:build integration_tests
 
 package character
 

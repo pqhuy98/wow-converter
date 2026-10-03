@@ -19,6 +19,7 @@
     "test:api": "bun test tests/api-tests",
     "test:regression-maps": "bun test --max-concurrency=1 tests/regression-maps",
     "test:regression-maps:fresh": "fresh=1 bun test --max-concurrency=1 tests/regression-maps",
+    "test:golang-integration": "bun test --max-concurrency=1 tests/golang-integration-tests",
     "verify": "bun scripts/verify.ts",
     "generate:acore-sqlite": "bun scripts/generate-azerothcore-sqlite.ts",
     "clean": "bun scripts/clean.ts",

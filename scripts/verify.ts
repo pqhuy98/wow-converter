@@ -1,5 +1,5 @@
 /**
- * Release checks: Go unit tests, dist-go build, boot that binary, API, then
+ * Release checks: Go unit tests, Go integration tests, dist-go build, boot that binary, API, then
  * snapshots for retail, mount, and classic. Regression maps export each
  * product separately so shared texture paths contain the correct bytes.
  *
@@ -61,6 +61,11 @@ async function main(): Promise<number> {
   const results: StepResult[] = [];
 
   results.push(await runStep('unit', () => run('go', ['test', './...'], path.join(repoRoot, 'golang'))));
+  results.push(await runStep('integration', () => run(
+    'bun',
+    ['test', '--max-concurrency=1', 'tests/golang-integration-tests'],
+    repoRoot,
+  )));
 
   const build = await runStep('build', () => run('bun', ['run', process.platform === 'win32' ? 'build' : 'build:linux'], repoRoot, {
     NODE_ENV: 'production',
