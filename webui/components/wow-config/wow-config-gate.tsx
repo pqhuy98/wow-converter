@@ -12,7 +12,8 @@ export function WowConfigGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { status, isReady } = useWowConfig();
 
-  const redirectToSetup = isReady && pathname !== '/setup' && !status.cascLoaded;
+  const reportPage = pathname === '/bug-reports' || pathname.startsWith('/bug-reports/');
+  const redirectToSetup = !reportPage && isReady && pathname !== '/setup' && !status.cascLoaded;
 
   useEffect(() => {
     if (redirectToSetup) {
@@ -20,7 +21,7 @@ export function WowConfigGate({ children }: { children: React.ReactNode }) {
     }
   }, [redirectToSetup, router]);
 
-  if (!isReady || redirectToSetup) {
+  if (!reportPage && (!isReady || redirectToSetup)) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

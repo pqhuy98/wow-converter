@@ -23,7 +23,7 @@
     "verify": "bun scripts/verify.ts",
     "generate:acore-sqlite": "bun scripts/generate-azerothcore-sqlite.ts",
     "clean": "bun scripts/clean.ts",
-    "shot": "bun .cursor/skills/shot-export-wow-converter/shot-export.ts",
+    "shot": "go -C golang run ./cmd/shot-converter",
     "postinstall": "cd webui && bun install && cd .. && prisma generate"
   },
   "devDependencies": {

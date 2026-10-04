@@ -59,6 +59,7 @@ export interface ExportRequest {
 }
 
 export interface ExportCharacterResponse {
+  reportMetadata?: ExportReportMetadata
   exportedModels: { path: string, size: number }[]
   exportedTextures: { path: string, size: number }[]
   outputDirectory?: string
@@ -84,6 +85,22 @@ export interface ExportCharacterResponse {
     collisionShapes: number;
     cameras: number;
   }
+}
+
+export interface ReportSequence {
+  index: number
+  name: string
+  wowName: string
+  wowVariant: number
+}
+
+export interface ExportReportMetadata {
+  request: ExportRequest
+  gitSha: string
+  buildKey: string
+  product: string
+  exportedAt: number
+  models: { path: string; sequences: ReportSequence[] }[]
 }
 
 export interface JobStatus {

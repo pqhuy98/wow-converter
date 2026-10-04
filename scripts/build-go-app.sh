@@ -21,7 +21,7 @@ done
 
 (
   cd golang
-  go build -ldflags "-s -w" -o "${DIST}/wow-converter" ./cmd/wow-converter
+  go build -ldflags "-s -w -X github.com/pqhuy98/wow-converter/internal/server/api.buildSHA=$(git rev-parse HEAD)" -o "${DIST}/wow-converter" ./cmd/wow-converter
 )
 
 mkdir -p "${DIST}/webui" "${DIST}/bin"

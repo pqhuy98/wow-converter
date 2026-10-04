@@ -111,6 +111,10 @@ test('sounds, transcripts, and a sound zip', async () => {
   expect(emptyZip.status).toBe(400);
   expect(errorOf(await emptyZip.json()).error).toBe('fileDataIDs must contain 1 to 1000 ids');
 
+  const bulkZip = await api('/api/sound/zip', jsonInit({ fileDataIDs: [sound.fileDataID, sound.fileDataID + 1] }));
+  expect(bulkZip.status).toBe(400);
+  expect(errorOf(await bulkZip.json()).error).toBe('zip is limited to one file');
+
   const zip = await api('/api/sound/zip', jsonInit({ fileDataIDs: [sound.fileDataID] }));
   expect(zip.status).toBe(200);
   expect(zip.headers.get('content-type')).toBe('application/zip');

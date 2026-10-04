@@ -5,24 +5,26 @@ description: Screenshot the Wowhead model-viewer canvas for a wowhead.com NPC, i
 
 # Shot export (Wowhead)
 
-Save only the model-viewer canvas. The page, toolbar, and cookie banner are not in the PNG. The shark pattern is removed. The background is the same flat gray as the converter viewer.
+Save the model canvas with the same Go capture code as the report server. The page, toolbar, and cookie banner stay outside the PNG. Use installed Chrome, Edge, or Chromium.
 
-Append `#modelviewer` when the URL does not already have it.
-
-From the wow-converter repo:
+From the repository root:
 
 ```
-bun .cursor/skills/shot-export-wowhead/snapshot.ts <url>
+go -C golang run ./cmd/shot-wowhead <url> --seq Stand --view front
 ```
 
-Optional flags: `--seq Attack` (default Stand), `--view front` (default is all six: front, back, left, right, top, bottom), `--out dir`. A second positional argument is also an output directory.
+Flags: `--seq Stand` (default), `--view front` (omit for all six; comma-separated views also work), `--variant 0`, `--out dir`. A second positional argument also sets the output directory. Relative output directories are relative to the repository root; default is this skill's `out` folder. The command adds `#modelviewer` when needed and prints one labeled 1440×900 PNG path per selected view, named `<slug>-<sequence>-<view>.png`. Read the PNGs. Blank shots fail.
 
-`<seq>` is the Wowhead animation name, such as `Stand`, `Attack1H`, or `Death`. One prefix matches the first animation in file order, the same rule the converter uses when `Attack` becomes `Attack 1`. The pose is the middle of that animation.
+Use WoW animation names such as `Stand`, `Attack1H`, or `Death`. Prefixes select the first match in file order; `--variant` selects a later match. WC3 names differ: use the export's `reportMetadata.models[].sequences[]` (`wowName`/`wowVariant` versus `name`) or the mapping in `src/lib/converter/wow-model/animation/animation-mapper.ts`.
 
-WoW names and WC3 sequence names are different. Look up the pair in `src/lib/converter/wow-model/animation/animation-mapper.ts` (`getWc3AnimName`: the case label is the Wowhead name, `wc3Name` is the converter name). Pass the Wowhead name to this script and `wc3Name` to shot-export-wow-converter. `Stand 1` and `Attack` are WC3 names, so they do not belong in this `--seq`.
+For comparison, follow shot-export-wow-converter to export fresh assets, then capture both sources together:
 
-Views match the converter shot, with the model facing the viewer on `front`: back is from behind, left looks from the model's left toward its right, right is the opposite, top looks down, bottom looks up. The camera is framed once from the model bounds so the bounds fill 0.92 of the frame, the same rule as the converter shot, and that frame stays put when the pose changes. If the output folder already has `<slug>-<seq>-<nn>-<view>-converter.png`, the silhouette is lined up to that picture instead. The pose is the middle of the animation: the playback cursor is set there and the skeleton is sampled at that time. Shading matches the converter viewer: one light from world up, with the surface brightness `clamp(N·up + 0.7, 0, 1)`. The two fill lights and the specular highlight are off.
+```
+go -C golang run ./cmd/shot-wowhead <url> --seq Stand --model <asset-path> --converter-seq "Stand 1" --view front --out tmp/compare-shots
+```
 
-The script prints one PNG path per view, named `<slug>-<seq>-<view>.png`. Read those images. A blank frame, or a mesh with holes where the face or cloth should be, means the shot failed.
+The local converter must already be running; `--base` or `WOW_CONVERTER_URL` selects it. Only the requested views are captured. The report server's side refinement and source-to-converter camera transfer are shared, including the fixed Wowhead top/bottom cameras. Paired filenames end in `-wowhead.png` or `-converter.png`. Read both images.
 
-When the user pasted the URL to see the difference, also take the wow-converter shot (shot-export-wow-converter) with the same `--seq` and `--view` and read both PNGs.
+Standalone shots keep the existing model-bounds framing. If the output folder already contains `<slug>-<sequence>-<nn>-<view>-converter.png`, its silhouette aim is reused for that side view. Views are front, left, back, right, top, bottom. The pose is frozen at the animation midpoint; background is rgb(38,38,38), FOV 45 degrees, and lighting follows the converter's world-up curve. Captures use isolated temporary browser profiles.
+
+The Bun entry point remains a compatibility wrapper around `go run`; no screenshot executable needs rebuilding.

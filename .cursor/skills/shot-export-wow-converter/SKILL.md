@@ -5,24 +5,28 @@ description: Screenshot an exported Warcraft 3 model from the local wow-converte
 
 # Shot export (wow-converter)
 
-The converter must already be serving http://127.0.0.1:3001.
+The converter must already be serving http://127.0.0.1:3001. Use the installed Chrome, Edge, or Chromium.
 
-From the wow-converter repo:
+From the repository root:
 
 ```
-bun .cursor/skills/shot-export-wow-converter/shot-export.ts <asset-path>
+go -C golang run ./cmd/shot-converter <asset-path> --seq "Stand 1" --view front
 ```
 
-`<asset-path>` is the path under `exported-assets`, such as `the-lich-king.mdx`. A full path that contains `exported-assets` is accepted.
+The command runs the same Go capture code as the report server. It prints one labeled 1440×900 PNG path per selected view. Read the PNGs; blank frames fail. `<asset-path>` is relative to `exported-assets`; a full path containing that directory also works.
 
-Optional flags: `--seq Attack` (default Stand), `--view front` (default is all six: front, back, left, right, top, bottom), `--out dir`, `--base http://127.0.0.1:3001`.
+Flags: `--seq Stand` (default, prefix matches `Stand 1`), `--view front` (omit for all six; comma-separated views also work), `--out tmp/shots`, `--base http://127.0.0.1:3001` (or `WOW_CONVERTER_URL`). Relative output directories are relative to the repository root. Standalone files are `<model>-<matched-sequence>-<view>.png`.
 
-The script prints one PNG path per view. Read those images. A blank or flat frame means the shot failed.
+For a Wowhead comparison, freshly export the model first, then capture both sources in one command:
 
-Shot mode freezes the parent and every attached model's clock. The sequence plays from its start to the midpoint at a fixed 60Hz step, particles use a fixed random seed, then time stops. Each browser uses a separate temporary profile, disables HTTP caching, and hides Next's development overlay. Two shots of the same file on this machine should match.
+```
+go -C golang run ./cmd/shot-converter <asset-path> --seq "Stand 1" --wowhead <url> --wow-seq Stand --view front --out tmp/compare-shots
+```
 
-Views, with the model facing +X: front looks at the face, back looks from behind toward the front, left looks from the model's left toward its right, right is the opposite, top looks down, bottom looks up.
+This captures only front for both sources. The converter supplies its preliminary silhouette aim; Wowhead applies the report server's side refinement, then its actual eye/target/up is transferred into converter model coordinates. Top/bottom use Wowhead's fixed cameras. Paired filenames end in `-wowhead.png` or `-converter.png`. Read both images.
 
-When the user pasted a Wowhead URL, export it if that MDX is not already written, then shoot the same `--view`. `--seq` is the WC3 name from `getWc3AnimName` in `src/lib/converter/wow-model/animation/animation-mapper.ts`, not the Wowhead name. The shot script prefix-matches, so `Stand` hits `Stand 1`. POST `http://127.0.0.1:3001/api/export/character` with `character.base` `{ "type": "wowhead", "value": "<url>" }`, `character.inGameMovespeed` 270, `outputFileName` set to the page slug, `optimization` `{}`, and `format` `mdx`. Poll `GET /api/export/character/status/{id}` until `status` is `done`. Pass `result.exportedModels[0].path` to the shot script. Read those PNGs next to the Wowhead shots from the shot-export-wowhead skill.
+Fresh export: POST `/api/export/character` with `character.base` `{"type":"wowhead","value":"<url>"}`, `character.inGameMovespeed` 270, `outputFileName` set to the page slug, `optimization` `{}`, and `format` `mdx`. Poll `/api/export/character/status/{id}` until `done`; fail on `failed` or `cancelled`. Use the returned `result.exportedModels[].path` and `result.reportMetadata.models[].sequences[]` for the WC3 `name`, WoW `wowName`, and `wowVariant` (`--variant`). Never guess the source animation from a WC3 name. The mapping is in `src/lib/converter/wow-model/animation/animation-mapper.ts`.
 
-The regression suite shoots the same frozen viewer against the converter already listening at `WOW_CONVERTER_URL` or `http://127.0.0.1:3001`. Run it with `bun run test:snapshot`. It compares a 2×3 sheet to `tests/snapshot-tests/model/<suite>/<slug>/<slug>.expected.png`. Update with `SNAPSHOT_UPDATE=1 SNAPSHOT_SUITE=retail SNAPSHOT_SLUG=<slug> bun test tests/snapshot-tests/model/model.test.ts`. `bun test` does not forward arguments after `--`. `<slug>.actual.png` and `<slug>.diff.png` sit next to the expected sheet and are gitignored. The fail line and the heatmap colors are in the development rule.
+Shot mode deterministically freezes the parent, attachments, and particles at the animation midpoint. Browser profiles are isolated, HTTP caching is disabled, and the development overlay is hidden. Background is rgb(38,38,38); FOV is 45 degrees. Views are front, left, back, right, top, bottom. Standalone shots retain local mesh framing.
+
+The Lich King report check always exports before shooting: from `golang`, run `go test ./internal/server/reportshot -run TestLocalLichKingCapture -v -count=1`. The converter must already be running. The broader visual regression suite remains `bun run test:snapshot`; update a case with `SNAPSHOT_UPDATE=1 SNAPSHOT_SUITE=retail SNAPSHOT_SLUG=<slug> bun test tests/snapshot-tests/model/model.test.ts`, then inspect its actual/diff/expected PNGs.

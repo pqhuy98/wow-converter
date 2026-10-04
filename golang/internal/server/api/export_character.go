@@ -46,11 +46,12 @@ type exportCharacterRequest struct {
 }
 
 type exportCharacterResponse struct {
-	ExportedModels   []exportAssetInfo `json:"exportedModels"`
-	ExportedTextures []exportAssetInfo `json:"exportedTextures"`
-	ModelStats       map[string]int    `json:"modelStats"`
-	OutputDirectory  string            `json:"outputDirectory,omitempty"`
-	VersionID        string            `json:"versionId"`
+	ReportMetadata   *exportReportMetadata `json:"reportMetadata,omitempty"`
+	ExportedModels   []exportAssetInfo     `json:"exportedModels"`
+	ExportedTextures []exportAssetInfo     `json:"exportedTextures"`
+	ModelStats       map[string]int        `json:"modelStats"`
+	OutputDirectory  string                `json:"outputDirectory,omitempty"`
+	VersionID        string                `json:"versionId"`
 }
 
 type exportAssetInfo struct {
@@ -219,6 +220,7 @@ func registerExportCharacter(r Router, d *Deps) {
 	})
 
 	registerExportStatic(r, d)
+	registerReportCapture(r, d, queue)
 	if !d.Config.IsSharedHosting {
 		_ = os.RemoveAll(d.Config.OutputDirBrowse)
 		_ = os.MkdirAll(d.Config.OutputDirBrowse, 0o755)
@@ -382,6 +384,19 @@ func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (expo
 		resp.ExportedTextures = append(resp.ExportedTextures, exportAssetInfo{Path: filepath.ToSlash(rel), Size: info.Size()})
 	}
 	stringsort.SortBy(resp.ExportedTextures, func(info exportAssetInfo) string { return info.Path })
+	if !d.Config.IsSharedHosting && req.Character.Base.Type == "wowhead" {
+		metadata := &exportReportMetadata{Request: req, GitSHA: currentGitSHA(), BuildKey: d.BuildKey(ctx), ExportedAt: time.Now().UnixMilli(), Models: exporter.SequenceSources(req.Format), AssetHashes: map[string]string{}}
+		if info, err := d.Client.GetCASCInfo(ctx); err == nil {
+			metadata.Product = info.Build.Product
+		}
+		for _, asset := range append(append([]exportAssetInfo{}, resp.ExportedModels...), resp.ExportedTextures...) {
+			metadata.AssetHashes[asset.Path] = ""
+			if hash, err := hashExportAsset(outDir, asset.Path); err == nil {
+				metadata.AssetHashes[asset.Path] = hash
+			}
+		}
+		resp.ReportMetadata = metadata
+	}
 	if !d.Config.IsSharedHosting {
 		resp.OutputDirectory = outDir
 	}

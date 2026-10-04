@@ -1,53 +1,12 @@
 /* eslint-disable max-classes-per-file */
 /** Capture a PNG of an exported MDX from the local viewer. Uses the system browser. */
 import { type ChildProcess, spawn, spawnSync } from 'child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'fs';
-import { writeFile } from 'fs/promises';
+import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const WIDTH = 1440;
-const HEIGHT = 900;
 const READY_MS = 45_000;
-const VIEWS = ['front', 'back', 'left', 'right', 'top', 'bottom'] as const;
-
-interface ShotOptions {
-  model: string;
-  seq: string;
-  out: string;
-  base: string;
-  view: string;
-}
-
-function parseArgs(argv: readonly string[]): ShotOptions {
-  let model = '';
-  let seq = 'Stand';
-  let out = '';
-  let view = '';
-  let base = process.env.WOW_CONVERTER_URL ?? 'http://127.0.0.1:3001';
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i] ?? '';
-    if (arg === '--seq') seq = argv[++i] ?? seq;
-    else if (arg === '--out') out = argv[++i] ?? out;
-    else if (arg === '--view') view = argv[++i] ?? view;
-    else if (arg === '--base') base = argv[++i] ?? base;
-    else if (!arg.startsWith('--') && model === '') model = arg;
-  }
-  if (model === '') {
-    throw new Error('usage: bun .cursor/skills/shot-export-wow-converter/shot-export.ts <model-path> [--seq Stand] [--view front] [--out dir] [--base http://127.0.0.1:3001]');
-  }
-  return {
-    model, seq, out, base, view,
-  };
-}
-
-function toAssetPath(input: string): string {
-  const norm = input.replace(/\\/g, '/');
-  const marker = '/exported-assets/';
-  const at = norm.toLowerCase().indexOf(marker);
-  if (at >= 0) return norm.slice(at + marker.length);
-  return norm.replace(/^\.\//, '');
-}
 
 /** Installer-recorded Edge path, including a non-default directory. Empty when the key is missing. */
 function edgeFromRegistry(): string {
@@ -113,10 +72,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+type CdpReply = (msg: Record<string, unknown>) => void;
+
 class Cdp {
   private next = 0;
 
-  private readonly pending = new Map<number, (msg: Record<string, unknown>) => void>();
+  private readonly pending = new Map<number, CdpReply>();
 
   constructor(private readonly ws: WebSocket) {
     ws.addEventListener('message', (ev: MessageEvent) => {
@@ -338,36 +299,13 @@ export class ShotBrowser {
   }
 }
 
-async function main(): Promise<void> {
-  const opts = parseArgs(process.argv.slice(2));
-  const assetPath = toAssetPath(opts.model);
-  const browser = await ShotBrowser.open(WIDTH, HEIGHT);
-  try {
-    const captured = await browser.capture({
-      base: opts.base,
-      model: assetPath,
-      seq: opts.seq,
-      width: WIDTH,
-      height: HEIGHT,
-      views: opts.view !== '' ? [opts.view] : [...VIEWS],
-    });
-    const baseName = path.basename(assetPath, path.extname(assetPath));
-    const safeSeq = (captured.sequence !== '' ? captured.sequence : opts.seq).replace(/[<>:"/\\|?*]/g, '_');
-    const dir = opts.out !== '' ? opts.out : path.join('tmp', 'shots');
-    mkdirSync(dir, { recursive: true });
-    for (const [view, png] of captured.views) {
-      const dest = path.join(dir, `${baseName}-${safeSeq}-${view}.png`);
-      await writeFile(dest, png);
-      console.log(path.resolve(dest));
-    }
-  } finally {
-    await browser.close();
-  }
-}
-
+// Snapshot tests import ShotBrowser above; the skill CLI uses the Go server code.
 if (import.meta.main) {
-  main().then(() => process.exit(0)).catch((err: unknown) => {
-    console.error(err instanceof Error ? err.message : err);
-    process.exit(1);
+  const result = spawnSync('go', ['run', './cmd/shot-converter', ...process.argv.slice(2)], {
+    cwd: fileURLToPath(new URL('../../../golang/', import.meta.url)),
+    stdio: 'inherit',
+    windowsHide: true,
   });
+  if (result.error) console.error(result.error.message);
+  process.exit(result.status ?? 1);
 }

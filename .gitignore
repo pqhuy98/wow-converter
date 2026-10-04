@@ -6,6 +6,7 @@ tests/snapshot-tests/model/**/*.diff.png
 golang/test/**/tmp/
 tmp/
 recent-exports.json
+.bug-reports/
 .playwright-mcp
 wow-converter.code-workspace
 build

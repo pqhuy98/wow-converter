@@ -53,6 +53,7 @@ func NewServer(d *Deps) *Server {
 	}
 
 	root := chi.NewRouter()
+	root.Use(reportPeer)
 	root.Use(middleware.Recoverer)
 	root.Use(middleware.RequestID)
 	root.Use(middleware.RealIP)
@@ -64,6 +65,7 @@ func NewServer(d *Deps) *Server {
 	}
 
 	root.Mount("/api", apiRouter)
+	registerBugReports(apiRouter, root, d)
 	registerDocs(root)
 
 	uiDir := resolveUIDir()

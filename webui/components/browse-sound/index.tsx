@@ -1,6 +1,8 @@
 'use client';
 
-import { CaptionsIcon, DownloadIcon, Loader2, Music2Icon, PackageIcon } from 'lucide-react';
+import {
+  CaptionsIcon, DownloadIcon, Loader2, Music2Icon,
+} from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -12,14 +14,12 @@ import {
 import { FileRow, VirtualListBox } from '@/components/common/listbox';
 import { useServerConfig } from '@/components/server-config';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { withCascBuild } from '@/lib/api/casc-cache';
 import { usePendingScrollToItem } from '@/lib/hooks/use-pending-scroll-to-item';
 import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-search-change';
@@ -29,8 +29,6 @@ type FileEntry = { fileDataID: number; fileName: string };
 
 const OVERSCAN = 8;
 const CONTAINER_PADDING = 4;
-/** Must match maxSoundZipFiles in golang/internal/server/api/sound.go. */
-const MAX_ZIP_FILES = 1000;
 
 const suggestions = ['sound/creature/', 'sound/music/'] as const;
 const AUTO_PLAY_KEY = 'browse-sound-autoplay';
@@ -113,8 +111,6 @@ export default function BrowseSoundPage() {
   const [searchTranscript, setSearchTranscript] = useState(false);
   const [transcripts, setTranscripts] = useState<ReadonlyMap<number, string>>(() => new Map());
   const [playNonce, setPlayNonce] = useState(0);
-  const [isZipping, setIsZipping] = useState(false);
-  const [zipError, setZipError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -226,35 +222,6 @@ export default function BrowseSoundPage() {
     }
   };
 
-  const downloadZip = async () => {
-    setIsZipping(true);
-    setZipError(null);
-    try {
-      const resp = await fetch('/api/sound/zip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileDataIDs: filtered.map((f) => f.fileDataID) }),
-      });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.error ?? `Download failed with ${resp.status}`);
-      }
-      const url = URL.createObjectURL(await resp.blob());
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'sounds.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setZipError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsZipping(false);
-    }
-  };
-
-  const canZip = filtered.length > 0 && filtered.length <= MAX_ZIP_FILES;
   const selectedUrl = selected ? withCascBuild(`/api/sound/${selected.fileDataID}`, buildKey) : undefined;
   const selectedTranscript = selected ? transcripts.get(selected.fileDataID) : undefined;
 
@@ -286,35 +253,20 @@ export default function BrowseSoundPage() {
                       }
                     }}
                     ref={inputRef}
-                    className="w-full pr-10 sm:pr-[268px]"
+                    className="w-full sm:pr-[240px]"
                   />
-                  <div className="absolute inset-y-0 right-1.5 flex items-center gap-1.5 z-20">
-                    <div className="hidden sm:flex items-center gap-1.5 pointer-events-none">
-                      {suggestions.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
-                          onClick={() => applySuggestion(s)}
-                          title={`Search for ${s}`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            aria-pressed={searchTranscript}
-                            className={`rounded border border-border p-1 pointer-events-auto ${searchTranscript ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-accent'}`}
-                            onClick={() => setSearchTranscript((on) => !on)}
-                          >
-                            <CaptionsIcon className="w-3.5 h-3.5" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">Search phrase by generated transcript</TooltipContent>
-                      </Tooltip>
+                  <div className="absolute inset-y-0 right-1.5 hidden sm:flex items-center gap-1.5 pointer-events-none z-20">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-secondary hover:bg-accent border border-border pointer-events-auto"
+                        onClick={() => applySuggestion(s)}
+                        title={`Search for ${s}`}
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-2 mb-2 text-xs text-muted-foreground">
@@ -336,20 +288,19 @@ export default function BrowseSoundPage() {
                         </span>
                       </label>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      disabled={!canZip || isZipping}
-                      onClick={() => void downloadZip()}
-                      title={canZip ? 'Download all listed files as a zip' : `Narrow the search to at most ${MAX_ZIP_FILES} files to download them as a zip`}
-                    >
-                      <PackageIcon />
-                      {isZipping ? 'Zipping...' : 'Download all (.zip)'}
-                    </Button>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      Transcript search
+                      <span className="relative inline-block h-3.5 w-6 shrink-0">
+                        <Switch
+                          className="absolute left-0 top-0 origin-top-left scale-[0.55]"
+                          checked={searchTranscript}
+                          onCheckedChange={setSearchTranscript}
+                          aria-label="Transcript search"
+                        />
+                      </span>
+                    </label>
                   </div>
                 </div>
-                {zipError && <p className="text-xs text-destructive mb-2">{zipError}</p>}
                 <VirtualListBox<FileEntry>
                   items={filtered}
                   listKey={`${debouncedQuery}\n${searchTranscript ? '1' : '0'}`}

@@ -67,7 +67,9 @@ export function TooltipHelp({
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => {
-              // Prevent implicit form submit and label-associated checkbox toggles.
+              // Help icons sit next to labels/checkboxes; don't toggle those.
+              // Toolbar buttons wrap TooltipHelp as their content — let those clicks through.
+              if (e.currentTarget.closest('button')) return;
               e.preventDefault();
               e.stopPropagation();
             }}

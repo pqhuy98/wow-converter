@@ -44,7 +44,8 @@ Ensure-Dir $distGo
 $exeName = if ($isWindows) { "wow-converter.exe" } else { "wow-converter" }
 Write-Host "Building wow-converter (Go) -> dist-go/$exeName"
 Push-Location golang
-go build -ldflags "-s -w" -o (Join-Path $distGo $exeName) ./cmd/wow-converter
+$reportBuildSHA = git -c "safe.directory=$root" rev-parse HEAD
+go build -ldflags "-s -w -X github.com/pqhuy98/wow-converter/internal/server/api.buildSHA=$reportBuildSHA" -o (Join-Path $distGo $exeName) ./cmd/wow-converter
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "go build failed" }
 Pop-Location
 

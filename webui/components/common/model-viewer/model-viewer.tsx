@@ -16,23 +16,25 @@ import {
   useEffect, useMemo, useRef, useState,
 } from 'react';
 
-declare global {
-  interface Window {
-    __shotView?: (name: string) => string
-  }
-}
-
 import { Button } from '@/components/ui/button';
 
 import { useServerConfig } from '../../server-config';
 import { TooltipHelp } from '../tooltip-help';
 import { CutBox, cutBoxFromInstanceBounds, CutBoxOrthoView } from './cut-box-view';
 import {
-  frameShotCamera, readMdxExtents, usefulExtent, type ExtentBox, type ShotExtents,
+  type ExtentBox, frameReferenceCamera, frameShotCamera, readMdxExtents,
+  type ShotCameraReference, type ShotExtents, usefulExtent,
 } from './shot-frame';
 import { freezeShotPose, settleShotPose } from './shot-pose';
 
+declare global {
+  interface Window {
+    __shotView?: (name: string, reference?: ShotCameraReference) => string
+  }
+}
+
 interface ModelViewerProps {
+  onSequenceChange?: (index: number) => void
   modelPath?: string
   /** When unchanged across reloads (e.g. skin swap), orbit camera is preserved. */
   cameraSessionKey?: string
@@ -51,7 +53,7 @@ const MAX_DISTANCE = 2000000;
 const FAR_CLIP_PLANE = 100_000_000;
 
 export default function ModelViewerUi({
-  modelPath, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence,
+  modelPath, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence, onSequenceChange,
 }: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -673,6 +675,10 @@ export default function ModelViewerUi({
 
   const [progress, setProgress] = useState(0);
 
+  useEffect(() => {
+    if (sequences.length) onSequenceChange?.(currentSeq);
+  }, [currentSeq, sequences, onSequenceChange]);
+
   // Apply sequence when currentSeq updates.
   // setSequence rewinds frame to the interval start. A shot pose is settled once per instance.
   useEffect(() => {
@@ -680,11 +686,11 @@ export default function ModelViewerUi({
     const pose = shotPoseRef.current;
     const settled = Boolean(shot && inst && pose?.inst === inst && pose.seq === currentSeq);
     const bindShotView = (): void => {
-      window.__shotView = (name: string) => {
+      window.__shotView = (name: string, reference?: ShotCameraReference) => {
         const liveScene = sceneRef.current;
         const liveInst = instanceRef.current;
         if (!liveScene || !liveInst) return '';
-        applyShotView(liveScene, liveInst, name, shotExtentsRef.current);
+        applyShotView(liveScene, liveInst, name, shotExtentsRef.current, reference);
         document.documentElement.dataset.viewerView = name;
         return name;
       };
@@ -1204,11 +1210,16 @@ function shotExtentBox(extents: ShotExtents, inst: MdxModelInstance): ExtentBox 
 }
 
 /** Model faces +X. `left` looks from the model's left toward its right. */
-function applyShotView(scene: Scene, inst: MdxModelInstance, view: string, extents: ShotExtents | null): void {
+function applyShotView(scene: Scene, inst: MdxModelInstance, view: string, extents: ShotExtents | null, reference?: ShotCameraReference): void {
   const offset = shotViewOffset(view);
+  const topDown = view === 'top' || view === 'bottom';
+  if (reference && extents?.points.length) {
+    frameReferenceCamera(scene.camera, reference, extents.points);
+    return;
+  }
   const box = extents ? shotExtentBox(extents, inst) : null;
   if (box) {
-    frameShotCamera(scene.camera, box, offset, extents?.points);
+    frameShotCamera(scene.camera, box, offset, topDown ? undefined : extents?.points);
     return;
   }
   const bounds = inst.getBounds();

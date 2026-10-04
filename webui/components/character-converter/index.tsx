@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { Download } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { ReportForm } from '@/components/bug-reports/report-form';
 import { AttachItems } from '@/components/character-converter/attach-items';
 import { CharacterConfig } from '@/components/character-converter/character-config';
 import { ExportSection } from '@/components/character-converter/export-section';
@@ -85,6 +86,7 @@ export function CharacterConverter() {
   // Job/queue tracking
   const [jobStatus, setJobStatus] = useState<JobStatus | undefined>(undefined);
   const [viewerModelPath, setViewerModelPath] = useState<string | undefined>(undefined);
+  const [reportSequence, setReportSequence] = useState(0);
 
   useEffect(() => {
     const checkExportResult = async () => {
@@ -384,10 +386,13 @@ export function CharacterConverter() {
               </div>}
               {viewerModelPath && (
                 <div className="h-[600px] border-border">
-                  <ModelViewerUi key={`${viewerModelPath}:${doneCount}`} modelPath={viewerModelPath} />
+                  <ModelViewerUi key={`${viewerModelPath}:${doneCount}`} modelPath={viewerModelPath} onSequenceChange={setReportSequence} />
                 </div>
               )}
               {jobStatus?.result && <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {!serverConfig.isSharedHosting && jobStatus.status === 'done' && viewerModelPath && jobStatus.result.reportMetadata?.request.character.base.type === 'wowhead' && <div className="md:col-span-2">
+                  <ReportForm key={jobStatus.id} exportId={jobStatus.id} metadata={jobStatus.result.reportMetadata} modelPath={viewerModelPath} currentSequence={reportSequence} />
+                </div>}
                 <div>
                   <h4 className="font-semibold mb-2">Model Stats:</h4>
                   {[

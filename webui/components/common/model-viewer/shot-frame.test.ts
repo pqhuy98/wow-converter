@@ -1,9 +1,12 @@
 import Camera from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/camera';
 import { describe, expect, test } from 'bun:test';
-import { vec3, vec4 } from 'gl-matrix';
+import {
+  mat4, quat, vec3, vec4,
+} from 'gl-matrix';
 
 import {
-  frameShotCamera, readMdxExtents, SHOT_FILL, type ExtentBox, type ShotOffset,
+  type ExtentBox, frameReferenceCamera, frameShotCamera, readMdxExtents,
+  SHOT_FILL, type ShotCameraReference, type ShotOffset,
 } from './shot-frame';
 
 const FRONT: ShotOffset = [1, 0, 0, 0, 0, 1];
@@ -55,6 +58,79 @@ describe('shot framing', () => {
     expect(maxPoint).toBeGreaterThan(SHOT_FILL - 0.02);
     expect(maxPoint).toBeLessThanOrEqual(SHOT_FILL + 0.005);
     expect(maxCorner).toBeGreaterThan(1);
+  });
+
+  test('top view can look at a body center instead of the vertex hull', () => {
+    const box: ExtentBox = { min: [-40, -10, 0], max: [10, 10, 20] };
+    const camera = new Camera();
+    camera.perspective(Math.PI / 4, 640 / 400, 8, 1_000_000);
+    const lookAt = vec3.fromValues(0, 0, 10);
+    frameShotCamera(camera, box, TOP, undefined, lookAt);
+    expect(camera.location[0]).toBeCloseTo(0, 5);
+    expect(camera.location[1]).toBeCloseTo(0, 5);
+    expect(camera.location[2]).toBeGreaterThan(10);
+  });
+
+  test.each([
+    { name: 'front', offset: [0, 20, 0], up: [0, 0, 1] },
+    { name: 'back', offset: [0, -20, 0], up: [0, 0, 1] },
+    { name: 'left', offset: [-20, 0, 0], up: [0, 0, 1] },
+    { name: 'right', offset: [20, 0, 0], up: [0, 0, 1] },
+    { name: 'top', offset: [0, 0, 20], up: [0, 1, 0] },
+    { name: 'bottom', offset: [0, 0, -20], up: [0, 1, 0] },
+  ])('reference $name projects the mesh like the source camera', ({ offset, up }) => {
+    const modelMatrix = mat4.fromRotationTranslationScale(
+      mat4.create(),
+      quat.setAxisAngle(quat.create(), [0, 0, 1], Math.PI / 2),
+      [4, -3, 2],
+      [3, 3, 3],
+    );
+    const reference: ShotCameraReference = {
+      target: vec3.fromValues(1, 2, 8),
+      eye: vec3.fromValues(1 + offset[0], 2 + offset[1], 8 + offset[2]),
+      up: vec3.fromValues(up[0], up[1], up[2]),
+      modelMatrix,
+      height: 5,
+    };
+    const points = new Float32Array([-20, -40, 0, 20, 40, 100, 40, -20, 60]);
+    const camera = new Camera();
+    camera.perspective(Math.PI / 4, 640 / 400, 8, 1_000_000);
+    frameReferenceCamera(camera, reference, points);
+    const sourceView = mat4.lookAt(mat4.create(), reference.eye, reference.target, reference.up);
+    const sourceVP = mat4.multiply(mat4.create(), camera.projectionMatrix, sourceView);
+    for (let i = 0; i < points.length; i += 3) {
+      const sourcePoint = vec3.fromValues(points[i] / 20, points[i + 1] / 20, points[i + 2] / 20);
+      vec3.transformMat4(sourcePoint, sourcePoint, modelMatrix);
+      const sourceClip = vec4.transformMat4(vec4.create(), [sourcePoint[0], sourcePoint[1], sourcePoint[2], 1], sourceVP);
+      const converterClip = vec4.transformMat4(vec4.create(), [points[i], points[i + 1], points[i + 2], 1], camera.viewProjectionMatrix);
+      expect(converterClip[0] / converterClip[3]).toBeCloseTo(sourceClip[0] / sourceClip[3], 5);
+      expect(converterClip[1] / converterClip[3]).toBeCloseTo(sourceClip[1] / sourceClip[3], 5);
+    }
+  });
+
+  test('rejects a missing reference height instead of making a blank shot', () => {
+    const reference: ShotCameraReference = {
+      target: vec3.create(), eye: vec3.fromValues(0, 0, 10), up: vec3.fromValues(0, 1, 0), modelMatrix: mat4.create(), height: 0,
+    };
+    expect(() => frameReferenceCamera(new Camera(), reference, new Float32Array([0, 0, 0, 0, 0, 10]))).toThrow();
+  });
+
+  test('top is a true top-down with model forward toward the top of the frame', () => {
+    const box: ExtentBox = { min: [-10, -10, 0], max: [10, 10, 20] };
+    const camera = new Camera();
+    camera.perspective(Math.PI / 4, 640 / 400, 8, 1_000_000);
+    frameShotCamera(camera, box, TOP);
+    const clip = vec4.create();
+    const ndc = (x: number, y: number, z: number): [number, number] => {
+      vec4.set(clip, x, y, z, 1);
+      vec4.transformMat4(clip, clip, camera.viewProjectionMatrix);
+      return [clip[0] / clip[3], clip[1] / clip[3]];
+    };
+    const forward = ndc(10, 0, 10);
+    const crown = ndc(0, 0, 20);
+    expect(forward[1]).toBeGreaterThan(0);
+    expect(Math.abs(crown[0])).toBeLessThan(0.05);
+    expect(Math.abs(crown[1])).toBeLessThan(0.05);
   });
 });
 

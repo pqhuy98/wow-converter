@@ -152,6 +152,28 @@ func (q *JobQueue[T, V]) CancelJob(id string) bool {
 }
 
 // GetJob returns a job by ID.
+
+// CompletedResult also finds retained recent exports after the short status TTL.
+func (q *JobQueue[T, V]) CompletedResult(id string) *V {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if job := q.jobs[id]; job != nil && job.Status == JobDone {
+		return job.Result
+	}
+	for _, job := range q.RecentCompletedJobs {
+		if job.ID == id && job.Status == JobDone {
+			return job.Result
+		}
+	}
+	return nil
+}
+
+func (q *JobQueue[T, V]) OutstandingCount() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.activeJobs + len(q.pendingIndex)
+}
+
 func (q *JobQueue[T, V]) GetJob(id string) *Job[T, V] {
 	q.mu.Lock()
 	defer q.mu.Unlock()

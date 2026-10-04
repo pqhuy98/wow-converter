@@ -146,6 +146,11 @@ func registerSound(r Router, d *Deps) {
 			sendError(w, http.StatusBadRequest, "fileDataIDs must contain 1 to "+strconv.Itoa(maxSoundZipFiles)+" ids")
 			return
 		}
+		// Temporary: one file per zip. Delete this check to restore bulk zip (limit stays maxSoundZipFiles).
+		if len(body.FileDataIDs) > 1 {
+			sendError(w, http.StatusBadRequest, "zip is limited to one file")
+			return
+		}
 		_, nameByID, err := index.load(req, d)
 		if err != nil {
 			sendInternalError(w, err)

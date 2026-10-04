@@ -1,4 +1,4 @@
-import { vec3 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 /** The model fills this fraction of the limiting screen axis. */
 export const SHOT_FILL = 0.92;
@@ -19,12 +19,22 @@ export interface ShotExtents {
 export interface ShotCamera {
   fov: number
   nearClipPlane: number
-  readonly viewProjectionMatrix: Float32Array
+  readonly location: vec3
+  readonly viewProjectionMatrix: ArrayLike<number>
   moveToAndFace(from: vec3, to: vec3, worldUp: vec3): void
 }
 
 /** Direction from the target to the camera, then the camera's world up. */
 export type ShotOffset = readonly [number, number, number, number, number, number]
+
+/** Captured Wowhead camera, plus its model-to-world transform and unscaled mesh height. */
+export interface ShotCameraReference {
+  readonly target: vec3
+  readonly eye: vec3
+  readonly up: vec3
+  readonly modelMatrix: mat4
+  readonly height: number
+}
 
 const SEQUENCE_STRIDE = 132;
 const SEQUENCE_EXTENT = 104;
@@ -90,10 +100,10 @@ export function readMdxExtents(data: ArrayBuffer): ShotExtents {
  * Place the camera so the extent fills `SHOT_FILL` of the limiting axis.
  * Front/side views fit the silhouette; a top view fits the footprint.
  */
-export function frameShotCamera(camera: ShotCamera, box: ExtentBox, offset: ShotOffset, points?: Float32Array): void {
+export function frameShotCamera(camera: ShotCamera, box: ExtentBox, offset: ShotOffset, points?: Float32Array, lookAt?: vec3, fill = SHOT_FILL): void {
   const fitted = points && points.length >= 3 ? boundsOf(points) : box;
   const samples = points && points.length >= 3 ? points : boxCorners(box);
-  const target = vec3.fromValues(
+  const target = lookAt ?? vec3.fromValues(
     (fitted.min[0] + fitted.max[0]) / 2,
     (fitted.min[1] + fitted.max[1]) / 2,
     (fitted.min[2] + fitted.max[2]) / 2,
@@ -104,15 +114,41 @@ export function frameShotCamera(camera: ShotCamera, box: ExtentBox, offset: Shot
   const near = camera.nearClipPlane > 0 ? camera.nearClipPlane : 8;
   let lo = along / 2 + near + 1;
   let hi = Math.max(lo * 2, along * 4, 32);
-  for (let i = 0; i < 24 && maxAbsNdc(camera, target, offset, samples, hi) > SHOT_FILL; i++) {
+  for (let i = 0; i < 24 && maxAbsNdc(camera, target, offset, samples, hi) > fill; i++) {
     hi *= 1.7;
   }
   for (let i = 0; i < 28; i++) {
     const mid = (lo + hi) / 2;
-    if (maxAbsNdc(camera, target, offset, samples, mid) <= SHOT_FILL) hi = mid;
+    if (maxAbsNdc(camera, target, offset, samples, mid) <= fill) hi = mid;
     else lo = mid;
   }
   place(camera, target, offset, hi);
+}
+
+/** Transfer the reference camera through model space; leave the frozen mesh alone. */
+export function frameReferenceCamera(
+  camera: ShotCamera,
+  reference: ShotCameraReference,
+  points: Float32Array,
+): void {
+  const inverse = mat4.invert(mat4.create(), reference.modelMatrix);
+  const box = boundsOf(points);
+  const scale = (box.max[2] - box.min[2]) / reference.height;
+  if (!inverse || !Number.isFinite(scale) || scale <= 0 || vec3.distance(reference.eye, reference.target) <= 0) {
+    throw new Error('Invalid reference camera');
+  }
+  const target = vec3.transformMat4(vec3.create(), reference.target, inverse);
+  const eye = vec3.transformMat4(vec3.create(), reference.eye, inverse);
+  vec3.scale(target, target, scale);
+  vec3.scale(eye, eye, scale);
+  // Transform up as a direction, without the matrix translation.
+  const [x, y, z] = reference.up;
+  const up = vec3.normalize(vec3.create(), vec3.fromValues(
+    inverse[0] * x + inverse[4] * y + inverse[8] * z,
+    inverse[1] * x + inverse[5] * y + inverse[9] * z,
+    inverse[2] * x + inverse[6] * y + inverse[10] * z,
+  ));
+  camera.moveToAndFace(eye, target, up);
 }
 
 function readExtent(view: DataView, offset: number): ExtentBox {

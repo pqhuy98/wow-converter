@@ -20,6 +20,11 @@ func registerWebUI(root chiRouter, d *Deps, uiDir string) bool {
 	absUI, _ := filepath.Abs(uiDir)
 	fileServer := http.FileServer(http.Dir(absUI))
 	root.Get("/*", func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/bug-reports" || strings.HasPrefix(req.URL.Path, "/bug-reports/") {
+			w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
+			http.ServeFile(w, req, filepath.Join(absUI, "bug-reports.html"))
+			return
+		}
 		if strings.Contains(req.URL.Path, ".") {
 			fileServer.ServeHTTP(w, req)
 			return
@@ -42,6 +47,9 @@ func registerDevProxy(root chiRouter) {
 	// pass through this handler without a separate upgrade hook.
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Director = func(req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/bug-reports/") {
+			req.URL.Path = "/bug-reports"
+		}
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.Host = target.Host

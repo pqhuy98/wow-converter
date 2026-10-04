@@ -1,0 +1,130 @@
+package reportshot
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestShotArgsPreserveSingleAndMultipleViews(t *testing.T) {
+	for _, tc := range []struct {
+		source string
+		args   []string
+		want   []int
+	}{
+		{"converter", []string{`exported-assets\lich-king.mdx`, "--view", "front", "--seq", "Stand"}, []int{0}},
+		{"wowhead", []string{"https://www.wowhead.com/wotlk/npc=36597/the-lich-king", "--seq", "Stand", "--view", "bottom,back"}, []int{5, 2}},
+		{"converter", []string{"lich-king.mdx"}, []int{0, 1, 2, 3, 4, 5}},
+	} {
+		opts, err := parseShotArgs(tc.source, tc.args, io.Discard)
+		if err != nil || !reflect.DeepEqual(opts.indices, tc.want) {
+			t.Fatalf("%v: indices %v, error %v", tc.args, opts.indices, err)
+		}
+	}
+	for _, view := range []string{"unknown", "front,front"} {
+		if _, err := parseShotArgs("converter", []string{"x.mdx", "--view", view}, io.Discard); err == nil {
+			t.Fatalf("accepted invalid views %q", view)
+		}
+	}
+	if got := assetPath(`C:\models\exported-assets\folder\king.mdx`); got != "folder/king.mdx" {
+		t.Fatalf("asset path %q", got)
+	}
+	if got := groupViews([]int{5, 0}); !reflect.DeepEqual(got, [][]int{{0}, {5}}) {
+		t.Fatalf("capture groups %v", got)
+	}
+}
+
+// Uses a local page to prove that a CLI single-view shot does not shoot the other five.
+func TestShotCLISingleViewUsesServerCaptureAndLabel(t *testing.T) {
+	if os.Getenv("REPORT_SHOT_CLI_TEST") != "1" {
+		t.Skip("Set REPORT_SHOT_CLI_TEST=1 to exercise the CLI with the installed browser")
+	}
+	captures := make(chan string, 8)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/view" {
+			captures <- r.URL.Query().Get("name")
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, `<!doctype html><style>body{margin:0;background:rgb(38,38,38)}nextjs-portal{position:fixed;inset:0;background:lime}</style><canvas width="1440" height="900"></canvas><nextjs-portal></nextjs-portal><script>
+document.documentElement.dataset.viewerReady='1';document.documentElement.dataset.viewerSequence='Stand 1';
+window.__shotView=async name=>{const c=document.querySelector('canvas').getContext('2d');c.fillStyle='red';c.fillRect(400,200,400,500);await fetch('/view?name='+name);return name;};
+</script>`)
+	}))
+	defer server.Close()
+	out := t.TempDir()
+	if err := runCLI("converter", []string{"fake.mdx", "--seq", "Stand", "--view", "front", "--base", server.URL, "--out", out}); err != nil {
+		t.Fatal(err)
+	}
+	if len(captures) != 1 || <-captures != "front" {
+		t.Fatal("single-view capture shot an unexpected view")
+	}
+	files, err := os.ReadDir(out)
+	if err != nil || len(files) != 1 || files[0].Name() != "fake-Stand 1-front.png" {
+		t.Fatalf("output %v, error %v", files, err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, files[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil || img.Bounds() != image.Rect(0, 0, 1440, 900) {
+		t.Fatalf("invalid shot: %v", err)
+	}
+	r, g, b, _ := img.At(500, 300).RGBA()
+	if r != 65535 || g != 0 || b != 0 {
+		t.Fatal("development overlay covered the model")
+	}
+	label := tileMask(img, image.Point{}, 64, 26)
+	if !strings.Contains(string(label), string([]byte{1})) {
+		t.Fatal("single-view shot has no label")
+	}
+}
+
+func TestStandaloneWowheadMissingAimDoesNotWait(t *testing.T) {
+	opts := shotOptions{request: Request{WowheadURL: "https://www.wowhead.com/npc=36597/the-lich-king", WowSequence: "Stand"}, indices: []int{0}, out: t.TempDir()}
+	if err := loadConverterAims(&opts); err != nil || opts.request.aims[0] != nil {
+		t.Fatalf("missing aim must remain nil: %v", err)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 640, 400))
+	draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{38, 38, 38, 255}), image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(200, 100, 400, 300), image.NewUniform(color.RGBA{255, 0, 0, 255}), image.Point{}, draw.Src)
+	data, _ := encodePNG(img)
+	if err := os.WriteFile(filepath.Join(opts.out, "the-lich-king-Stand-01-front-converter.png"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := loadConverterAims(&opts); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case aim := <-opts.request.aims[0]:
+		if aim.CX < 0.45 || aim.CX > 0.5 || aim.CY < 0.48 || aim.CY > 0.51 {
+			t.Fatalf("legacy converter aim %+v", aim)
+		}
+	default:
+		t.Fatal("missing legacy aim")
+	}
+}
+
+func TestFreshLichKingExportFailureDoesNotReuseOldAssets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{"id": "failed", "status": "failed", "error": "export failed"})
+	}))
+	defer server.Close()
+	request, err := exportLichKing(context.Background(), server.URL)
+	if err == nil || request.Model != "" {
+		t.Fatalf("reused a model after failed export: %+v %v", request, err)
+	}
+}
