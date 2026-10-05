@@ -88,6 +88,8 @@ func AnimationToString(typeName string, animation *Animation) string {
 			b.WriteString(FVal(v))
 		case int:
 			b.WriteString(FVal(float64(v)))
+		case *Texture:
+			b.WriteString(FVal(float64(v.ID)))
 		default:
 			if arr, ok := value.([]float64); ok {
 				b.WriteString("{ ")

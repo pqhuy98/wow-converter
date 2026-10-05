@@ -123,6 +123,9 @@ func (f *File) getGlobalSeq(id int) *components.GlobalSequence {
 		return gs
 	}
 	created := components.NewGlobalSequence(id, 1)
+	if id >= 0 && id < len(f.globalLoops) {
+		created.Duration = int(f.globalLoops[id])
+	}
 	gs := &created
 	f.globalSequenceMap[id] = gs
 	if f.mdl != nil {
@@ -224,6 +227,35 @@ func (f *File) buildTextureAnims() []components.TextureAnim {
 	}
 	f.mdl.TextureAnims = anims
 	return anims
+}
+
+// TextureWeight returns the native unit weight on the same timeline as bones
+// and UV tracks. Missing weights are neutral, rather than hiding the surface.
+func (f *File) TextureWeight(combo int) components.AnimatedOrStatic[float64] {
+	neutral := components.AnimatedOrStatic[float64]{Static: true, Value: 1}
+	if combo < 0 || combo >= len(f.transparencyLookup) {
+		return neutral
+	}
+	index := int(f.transparencyLookup[combo])
+	if index >= len(f.textureWeights) {
+		return neutral
+	}
+	track := f.textureWeights[index]
+	hasValue := false
+	for _, row := range track.Values {
+		for _, value := range row {
+			hasValue = hasValue || len(value) > 0
+		}
+	}
+	if !hasValue {
+		return neutral
+	}
+	return f.m2trackToAnimationOrStaticFloat(track, components.AnimTypeAlpha, func(v []float64) any {
+		if len(v) == 0 {
+			return float64(1)
+		}
+		return v[0] / 32767
+	})
 }
 
 func textureTransformIndex(lookup []int, comboIndex, layerIndex int) int {

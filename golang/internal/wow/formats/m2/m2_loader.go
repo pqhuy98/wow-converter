@@ -71,7 +71,8 @@ type Loader struct {
 	RibbonEmitters          []RibbonEmitterEntry
 	ParticleEmitters        []ParticleEmitterEntry
 	Colors                  []ColorEntry
-	TextureWeights          []any
+	TextureWeights          []Track
+	GlobalLoops             []uint32
 
 	getFile func(ctx context.Context, fileDataID uint32) ([]byte, error)
 }
@@ -182,7 +183,14 @@ func (l *Loader) parseChunkMD21() error {
 	l.MD21Ofs = ofs
 	l.parseMD21ModelName(ofs)
 	l.Flags = readU32(l.Data)
-	l.Data.Move(8) // globalLoops
+	loopCount, loopOffset := int(readU32(l.Data)), int(readU32(l.Data))
+	loopBase := l.Data.Offset()
+	l.Data.Seek(ofs + loopOffset)
+	l.GlobalLoops = make([]uint32, loopCount)
+	for i := range l.GlobalLoops {
+		l.GlobalLoops[i] = readU32(l.Data)
+	}
+	l.Data.Seek(loopBase)
 	l.parseMD21Animations(ofs)
 	l.Data.Move(8) // animationLookup
 	l.parseMD21Bones(ofs, false)
@@ -466,9 +474,13 @@ func (l *Loader) parseMD21Textures(ofs int) {
 func (l *Loader) parseMD21TextureWeights(ofs int) {
 	count := int(readU32(l.Data))
 	tableOfs := int(readU32(l.Data))
-	_ = count
-	_ = tableOfs
-	_ = ofs
+	base := l.Data.Offset()
+	l.Data.Seek(tableOfs + ofs)
+	l.TextureWeights = make([]Track, count)
+	for i := range l.TextureWeights {
+		l.TextureWeights[i] = ReadM2Track(l.Data, ofs, TrackInt16, nil)
+	}
+	l.Data.Seek(base)
 }
 
 func (l *Loader) parseMD21TextureTransforms(ofs int) {
@@ -721,9 +733,9 @@ func (l *Loader) parseMD21ParticleEmitters(ofs int) {
 		entry.BlendingType = uint8(l.Data.ReadUInt8().(int64))
 		entry.EmitterType = uint8(l.Data.ReadUInt8().(int64))
 		entry.ParticleColorIndex = readU16(l.Data)
-		_ = l.Data.ReadUInt8().(int64) // multiTextureParamX0
-		_ = l.Data.ReadUInt8().(int64) // multiTextureParamX1
-		_ = readU16(l.Data)            // textureTileRotation / priorityPlane
+		entry.MultiTextureScale[0] = float32(l.Data.ReadUInt8().(int64)) / 32
+		entry.MultiTextureScale[1] = float32(l.Data.ReadUInt8().(int64)) / 32
+		_ = readU16(l.Data) // textureTileRotation / priorityPlane
 		entry.TextureRows = readU16(l.Data)
 		entry.TextureCols = readU16(l.Data)
 		entry.EmissionSpeed = ReadM2Track(l.Data, ofs, TrackFloat, nil)
@@ -767,20 +779,33 @@ func (l *Loader) parseMD21ParticleEmitters(ofs int) {
 		_ = readU32(l.Data)                // splinePointsCount
 		_ = readU32(l.Data)                // splinePointsOfs
 		entry.EnabledIn = ReadM2Track(l.Data, ofs, TrackUint8, nil)
-		tryReadParticleMultiTextureParams(l.Data)
+		readParticleMultiTextureParams(l.Data, &entry)
 		l.ParticleEmitters[i] = entry
 	}
 	l.Data.Seek(base)
 }
 
-func tryReadParticleMultiTextureParams(data *buffer.Buffer) {
+func readParticleMultiTextureParams(data *buffer.Buffer, entry *ParticleEmitterEntry) {
 	defer func() {
 		_ = recover()
 	}()
-	_ = readFp69Vec2(data)
-	_ = readFp69Vec2(data)
-	_ = readFp69Vec2(data)
-	_ = readFp69Vec2(data)
+	read := func() [2]float32 {
+		var v [2]float32
+		for k := range 2 {
+			raw := readU16(data)
+			v[k] = float32(raw&0x7fff) / 512
+			if raw&0x8000 != 0 {
+				v[k] = -v[k]
+			}
+		}
+		return v
+	}
+	for k := range 2 {
+		entry.MultiTextureScrollMid[k] = read()
+	}
+	for k := range 2 {
+		entry.MultiTextureScrollRange[k] = read()
+	}
 }
 
 func readU32(b *buffer.Buffer) uint32 { return uint32(b.ReadUInt32LE().(int64)) }

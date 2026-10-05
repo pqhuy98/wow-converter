@@ -21,7 +21,7 @@ import { isAllowedCorsOrigin } from './utils/cors';
 
 function listenHost(): string {
   if (process.env.HOST) return process.env.HOST;
-  return isSharedHosting ? '0.0.0.0' : '127.0.0.1';
+  return isSharedHosting || isDev ? '0.0.0.0' : '127.0.0.1';
 }
 
 function resolveUiDir(): string {

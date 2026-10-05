@@ -723,7 +723,7 @@ export class M2Loader {
         const x = this.data.readUInt16LE();
         const y = this.data.readUInt16LE();
         // fp_6_9 approx: divide by 2^9
-        return [x / 512.0, y / 512.0];
+        return [(x & 0x7fff) / 512 * (x & 0x8000 ? -1 : 1), (y & 0x7fff) / 512 * (y & 0x8000 ? -1 : 1)];
       };
       let multiTextureParam0: number[][] | null = null;
       let multiTextureParam1: number[][] | null = null;
@@ -1113,7 +1113,7 @@ export class M2Loader {
     const base = this.data.offset;
     this.data.seek(globalLoopOfs + ofs);
 
-    this.globalLoops = this.data.readInt16LE(globalLoopCount);
+    this.globalLoops = this.data.readUInt32LE(globalLoopCount);
 
     this.data.seek(base);
   }

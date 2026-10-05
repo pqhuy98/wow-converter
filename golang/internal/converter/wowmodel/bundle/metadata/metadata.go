@@ -31,6 +31,9 @@ type File struct {
 	textureCombos           []int
 	textureTransforms       []map[string]any
 	textureTransformsLookup []int
+	transparencyLookup      []uint16
+	textureWeights          []m2.Track
+	globalLoops             []uint32
 	m2Animations            []m2AnimMeta
 	colors                  []map[string]any
 	cameras                 []m2.CameraEntry
@@ -70,12 +73,15 @@ type subMeshMeta struct {
 }
 
 type textureUnitMeta struct {
+	Flags                      int `json:"flags"`
+	Priority                   int `json:"priority"`
 	ShaderID                   int `json:"shaderID"`
 	SkinSectionIndex           int `json:"skinSectionIndex"`
 	MaterialIndex              int `json:"materialIndex"`
 	TextureCount               int `json:"textureCount"`
 	TextureComboIndex          int `json:"textureComboIndex"`
 	TextureTransformComboIndex int `json:"textureTransformComboIndex"`
+	TextureWeightComboIndex    int `json:"textureWeightComboIndex"`
 	ColorIndex                 int `json:"colorIndex"`
 }
 
@@ -171,6 +177,9 @@ func (f *File) LoadFromData(data map[string]any) {
 	loadJSONField(data, "lights", &f.lights)
 	loadJSONField(data, "ribbonEmitters", &f.ribbonEmitters)
 	loadJSONField(data, "particleEmitters", &f.particleEmitters)
+	loadJSONField(data, "transparencyLookup", &f.transparencyLookup)
+	loadJSONField(data, "textureWeights", &f.textureWeights)
+	loadJSONField(data, "globalLoops", &f.globalLoops)
 	f.IsLoaded = true
 }
 
@@ -336,7 +345,7 @@ func (f *File) ExtractMDLTexturesMaterials() ExtractResult {
 		material := f.materials[tu.MaterialIndex]
 		twoSided := material.Flags&0x04 > 0
 		if _, ok := submeshMaterials[submeshID]; !ok {
-			submeshMaterials[submeshID] = &components.Material{TwoSided: twoSided}
+			submeshMaterials[submeshID] = &components.Material{TwoSided: twoSided, PriorityPlane: tu.Priority}
 		}
 		layers := &submeshMaterials[submeshID].Layers
 		textureCount := tu.TextureCount
@@ -361,9 +370,12 @@ func (f *File) ExtractMDLTexturesMaterials() ExtractResult {
 				continue
 			}
 			alpha := components.AnimatedOrStatic[float64]{Static: true, Value: 1}
+			if tu.Flags&0x40 == 0 {
+				alpha = f.TextureWeight(tu.TextureWeightComboIndex)
+			}
 			layer := components.Layer{
 				Texture: &textures[textureID], FilterMode: *filterMode, Alpha: alpha,
-				Unlit: material.Flags&0x01 > 0, Unfogged: material.Flags&0x02 > 0,
+				Unlit: material.Flags&0x01 > 0, Unshaded: material.Flags&0x01 > 0, Unfogged: material.Flags&0x02 > 0,
 				TwoSided: material.Flags&0x04 > 0, NoDepthTest: material.Flags&0x08 > 0,
 				NoDepthSet: material.Flags&0x10 > 0,
 			}

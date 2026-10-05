@@ -25,10 +25,10 @@ import (
 	directwmo "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/direct/wmo"
 	"github.com/pqhuy98/wow-converter/internal/formats/blp"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
-	m2export "github.com/pqhuy98/wow-converter/internal/wow/export/m2"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
+	m2export "github.com/pqhuy98/wow-converter/internal/wow/export/m2"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
@@ -322,12 +322,13 @@ func (a *AssetManager) ExportModels(assetPath string) error {
 }
 
 type blpConvertItem struct {
-	pngPath  string
-	pngData  []byte
-	rawBLP   []byte
-	resizeTo *blp.Size
-	opaque   bool
-	outPath  string
+	pngPath       string
+	pngData       []byte
+	rawBLP        []byte
+	resizeTo      *blp.Size
+	opaque        bool
+	preserveAlpha bool
+	outPath       string
 }
 
 type texturePrepResult struct {
@@ -399,11 +400,11 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 				}
 				switch {
 				case len(item.rawBLP) > 0:
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "blp2", Data: item.rawBLP, ResizeTo: item.resizeTo, Opaque: item.opaque}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "blp2", Data: item.rawBLP, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha}, item.outPath); err != nil {
 						return err
 					}
 				case len(item.pngData) > 0:
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: item.pngData, ResizeTo: item.resizeTo, Opaque: item.opaque}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: item.pngData, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha}, item.outPath); err != nil {
 						return err
 					}
 				case item.pngPath != "":
@@ -411,7 +412,7 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 					if err != nil {
 						return nil
 					}
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: data, ResizeTo: item.resizeTo, Opaque: item.opaque}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: data, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha}, item.outPath); err != nil {
 						return err
 					}
 				default:
@@ -483,7 +484,7 @@ func (a *AssetManager) prepTextureForExport(rel, assetPath string) texturePrepRe
 		resizeTo = &blp.Size{Width: targetW, Height: targetH}
 	}
 
-	item := blpConvertItem{outPath: outPath, resizeTo: resizeTo, opaque: hasSource && source.Opaque}
+	item := blpConvertItem{outPath: outPath, resizeTo: resizeTo, opaque: hasSource && source.Opaque, preserveAlpha: hasSource && source.PreserveAlpha}
 	switch {
 	case hasSource && source.Kind == texturesource.KindBLP && a.wowClient != nil:
 		raw, err := a.wowClient.DownloadCascFile(context.Background(), source.FileDataID)

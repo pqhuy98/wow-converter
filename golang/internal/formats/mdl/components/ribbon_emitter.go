@@ -19,6 +19,7 @@ type RibbonEmitter struct {
 	Rows         int
 	Columns      int
 	MaterialID   int
+	Material     *Material
 	Gravity      float64
 }
 

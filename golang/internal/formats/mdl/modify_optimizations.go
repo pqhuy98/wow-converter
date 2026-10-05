@@ -46,6 +46,17 @@ func (mod *Modify) RemoveUnusedMaterialsTextures() *Modify {
 		seenGeosetMat[geoset.Material] = struct{}{}
 		geosetMaterials = append(geosetMaterials, geoset.Material)
 	}
+	for _, ribbon := range mod.MDL.RibbonEmitters {
+		if ribbon.Material == nil && ribbon.MaterialID >= 0 && ribbon.MaterialID < len(mod.MDL.Materials) {
+			ribbon.Material = mod.MDL.Materials[ribbon.MaterialID]
+		}
+		if ribbon.Material != nil {
+			if _, ok := seenGeosetMat[ribbon.Material]; !ok {
+				seenGeosetMat[ribbon.Material] = struct{}{}
+				geosetMaterials = append(geosetMaterials, ribbon.Material)
+			}
+		}
+	}
 
 	for i := range mod.MDL.TextureAnims {
 		mod.MDL.TextureAnims[i].ID = i
@@ -83,6 +94,13 @@ func (mod *Modify) RemoveUnusedMaterialsTextures() *Modify {
 				log.Printf("%s", ansi.Redf("Empty texture, i: %d, wow type: %d", i, layer.Texture.WowData.Type))
 			}
 			layer.Texture = getTexture(layer.Texture)
+			if layer.TextureIDAnim != nil {
+				for time, value := range layer.TextureIDAnim.KeyFrames {
+					if texture, ok := value.(*components.Texture); ok {
+						layer.TextureIDAnim.KeyFrames[time] = getTexture(texture)
+					}
+				}
+			}
 			canonicalTextureAnim(&layer.TVertexAnim)
 		}
 	}
@@ -117,6 +135,18 @@ func (mod *Modify) RemoveUnusedMaterialsTextures() *Modify {
 		}
 		usedMaterials[key] = geoset.Material
 		materialOrder = append(materialOrder, key)
+	}
+	for _, ribbon := range mod.MDL.RibbonEmitters {
+		if ribbon.Material == nil {
+			continue
+		}
+		key := materialKey(*ribbon.Material)
+		if existing, ok := usedMaterials[key]; ok {
+			ribbon.Material = existing
+		} else {
+			usedMaterials[key] = ribbon.Material
+			materialOrder = append(materialOrder, key)
+		}
 	}
 	materials := make([]*components.Material, 0, len(materialOrder))
 	for _, key := range materialOrder {

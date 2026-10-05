@@ -22,6 +22,8 @@ type Source struct {
 	// Opaque forces alpha to 255 before BLP1 quantization. Set for WMO
 	// materials whose blend mode does not use texture alpha.
 	Opaque bool
+	// PreserveAlpha keeps intentionally empty shader output transparent.
+	PreserveAlpha bool
 }
 
 var (

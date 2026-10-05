@@ -6,6 +6,7 @@ import (
 
 // Config mirrors src/lib/global-config.ts Config.
 type Config struct {
+	TextureBaking                      TextureBakingOptions
 	ExportAssetDir                     string
 	AssetPrefix                        string
 	RawModelScaleUp                    float64
@@ -15,6 +16,12 @@ type Config struct {
 	InfiniteExtentBoundRadiusThreshold float64
 	IsBulkExport                       bool
 	MaxTextureSize                     int
+}
+
+// TextureBakingOptions is request-scoped; zero values retain the compact default.
+type TextureBakingOptions struct {
+	FPS      int `json:"fps,omitempty"`
+	WindowMS int `json:"windowMS,omitempty"`
 }
 
 // DefaultConfig returns converter defaults (asset dir from env or repo .cache/wow-export).

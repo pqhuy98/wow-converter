@@ -80,6 +80,25 @@ func validateExportCharacterShape(raw map[string]any) []string {
 	}
 	validateOptionalBool(raw, "isBrowse", &issues)
 	validateOptionalString(raw, "skinId", &issues)
+	if value, exists := raw["textureBaking"]; exists {
+		options, ok := value.(map[string]any)
+		if !ok {
+			issues = append(issues, "textureBaking must be an object")
+		} else {
+			for _, setting := range []struct {
+				field string
+				limit int
+			}{{"fps", 60}, {"windowMS", 60000}} {
+				field, limit := setting.field, setting.limit
+				if value, exists := options[field]; exists {
+					number, ok := value.(float64)
+					if !ok || number < 1 || number > float64(limit) || number != float64(int(number)) {
+						issues = append(issues, fmt.Sprintf("textureBaking.%s must be an integer from 1 to %d", field, limit))
+					}
+				}
+			}
+		}
+	}
 	validateExportOptimization(raw["optimization"], &issues)
 	validateCharacterObject(raw["character"], "character", &issues)
 	return issues

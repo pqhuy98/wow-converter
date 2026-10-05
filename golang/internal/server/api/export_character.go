@@ -29,8 +29,9 @@ import (
 )
 
 type exportCharacterRequest struct {
-	Character      character.Character `json:"character"`
-	OutputFileName string              `json:"outputFileName"`
+	TextureBaking  config.TextureBakingOptions `json:"textureBaking,omitempty"`
+	Character      character.Character         `json:"character"`
+	OutputFileName string                      `json:"outputFileName"`
 	Optimization   struct {
 		SortSequences                 *bool  `json:"sortSequences"`
 		AllMaterialsUnshaded          *bool  `json:"allMaterialsUnshaded"`
@@ -67,7 +68,10 @@ type exportCharacterJobStatus struct {
 func registerExportCharacter(r Router, d *Deps) {
 	exportlog.Install()
 
-	timeout := 5 * time.Minute
+	// Local shader baking can legitimately exceed five minutes. Match the
+	// export pipeline's own deadline so the queue does not report failure and
+	// launch retries while the original conversion is still running.
+	timeout := 20 * time.Minute
 	if d.Config.IsSharedHosting {
 		timeout = 2 * time.Minute
 	}
@@ -295,6 +299,7 @@ func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (expo
 	log.Printf("Start exporting %s: %s", req.OutputFileName, ansi.Gray(string(requestJSON)))
 
 	cfg := config.DefaultConfig()
+	cfg.TextureBaking = req.TextureBaking
 	cfg.MDX = req.Format == "mdx"
 	if req.Optimization.MaxTextureSize != "" {
 		switch req.Optimization.MaxTextureSize {

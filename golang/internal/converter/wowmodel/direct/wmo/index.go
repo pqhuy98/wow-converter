@@ -3,6 +3,7 @@ package directwmo
 import (
 	"context"
 	"fmt"
+	"image"
 	"log"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/converter/wowmodel/bundle/mtl"
 	objpkg "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/bundle/obj"
 	directm2 "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/direct/m2"
+	"github.com/pqhuy98/wow-converter/internal/formats/blp"
 	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/wmo"
@@ -69,18 +71,26 @@ func wmoDiffuseFileID(material wmo.Material) uint32 {
 
 func exportTextureSlots(material wmo.Material) []uint32 {
 	slots := []uint32{material.Texture1, material.Texture2, material.Texture3}
-	if material.Shader == 23 {
-		slots = append(slots, material.Flags3, material.Color3,
-			material.RuntimeData[0], material.RuntimeData[1], material.RuntimeData[2], material.RuntimeData[3])
+	if material.Shader == 22 || material.Shader == 23 {
+		slots = append(slots, material.Flags3, material.Color3)
+		count := 1
+		if material.Shader == 23 {
+			count = 4
+		}
+		slots = append(slots, material.RuntimeData[:min(count, len(material.RuntimeData))]...)
 	}
 	return slots
 }
 
 func metaTextureSlots(material wmo.Material) []uint32 {
 	slots := []uint32{material.Texture1, material.Texture2, material.Texture3}
-	if material.Shader == 23 {
-		slots = append(slots, material.Color3, material.Flags3,
-			material.RuntimeData[0], material.RuntimeData[1], material.RuntimeData[2], material.RuntimeData[3])
+	if material.Shader == 22 || material.Shader == 23 {
+		slots = append(slots, material.Color3, material.Flags3)
+		count := 1
+		if material.Shader == 23 {
+			count = 4
+		}
+		slots = append(slots, material.RuntimeData[:min(count, len(material.RuntimeData))]...)
 	}
 	return slots
 }
@@ -387,7 +397,91 @@ func ConvertWmoToMdl(ctx context.Context, cfg config.Config, src directm2.FileSo
 		Metadata:    meta,
 	}, cfg)
 
-	return directm2.ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths}, nil
+	result := directm2.ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths}
+	if err := bakeWmoMaterials(ctx, cfg, src, root, allGroups, &result); err != nil {
+		return directm2.ConvertResult{}, err
+	}
+	return result, nil
+}
+
+func bakeWmoMaterials(ctx context.Context, cfg config.Config, src directm2.FileSource, root *wmo.Loader, groups []*wmo.Loader, result *directm2.ConvertResult) error {
+	decoded := map[int]*image.NRGBA{}
+	originals := append(result.MDL.Geosets[:0:0], result.MDL.Geosets...)
+	gi := 0
+	for _, group := range groups {
+		for _, batch := range group.RenderBatches {
+			if batch.NumFaces < 3 {
+				continue
+			}
+			if gi >= len(originals) {
+				return fmt.Errorf("WMO batch geometry is missing")
+			}
+			g := originals[gi]
+			gi++
+			matID := int(batch.MaterialID)
+			if batch.Flags&2 != 0 && len(batch.PossibleBox2) > 2 {
+				matID = int(batch.PossibleBox2[2])
+			}
+			if matID >= len(root.Materials) {
+				return fmt.Errorf("WMO material %d out of range", matID)
+			}
+			material := root.Materials[matID]
+			count, err := directm2.WMOShaderSamplerCount(material.Shader)
+			if err != nil {
+				return err
+			}
+			if g.Material == nil || len(g.Material.Layers) == 0 {
+				continue
+			}
+			var speed [4]float32
+			if matID < len(root.MaterialUVSpeed) {
+				speed = root.MaterialUVSpeed[matID]
+			}
+			if count == 1 && len(group.VertexColours) == 0 && speed == [4]float32{} && material.BlendMode <= 3 {
+				g.Material.Layers[0].Unshaded = material.Flags&1 != 0
+				continue
+			}
+			var images [9]*image.NRGBA
+			slots := metaTextureSlots(material)
+			for sampler := range count {
+				if sampler >= len(slots) || slots[sampler] == 0 {
+					continue
+				}
+				id := int(slots[sampler])
+				if root.TextureNames != nil {
+					var found bool
+					id, found = archivecasc.GetByFilename(root.TextureNames[id])
+					if !found {
+						continue
+					}
+				}
+				img := decoded[id]
+				if img == nil {
+					raw, err := src.GetRawFile(ctx, id)
+					if err != nil {
+						return fmt.Errorf("WMO texture %d: %w", id, err)
+					}
+					texture, err := blp.NewBLPImage(buffer.From(raw))
+					if err != nil {
+						return err
+					}
+					pixels, err := texture.ToUInt8Array(0, 15)
+					if err != nil {
+						return err
+					}
+					img = image.NewNRGBA(image.Rect(0, 0, int(texture.Width), int(texture.Height)))
+					copy(img.Pix, pixels)
+					decoded[id] = img
+				}
+				images[sampler] = img
+			}
+			if err := directm2.BakeWMOMaterial(ctx, cfg, result, g, group, batch, material, images, speed); err != nil {
+				return err
+			}
+		}
+	}
+	result.MDL.Sync()
+	return nil
 }
 
 func relPath(base, target string) string {

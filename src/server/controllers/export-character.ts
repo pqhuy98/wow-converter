@@ -24,6 +24,12 @@ import { startupRequests } from './export-character.startup';
 
 export const ExporCharacterRequestSchema = z.object({
   character: CharacterSchema,
+  textureBaking: z.object({
+    fps: z.number().int().min(1).max(60)
+      .optional(),
+    windowMS: z.number().int().min(1).max(60000)
+      .optional(),
+  }).optional(),
   outputFileName: LocalRefValueSchema,
   optimization: z.object({
     sortSequences: z.boolean().optional().default(true),

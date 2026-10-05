@@ -2,6 +2,26 @@ package api
 
 import "testing"
 
+func TestTextureBakingRequestOptions(t *testing.T) {
+	for _, fps := range []float64{12, 21, 30} {
+		for _, window := range []float64{4000, 12000} {
+			raw := validExportCharacterBody()
+			raw["textureBaking"] = map[string]any{"fps": fps, "windowMS": window}
+			body, issues := parseExportCharacterRequest(raw)
+			if len(issues) > 0 || body.TextureBaking.FPS != int(fps) || body.TextureBaking.WindowMS != int(window) {
+				t.Fatalf("request settings lost: %+v %v", body.TextureBaking, issues)
+			}
+		}
+	}
+	for _, value := range []any{nil, "12", map[string]any{"fps": 0.0}, map[string]any{"fps": 21.5}, map[string]any{"windowMS": 60001.0}} {
+		raw := validExportCharacterBody()
+		raw["textureBaking"] = value
+		if _, issues := parseExportCharacterRequest(raw); len(issues) == 0 {
+			t.Fatalf("accepted invalid settings: %v", value)
+		}
+	}
+}
+
 func validExportCharacterBody() map[string]any {
 	return map[string]any{
 		"character": map[string]any{

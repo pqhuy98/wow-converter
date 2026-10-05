@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"log"
 	stdpng "image/png"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -29,7 +29,8 @@ type EncodeInput struct {
 	// Opaque keeps RGB on pixels whose source alpha is 0. WMO blend mode 0
 	// stores the albedo that way; the quantizer otherwise builds its palette
 	// only from visible pixels and the surface goes black.
-	Opaque bool
+	Opaque        bool
+	PreserveAlpha bool
 }
 
 // Size holds width and height dimensions.
@@ -70,7 +71,7 @@ func ConvertTextureToBlp(input EncodeInput, blpPath string) error {
 		}
 		pngData = forced
 	}
-	return ConvertPngToBlp(pngData, blpPath)
+	return convertPngToBlp(pngData, blpPath, input.PreserveAlpha)
 }
 
 // forcePNGOpaque sets every pixel alpha to 255 so zero-alpha RGB survives quantization.
@@ -88,9 +89,17 @@ func forcePNGOpaque(pngData []byte) ([]byte, error) {
 // ConvertPngToBlp converts PNG bytes to a BLP1 file using the native C++ encoder
 // when CGO is enabled, otherwise the Go JS-fallback path.
 func ConvertPngToBlp(pngBufferOriginal []byte, blpPath string) error {
-	pngBuffer, err := EnsureOpaqueIfAllAlphaZero(pngBufferOriginal)
-	if err != nil {
-		return err
+	return convertPngToBlp(pngBufferOriginal, blpPath, false)
+}
+
+func convertPngToBlp(pngBufferOriginal []byte, blpPath string, preserveAlpha bool) error {
+	pngBuffer := pngBufferOriginal
+	if !preserveAlpha {
+		var err error
+		pngBuffer, err = EnsureOpaqueIfAllAlphaZero(pngBufferOriginal)
+		if err != nil {
+			return err
+		}
 	}
 	if NativeEncoderAvailable() {
 		if err := encodeNative(pngBuffer, blpPath); err != nil {

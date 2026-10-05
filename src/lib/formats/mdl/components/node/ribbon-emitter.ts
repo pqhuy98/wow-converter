@@ -4,6 +4,7 @@ import {
   animatedValueToString, Animation, AnimationOrStatic, animationToString,
 } from '../animation';
 import { f } from '../formatter';
+import { Material } from '../material';
 import { Node, nodeAnimations, nodeHeaders } from './node';
 
 export interface RibbonEmitter extends Node {
@@ -23,6 +24,7 @@ export interface RibbonEmitter extends Node {
   rows: number;
   columns: number;
   materialId: number;
+  material?: Material;
   gravity: number;
 }
 
@@ -44,7 +46,7 @@ export function ribbonEmittersToString(ribbons: RibbonEmitter[]): string {
       ${e.gravity !== 0 ? `Gravity ${f(e.gravity)},` : ''}
       Rows ${e.rows},
       Columns ${e.columns},
-      MaterialID ${e.materialId},
+      MaterialID ${e.material?.id ?? e.materialId},
 
       ${nodeAnimations(e)}
     }`).join('\n');

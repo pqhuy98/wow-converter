@@ -346,7 +346,9 @@ export class M2MetadataFile {
 
   colors: Data.Color[];
 
-  textureWeights: Data.M2Track<number>;
+  textureWeights: Data.M2Track<number>[];
+
+  globalLoops?: number[];
 
   transparencyLookup: number[];
 
@@ -458,7 +460,7 @@ export class M2MetadataFile {
   private getGlobalSeq(id: number) {
     if (!this.globalSequenceMap.has(id)) {
       const newGs: GlobalSequence = {
-        id, duration: 1,
+        id, duration: this.globalLoops?.[id] ?? 1,
       };
       this.globalSequenceMap.set(id, newGs);
       this.mdl.globalSequences.push(newGs);
@@ -694,6 +696,7 @@ export class M2MetadataFile {
       if (!submeshMaterials.has(submeshId)) {
         submeshMaterials.set(submeshId, {
           id: 0,
+          priorityPlane: tu.priority,
           constantColor: false,
           twoSided,
           layers: [],
@@ -744,17 +747,16 @@ export class M2MetadataFile {
           tvertexAnim: textAnimId !== BlizzardNull ? textureAnims[textAnimId] : undefined,
 
           // https://wowdev.wiki/M2#Render_flags_and_blending_modes
-          unshaded: false,
+          unshaded: (material.flags & 0x01) > 0,
           sphereEnvMap: false,
           unlit: (material.flags & 0x01) > 0,
           unfogged: (material.flags & 0x02) > 0,
           twoSided: (material.flags & 0x04) > 0,
           noDepthTest: (material.flags & 0x08) > 0,
           noDepthSet: (material.flags & 0x10) > 0,
-          alpha: {
-            static: true,
-            value: 1,
-          },
+          alpha: !(tu.flags & 0x40) && this.textureWeights?.[this.transparencyLookup?.[tu.textureWeightComboIndex]]?.values?.some((row) => row.length > 0)
+            ? this.m2trackToAnimationOrStatic(this.textureWeights[this.transparencyLookup[tu.textureWeightComboIndex]], 'alpha', (v) => v / 32767) ?? { static: true, value: 1 }
+            : { static: true, value: 1 },
           coordId,
         });
       }
@@ -877,7 +879,8 @@ export class M2MetadataFile {
         objectId: -1,
         type: 'ParticleEmitter2',
         name: `ParticleEmitter_${i}`,
-        pivotPoint: [p.position[0], -p.position[2], p.position[1]], // x -z y
+        // Loader particles use (x, z, -y); MDL's intermediate basis is (x, -z, y).
+        pivotPoint: [p.position[0], -p.position[1], -p.position[2]],
         parent,
         flags: [],
         flags2: [],
@@ -1138,6 +1141,8 @@ export class M2MetadataFile {
     }
 
     const ribbons: MDLRibbonEmitter[] = [];
+    const frameSequence: GlobalSequence = { id: this.mdl.globalSequences.length, duration: 1 };
+    this.mdl.globalSequences.push(frameSequence);
 
     this.ribbonEmitters.forEach((r, i) => {
       const parent = this.mdl.bones[(r.boneIndex ?? 0)] ?? this.mdl.bones[0];
@@ -1181,7 +1186,7 @@ export class M2MetadataFile {
           texture: ribbonTexture,
           tvertexAnim: textAnimId !== BlizzardNull ? this.mdl.textureAnims?.[textAnimId] : undefined,
           alpha: { static: true as const, value: 1 },
-          unshaded: false,
+          unshaded: (material.flags & 0x01) > 0,
           sphereEnvMap: false,
           twoSided: (material.flags & 0x04) > 0,
           unfogged: (material.flags & 0x02) > 0,
@@ -1197,6 +1202,9 @@ export class M2MetadataFile {
         type: 'RibbonEmitter',
         name: `RibbonEmitter_${i}`,
         pivotPoint: [r.position[0], -r.position[2], r.position[1]],
+        rotation: {
+          type: 'rotation', globalSeq: frameSequence, interpolation: 'DontInterp', keyFrames: new Map([[0, [Math.SQRT1_2, 0, 0, Math.SQRT1_2]]]),
+        },
         parent,
         flags: [],
 
@@ -1205,7 +1213,7 @@ export class M2MetadataFile {
         heightBelow: this.m2trackToAnimationOrStatic(r.heightBelowTrack, 'others'),
         alpha: this.m2trackToAnimationOrStatic(r.alphaTrack, 'alpha', (v) => v / 32767),
         // this color stays the same unlike color in geosetAnims
-        color: this.m2trackToAnimationOrStatic(r.colorTrack, 'color'),
+        color: this.m2trackToAnimationOrStatic(r.colorTrack, 'color', (v) => [v[2], v[1], v[0]]),
         textureSlot: this.m2trackToAnimationOrStatic(r.texSlotTrack, 'others'),
         visibility: this.m2trackToAnimation(r.visibilityTrack, 'others'),
 
@@ -1215,6 +1223,7 @@ export class M2MetadataFile {
         rows: Math.max(1, r.textureRows || 1),
         columns: Math.max(1, r.textureCols || 1),
         materialId: ribbonMaterial.id,
+        material: ribbonMaterial,
         gravity: r.gravity || 0,
       };
 

@@ -81,12 +81,12 @@ type RenderBatch struct {
 
 // Liquid describes liquid volume data in a group.
 type Liquid struct {
-	VertX, VertY       uint32
-	TileX, TileY       uint32
-	Vertices           []LiquidVertex
-	Tiles              []uint8
-	Corner             []float32
-	MaterialID         uint16
+	VertX, VertY uint32
+	TileX, TileY uint32
+	Vertices     []LiquidVertex
+	Tiles        []uint8
+	Corner       []float32
+	MaterialID   uint16
 }
 
 // LiquidVertex is one liquid mesh vertex.
@@ -125,19 +125,20 @@ type Loader struct {
 
 	Version uint32
 
-	MaterialCount uint32
-	GroupCount    uint32
-	PortalCount   uint32
-	LightCount    uint32
-	ModelCount    uint32
-	DoodadCount   uint32
-	SetCount      uint32
-	AmbientColor  uint32
-	AreaTableID   uint32
-	BoundingBox1  []float32
-	BoundingBox2  []float32
-	Flags         uint32
-	LodCount      uint16
+	MaterialCount   uint32
+	GroupCount      uint32
+	PortalCount     uint32
+	LightCount      uint32
+	ModelCount      uint32
+	DoodadCount     uint32
+	SetCount        uint32
+	AmbientColor    uint32
+	MaterialUVSpeed [][4]float32
+	AreaTableID     uint32
+	BoundingBox1    []float32
+	BoundingBox2    []float32
+	Flags           uint32
+	LodCount        uint16
 
 	Groups       []*Loader
 	TextureNames map[int]string
@@ -156,23 +157,23 @@ type Loader struct {
 	GroupIDs       []uint32
 
 	// Group data
-	Liquid         *Liquid
-	VertexColours  [][]uint32
-	NameOfs        uint32
-	DescOfs        uint32
-	OfsPortals     uint16
-	NumPortals     uint16
-	NumBatchesA    uint16
-	NumBatchesB    uint16
-	NumBatchesC    uint32
-	LiquidType     uint32
-	GroupID        uint32
-	Indices        []uint16
-	Vertices       []float32
-	UVs            [][]float32
-	Normals        []float32
-	RenderBatches  []RenderBatch
-	MaterialInfo   []MaterialInfo
+	Liquid        *Liquid
+	VertexColours [][]uint32
+	NameOfs       uint32
+	DescOfs       uint32
+	OfsPortals    uint16
+	NumPortals    uint16
+	NumBatchesA   uint16
+	NumBatchesB   uint16
+	NumBatchesC   uint32
+	LiquidType    uint32
+	GroupID       uint32
+	Indices       []uint16
+	Vertices      []float32
+	UVs           [][]float32
+	Normals       []float32
+	RenderBatches []RenderBatch
+	MaterialInfo  []MaterialInfo
 }
 
 // NewLoader creates a WMO loader.
@@ -221,6 +222,7 @@ var wmoChunkHandlers = map[uint32]chunkHandler{
 	0x4D4F5458: handleMOTX,
 	0x4D464F47: handleMFOG,
 	0x4D4F4D54: handleMOMT,
+	0x4D4F5556: handleMOUV,
 	0x4D4F5056: handleMOPV,
 	0x4D4F5054: handleMOPT,
 	0x4D4F5052: handleMOPR,
@@ -407,6 +409,15 @@ func handleMODD(l *Loader, data *buffer.Buffer, chunkSize int) {
 
 func handleGFID(l *Loader, data *buffer.Buffer, chunkSize int) {
 	l.GroupIDs = readUInt32Slice(data, chunkSize/4)
+}
+
+func handleMOUV(l *Loader, data *buffer.Buffer, chunkSize int) {
+	l.MaterialUVSpeed = make([][4]float32, chunkSize/16)
+	for i := range l.MaterialUVSpeed {
+		for j := range 4 {
+			l.MaterialUVSpeed[i][j] = data.ReadFloatLE().(float32)
+		}
+	}
 }
 
 func handleMLIQ(l *Loader, data *buffer.Buffer, _ int) {

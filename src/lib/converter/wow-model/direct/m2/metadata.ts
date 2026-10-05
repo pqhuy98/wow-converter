@@ -58,6 +58,7 @@ export async function buildMetadataObject(
     m2Animations: m2.animations,
     colors: m2.colors,
     textureWeights: m2.textureWeights,
+    globalLoops: m2.globalLoops,
     transparencyLookup: m2.transparencyLookup,
     textureTransforms: m2.textureTransforms,
     textureTransformsLookup: m2.textureTransformsLookup,

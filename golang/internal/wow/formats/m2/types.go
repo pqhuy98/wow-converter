@@ -114,34 +114,37 @@ type RibbonEmitterEntry struct {
 
 // ParticleEmitterEntry is an M2 particle emitter.
 type ParticleEmitterEntry struct {
-	ParticleID         uint32     `json:"particleId"`
-	Flags              uint32     `json:"flags"`
-	Position           [3]float32 `json:"position"`
-	Bone               uint16     `json:"bone"`
-	TexturePacked      uint16     `json:"texturePacked"`
-	BlendingType       uint8      `json:"blendingType"`
-	EmitterType        uint8      `json:"emitterType"`
-	ParticleColorIndex uint16     `json:"particleColorIndex"`
-	TextureRows        uint16     `json:"textureRows"`
-	TextureCols        uint16     `json:"textureCols"`
-	EmissionSpeed      Track      `json:"emissionSpeed"`
-	SpeedVariation     Track      `json:"speedVariation"`
-	VerticalRange      Track      `json:"verticalRange"`
-	HorizontalRange    Track      `json:"horizontalRange"`
-	Gravity            Track      `json:"gravity"`
-	Lifespan           Track      `json:"lifespan"`
-	LifespanVary       float32    `json:"lifespanVary"`
-	EmissionRate       Track      `json:"emissionRate"`
-	EmissionAreaLength Track      `json:"emissionAreaLength"`
-	EmissionAreaWidth  Track      `json:"emissionAreaWidth"`
-	ColorTrack         PartTrack  `json:"colorTrack"`
-	AlphaTrack         PartTrack  `json:"alphaTrack"`
-	ScaleTrack         PartTrack  `json:"scaleTrack"`
-	ScaleVary          [2]float32 `json:"scaleVary"`
-	HeadCellTrack      PartTrack  `json:"headCellTrack"`
-	TailCellTrack      PartTrack  `json:"tailCellTrack"`
-	TailLength         float32    `json:"tailLength"`
-	TwinkleScale       struct {
+	ParticleID              uint32        `json:"particleId"`
+	Flags                   uint32        `json:"flags"`
+	Position                [3]float32    `json:"position"`
+	Bone                    uint16        `json:"bone"`
+	TexturePacked           uint16        `json:"texturePacked"`
+	BlendingType            uint8         `json:"blendingType"`
+	EmitterType             uint8         `json:"emitterType"`
+	ParticleColorIndex      uint16        `json:"particleColorIndex"`
+	TextureRows             uint16        `json:"textureRows"`
+	TextureCols             uint16        `json:"textureCols"`
+	MultiTextureScale       [2]float32    `json:"multiTextureScale"`
+	MultiTextureScrollMid   [2][2]float32 `json:"multiTextureScrollMid"`
+	MultiTextureScrollRange [2][2]float32 `json:"multiTextureScrollRange"`
+	EmissionSpeed           Track         `json:"emissionSpeed"`
+	SpeedVariation          Track         `json:"speedVariation"`
+	VerticalRange           Track         `json:"verticalRange"`
+	HorizontalRange         Track         `json:"horizontalRange"`
+	Gravity                 Track         `json:"gravity"`
+	Lifespan                Track         `json:"lifespan"`
+	LifespanVary            float32       `json:"lifespanVary"`
+	EmissionRate            Track         `json:"emissionRate"`
+	EmissionAreaLength      Track         `json:"emissionAreaLength"`
+	EmissionAreaWidth       Track         `json:"emissionAreaWidth"`
+	ColorTrack              PartTrack     `json:"colorTrack"`
+	AlphaTrack              PartTrack     `json:"alphaTrack"`
+	ScaleTrack              PartTrack     `json:"scaleTrack"`
+	ScaleVary               [2]float32    `json:"scaleVary"`
+	HeadCellTrack           PartTrack     `json:"headCellTrack"`
+	TailCellTrack           PartTrack     `json:"tailCellTrack"`
+	TailLength              float32       `json:"tailLength"`
+	TwinkleScale            struct {
 		Min float32 `json:"min"`
 		Max float32 `json:"max"`
 	} `json:"twinkleScale"`

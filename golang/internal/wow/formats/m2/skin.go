@@ -23,7 +23,8 @@ type SkinSubMesh struct {
 
 // SkinTextureUnit is a texture unit in an M2 skin file.
 type SkinTextureUnit struct {
-	Flags, Priority                                                             uint8
+	Flags                                                                       uint8
+	Priority                                                                    int8
 	ShaderID, SkinSectionIndex, Flags2                                          uint16
 	ColorIndex, MaterialIndex, MaterialLayer                                    uint16
 	TextureCount, TextureComboIndex                                             uint16
@@ -107,7 +108,7 @@ func (s *Skin) Load(ctx context.Context) error {
 	s.TextureUnits = make([]SkinTextureUnit, textureUnitsCount)
 	for i := 0; i < textureUnitsCount; i++ {
 		s.TextureUnits[i] = SkinTextureUnit{
-			Flags: uint8(data.ReadUInt8().(int64)), Priority: uint8(data.ReadUInt8().(int64)),
+			Flags: uint8(data.ReadUInt8().(int64)), Priority: int8(data.ReadInt8().(int64)),
 			ShaderID: uint16(readU16(data)), SkinSectionIndex: uint16(readU16(data)),
 			Flags2: uint16(readU16(data)), ColorIndex: uint16(readU16(data)),
 			MaterialIndex: uint16(readU16(data)), MaterialLayer: uint16(readU16(data)),

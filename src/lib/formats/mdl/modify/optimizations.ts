@@ -10,7 +10,13 @@ import { MDLModify } from '.';
 
 export function removeUnusedMaterialsTextures(this: MDLModify) {
   // Deduplicate textures
-  this.mdl.materials = [...new Set(this.mdl.geosets.map((geoset) => geoset.material))];
+  this.mdl.ribbonEmitters.forEach((ribbon) => {
+    ribbon.material ??= this.mdl.materials[ribbon.materialId];
+  });
+  this.mdl.materials = [...new Set([
+    ...this.mdl.geosets.map((geoset) => geoset.material),
+    ...this.mdl.ribbonEmitters.flatMap((ribbon) => (ribbon.material ? [ribbon.material] : [])),
+  ])];
   const textureKey = (tex: Texture) => JSON.stringify(tex);
   const usedTextures = new Map<string, Texture>();
 
@@ -28,6 +34,7 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
         console.log(chalk.red(`Empty texture, i: ${i}, wow type: ${layer.texture.wowData.type}`));
       }
       layer.texture = getTexture(layer.texture);
+      layer.textureIDAnim?.keyFrames.forEach((texture, time, frames) => frames.set(time, getTexture(texture)));
     });
   });
   this.mdl.particleEmitter2s.forEach((e) => {
@@ -39,7 +46,7 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
   // set id of texture anims so that materialKey works correct.
   // Because textureAnims[].XXX.keyframes cannot be serialized since it's a Map
   this.mdl.textureAnims.forEach((ta, i) => ta.id = i);
-  const materialKey = (mat: Material) => JSON.stringify(mat);
+  const materialKey = (mat: Material) => JSON.stringify(mat, (_key, value) => (value instanceof Map ? [...value.entries()] : value));
 
   const usedMaterials = new Map<string, Material>();
   this.mdl.geosets.forEach((geoset) => {
@@ -49,6 +56,12 @@ export function removeUnusedMaterialsTextures(this: MDLModify) {
     } else {
       geoset.material = usedMaterials.get(matKey)!;
     }
+  });
+  this.mdl.ribbonEmitters.forEach((ribbon) => {
+    if (!ribbon.material) return;
+    const matKey = materialKey(ribbon.material);
+    if (!usedMaterials.has(matKey)) usedMaterials.set(matKey, ribbon.material);
+    ribbon.material = usedMaterials.get(matKey)!;
   });
   this.mdl.materials = [...usedMaterials.values()];
   return this;

@@ -151,6 +151,8 @@ func (f *File) ExtractMDLRibbonEmitters(textures []components.Texture) {
 	if !f.IsLoaded || f.mdl == nil || len(f.ribbonEmitters) == 0 || len(f.mdl.Bones) == 0 {
 		return
 	}
+	frameSequence := components.NewGlobalSequence(len(f.mdl.GlobalSequences), 1)
+	f.mdl.GlobalSequences = append(f.mdl.GlobalSequences, &frameSequence)
 	for i, r := range f.ribbonEmitters {
 		texIdx := 0
 		if len(r.TextureIndices) > 0 {
@@ -159,9 +161,9 @@ func (f *File) ExtractMDLRibbonEmitters(textures []components.Texture) {
 		if texIdx < 0 || texIdx >= len(textures) {
 			payload, _ := json.Marshal(map[string]any{
 				"model":          f.mdl.Model.Name,
-				"ribbonIndex":      i,
-				"textureIndex":     texIdx,
-				"texturesLength":   len(textures),
+				"ribbonIndex":    i,
+				"textureIndex":   texIdx,
+				"texturesLength": len(textures),
 			})
 			log.Printf("%s %s", ansi.Red("Ribbon with invalid texture index"), string(payload))
 			continue
@@ -196,6 +198,7 @@ func (f *File) ExtractMDLRibbonEmitters(textures []components.Texture) {
 				Texture:     storeMdlTexture(f.mdl, &textures[texIdx]),
 				Alpha:       components.AnimatedOrStatic[float64]{Static: true, Value: 1},
 				Unlit:       material.Flags&0x01 > 0,
+				Unshaded:    material.Flags&0x01 > 0,
 				Unfogged:    material.Flags&0x02 > 0,
 				TwoSided:    material.Flags&0x04 > 0,
 				NoDepthTest: material.Flags&0x08 > 0,
@@ -213,7 +216,12 @@ func (f *File) ExtractMDLRibbonEmitters(textures []components.Texture) {
 		heightAbove := ptrAnimOrStatic(f.m2trackToAnimationOrStaticFloat(r.HeightAboveTrack, components.AnimTypeOthers, scalarIdentity))
 		heightBelow := ptrAnimOrStatic(f.m2trackToAnimationOrStaticFloat(r.HeightBelowTrack, components.AnimTypeOthers, scalarIdentity))
 		alpha := ptrAnimOrStatic(f.m2trackToAnimationOrStaticFloat(r.AlphaTrack, components.AnimTypeAlpha, func(v []float64) any { return v[0] / 32767 }))
-		color := ptrAnimOrStaticVec3(f.m2trackToAnimationOrStaticVec3(r.ColorTrack, components.AnimTypeColor, vec3Identity))
+		color := ptrAnimOrStaticVec3(f.m2trackToAnimationOrStaticVec3(r.ColorTrack, components.AnimTypeColor, func(v []float64) any {
+			if len(v) < 3 {
+				return imath.Vector3{1, 1, 1}
+			}
+			return imath.Vector3{v[2], v[1], v[0]}
+		}))
 		texSlot := ptrAnimOrStatic(f.m2trackToAnimationOrStaticFloat(r.TexSlotTrack, components.AnimTypeOthers, scalarIdentity))
 		f.mdl.RibbonEmitters = append(f.mdl.RibbonEmitters, &components.RibbonEmitter{
 			NodeBase: components.NodeBase{
@@ -221,6 +229,10 @@ func (f *File) ExtractMDLRibbonEmitters(textures []components.Texture) {
 				Type:       "RibbonEmitter",
 				Parent:     parent,
 				PivotPoint: imath.Vector3{float64(r.Position[0]), float64(-r.Position[2]), float64(r.Position[1])},
+				// WoW extends ribbon edges along the bone's local Y. After the
+				// model basis conversion that direction is WC3 local Z; native
+				// ribbons extend along Y, so rotate the emitter frame about X.
+				Rotation: &components.Animation{GlobalSeq: &frameSequence, Type: components.AnimTypeRotation, Interpolation: components.InterpDontInterp, KeyFrames: map[int]any{0: imath.QuaternionRotation{math.Sqrt(.5), 0, 0, math.Sqrt(.5)}}},
 			},
 			HeightAbove:  heightAbove,
 			HeightBelow:  heightBelow,
@@ -232,7 +244,7 @@ func (f *File) ExtractMDLRibbonEmitters(textures []components.Texture) {
 			LifeSpan:     float64(r.EdgeLifetime),
 			Rows:         maxInt(1, int(r.TextureRows)),
 			Columns:      maxInt(1, int(r.TextureCols)),
-			MaterialID:   0,
+			Material:     ribbonMat,
 			Gravity:      float64(r.Gravity),
 		})
 	}
@@ -293,10 +305,12 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 		speed := f.m2trackToAnimationOrStaticFloat(p.EmissionSpeed, components.AnimTypeOthers, scalarIdentity)
 		node := &components.ParticleEmitter2{
 			NodeBase: components.NodeBase{
-				Name:       "ParticleEmitter_" + itoa(i),
-				Type:       "ParticleEmitter2",
-				Parent:     parent,
-				PivotPoint: imath.Vector3{float64(p.Position[0]), float64(-p.Position[2]), float64(p.Position[1])},
+				Name:   "ParticleEmitter_" + itoa(i),
+				Type:   "ParticleEmitter2",
+				Parent: parent,
+				// The M2 loader already stores particles as (x, z, -y).
+				// Convert that representation to MDL's intermediate (x, -z, y).
+				PivotPoint: imath.Vector3{float64(p.Position[0]), float64(-p.Position[1]), float64(-p.Position[2])},
 			},
 			FilterMode:         mapParticleBlend(p.BlendingType),
 			Width:              f.m2trackToAnimationOrStaticFloat(p.EmissionAreaWidth, components.AnimTypeOthers, scalarIdentity),

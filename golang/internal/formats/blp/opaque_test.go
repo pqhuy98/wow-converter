@@ -1,12 +1,41 @@
 package blp
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
 
 	pngwriter "github.com/pqhuy98/wow-converter/internal/formats/png"
 )
+
+func TestBakedEmptyAlphaIsPreserved(t *testing.T) {
+	pixels := make([]byte, 16*16*4)
+	for i := 0; i < len(pixels); i += 4 {
+		pixels[i] = 120
+	}
+	pngBytes, err := pngwriter.EncodeRGBA(pixels, 16, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "empty.blp")
+	if err := ConvertTextureToBlp(EncodeInput{PNG: pngBytes, PreserveAlpha: true}, path); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binary.LittleEndian.Uint32(raw[4:8]) != 1 || binary.LittleEndian.Uint32(raw[8:12]) != 8 {
+		t.Fatal("expected paletted BLP1 with explicit alpha")
+	}
+	offset := int(binary.LittleEndian.Uint32(raw[28:32])) + 16*16
+	for _, alpha := range raw[offset : offset+16*16] {
+		if alpha != 0 {
+			t.Fatal("empty shader output became opaque")
+		}
+	}
+}
 
 func TestOpaqueEncodeKeepsZeroAlphaRGB(t *testing.T) {
 	const w, h = 20, 20

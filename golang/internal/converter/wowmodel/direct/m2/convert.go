@@ -173,7 +173,11 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 		Metadata:    meta,
 	}, cfg)
 
-	return ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths}, nil
+	result := ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths}
+	if err := bakeM2Materials(ctx, cfg, src, loader, skin, geosetMask, resolved, meta, &result); err != nil {
+		return ConvertResult{}, err
+	}
+	return result, nil
 }
 
 func buildKeyFromSource(ctx context.Context, src FileSource) string {

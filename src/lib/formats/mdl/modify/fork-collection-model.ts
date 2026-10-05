@@ -14,7 +14,10 @@ import { MDL } from '../mdl';
 export function forkCollectionModel(template: Model, enabledGeosets: Geoset[]): Model {
   const src = template.mdl;
   const enabledSet = new Set(enabledGeosets);
-  const materials = [...new Set(enabledGeosets.map((g) => g.material))];
+  const materials = [...new Set([
+    ...enabledGeosets.map((g) => g.material),
+    ...src.ribbonEmitters.flatMap((r) => (r.material ? [r.material] : [])),
+  ])];
 
   const cloned = structuredClone({
     geosets: enabledGeosets,

@@ -1,4 +1,6 @@
-import { animatedValueToString, AnimationOrStatic } from './animation';
+import {
+  animatedValueToString, Animation, AnimationOrStatic, animationToString,
+} from './animation';
 import { Texture } from './texture';
 import { TextureAnim } from './texture-anim';
 
@@ -7,6 +9,7 @@ export type BlendMode = 'None' | 'Transparent' | 'Blend' | 'Additive' | 'AddAlph
 export interface Layer {
   filterMode: BlendMode;
   texture: Texture;
+  textureIDAnim?: Animation<Texture>;
   tvertexAnim?: TextureAnim;
   alpha: AnimationOrStatic<number>;
   coordId?: number;
@@ -23,6 +26,7 @@ export interface Layer {
 
 export interface Material {
   id: number
+  priorityPlane?: number;
   constantColor: boolean;
   twoSided: boolean;
   layers: Layer[];
@@ -33,11 +37,12 @@ export function materialsToString(version: number, materials: Material[]) {
   return `Materials ${materials.length} {
     ${materials.map((material) => `
       Material {
+        ${material.priorityPlane ? `PriorityPlane ${material.priorityPlane},` : ''}
         ${material.constantColor ? 'ConstantColor,' : ''}
         ${material.layers.map((layer) => `
         Layer {
           FilterMode ${layer.filterMode},
-          static TextureID ${layer.texture.id},
+          ${layer.textureIDAnim ? animationToString('TextureID', { ...layer.textureIDAnim, keyFrames: new Map([...layer.textureIDAnim.keyFrames].map(([t, tex]) => [t, tex.id])) }) : `static TextureID ${layer.texture.id},`}
           ${layer.unshaded ? 'Unshaded,' : ''}
           ${layer.sphereEnvMap ? 'SphereEnvMap,' : ''}
           ${layer.twoSided ? 'TwoSided,' : ''}

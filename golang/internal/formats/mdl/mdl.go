@@ -127,6 +127,7 @@ func (m *MDL) GetAnimated() []*components.Animation {
 	for _, mat := range m.Materials {
 		for _, layer := range mat.Layers {
 			addAnimOrStatic(layer.Alpha)
+			add(layer.TextureIDAnim)
 			if layer.TVertexAnim != nil {
 				add(layer.TVertexAnim.Translation)
 				add(layer.TVertexAnim.Rotation)
@@ -204,10 +205,22 @@ func (m *MDL) UpdateIDs() {
 		m.Materials[i].ID = i
 		for li := range m.Materials[i].Layers {
 			syncTextureID(m.Materials[i].Layers[li].Texture)
+			if anim := m.Materials[i].Layers[li].TextureIDAnim; anim != nil {
+				for _, value := range anim.KeyFrames {
+					if texture, ok := value.(*components.Texture); ok {
+						syncTextureID(texture)
+					}
+				}
+			}
 		}
 	}
 	for _, emitter := range m.ParticleEmitter2s {
 		syncTextureID(emitter.Texture)
+	}
+	for _, ribbon := range m.RibbonEmitters {
+		if ribbon.Material != nil {
+			ribbon.MaterialID = ribbon.Material.ID
+		}
 	}
 	for i := range m.TextureAnims {
 		m.TextureAnims[i].ID = i

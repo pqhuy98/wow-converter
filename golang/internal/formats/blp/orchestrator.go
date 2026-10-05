@@ -10,10 +10,11 @@ import (
 
 // TaskInput is one BLP conversion task.
 type TaskInput struct {
-	Data     []byte
-	Kind     string // "png" or "blp2"
-	ResizeTo *Size
-	Opaque   bool
+	Data          []byte
+	Kind          string // "png" or "blp2"
+	ResizeTo      *Size
+	Opaque        bool
+	PreserveAlpha bool
 }
 
 // WorkerPool runs BLP conversions with bounded parallelism.
@@ -73,7 +74,7 @@ func (p *WorkerPool) Submit(input TaskInput, blpPath string) error {
 	p.sem <- struct{}{}
 	defer func() { <-p.sem }()
 
-	encode := EncodeInput{ResizeTo: input.ResizeTo, Opaque: input.Opaque}
+	encode := EncodeInput{ResizeTo: input.ResizeTo, Opaque: input.Opaque, PreserveAlpha: input.PreserveAlpha}
 	switch input.Kind {
 	case "png":
 		encode.PNG = input.Data

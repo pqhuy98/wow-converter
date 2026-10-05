@@ -133,6 +133,8 @@ export class MDL {
       ...this.textureAnims.flatMap((texAnim) => [texAnim.translation, texAnim.rotation, texAnim.scaling]),
       ...this.materials.flatMap((mat) => mat.layers.flatMap((layer) => [
         layer.alpha && 'keyFrames' in layer.alpha ? layer.alpha : null,
+        // Sequence operations change timestamps, not the texture references.
+        layer.textureIDAnim as unknown as Animation<number> | undefined,
         layer.tvertexAnim?.translation,
         layer.tvertexAnim?.rotation,
         layer.tvertexAnim?.scaling,

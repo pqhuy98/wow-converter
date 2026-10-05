@@ -107,6 +107,8 @@ export class WMOLoader {
 
   ambientColor?: number;
 
+  materialUVSpeed?: [number, number, number, number][];
+
   areaTableID?: number;
 
   boundingBox1?: number[];
@@ -305,6 +307,11 @@ const WMOChunkHandlers: Record<number, (this: WMOLoader, data: BufferWrapper, ch
         },
       };
     }
+  },
+
+  // MOMT (Materials) [WMO Root]
+  0x4D4F5556(data, chunkSize) {
+    this.materialUVSpeed = Array.from({ length: Math.floor(chunkSize / 16) }, () => data.readFloatLE(4) as [number, number, number, number]);
   },
 
   // MOMT (Materials) [WMO Root]

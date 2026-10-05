@@ -7,32 +7,34 @@ import (
 type BlendMode string
 
 const (
-	BlendNone      BlendMode = "None"
+	BlendNone        BlendMode = "None"
 	BlendTransparent BlendMode = "Transparent"
-	BlendBlend     BlendMode = "Blend"
-	BlendAdditive  BlendMode = "Additive"
-	BlendAddAlpha  BlendMode = "AddAlpha"
-	BlendModulate  BlendMode = "Modulate"
-	BlendModulate2x BlendMode = "Modulate2x"
+	BlendBlend       BlendMode = "Blend"
+	BlendAdditive    BlendMode = "Additive"
+	BlendAddAlpha    BlendMode = "AddAlpha"
+	BlendModulate    BlendMode = "Modulate"
+	BlendModulate2x  BlendMode = "Modulate2x"
 )
 
 type Layer struct {
-	FilterMode   BlendMode
-	Texture      *Texture
-	TVertexAnim  *TextureAnim
-	Alpha        AnimatedOrStatic[float64]
-	CoordID      *int
-	Unshaded     bool
-	SphereEnvMap bool
-	TwoSided     bool
-	Unfogged     bool
-	Unlit        bool
-	NoDepthTest  bool
-	NoDepthSet   bool
+	FilterMode    BlendMode
+	Texture       *Texture
+	TextureIDAnim *Animation
+	TVertexAnim   *TextureAnim
+	Alpha         AnimatedOrStatic[float64]
+	CoordID       *int
+	Unshaded      bool
+	SphereEnvMap  bool
+	TwoSided      bool
+	Unfogged      bool
+	Unlit         bool
+	NoDepthTest   bool
+	NoDepthSet    bool
 }
 
 type Material struct {
 	ID            int
+	PriorityPlane int
 	ConstantColor bool
 	TwoSided      bool
 	Layers        []Layer
@@ -51,6 +53,11 @@ func MaterialsToString(version int, materials []*Material) string {
 			continue
 		}
 		b.WriteString("Material {\n")
+		if material.PriorityPlane != 0 {
+			b.WriteString("PriorityPlane ")
+			b.WriteString(FVal(float64(material.PriorityPlane)))
+			b.WriteString(",\n")
+		}
 		if material.ConstantColor {
 			b.WriteString("ConstantColor,\n")
 		}
@@ -59,9 +66,13 @@ func MaterialsToString(version int, materials []*Material) string {
 			b.WriteString("FilterMode ")
 			b.WriteString(string(layer.FilterMode))
 			b.WriteString(",\n")
-			b.WriteString("static TextureID ")
-			b.WriteString(FVal(float64(layer.Texture.ID)))
-			b.WriteString(",\n")
+			if layer.TextureIDAnim != nil {
+				b.WriteString(AnimationToString("TextureID", layer.TextureIDAnim))
+			} else {
+				b.WriteString("static TextureID ")
+				b.WriteString(FVal(float64(layer.Texture.ID)))
+				b.WriteString(",\n")
+			}
 			if layer.Unshaded {
 				b.WriteString("Unshaded,\n")
 			}

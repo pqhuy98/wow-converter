@@ -14,7 +14,6 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 	for _, g := range enabledGeosets {
 		enabledSet[g] = struct{}{}
 	}
-
 	materialSet := map[*components.Material]struct{}{}
 	var materialOrder []*components.Material
 	for _, g := range enabledGeosets {
@@ -23,6 +22,14 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 				materialOrder = append(materialOrder, g.Material)
 			}
 			materialSet[g.Material] = struct{}{}
+		}
+	}
+	for _, ribbon := range src.RibbonEmitters {
+		if ribbon.Material != nil {
+			if _, ok := materialSet[ribbon.Material]; !ok {
+				materialOrder = append(materialOrder, ribbon.Material)
+			}
+			materialSet[ribbon.Material] = struct{}{}
 		}
 	}
 	textures := make([]*components.Texture, len(src.Textures))
@@ -50,6 +57,15 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 		cloned := *mat
 		cloned.Layers = append([]components.Layer(nil), mat.Layers...)
 		for i := range cloned.Layers {
+			if anim := cloned.Layers[i].TextureIDAnim; anim != nil {
+				anim = cloneAnimation(anim)
+				for time, value := range anim.KeyFrames {
+					if texture, ok := value.(*components.Texture); ok {
+						anim.KeyFrames[time] = textureMap[texture]
+					}
+				}
+				cloned.Layers[i].TextureIDAnim = anim
+			}
 			tex := cloned.Layers[i].Texture
 			if tex == nil {
 				continue
@@ -109,6 +125,11 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 	mdl.Attachments = append([]*components.AttachmentPoint(nil), src.Attachments...)
 	mdl.Lights = append([]*components.Light(nil), src.Lights...)
 	mdl.RibbonEmitters = append([]*components.RibbonEmitter(nil), src.RibbonEmitters...)
+	for i, ribbon := range mdl.RibbonEmitters {
+		cloned := *ribbon
+		cloned.Material = materialMap[ribbon.Material]
+		mdl.RibbonEmitters[i] = &cloned
+	}
 	mdl.ParticleEmitter2s = append([]*components.ParticleEmitter2(nil), src.ParticleEmitter2s...)
 	mdl.Helpers = append([]*components.Helper(nil), src.Helpers...)
 	mdl.Cameras = append([]components.Camera(nil), src.Cameras...)

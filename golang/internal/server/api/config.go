@@ -52,15 +52,15 @@ func LoadConfig() Config {
 		OutputDirBrowse:  outputDirBrowse,
 		RecentExports:    workspace.ResolveRepoPath(recentExportsRel),
 		Port:             port,
-		ListenHost:       listenHost(isShared),
+		ListenHost:       listenHost(isShared, isDev),
 	}
 }
 
-func listenHost(isSharedHosting bool) string {
+func listenHost(isSharedHosting bool, isDev bool) string {
 	if v := os.Getenv("HOST"); v != "" {
 		return v
 	}
-	if isSharedHosting {
+	if isSharedHosting || isDev {
 		return "0.0.0.0"
 	}
 	return "127.0.0.1"

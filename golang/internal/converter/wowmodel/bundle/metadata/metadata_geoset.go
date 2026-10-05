@@ -51,45 +51,53 @@ func (f *File) ExtractMDLGeosetAnim() {
 			}
 			continue
 		}
-		wowColor := f.colors[tu.ColorIndex]
-		ga := components.GeosetAnim{
-			Geoset: geoset,
-		}
-		if track, ok := parseM2TrackRaw(firstKey(wowColor, "color", "Color")); ok {
-			transform := func(v []float64) imath.Vector3 {
-				if len(v) < 3 {
-					return imath.Vector3{}
-				}
-				return imath.Vector3{v[2], v[1], v[0]}
-			}
-			if trackRawIsStatic(track) && len(track.Values[0][0]) >= 3 {
-				ga.Color = &components.AnimatedOrStatic[imath.Vector3]{Static: true, Value: transform(track.Values[0][0])}
-			} else if anim := f.m2TrackToAnimation(track, components.AnimTypeColor, func(v []float64) any {
-				return transform(v)
-			}); anim != nil {
-				ga.Color = &components.AnimatedOrStatic[imath.Vector3]{Static: false, Anim: anim}
-			}
-		}
-		if track, ok := parseM2TrackRaw(firstKey(wowColor, "alpha", "Alpha")); ok {
-			transform := func(v []float64) float64 {
-				if len(v) == 0 {
-					return float64(1)
-				}
-				return v[0] / 32767
-			}
-			if trackRawIsStatic(track) && len(track.Values[0][0]) > 0 {
-				ga.Alpha = &components.AnimatedOrStatic[float64]{Static: true, Value: transform(track.Values[0][0])}
-			} else if anim := f.m2TrackToAnimation(track, components.AnimTypeAlpha, func(v []float64) any {
-				return transform(v)
-			}); anim != nil {
-				ga.Alpha = &components.AnimatedOrStatic[float64]{Static: false, Anim: anim}
-			}
-		}
+		ga := f.GeosetAnimation(tu.ColorIndex, geoset)
 		if ga.Color != nil || ga.Alpha != nil {
 			result = append(result, ga)
 		}
 	}
 	f.mdl.GeosetAnims = result
+}
+
+// GeosetAnimation binds a batch's colour to its own draw, including multipass
+// sections whose batches use different colour/visibility tracks.
+func (f *File) GeosetAnimation(colorIndex int, geoset *components.Geoset) components.GeosetAnim {
+	ga := components.GeosetAnim{Geoset: geoset}
+	if colorIndex < 0 || colorIndex >= len(f.colors) {
+		return ga
+	}
+	wowColor := f.colors[colorIndex]
+	if track, ok := parseM2TrackRaw(firstKey(wowColor, "color", "Color")); ok {
+		transform := func(v []float64) imath.Vector3 {
+			if len(v) < 3 {
+				return imath.Vector3{}
+			}
+			return imath.Vector3{v[2], v[1], v[0]}
+		}
+		if trackRawIsStatic(track) && len(track.Values[0][0]) >= 3 {
+			ga.Color = &components.AnimatedOrStatic[imath.Vector3]{Static: true, Value: transform(track.Values[0][0])}
+		} else if anim := f.m2TrackToAnimation(track, components.AnimTypeColor, func(v []float64) any {
+			return transform(v)
+		}); anim != nil {
+			ga.Color = &components.AnimatedOrStatic[imath.Vector3]{Static: false, Anim: anim}
+		}
+	}
+	if track, ok := parseM2TrackRaw(firstKey(wowColor, "alpha", "Alpha")); ok {
+		transform := func(v []float64) float64 {
+			if len(v) == 0 {
+				return float64(1)
+			}
+			return v[0] / 32767
+		}
+		if trackRawIsStatic(track) && len(track.Values[0][0]) > 0 {
+			ga.Alpha = &components.AnimatedOrStatic[float64]{Static: true, Value: transform(track.Values[0][0])}
+		} else if anim := f.m2TrackToAnimation(track, components.AnimTypeAlpha, func(v []float64) any {
+			return transform(v)
+		}); anim != nil {
+			ga.Alpha = &components.AnimatedOrStatic[float64]{Static: false, Anim: anim}
+		}
+	}
+	return ga
 }
 
 func trackRawIsStatic(track m2TrackRaw) bool {

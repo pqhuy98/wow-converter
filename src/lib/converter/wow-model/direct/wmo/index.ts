@@ -65,8 +65,8 @@ function wmoDiffuseFileID(material: WMOMaterial): number {
 /** Texture slots in WMOExporter.exportTextures order (flags3 before color3 for shader 23). */
 function exportTextureSlots(material: WMOMaterial): number[] {
   const slots = [material.texture1, material.texture2, material.texture3];
-  if (material.shader === 23) {
-    slots.push(material.flags3, material.color3, material.runtimeData[0], material.runtimeData[1], material.runtimeData[2], material.runtimeData[3]);
+  if (material.shader === 22 || material.shader === 23) {
+    slots.push(material.flags3, material.color3, ...material.runtimeData.slice(0, material.shader === 23 ? 4 : 1));
   }
   return slots;
 }
@@ -74,8 +74,8 @@ function exportTextureSlots(material: WMOMaterial): number[] {
 /** Texture slots in WMOExporter's JSON meta order (color3 before flags3 for shader 23). */
 function metaTextureSlots(material: WMOMaterial): number[] {
   const slots = [material.texture1, material.texture2, material.texture3];
-  if (material.shader === 23) {
-    slots.push(material.color3, material.flags3, material.runtimeData[0], material.runtimeData[1], material.runtimeData[2], material.runtimeData[3]);
+  if (material.shader === 22 || material.shader === 23) {
+    slots.push(material.color3, material.flags3, ...material.runtimeData.slice(0, material.shader === 23 ? 4 : 1));
   }
   return slots;
 }
