@@ -65,7 +65,9 @@ independent global tracks can reset their relative phase at that boundary.
 Native UV loops sharing a source clock with a baked material repeat the same
 window, preserving source velocity inside it; independent native loops retain
 their full duration. This keeps flowing detail aligned with baked cutouts.
-Content hashes share identical atlases. The regular exporter writes BLP1.
+Baked paths are `baked/uv2/{wow-stem}_{12-hex}.png`. The stem is the listfile
+basename. The 12 hex digits are SHA-256 of the PNG. Identical atlases of the
+same WoW file share one BLP. The regular exporter writes BLP1.
 
 Emission is separated from diffuse shading. Opaque environment-metal materials
 retain their full-resolution albedo and use a baked modulation layer for their
@@ -75,18 +77,22 @@ variants. Particle lifetime is preserved.
 
 ## Request options and size policy
 
-`POST /api/export/character` accepts the optional request-scoped object:
+Baking is off unless the request sets `enabled`. `POST /api/export/character`
+accepts:
 
 ```json
-{"textureBaking": {"fps": 21, "windowMS": 12000}}
+{"textureBaking": {"enabled": true, "animate": true, "fps": 21, "windowMS": 12000}}
 ```
 
-`fps` is an integer from 1 to 60. `windowMS` is an integer from 1 to 60000.
-Omitted settings use 8 FPS and a 4000 ms maximum baked window. Native UV
-translation is continuous and does not use this FPS. Native loops shorter
-than the window retain their duration. Static effects do not acquire animation.
-PRE2 sampling covers the full particle lifetime at the selected FPS, because
-its atlas advances over lifetime rather than a repeatable global texture loop.
+`enabled` defaults false. `animate` defaults true when omitted. `fps` is 1 to 60.
+`windowMS` is 1 to 60000. Omitted fps/window use 8 FPS and a 4000 ms maximum
+baked window. `animate: false` paints one combined texture at time 0 and does
+not attach a flipbook; fps/window are ignored. Native UV translation is
+continuous and does not use this FPS. Native loops shorter than the window
+retain their duration. Static effects do not acquire animation. PRE2 sampling
+covers the full particle lifetime at the selected FPS, because its atlas
+advances over lifetime rather than a repeatable global texture loop. Still-frame
+mode bakes particles at age 0.
 
 Painted opaque/cutout surfaces share an 8 × 1024² reserve by physical area;
 effects and environment factors share a separate 2 × 1024² reserve. Models with

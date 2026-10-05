@@ -2,6 +2,7 @@
 
 import { Settings } from 'lucide-react';
 
+import { BakeTexturesButton } from '@/components/character-converter/optimization-options';
 import { BasicCharacterConfig } from '@/components/common/basic-character-config';
 import { TooltipHelp } from '@/components/common/tooltip-help';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Character, ModelFormat, ModelFormatVersion, Optimization,
+  Character, ModelFormat, ModelFormatVersion, Optimization, TextureBakingForm,
 } from '@/lib/models/export-character.model';
 
 const tooltips = {
@@ -32,6 +33,8 @@ export function SettingsDialogButton({
   setFormatVersion,
   optimization: _optimization,
   setOptimization: _setOptimization,
+  textureBaking,
+  setTextureBaking,
   disabled,
   className,
 }: {
@@ -45,6 +48,8 @@ export function SettingsDialogButton({
   setFormatVersion: React.Dispatch<React.SetStateAction<ModelFormatVersion>>
   optimization: Optimization
   setOptimization: React.Dispatch<React.SetStateAction<Optimization>>
+  textureBaking: TextureBakingForm
+  setTextureBaking: React.Dispatch<React.SetStateAction<TextureBakingForm>>
   disabled?: boolean
   className?: string
   }) {
@@ -96,6 +101,8 @@ export function SettingsDialogButton({
             </Select>
           </div>
         </div>
+
+        <BakeTexturesButton textureBaking={textureBaking} setTextureBaking={setTextureBaking} />
       </DialogContent>
     </Dialog>
   );

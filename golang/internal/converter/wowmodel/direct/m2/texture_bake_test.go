@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"math"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
@@ -422,6 +423,37 @@ func TestLongBakeFitsItsSharedPixelBudget(t *testing.T) {
 	}
 }
 
+func TestStillBakeUsesFirstFrameOnly(t *testing.T) {
+	animate := false
+	g := &components.Geoset{Name: "still effect", Material: &components.Material{Layers: []components.Layer{{Texture: &components.Texture{}, FilterMode: components.BlendBlend}}}}
+	for _, uv := range []imath.Vector2{{0, 0}, {1, 0}, {0, 1}} {
+		copyUV := uv
+		g.Vertices = append(g.Vertices, &components.GeosetVertex{TexPosition: uv, TexPosition2: &copyUV})
+	}
+	g.Faces = []components.Face{{Vertices: [3]*components.GeosetVertex{g.Vertices[0], g.Vertices[1], g.Vertices[2]}}}
+	img := image.NewNRGBA(image.Rect(0, 0, 64, 64))
+	for i := range img.Pix {
+		img.Pix[i] = 128
+	}
+	gs := components.NewGlobalSequence(0, 36000)
+	transform := &components.TextureAnim{Translation: &components.Animation{GlobalSeq: &gs, Interpolation: components.InterpLinear, KeyFrames: map[int]any{0: imath.Vector3{}, 36000: imath.Vector3{36, 0, 0}}}}
+	p := bakeProgram{shader: m2Shader{pixel: 6, coords: [4]m2Coord{coordT1M0, coordT2M1}}, blend: 2, count: 2, images: [4]*image.NRGBA{img, img}, transforms: [2]*components.TextureAnim{transform, nil}, pixelBudget: 65536}
+	result := ConvertResult{MDL: mdl.New(mdl.NewMDLOptions{}), TexturePaths: map[string]struct{}{}}
+	options := config.TextureBakingOptions{Enabled: true, Animate: &animate, FPS: 30, WindowMS: 12000}
+	if err := bakeM2Geoset(context.Background(), config.Config{TextureBaking: options}, &result, g, p); err != nil {
+		t.Fatal(err)
+	}
+	if g.Material.Layers[0].TVertexAnim != nil {
+		t.Fatal("still bake attached a flipbook")
+	}
+	if len(result.MDL.Textures) != 1 {
+		t.Fatalf("still bake pages: %d", len(result.MDL.Textures))
+	}
+	for _, tex := range result.MDL.Textures {
+		texturesource.Unregister(tex.WowData.PngPath)
+	}
+}
+
 func TestEnvironmentFactorKeepsDiffuseDetailOutsideTheAtlas(t *testing.T) {
 	g := &components.Geoset{Material: &components.Material{Layers: []components.Layer{{Texture: &components.Texture{}, FilterMode: components.BlendModulate2x, Unshaded: true}}}}
 	for _, uv := range []imath.Vector2{{0, 0}, {1, 0}, {0, 1}} {
@@ -455,5 +487,37 @@ func TestEnvironmentFactorKeepsDiffuseDetailOutsideTheAtlas(t *testing.T) {
 		if math.Abs(float64(channel)/255*2*[]float64{.8, .6, .4}[k]-want.diffuse[k]) > 2.0/255 {
 			t.Fatalf("factor pass did not reproduce shader: %v %+v", actual, want)
 		}
+	}
+}
+
+func TestRegisterBakeTextureUsesListfileStemAnd12Hex(t *testing.T) {
+	if got := BakeStemFromListfile(`creature/firehawk/Alysrazor.m2`); got != "alysrazor" {
+		t.Fatalf("stem %q", got)
+	}
+	atlas := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	result := ConvertResult{
+		MDL: mdl.New(mdl.NewMDLOptions{}), TexturePaths: map[string]struct{}{},
+		BakeStem: BakeStemFromListfile(`creature/firehawk/Alysrazor.m2`),
+	}
+	tex, err := registerBakeTexture(config.Config{AssetPrefix: "wow"}, &result, atlas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel := tex.WowData.PngPath
+	t.Cleanup(func() { texturesource.Unregister(rel) })
+	const prefix = "baked/uv2/alysrazor_"
+	hexPart := strings.TrimSuffix(strings.TrimPrefix(rel, prefix), ".png")
+	if !strings.HasPrefix(rel, prefix) || len(hexPart) != 12 {
+		t.Fatalf("png path %q", rel)
+	}
+	if tex.Image != "wow/"+prefix+hexPart+".blp" {
+		t.Fatalf("blp path %q", tex.Image)
+	}
+	again, err := registerBakeTexture(config.Config{AssetPrefix: "wow"}, &result, atlas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.WowData.PngPath != rel {
+		t.Fatalf("same atlas %q vs %q", again.WowData.PngPath, rel)
 	}
 }

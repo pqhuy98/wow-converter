@@ -46,6 +46,7 @@ func TestFirehawkUV2Bake(t *testing.T) {
 		}
 	}
 	cfg := config.DefaultConfig()
+	cfg.TextureBaking.Enabled = true
 	out := os.Getenv("UV2_TEST_OUTPUT")
 	if out == "" {
 		out = t.TempDir()

@@ -51,6 +51,7 @@ type ConvertOptions struct {
 type ConvertResult struct {
 	MDL          *mdl.MDL
 	TexturePaths map[string]struct{}
+	BakeStem     string
 }
 
 // ConvertM2ToMdl converts an M2 file to MDL via the direct pipeline.
@@ -173,9 +174,11 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 		Metadata:    meta,
 	}, cfg)
 
-	result := ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths}
-	if err := bakeM2Materials(ctx, cfg, src, loader, skin, geosetMask, resolved, meta, &result); err != nil {
-		return ConvertResult{}, err
+	result := ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths, BakeStem: BakeStemFromListfile(fileName)}
+	if cfg.TextureBaking.Enabled {
+		if err := bakeM2Materials(ctx, cfg, src, loader, skin, geosetMask, resolved, meta, &result); err != nil {
+			return ConvertResult{}, err
+		}
 	}
 	return result, nil
 }

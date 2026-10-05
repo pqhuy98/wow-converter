@@ -342,6 +342,9 @@ func BakeWMOMaterial(ctx context.Context, cfg config.Config, result *ConvertResu
 		log.Printf("WMO shader %d: camera-dependent reflection/parallax uses a front reference view", material.Shader)
 	}
 	for matrix := range 2 {
+		if !cfg.TextureBaking.Flipbook() {
+			break
+		}
 		sx, sy := speed[matrix*2], speed[matrix*2+1]
 		if sx == 0 && sy == 0 {
 			continue

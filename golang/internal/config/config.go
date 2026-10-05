@@ -18,10 +18,17 @@ type Config struct {
 	MaxTextureSize                     int
 }
 
-// TextureBakingOptions is request-scoped; zero values retain the compact default.
+// TextureBakingOptions is request-scoped. Baking is off until Enabled is set.
 type TextureBakingOptions struct {
-	FPS      int `json:"fps,omitempty"`
-	WindowMS int `json:"windowMS,omitempty"`
+	Enabled  bool  `json:"enabled,omitempty"`
+	Animate  *bool `json:"animate,omitempty"`
+	FPS      int   `json:"fps,omitempty"`
+	WindowMS int   `json:"windowMS,omitempty"`
+}
+
+// Flipbook is true unless the request explicitly disables animation.
+func (o TextureBakingOptions) Flipbook() bool {
+	return o.Animate == nil || *o.Animate
 }
 
 // DefaultConfig returns converter defaults (asset dir from env or repo .cache/wow-export).

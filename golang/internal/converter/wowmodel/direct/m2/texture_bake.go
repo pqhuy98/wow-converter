@@ -215,16 +215,18 @@ units:
 		var nativeMasks []nativeMaskDraw
 		var opaqueRemainder *components.Geoset
 		var opaqueBase *components.Geoset
-		if unit.ColorIndex == 65535 && layer.Alpha.Static && layer.Alpha.Value == 1 && !layer.NoDepthSet && !layer.NoDepthTest {
-			opaqueRemainder, opaqueBase, environmentFactor = nativeOpaqueProduct(g, program)
-		}
-		if layer.NoDepthSet {
-			// The opacity and radiance draws must not write depth between their
-			// different mask subdivisions. Depth-writing batches use one bake.
-			nativeMasks = nativeModulateMask(g, program)
-		}
-		if opaqueBase == nil && len(nativeMasks) == 0 && unit.ColorIndex == 65535 && layer.Alpha.Static && layer.Alpha.Value == 1 {
-			opaqueRemainder, nativeMasks = nativeOpaqueMasks(g, program)
+		if cfg.TextureBaking.Flipbook() {
+			if unit.ColorIndex == 65535 && layer.Alpha.Static && layer.Alpha.Value == 1 && !layer.NoDepthSet && !layer.NoDepthTest {
+				opaqueRemainder, opaqueBase, environmentFactor = nativeOpaqueProduct(g, program)
+			}
+			if layer.NoDepthSet {
+				// The opacity and radiance draws must not write depth between their
+				// different mask subdivisions. Depth-writing batches use one bake.
+				nativeMasks = nativeModulateMask(g, program)
+			}
+			if opaqueBase == nil && len(nativeMasks) == 0 && unit.ColorIndex == 65535 && layer.Alpha.Static && layer.Alpha.Value == 1 {
+				opaqueRemainder, nativeMasks = nativeOpaqueMasks(g, program)
+			}
 		}
 		if opaqueBase != nil {
 			if len(opaqueRemainder.Faces) > 0 {
@@ -373,7 +375,7 @@ units:
 			}
 			return fmt.Errorf("UV2 bake section %d: %w", unit.SkinSectionIndex, err)
 		}
-		if didBake {
+		if didBake && cfg.TextureBaking.Flipbook() {
 			for _, ta := range program.transforms {
 				if ta != nil {
 					for _, track := range []*components.Animation{ta.Translation, ta.Rotation, ta.Scaling} {
@@ -550,12 +552,25 @@ func registerBakeTexture(cfg config.Config, result *ConvertResult, atlas *image.
 		return nil, err
 	}
 	hash := sha256.Sum256(encoded.Bytes())
-	rel := fmt.Sprintf("baked/uv2/%x.png", hash[:16])
+	stem := result.BakeStem
+	if stem == "" {
+		stem = BakeStemFromListfile(result.MDL.Model.Name)
+	}
+	rel := fmt.Sprintf("baked/uv2/%s_%x.png", stem, hash[:6])
 	texturesource.Register(rel, texturesource.Source{Kind: texturesource.KindPNG, PNG: encoded.Bytes(), PreserveAlpha: true})
 	result.TexturePaths[rel] = struct{}{}
 	tex := &components.Texture{Image: filepath.ToSlash(filepath.Join(cfg.AssetPrefix, strings.TrimSuffix(rel, ".png")+".blp")), WowData: components.TextureWowData{PngPath: rel}}
 	result.MDL.Textures = append(result.MDL.Textures, tex)
 	return tex, nil
+}
+
+// BakeStemFromListfile is the WoW file basename used in baked texture paths.
+func BakeStemFromListfile(fileName string) string {
+	stem := strings.ToLower(stripModelExt(filepath.Base(strings.ReplaceAll(fileName, "\\", "/"))))
+	if stem == "" || stem == "." {
+		return "baked"
+	}
+	return stem
 }
 
 func m2BakeBlend(mode uint16) components.BlendMode {
@@ -663,6 +678,9 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 		}
 	}
 	plan := makeBakeTimeline(transforms, program.weights, program.shader.pixel, result.MDL.Sequences)
+	if !cfg.TextureBaking.Flipbook() {
+		plan = stillBakeTimeline()
+	}
 	frames := len(plan.moments)
 	minUV, maxUV := imath.Vector2{math.Inf(1), math.Inf(1)}, imath.Vector2{math.Inf(-1), math.Inf(-1)}
 	minUV2, maxUV2 := minUV, maxUV
@@ -797,7 +815,7 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 	// with the compact reference above, then grow/page the atlas in time. This
 	// keeps FPS comparisons at identical spatial quality instead of silently
 	// dropping frames or blurring the higher-FPS variants further.
-	if cfg.TextureBaking.FPS > 0 || cfg.TextureBaking.WindowMS > 0 {
+	if cfg.TextureBaking.Flipbook() && (cfg.TextureBaking.FPS > 0 || cfg.TextureBaking.WindowMS > 0) {
 		plan = makeBakeTimeline(transforms, program.weights, program.shader.pixel, result.MDL.Sequences, cfg.TextureBaking)
 		frames = len(plan.moments)
 		frameCols = bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(frames)))))

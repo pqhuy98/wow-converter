@@ -25,6 +25,8 @@ import { startupRequests } from './export-character.startup';
 export const ExporCharacterRequestSchema = z.object({
   character: CharacterSchema,
   textureBaking: z.object({
+    enabled: z.boolean().optional(),
+    animate: z.boolean().optional(),
     fps: z.number().int().min(1).max(60)
       .optional(),
     windowMS: z.number().int().min(1).max(60000)

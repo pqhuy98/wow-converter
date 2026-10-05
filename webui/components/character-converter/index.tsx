@@ -18,7 +18,8 @@ import {
 } from '@/components/ui/card';
 import {
   allAttachments,
-  AttachItem, Character, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, Optimization, RefSchema,
+  AttachItem, Character, defaultTextureBakingForm, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, Optimization, RefSchema,
+  toTextureBakingRequest,
 } from '@/lib/models/export-character.model';
 
 import { useServerConfig } from '../server-config';
@@ -76,6 +77,7 @@ export function CharacterConverter() {
     removeUnusedMaterialsTextures: true,
     maxTextureSize: serverConfig.isClassic ? '512' : undefined,
   });
+  const [textureBaking, setTextureBaking] = useState(defaultTextureBakingForm);
 
   useEffect(() => {
     if (serverConfig.isClassic && !optimization.maxTextureSize) {
@@ -182,6 +184,7 @@ export function CharacterConverter() {
         character: exportCharacter,
         outputFileName,
         optimization,
+        textureBaking: toTextureBakingRequest(textureBaking),
         format,
         formatVersion,
       };
@@ -317,6 +320,8 @@ export function CharacterConverter() {
           jobStatus={jobStatus}
           optimization={optimization}
           setOptimization={setOptimization}
+          textureBaking={textureBaking}
+          setTextureBaking={setTextureBaking}
         />
 
         <Card className="pt-6">

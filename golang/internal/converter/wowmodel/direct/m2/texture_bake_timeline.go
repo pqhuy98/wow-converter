@@ -19,6 +19,10 @@ type bakeTimeline struct {
 	period  int
 }
 
+func stillBakeTimeline() bakeTimeline {
+	return bakeTimeline{moments: []bakeMoment{{time: 0}}, keys: map[int]int{0: 0}}
+}
+
 // A native detail loop and a baked cutout using the same source clock must
 // repeat the same window. Otherwise scrolling heads pass through old holes.
 func boundNativeUVLoops(result *ConvertResult, baked map[*components.GlobalSequence]bool, window int) {

@@ -349,9 +349,6 @@ export default function RecentsPage() {
                               <span className="font-medium">Optimizations:</span>
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {job.request.optimization.sortSequences && <Badge variant="secondary" className="text-xs">Sort Sequences</Badge>}
-                                {job.request.optimization.removeUnusedVertices && <Badge variant="secondary" className="text-xs">Remove Vertices</Badge>}
-                                {job.request.optimization.removeUnusedNodes && <Badge variant="secondary" className="text-xs">Remove Nodes</Badge>}
-                                {job.request.optimization.removeUnusedMaterialsTextures && <Badge variant="secondary" className="text-xs">Optimize Materials</Badge>}
                               </div>
                             </div>
                           )}

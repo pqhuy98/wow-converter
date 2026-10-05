@@ -39,6 +39,39 @@ export interface Character {
 
 export type ModelFormatVersion = '800' | '1000'
 
+export interface TextureBaking {
+  enabled?: boolean
+  animate?: boolean
+  fps?: number
+  windowMS?: number
+}
+
+export type TextureBakingForm = {
+  enabled: boolean
+  animate: boolean
+  fps: number
+  windowMS: number
+}
+
+export const defaultTextureBakingForm: TextureBakingForm = {
+  enabled: false,
+  animate: true,
+  fps: 15,
+  windowMS: 4000,
+};
+
+export function toTextureBakingRequest(form: TextureBakingForm): TextureBaking | undefined {
+  if (!form.enabled) {
+    return undefined;
+  }
+  if (!form.animate) {
+    return { enabled: true, animate: false };
+  }
+  return {
+    enabled: true, animate: true, fps: form.fps, windowMS: form.windowMS,
+  };
+}
+
 export interface Optimization {
   sortSequences?: boolean
   allMaterialsUnshaded?: boolean
@@ -52,6 +85,7 @@ export interface ExportRequest {
   character: Character
   outputFileName: string
   optimization: Optimization
+  textureBaking?: TextureBaking
   format?: ModelFormat
   formatVersion?: ModelFormatVersion
   isBrowse?: boolean

@@ -397,9 +397,11 @@ func ConvertWmoToMdl(ctx context.Context, cfg config.Config, src directm2.FileSo
 		Metadata:    meta,
 	}, cfg)
 
-	result := directm2.ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths}
-	if err := bakeWmoMaterials(ctx, cfg, src, root, allGroups, &result); err != nil {
-		return directm2.ConvertResult{}, err
+	result := directm2.ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths, BakeStem: directm2.BakeStemFromListfile(fileName)}
+	if cfg.TextureBaking.Enabled {
+		if err := bakeWmoMaterials(ctx, cfg, src, root, allGroups, &result); err != nil {
+			return directm2.ConvertResult{}, err
+		}
 	}
 	return result, nil
 }

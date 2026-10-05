@@ -89,7 +89,9 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 		}
 		frames := bakeFrameCount(int(node.LifeSpan * 1000))
 		referenceFrames := frames
-		if cfg.TextureBaking.FPS > 0 || cfg.TextureBaking.WindowMS > 0 {
+		if !cfg.TextureBaking.Flipbook() {
+			frames = 1
+		} else if cfg.TextureBaking.FPS > 0 || cfg.TextureBaking.WindowMS > 0 {
 			fps := bakeFPS
 			if cfg.TextureBaking.FPS > 0 {
 				fps = cfg.TextureBaking.FPS
@@ -113,7 +115,10 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 			}
 			atlas := image.NewNRGBA(image.Rect(0, 0, tile*cols, tile*rows))
 			for frame := range frames {
-				age := float64(frame) / float64(frames-1)
+				age := 0.0
+				if frames > 1 {
+					age = float64(frame) / float64(frames-1)
+				}
 				life := age * node.LifeSpan
 				scale := particleTrackAt(p.ScaleTrack, age, []float64{1, 1})
 				sx, sy := scale[0]/maxScale, scale[1]/maxScale

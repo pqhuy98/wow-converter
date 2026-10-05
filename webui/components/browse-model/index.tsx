@@ -25,10 +25,12 @@ import { useScrollResetOnSearchChange } from '@/lib/hooks/use-scroll-reset-on-se
 import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
 import {
   Character,
+  defaultTextureBakingForm,
   JobStatus,
   ModelFormat,
   ModelFormatVersion,
   Optimization,
+  toTextureBakingRequest,
 } from '@/lib/models/export-character.model';
 import { formatDocumentTitle } from '@/lib/utils/browse-page-title';
 
@@ -286,6 +288,7 @@ export default function BrowseModelPage() {
     removeUnusedNodes: true,
     removeUnusedMaterialsTextures: true,
   });
+  const [textureBaking, setTextureBaking] = useState(defaultTextureBakingForm);
   const isBusy = isExporting || job?.status === 'pending' || job?.status === 'processing';
 
   const triggerExport = useCallback(async (file: FileEntry, skinId?: string | null) => {
@@ -315,6 +318,7 @@ export default function BrowseModelPage() {
       character: exportCharacter,
       outputFileName: guessedName,
       optimization,
+      textureBaking: toTextureBakingRequest(textureBaking),
       format,
       formatVersion,
       isBrowse: true,
@@ -330,7 +334,7 @@ export default function BrowseModelPage() {
     setIsExporting(false);
     const js = (await res.json()) as JobStatus;
     setJob(js);
-  }, [isExporting, character, optimization, format, formatVersion, selectedSkinId]);
+  }, [isExporting, character, optimization, textureBaking, format, formatVersion, selectedSkinId]);
 
   const getRowHeight = useCallback((file: FileEntry) => {
     if (selected?.fileDataID !== file.fileDataID || selected?.fileName !== file.fileName) {
@@ -421,6 +425,8 @@ export default function BrowseModelPage() {
                   setFormatVersion={setFormatVersion}
                   optimization={optimization}
                   setOptimization={setOptimization}
+                  textureBaking={textureBaking}
+                  setTextureBaking={setTextureBaking}
                   disabled={isBusy}
                 />
               </CardHeader>

@@ -18,7 +18,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  JobStatus, ModelFormat, ModelFormatVersion, Optimization,
+  JobStatus, ModelFormat, ModelFormatVersion, Optimization, TextureBakingForm,
 } from '@/lib/models/export-character.model';
 
 import { TooltipHelp } from '../common/tooltip-help';
@@ -43,6 +43,8 @@ export function ExportSection({
   jobStatus,
   optimization,
   setOptimization,
+  textureBaking,
+  setTextureBaking,
 }: {
   outputFileName: string;
   setOutputFileName: (value: string) => void;
@@ -54,6 +56,8 @@ export function ExportSection({
   jobStatus?: JobStatus;
   optimization: Optimization;
   setOptimization: (value: Optimization) => void;
+  textureBaking: TextureBakingForm;
+  setTextureBaking: (value: TextureBakingForm) => void;
 }) {
   const serverConfig = useServerConfig();
 
@@ -169,6 +173,8 @@ export function ExportSection({
         <OptimizationOptions
           optimization={optimization}
           setOptimization={setOptimization}
+          textureBaking={textureBaking}
+          setTextureBaking={setTextureBaking}
         />
 
       </CardContent>
