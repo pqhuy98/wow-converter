@@ -879,8 +879,9 @@ export class M2MetadataFile {
         objectId: -1,
         type: 'ParticleEmitter2',
         name: `ParticleEmitter_${i}`,
-        // Loader particles use (x, z, -y); MDL's intermediate basis is (x, -z, y).
-        pivotPoint: [p.position[0], -p.position[1], -p.position[2]],
+        // Undo the loader's (x, z, -y) basis, as for bone pivots.
+        // This is a model-space bind point, not an offset from the parent pivot.
+        pivotPoint: [p.position[0], -p.position[2], p.position[1]],
         parent,
         flags: [],
         flags2: [],
@@ -1141,8 +1142,6 @@ export class M2MetadataFile {
     }
 
     const ribbons: MDLRibbonEmitter[] = [];
-    const frameSequence: GlobalSequence = { id: this.mdl.globalSequences.length, duration: 1 };
-    this.mdl.globalSequences.push(frameSequence);
 
     this.ribbonEmitters.forEach((r, i) => {
       const parent = this.mdl.bones[(r.boneIndex ?? 0)] ?? this.mdl.bones[0];
@@ -1201,10 +1200,9 @@ export class M2MetadataFile {
         objectId: -1,
         type: 'RibbonEmitter',
         name: `RibbonEmitter_${i}`,
-        pivotPoint: [r.position[0], -r.position[2], r.position[1]],
-        rotation: {
-          type: 'rotation', globalSeq: frameSequence, interpolation: 'DontInterp', keyFrames: new Map([[0, [Math.SQRT1_2, 0, 0, Math.SQRT1_2]]]),
-        },
+        // Ribbon positions stay in the source model basis in the loader.
+        // WoW and WC3 both extend edges along the inherited bone's local Y.
+        pivotPoint: [r.position[0], r.position[1], r.position[2]],
         parent,
         flags: [],
 

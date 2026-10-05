@@ -20,6 +20,8 @@ function lanDevOrigins(port) {
 const nextConfig = {
   devIndicators: false,
   allowedDevOrigins: ['localhost:3001', '127.0.0.1:3001', ...lanDevOrigins(apiPort)],
+  // `next build` wipes distDir; keep it off `.next` so `bun run build` can run during `bun dev`.
+  distDir: isDev ? '.next' : '.next-prod',
   // Static export for production builds only — dev needs rewrites to proxy /api to Express.
   ...(isDev ? {} : { output: 'export' }),
   async rewrites() {

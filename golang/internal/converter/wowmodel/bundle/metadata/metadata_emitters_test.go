@@ -25,25 +25,71 @@ func TestExtractMDLParticlesEmittersBasic(t *testing.T) {
 	if len(model.ParticleEmitter2s) != 1 {
 		t.Fatalf("expected 1 particle emitter, got %d", len(model.ParticleEmitter2s))
 	}
-	if got := model.ParticleEmitter2s[0].PivotPoint; got != (imath.Vector3{1, -3, 2}) {
-		t.Fatalf("particle position converted twice: %v", got)
+	if got := model.ParticleEmitter2s[0].PivotPoint; got != (imath.Vector3{1, 2, 3}) {
+		t.Fatalf("particle pivot %v, want model-space bind point (1,2,3)", got)
 	}
 }
 
-func TestRibbonBasisRotationSurvivesSequenceRemapping(t *testing.T) {
-	f := &File{IsLoaded: true, materials: []materialMeta{{BlendingMode: 2}}, ribbonEmitters: []m2.RibbonEmitterEntry{{TextureIndices: []uint16{0}, MaterialIndices: []uint16{0}}}}
-	m := mdl.New(mdl.NewMDLOptions{Name: "ribbon basis"})
-	m.Bones = []*components.Bone{components.NewBone("root")}
-	m.Sequences = []components.Sequence{{Interval: [2]int{0, 100}}, {Interval: [2]int{101, 201}}}
-	f.BindMdl(m)
-	f.ExtractMDLRibbonEmitters([]components.Texture{{Image: "ribbon.blp"}})
-	if len(m.RibbonEmitters) != 1 {
-		t.Fatal("ribbon missing")
+func TestExtractMDLParticlesEmittersModelSpacePivots(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		parent, want imath.Vector3
+		loaded       [3]float32
+	}{
+		{"nonzero offset", imath.Vector3{10, 20, 30}, imath.Vector3{11, 22, 33}, [3]float32{11, 33, -22}},
+		{"model origin", imath.Vector3{10, 20, 30}, imath.Vector3{}, [3]float32{}},
+		{"mirrored point", imath.Vector3{1, 2, 3}, imath.Vector3{-1, 2, 3}, [3]float32{-1, 3, -2}},
+		{"point on parent", imath.Vector3{1, 2, 3}, imath.Vector3{1, 2, 3}, [3]float32{1, 3, -2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &File{IsLoaded: true, particleEmitters: []m2.ParticleEmitterEntry{{Position: tc.loaded, Bone: 0}}}
+			model := mdl.New(mdl.NewMDLOptions{Name: "particle bind point"})
+			parent := components.NewBone("parent")
+			parent.PivotPoint = tc.parent
+			model.Bones = []*components.Bone{parent}
+			f.BindMdl(model)
+			f.ExtractMDLParticlesEmitters([]components.Texture{{Image: "test.blp"}})
+			if len(model.ParticleEmitter2s) != 1 {
+				t.Fatal("expected one emitter")
+			}
+			emitter := model.ParticleEmitter2s[0]
+			if emitter.PivotPoint != tc.want || emitter.Parent != parent {
+				t.Fatalf("pivot %v, parent %p; want pivot %v, parent %p", emitter.PivotPoint, emitter.Parent, tc.want, parent)
+			}
+		})
 	}
-	rotation := m.RibbonEmitters[0].Rotation
-	m.Modify.ScaleSequenceDuration(&m.Sequences[0], 2)
-	if rotation.GlobalSeq == nil || rotation.GlobalSeq.Duration != 1 || len(rotation.KeyFrames) != 1 || rotation.KeyFrames[0] == nil {
-		t.Fatal("constant emitter frame became a sequence-local animation")
+}
+
+func TestExtractMDLRibbonsPreservesBindPointsAndBoneFrame(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		parent, want imath.Vector3
+		position     [3]float32
+	}{
+		{"point on wing bone", imath.Vector3{1, 2, 3}, imath.Vector3{1, 2, 3}, [3]float32{1, 2, 3}},
+		{"offset from bone", imath.Vector3{10, 20, 30}, imath.Vector3{11, 22, 33}, [3]float32{11, 22, 33}},
+		{"mirrored point", imath.Vector3{1, 2, 3}, imath.Vector3{-1, 2, 3}, [3]float32{-1, 2, 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &File{IsLoaded: true, materials: []materialMeta{{BlendingMode: 2}}, ribbonEmitters: []m2.RibbonEmitterEntry{{BoneIndex: 0, Position: tc.position, TextureIndices: []uint16{0}, MaterialIndices: []uint16{0}}}}
+			m := mdl.New(mdl.NewMDLOptions{Name: "ribbon bind point"})
+			parent := components.NewBone("wing")
+			parent.PivotPoint = tc.parent
+			parent.Rotation = &components.Animation{Type: components.AnimTypeRotation, KeyFrames: map[int]any{0: imath.QuaternionRotation{0.5, 0.5, 0.5, 0.5}}}
+			m.Bones = []*components.Bone{parent}
+			f.BindMdl(m)
+			f.ExtractMDLRibbonEmitters([]components.Texture{{Image: "ribbon.blp"}})
+			if len(m.RibbonEmitters) != 1 {
+				t.Fatal("ribbon missing")
+			}
+			ribbon := m.RibbonEmitters[0]
+			if ribbon.Parent != parent || ribbon.PivotPoint != tc.want {
+				t.Fatalf("ribbon pivot %v, parent %p; want pivot %v, parent %p", ribbon.PivotPoint, ribbon.Parent, tc.want, parent)
+			}
+			if ribbon.Rotation != nil {
+				t.Fatal("ribbon should inherit the bone frame without an extra basis rotation")
+			}
+		})
 	}
 }
 

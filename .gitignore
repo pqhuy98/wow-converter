@@ -103,6 +103,7 @@ typings/
 
 # next.js build output
 .next
+.next-prod
 
 # nuxt.js build output
 .nuxt

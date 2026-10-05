@@ -85,3 +85,27 @@ func TestScaleSequenceDurationPreservesTSCollisionOrder(t *testing.T) {
 		t.Fatalf("did not expect synthesized boundary key at 3394, got %v", components.SortedKeyInts(m.Bones[0].Translation.KeyFrames))
 	}
 }
+
+func TestParticlePivotsPreservedBySyncAndSerialization(t *testing.T) {
+	m := New(NewMDLOptions{Name: "particles"})
+	bone := components.NewBone("eye")
+	bone.PivotPoint = imath.Vector3{1, 2, 3}
+	m.Bones = []*components.Bone{bone}
+	m.ParticleEmitter2s = []*components.ParticleEmitter2{{
+		NodeBase: components.NodeBase{
+			Name:       "ParticleEmitter_0",
+			Type:       "ParticleEmitter2",
+			Parent:     bone,
+			PivotPoint: imath.Vector3{-1, 2, 3},
+		},
+	}}
+	want := m.ParticleEmitter2s[0].PivotPoint
+	m.Sync()
+	if got := m.ParticleEmitter2s[0].PivotPoint; got != want {
+		t.Fatalf("Sync changed emitter pivot: %v, want %v", got, want)
+	}
+	_ = m.ToMdl()
+	if got := m.ParticleEmitter2s[0].PivotPoint; got != want {
+		t.Fatalf("serialization changed emitter pivot: %v, want %v", got, want)
+	}
+}
