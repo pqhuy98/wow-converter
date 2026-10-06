@@ -136,13 +136,14 @@ func (a *AssetManager) ParseDirect(ctx context.Context, fileDataID int, skinName
 
 // DirectParseOptions configures direct M2 conversion.
 type DirectParseOptions struct {
-	FileDataID         int
-	SkinName           string
-	GeosetMask         []m2export.GeosetMaskEntry
-	GeosetMaskBuilder  func(*m2.Skin) []m2export.GeosetMaskEntry
-	DataTextures       map[int]directm2.DirectDataTexture
-	ExcludeAnimIDs     map[int]struct{}
-	ExportPathOverride string
+	FileDataID          int
+	SkinName            string
+	ReplaceableTextures map[int]int
+	GeosetMask          []m2export.GeosetMaskEntry
+	GeosetMaskBuilder   func(*m2.Skin) []m2export.GeosetMaskEntry
+	DataTextures        map[int]directm2.DirectDataTexture
+	ExcludeAnimIDs      map[int]struct{}
+	ExportPathOverride  string
 }
 
 // ParseDirectOptions converts M2/WMO with full direct pipeline options.
@@ -166,13 +167,14 @@ func (a *AssetManager) ParseDirectOptions(ctx context.Context, opts DirectParseO
 	var result directm2.ConvertResult
 	if strings.HasSuffix(strings.ToLower(fileName), ".m2") {
 		result, err = directm2.ConvertM2ToMdl(ctx, a.config, src, directm2.ConvertOptions{
-			FileDataID:         opts.FileDataID,
-			SkinName:           opts.SkinName,
-			GeosetMask:         opts.GeosetMask,
-			GeosetMaskBuilder:  opts.GeosetMaskBuilder,
-			DataTextures:       opts.DataTextures,
-			ExcludeAnimIDs:     opts.ExcludeAnimIDs,
-			ExportPathOverride: opts.ExportPathOverride,
+			FileDataID:          opts.FileDataID,
+			SkinName:            opts.SkinName,
+			ReplaceableTextures: opts.ReplaceableTextures,
+			GeosetMask:          opts.GeosetMask,
+			GeosetMaskBuilder:   opts.GeosetMaskBuilder,
+			DataTextures:        opts.DataTextures,
+			ExcludeAnimIDs:      opts.ExcludeAnimIDs,
+			ExportPathOverride:  opts.ExportPathOverride,
 		})
 	} else {
 		result, err = directwmo.ConvertWmoToMdl(ctx, a.config, src, directwmo.ConvertOptions{
@@ -328,6 +330,7 @@ type blpConvertItem struct {
 	resizeTo      *blp.Size
 	opaque        bool
 	preserveAlpha bool
+	ignoreAlpha   bool
 	outPath       string
 }
 
@@ -400,11 +403,11 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 				}
 				switch {
 				case len(item.rawBLP) > 0:
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "blp2", Data: item.rawBLP, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "blp2", Data: item.rawBLP, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
 						return err
 					}
 				case len(item.pngData) > 0:
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: item.pngData, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: item.pngData, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
 						return err
 					}
 				case item.pngPath != "":
@@ -412,7 +415,7 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 					if err != nil {
 						return nil
 					}
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: data, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: data, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
 						return err
 					}
 				default:
@@ -484,7 +487,7 @@ func (a *AssetManager) prepTextureForExport(rel, assetPath string) texturePrepRe
 		resizeTo = &blp.Size{Width: targetW, Height: targetH}
 	}
 
-	item := blpConvertItem{outPath: outPath, resizeTo: resizeTo, opaque: hasSource && source.Opaque, preserveAlpha: hasSource && source.PreserveAlpha}
+	item := blpConvertItem{outPath: outPath, resizeTo: resizeTo, opaque: hasSource && source.Opaque, preserveAlpha: hasSource && source.PreserveAlpha, ignoreAlpha: hasSource && source.IgnoreAlpha}
 	switch {
 	case hasSource && source.Kind == texturesource.KindBLP && a.wowClient != nil:
 		raw, err := a.wowClient.DownloadCascFile(context.Background(), source.FileDataID)

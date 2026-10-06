@@ -1,0 +1,14 @@
+{
+  "fileName": "world\\wmo\\expansion11\\void\\12vd_void_pylon01.wmo",
+  "fileDataId": 5888021,
+  "conversionDuration": "50.1188929s",
+  "conversionDurationMs": 50118,
+  "memory": {
+    "heapAllocStartBytes": 2392072,
+    "peakHeapAllocBytes": 1841392456,
+    "heapAllocEndBytes": 770056104,
+    "totalAllocDeltaBytes": 69692349456,
+    "numGCDelta": 143,
+    "samples": 503
+  }
+}

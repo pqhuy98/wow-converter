@@ -159,6 +159,9 @@ type Loader struct {
 	// Group data
 	Liquid        *Liquid
 	VertexColours [][]uint32
+	// MOCV streams hold lighting and two-layer alpha. MOC2 is a separate
+	// BGRA stream used for four-layer blend weights/AO and parallax coordinates.
+	BlendColours  []uint32
 	NameOfs       uint32
 	DescOfs       uint32
 	OfsPortals    uint16
@@ -211,6 +214,7 @@ var wmoOptionalChunks = map[uint32]bool{
 	0x4D4F5052: true, // MOPR
 	0x4D4F5054: true, // MOPT
 	0x4D4F4356: true, // MOCV
+	0x4D4F4332: true, // MOC2
 	0x4D44414C: true, // MDAL
 }
 
@@ -235,6 +239,7 @@ var wmoChunkHandlers = map[uint32]chunkHandler{
 	0x47464944: handleGFID,
 	0x4D4C4951: handleMLIQ,
 	0x4D4F4356: handleMOCV,
+	0x4D4F4332: handleMOC2,
 	0x4D44414C: handleMDAL,
 	0x4D4F4750: handleMOGP,
 	0x4D4F5649: handleMOVI,
@@ -450,6 +455,10 @@ func handleMOCV(l *Loader, data *buffer.Buffer, chunkSize int) {
 	l.VertexColours = append(l.VertexColours, vals)
 }
 
+func handleMOC2(l *Loader, data *buffer.Buffer, chunkSize int) {
+	l.BlendColours = readUInt32Slice(data, chunkSize/4)
+}
+
 func handleMDAL(l *Loader, data *buffer.Buffer, _ int) {
 	l.AmbientColor = uint32(data.ReadUInt32LE().(int64))
 }
@@ -516,6 +525,8 @@ func dispatchWMOChunk(l *Loader, data *buffer.Buffer, chunkID uint32, chunkSize 
 		handleMLIQ(l, data, chunkSize)
 	case 0x4D4F4356:
 		handleMOCV(l, data, chunkSize)
+	case 0x4D4F4332:
+		handleMOC2(l, data, chunkSize)
 	case 0x4D44414C:
 		handleMDAL(l, data, chunkSize)
 	case 0x4D4F4750:

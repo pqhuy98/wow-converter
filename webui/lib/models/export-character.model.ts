@@ -44,6 +44,7 @@ export interface TextureBaking {
   animate?: boolean
   fps?: number
   windowMS?: number
+  resolutionScale?: 1 | 0.5
 }
 
 export type TextureBakingForm = {
@@ -51,6 +52,7 @@ export type TextureBakingForm = {
   animate: boolean
   fps: number
   windowMS: number
+  resolutionScale: 1 | 0.5
 }
 
 export const defaultTextureBakingForm: TextureBakingForm = {
@@ -58,6 +60,7 @@ export const defaultTextureBakingForm: TextureBakingForm = {
   animate: true,
   fps: 15,
   windowMS: 4000,
+  resolutionScale: 1,
 };
 
 export function toTextureBakingRequest(form: TextureBakingForm): TextureBaking | undefined {
@@ -65,10 +68,14 @@ export function toTextureBakingRequest(form: TextureBakingForm): TextureBaking |
     return undefined;
   }
   if (!form.animate) {
-    return { enabled: true, animate: false };
+    return { enabled: true, animate: false, resolutionScale: form.resolutionScale };
   }
   return {
-    enabled: true, animate: true, fps: form.fps, windowMS: form.windowMS,
+    enabled: true,
+    animate: true,
+    fps: form.fps,
+    windowMS: form.windowMS,
+    resolutionScale: form.resolutionScale,
   };
 }
 

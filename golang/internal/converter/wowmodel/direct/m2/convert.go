@@ -37,21 +37,23 @@ type ModelSkin struct {
 
 // ConvertOptions configures direct M2 -> MDL conversion.
 type ConvertOptions struct {
-	FileDataID         int
-	SkinName           string
-	VariantTextures    []int
-	GeosetMask         []m2export.GeosetMaskEntry
-	GeosetMaskBuilder  func(*m2.Skin) []m2export.GeosetMaskEntry
-	DataTextures       map[int]DirectDataTexture
-	ExcludeAnimIDs     map[int]struct{}
-	ExportPathOverride string
+	FileDataID          int
+	SkinName            string
+	VariantTextures     []int
+	ReplaceableTextures map[int]int
+	GeosetMask          []m2export.GeosetMaskEntry
+	GeosetMaskBuilder   func(*m2.Skin) []m2export.GeosetMaskEntry
+	DataTextures        map[int]DirectDataTexture
+	ExcludeAnimIDs      map[int]struct{}
+	ExportPathOverride  string
 }
 
 // ConvertResult is M2 conversion output.
 type ConvertResult struct {
-	MDL          *mdl.MDL
-	TexturePaths map[string]struct{}
-	BakeStem     string
+	MDL                 *mdl.MDL
+	TexturePaths        map[string]struct{}
+	BakeStem            string
+	bakeReferencePixels int
 }
 
 // ConvertM2ToMdl converts an M2 file to MDL via the direct pipeline.
@@ -132,7 +134,7 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 
 	getRaw := func(c context.Context, id int) ([]byte, error) { return src.GetRawFile(c, id) }
 	getName := func(c context.Context, id int) (string, error) { return src.GetFileName(c, id) }
-	resolved, err := ResolveTextures(ctx, loader, variantTextures, opts.DataTextures, outDir, exportRoot, getRaw, getName)
+	resolved, err := ResolveTextures(ctx, loader, variantTextures, opts.ReplaceableTextures, opts.DataTextures, outDir, exportRoot, getRaw, getName)
 	if err != nil {
 		return ConvertResult{}, err
 	}
@@ -173,7 +175,6 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 		Animation:   animFile,
 		Metadata:    meta,
 	}, cfg)
-
 	result := ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths, BakeStem: BakeStemFromListfile(fileName)}
 	if cfg.TextureBaking.Enabled {
 		if err := bakeM2Materials(ctx, cfg, src, loader, skin, geosetMask, resolved, meta, &result); err != nil {

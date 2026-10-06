@@ -37,7 +37,7 @@ func virtualExportPath(exportRoot, file string) string {
 }
 
 // ResolveTextures resolves M2 textures and registers texture sources.
-func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []int, dataTextures map[int]DirectDataTexture, outDir, exportRoot string, getRaw func(context.Context, int) ([]byte, error), getName func(context.Context, int) (string, error)) (ResolvedTextures, error) {
+func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []int, replaceableTextures map[int]int, dataTextures map[int]DirectDataTexture, outDir, exportRoot string, getRaw func(context.Context, int) ([]byte, error), getName func(context.Context, int) (string, error)) (ResolvedTextures, error) {
 	valid := map[any]m2export.TextureManifestEntry{}
 	var mtlMaterials []mtlMaterial
 	addMaterial := func(name, file string) {
@@ -70,7 +70,6 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 		return matName, texFile, texPath, true
 	}
 
-	textureIndex := 0
 	dataTextureTypes := make([]int, 0, len(dataTextures))
 	for texType := range dataTextures {
 		dataTextureTypes = append(dataTextureTypes, texType)
@@ -101,10 +100,9 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 		valid[fmt.Sprintf("data-%d", texType)] = m2export.TextureManifestEntry{
 			MatName: matName, MatPathRelative: texFile, MatPath: texPath,
 		}
-		textureIndex++
 	}
 
-	for _, texture := range loader.Textures {
+	for textureIndex, texture := range loader.Textures {
 		texType := 0
 		if textureIndex < len(loader.TextureTypes) {
 			texType = int(loader.TextureTypes[textureIndex])
@@ -112,14 +110,20 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 		texFileDataID := texture.FileDataID
 
 		if _, isData := dataTextures[texType]; isData {
-			textureIndex++
 			continue
 		}
 
-		if texType > 0 {
+		if target := replaceableTextures[texType]; target > 0 {
+			texFileDataID = uint32(target)
+			loader.Textures[textureIndex].FileDataID = uint32(target)
+		} else if texType > 0 {
 			var target int
 			if texType >= 11 && texType < 14 && texType-11 < len(variantTextures) {
 				target = variantTextures[texType-11]
+			} else if texType == 5 && len(variantTextures) > 3 {
+				// CreatureDisplayInfo's fourth TextureVariation is M2 type 5.
+				// It is a supplied skin texture, not a stock environment map.
+				target = variantTextures[3]
 			} else if texType > 1 && texType < 5 && texType-2 < len(variantTextures) {
 				target = variantTextures[texType-2]
 			}
@@ -151,7 +155,6 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 				MatName: matName, MatPathRelative: texFile, MatPath: texPath,
 			}
 		}
-		textureIndex++
 	}
 
 	return ResolvedTextures{ValidTextures: valid, MtlMaterials: mtlMaterials}, nil

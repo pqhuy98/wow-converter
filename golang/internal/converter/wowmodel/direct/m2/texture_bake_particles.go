@@ -35,6 +35,10 @@ func particleTrackAt(track m2.PartTrack, age float64, fallback []float64) []floa
 	return track.Values[len(track.Values)-1]
 }
 
+func particleBakeRGBIndependent(mode components.ParticleFilterMode) bool {
+	return mode == components.PFilterModulate || mode == components.PFilterModulate2x
+}
+
 // PRE2 has one texture and square sprites. Bake the full three-texture shader,
 // both scroll rates and the source's anisotropic sprite shape over particle age.
 // A few deterministic phase variants approximate WoW's random per-particle UV
@@ -156,7 +160,7 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 					}
 				}
 			}
-			tex, err := registerBakeTexture(cfg, result, atlas)
+			tex, err := registerBakeTexture(cfg, result, atlas, bakeTextureOptions{independentRGB: particleBakeRGBIndependent(original.FilterMode)})
 			if err != nil {
 				return err
 			}

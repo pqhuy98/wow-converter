@@ -10,7 +10,10 @@ The baker resolves the M2 effect/pixel/vertex tables and WMO shader tables,
 samples their source UV sets and texture transforms, and evaluates their
 combiners. Meshes are rasterized with barycentric interpolation. Conflicting UV
 islands get separate charts; shared vertices are duplicated only at chart
-boundaries. Cropped charts have three texels of padding. The fragment baker
+boundaries. Disconnected compatible islands are cropped separately. Their padded
+silhouettes interlock in a deterministic skyline packer; overlapping bounding
+rectangles never imply overlapping sampled texels. Charts retain three texels
+of padding. The fragment baker
 preserves positions, skinning, normals and native model animation. Raster UV
 selection uses triangle texture coverage, rather than overall UV bounds.
 Spatial reduction preserves the chosen source texel proportions; atlas packing
@@ -105,6 +108,71 @@ needed. They can exceed the compact budget substantially. This makes FPS/window
 comparisons meaningful without silently lowering FPS or blurring high-FPS
 variants. Power-of-two atlas padding can make size changes discontinuous.
 
+Final pages remain powers of two, but repeated frame cells need not be. After
+choosing spatial detail with the same reference budget, the exporter crops only
+unused space beyond the padded chart bounds and aligns cell strides to eight
+pixels. It searches uniform page dimensions for the smallest total pixel count,
+including incomplete final pages. UV translations use cell strides divided by
+page dimensions; texture-ID tracks switch pages at those same frame indices.
+Chart samples, three-pixel gutters, FPS, and capture duration are retained.
+
+`textureBaking.resolutionScale` accepts `1` (default) or `0.5`. Half resolution
+averages straight RGB and alpha separately at final texture registration, halving
+width and height while retaining normalized geometry UVs and all timing tracks.
+It affects generated M2/WMO/particle textures in still and animated modes,
+including character attachments. Native source textures are unchanged, so the
+complete asset package does not necessarily shrink to one quarter its size.
+
+PNG-identical generated pages are reused within a model. After attachments are
+merged, identical PNG files with matching encoding semantics share a file path
+without merging wrap flags or other texture-object state. BLP1 alpha storage uses
+the smallest depth that reproduces every alpha value in every mip exactly:
+0 bits for fully opaque output, 1 for binary, 4 for multiples of 17, otherwise 8.
+Opaque baked base layers additionally mark alpha unused, removing that plane
+after color quantization without changing any palette/index or mip RGB bytes.
+This flag is distinct from forcing source PNGs opaque and has a separate hashed
+filename. Blended attenuation masks always retain their alpha. Zero-RGB secondary
+additive passes may use a single black texel because they never write depth.
+
+Temporary UV-chart samples are sparse: conflicting islands store only occupied
+texels rather than a full raster grid per island. Padding adds only the three
+boundary waves and retains deterministic neighbor selection. Chart construction
+and padding share a one-million-sample working limit; if a raster exceeds it,
+the baker retries at lower spatial resolution before allocating more samples.
+This limit is separate from RGBA atlas budgets and also applies to still frames.
+It bounds chart workspace, not the process's CASC, source-texture or model data.
+
+Unused M2 batch reserves are redistributed to subsequent batches. Native painted
+textures therefore do not strand most of the painted-surface allowance while
+dense effect cards receive only a few texels per triangle. Usage is measured at
+the common compact reference timeline, before explicit FPS/window expansion, so
+temporal comparisons keep the same spatial detail.
+
+Character equipment and collection meshes resolve replacement textures by M2
+texture type before shader baking. Global UV tracks retain their own timestamps
+and do not require an ordinary model animation. Generated atlases use texture
+type -1 so later component-0 replacement cannot overwrite them. Source component
+0 remains a valid replacement slot.
+
+Collection customization geoset IDs are selected before mesh construction and
+shader baking, using the existing exact-ID filter. Equipment collection filters
+also run early; models shared by equipment slots retain the union needed by all
+slots. Final collection filtering remains in place. This avoids baking hidden
+variants without losing parts required by later template reuse.
+
+Chart construction indexes only overlapping raster samples and prepares still
+shader colours lazily for actual conflicts. Faces reuse raster-write buffers;
+WMO varyings and face tangent bases are cached. Padding expands the boundary
+frontier while retaining the original neighbour priority and three-wave halo.
+
+Complex WMO exports bake at most two independent batches concurrently. Source
+textures are resolved and decoded serially once; workers have private mutable
+model graphs. Source-order merging preserves the serial geometry budget and
+output ordering. Generated animation references are rebased once and resolved
+against the final animation slice after all merges. Smaller exports remain
+serial. This bounds simultaneous chart workspace; CASC stays in the existing
+data-server process.
+
 ## Limits
 
 WoW scene lighting, HDR bloom, depth fades, refraction and camera-dependent
@@ -121,6 +189,46 @@ UV-chart, timeline and spatial-budget checks. The explicit-settings regression
 checks all six 12/21/30 FPS × 4000/12000 ms combinations under a small pixel
 budget and verifies every generated frame key.
 
+With `bun dev` already running, the WMO still-frame OOM regression is:
+
+```
+go test -tags integration_tests ./internal/server/api -run TestAmaniHubStillTextureBake -v -count=1
+```
+
+It exports `12tr_amani_hub03-wmo-fixed.mdl`, checks baked textures without
+flipbook tracks, and reports sampled server heap peaks including loaded CASC.
+`TestVoidPylonStillTextureBake` exercises `12vd_void_pylon01-wmo-fixed.mdl`.
+`TestAmaniEagleTempleStillTextureBake` covers masonry/grass height blending.
+
+Still WMO baking uses four times the effect spatial budget, capped at one
+megapixel per material. Missing shader-23 environment textures generate no
+empty emissive pass. Unrelated subpixel UV islands retain separate conservative
+samples; faces sharing an edge can still share boundary coverage. Sparse chart
+working-memory limits remain in place.
+
+Still opaque WMO diffuse and emission use independent layouts, reserving three
+quarters of the material budget for diffuse detail and one quarter for emission.
+Different reflection normals no longer force identical albedo into duplicate
+charts. Still conflicts compare the painted result, ignoring masked-out inputs;
+opaque RGB reuse requires identical clamped eight-bit output. Animated and
+alpha-dependent materials keep their combined sampling/coverage constraints.
+Disconnected tiled raster islands drop their whole integer tile offset. Islands
+spanning more than one tile scale uniformly into a bounded raster footprint;
+one extreme repeated UV island cannot shrink the common grid for all others.
+Secondary UVs rebase the complete connected island instead of individual faces,
+retaining shared edges across tile boundaries. Shader inputs keep the original
+UVs and repeat counts. Shorter islands retain their source raster density.
+Budget reductions scale both raster axes together; raster grids need not be
+powers of two, while final WC3 atlases remain powers of two.
+
+WMO shader inputs keep three colour streams distinct: first MOCV is lighting,
+second MOCV is two-layer blend alpha, and MOC2 supplies four-layer weights/AO
+or parallax coordinates. The baker reverses the loader's OBJ V flip before
+sampling BLP pixels. Blended faces preserve a usable active primary unwrap;
+otherwise they rasterize through the most detailed active source UV layer.
+Shader sampling still uses the original four UV sets. This
+prevents unused or collapsed UV1 from flattening detail stored in UV2/3/4.
+
 With the existing data server running, run:
 
 ```
@@ -131,3 +239,15 @@ The Firehawk integration checks transparency, material flags and serialized
 Classic flipbook tracks and writes MDL/MDX. `UV2_TEST_OUTPUT` retains its files.
 Use the Go screenshot commands to compare actual exports with Wowhead. Preview
 validation uses mdx-m3-viewer; in-game WC3 validation remains separate.
+
+`TestTrollShoulderGlobalUVBakeAnimatedAndStill` exercises a real global-only
+equipment UV track with explicit component replacements, checking both animated
+and still export and MDL reload. WMO worker tests compare exact texture bytes and
+optimized serialized models, including several animated passes and pre-existing
+animation references.
+
+From the repository root, `scripts/profile-wmo-texture-bake.ps1` profiles one
+direct WMO conversion against the existing data server. It writes CPU/heap
+profiles, a sampled peak-heap report, MDL and texture SHA-256 manifests. Detailed
+measurements and actual captures are in
+`docs/screenshots/uv2-baking/texture-bake-performance/README.md`.

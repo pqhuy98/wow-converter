@@ -31,6 +31,7 @@ export const ExporCharacterRequestSchema = z.object({
       .optional(),
     windowMS: z.number().int().min(1).max(60000)
       .optional(),
+    resolutionScale: z.union([z.literal(1), z.literal(0.5)]).optional(),
   }).optional(),
   outputFileName: LocalRefValueSchema,
   optimization: z.object({

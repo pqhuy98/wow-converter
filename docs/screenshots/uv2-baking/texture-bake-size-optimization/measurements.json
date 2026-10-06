@@ -1,0 +1,80 @@
+[
+  {
+    "name": "firehawk",
+    "quality": "full",
+    "fps": 12,
+    "windowMS": 4000,
+    "elapsedSeconds": 21.235329,
+    "mdxBytes": 3458738,
+    "mdlBytes": 8780702,
+    "textureBytes": 100835179,
+    "totalMdxBytes": 104293917,
+    "totalMdlBytes": 109615881,
+    "textures": 90
+  },
+  {
+    "name": "troll",
+    "quality": "full",
+    "fps": 15,
+    "windowMS": 4000,
+    "elapsedSeconds": 24.2628518,
+    "mdxBytes": 14848754,
+    "mdlBytes": 38516526,
+    "textureBytes": 106624372,
+    "totalMdxBytes": 121473126,
+    "totalMdlBytes": 145140898,
+    "textures": 44
+  },
+  {
+    "name": "dressing",
+    "quality": "full",
+    "fps": 15,
+    "windowMS": 1000,
+    "elapsedSeconds": 33.4027691,
+    "mdxBytes": 33509462,
+    "mdlBytes": 91325052,
+    "textureBytes": 67716958,
+    "totalMdxBytes": 101226420,
+    "totalMdlBytes": 159042010,
+    "textures": 71
+  },
+  {
+    "name": "firehawk",
+    "quality": "half",
+    "fps": 12,
+    "windowMS": 4000,
+    "elapsedSeconds": 18.1312424,
+    "mdxBytes": 3458738,
+    "mdlBytes": 8780702,
+    "textureBytes": 25861995,
+    "totalMdxBytes": 29320733,
+    "totalMdlBytes": 34642697,
+    "textures": 90
+  },
+  {
+    "name": "troll",
+    "quality": "half",
+    "fps": 15,
+    "windowMS": 4000,
+    "elapsedSeconds": 20.243089400000002,
+    "mdxBytes": 14848754,
+    "mdlBytes": 38516526,
+    "textureBytes": 35870068,
+    "totalMdxBytes": 50718822,
+    "totalMdlBytes": 74386594,
+    "textures": 44
+  },
+  {
+    "name": "dressing",
+    "quality": "half",
+    "fps": 15,
+    "windowMS": 1000,
+    "elapsedSeconds": 20.1682737,
+    "mdxBytes": 33509042,
+    "mdlBytes": 91324836,
+    "textureBytes": 29568364,
+    "totalMdxBytes": 63077406,
+    "totalMdlBytes": 120893200,
+    "textures": 70
+  }
+]

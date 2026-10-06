@@ -35,19 +35,26 @@ const bakeMaterialPixels = 6 * 1024 * 1024
 const bakeParticlePixels = 2 * 1024 * 1024
 const bakePadding = 3
 
+// Bound temporary shader samples, independently of the final RGBA atlas.
+// Each sample carries UVs, barycentrics and a source face (88 bytes before map overhead).
+const bakeChartPixels = 1024 * 1024
+
 var errUV2BakeUnsupported = errors.New("UV2 baking unavailable")
+var errBakeChartLimit = errors.New("shader chart working-memory limit")
 
 type bakePixel struct {
 	uv1, uv2 imath.Vector2
 	env      imath.Vector2
 	set      bool
 	covered  bool
+	prepared bool
 	face     int
 	bary     [3]float64
+	color    [6]uint8
 }
 
 type bakeChart struct {
-	pixels                          []bakePixel
+	pixels                          map[int]bakePixel
 	active                          []int
 	x, y, minX, minY, width, height int
 }
@@ -55,6 +62,7 @@ type bakeChart struct {
 type bakeChartOptions struct {
 	conflict func(bakePixel, bakePixel) bool
 	sourceUV map[*components.GeosetVertex][2]imath.Vector2
+	prepare  func(*bakePixel)
 }
 
 // bakeUV2Materials evaluates the WoW fragment combiner before framebuffer
@@ -81,6 +89,12 @@ func bakeM2Materials(ctx context.Context, cfg config.Config, src FileSource, loa
 	unitsPerSection := map[uint16]int{}
 	bakedGlobals := map[*components.GlobalSequence]bool{}
 	budgets := m2BakeBudgets(loader, skin, geosets)
+	remaining, spare := 0, 0
+	for _, budget := range budgets {
+		if budget > 0 {
+			remaining++
+		}
+	}
 	decoded := map[int]*image.NRGBA{}
 	loadTexture := func(index int) (*image.NRGBA, error) {
 		if img := decoded[index]; img != nil {
@@ -172,6 +186,15 @@ units:
 		}
 		g.Material = &components.Material{PriorityPlane: int(unit.Priority), TwoSided: layer.TwoSided, Layers: []components.Layer{layer}}
 		program := bakeProgram{shader: description, count: m2SamplerCounts[description.pixel], blend: material.BlendingMode, weights: [4]components.AnimatedOrStatic[float64]{}, pixelBudget: budgets[unitIndex]}
+		// Reuse space that earlier batches did not need. A native body texture
+		// must not strand the painted-surface reserve while detailed effects
+		// shrink to a handful of texels. Account at the common reference FPS so
+		// explicit FPS/window comparisons retain the same spatial quality.
+		share := spare / max(1, remaining)
+		program.pixelBudget += share
+		spare -= share
+		remaining--
+		referenceBefore := result.bakeReferencePixels
 		for k := range 4 {
 			program.weights[k] = components.AnimatedOrStatic[float64]{Static: true, Value: 1}
 			if meta != nil {
@@ -187,6 +210,7 @@ units:
 			img, err := loadTexture(index)
 			if err != nil {
 				if errors.Is(err, errUV2BakeUnsupported) {
+					spare += program.pixelBudget
 					log.Printf("UV2 bake: preserving section %d: %v", unit.SkinSectionIndex, err)
 					continue units
 				}
@@ -237,14 +261,14 @@ units:
 				didBake = true
 			}
 			g = opaqueBase
-			texture, err := registerBakeTexture(cfg, result, program.images[1])
+			texture, err := registerBakeTexture(cfg, result, program.images[1], bakeTextureOptions{independentRGB: true})
 			if err != nil {
 				return err
 			}
 			texture.WrapWidth, texture.WrapHeight = program.flags[1]&1 != 0, program.flags[1]&2 != 0
 			g.Material.Layers[0].Texture, g.Material.Layers[0].TVertexAnim = texture, program.transforms[1]
 			g.Material.Layers[0].FilterMode = components.BlendNone
-			factorTexture, err := registerBakeTexture(cfg, result, nativeModulateColor(program.images[0]))
+			factorTexture, err := registerBakeTexture(cfg, result, nativeModulateColor(program.images[0]), bakeTextureOptions{independentRGB: true})
 			if err != nil {
 				return err
 			}
@@ -312,7 +336,7 @@ units:
 			if program.blend == 1 {
 				nativeImage = nativeCutoutAlpha(nativeImage)
 			}
-			texture, err := registerBakeTexture(cfg, result, nativeImage)
+			texture, err := registerBakeTexture(cfg, result, nativeImage, bakeTextureOptions{independentRGB: m2BakeRGBIndependent(program.blend, false)})
 			if err != nil {
 				return err
 			}
@@ -510,6 +534,7 @@ units:
 			g.Material.Layers = g.Material.Layers[:1]
 		}
 		unitsPerSection[unit.SkinSectionIndex]++
+		spare += max(0, program.pixelBudget-(result.bakeReferencePixels-referenceBefore))
 	}
 	boundNativeUVLoops(result, bakedGlobals, cfg.TextureBaking.WindowMS)
 	if err := bakeM2Particles(ctx, cfg, result, loader, loadTexture); err != nil {
@@ -531,6 +556,7 @@ type bakeProgram struct {
 	weights           [4]components.AnimatedOrStatic[float64]
 	shade             func(bakePixel, bakeMoment) m2Fragment
 	conflict          func(bakePixel, bakePixel) bool
+	prepare           func(*bakePixel)
 	hasEmission       bool
 	screen            bool
 	pixelBudget       int
@@ -545,21 +571,46 @@ func m2HasEmission(pixel int) bool {
 	return false
 }
 
-func registerBakeTexture(cfg config.Config, result *ConvertResult, atlas *image.NRGBA) (*components.Texture, error) {
+type bakeTextureOptions struct {
+	ignoreAlpha    bool
+	independentRGB bool
+}
+
+func registerBakeTexture(cfg config.Config, result *ConvertResult, atlas *image.NRGBA, options ...bakeTextureOptions) (*components.Texture, error) {
+	textureOptions := bakeTextureOptions{}
+	if len(options) > 0 {
+		textureOptions = options[0]
+	}
+	if cfg.TextureBaking.ResolutionFactor() == .5 {
+		atlas = halfBakeTexture(atlas, textureOptions.independentRGB)
+	}
 	var encoded bytes.Buffer
 	encoder := png.Encoder{CompressionLevel: png.BestSpeed}
 	if err := encoder.Encode(&encoded, atlas); err != nil {
 		return nil, err
 	}
 	hash := sha256.Sum256(encoded.Bytes())
+	if textureOptions.ignoreAlpha {
+		// Identical PNGs used by opaque and blended draws must not alias an
+		// output file with different alpha semantics.
+		hasher := sha256.New()
+		hasher.Write(encoded.Bytes())
+		hasher.Write([]byte("alpha-unused"))
+		copy(hash[:], hasher.Sum(nil))
+	}
 	stem := result.BakeStem
 	if stem == "" {
 		stem = BakeStemFromListfile(result.MDL.Model.Name)
 	}
 	rel := fmt.Sprintf("baked/uv2/%s_%x.png", stem, hash[:6])
-	texturesource.Register(rel, texturesource.Source{Kind: texturesource.KindPNG, PNG: encoded.Bytes(), PreserveAlpha: true})
+	for _, tex := range result.MDL.Textures {
+		if tex.WowData.PngPath == rel {
+			return tex, nil
+		}
+	}
+	texturesource.Register(rel, texturesource.Source{Kind: texturesource.KindPNG, PNG: encoded.Bytes(), PreserveAlpha: true, IgnoreAlpha: textureOptions.ignoreAlpha})
 	result.TexturePaths[rel] = struct{}{}
-	tex := &components.Texture{Image: filepath.ToSlash(filepath.Join(cfg.AssetPrefix, strings.TrimSuffix(rel, ".png")+".blp")), WowData: components.TextureWowData{PngPath: rel}}
+	tex := &components.Texture{Image: filepath.ToSlash(filepath.Join(cfg.AssetPrefix, strings.TrimSuffix(rel, ".png")+".blp")), WowData: components.TextureWowData{Type: -1, PngPath: rel}}
 	result.MDL.Textures = append(result.MDL.Textures, tex)
 	return tex, nil
 }
@@ -575,6 +626,10 @@ func BakeStemFromListfile(fileName string) string {
 
 func m2BakeBlend(mode uint16) components.BlendMode {
 	return [8]components.BlendMode{components.BlendNone, components.BlendTransparent, components.BlendBlend, components.BlendAdditive, components.BlendAddAlpha, components.BlendModulate, components.BlendModulate2x, components.BlendBlend}[min(7, int(mode))]
+}
+
+func m2BakeRGBIndependent(blend uint16, screen bool) bool {
+	return blend == 0 || blend == 5 || blend == 6 || screen
 }
 
 func m2BakeBudgets(loader *m2.Loader, skin *m2.Skin, geosets map[int]*components.Geoset) []int {
@@ -706,7 +761,7 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 	if domain2 {
 		minUV, maxUV, span = minUV2, maxUV2, span2
 	}
-	chartOptions := bakeChartOptions{conflict: program.conflict}
+	chartOptions := bakeChartOptions{conflict: program.conflict, prepare: program.prepare}
 	if span[0] <= 1e-9 || span[1] <= 1e-9 {
 		// Uniform/gradient swatches can have no surface unwrap at all. Make a
 		// planar raster domain while preserving the UVs used by the shader.
@@ -742,7 +797,6 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 		limit = 1024
 	}
 	w, h := bakeRasterSize(span, program, domain2, limit)
-	spatialW, spatialH := w, h
 	constantUV2 := [2]bool{}
 	other := 1
 	if domain2 {
@@ -762,11 +816,42 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 			env[v] = m2SphereCoord(imath.Vector3{0, 0, -1}, imath.Vector3{v.Normal[1], v.Normal[2], v.Normal[0]})
 		}
 	}
-	charts, faceCharts := buildBakeCharts(g, minUV, span, w, h, constantUV2, domain2, env, chartOptions)
+	var charts []bakeChart
+	var faceCharts []int
+	var frameW, frameH int
+	shrinkRaster := func() {
+		// Raster grids need not be powers of two; only the packed atlas does.
+		// Halve area uniformly instead of halving one surface axis at a time.
+		scale := math.Sqrt(.5)
+		w = max(16, int(float64(w)*scale))
+		h = max(16, int(float64(h)*scale))
+	}
+	buildCharts := func() error {
+		for {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			var err error
+			charts, faceCharts, err = buildBakeCharts(g, minUV, span, w, h, constantUV2, domain2, env, chartOptions)
+			if err == nil {
+				frameW, frameH, err = packBakeCharts(charts, w, h)
+			}
+			if err == nil {
+				return nil
+			}
+			charts, faceCharts = nil, nil
+			if !errors.Is(err, errBakeChartLimit) || w <= 16 && h <= 16 {
+				return fmt.Errorf("%w: %s at %dx%d: %v", errUV2BakeUnsupported, g.Name, w, h, err)
+			}
+			shrinkRaster()
+		}
+	}
+	if err := buildCharts(); err != nil {
+		return err
+	}
 	frameCols := bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(frames)))))
 	frameRows := bakePowerOfTwo((frames + frameCols - 1) / frameCols)
 	// Balance the complete atlas, including rectangular tiles and frame grids.
-	frameW, frameH := packBakeCharts(charts, w, h)
 	width, height := frameW*frameCols, frameH*frameRows
 	passes := 1
 	if program.hasEmission || m2HasEmission(program.shader.pixel) {
@@ -800,17 +885,15 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 			} else {
 				break
 			}
-		} else if w*spatialH >= h*spatialW && w > 16 {
-			w /= 2
-		} else if h > 16 {
-			h /= 2
 		} else {
-			w /= 2
+			shrinkRaster()
 		}
-		charts, faceCharts = buildBakeCharts(g, minUV, span, w, h, constantUV2, domain2, env, chartOptions)
-		frameW, frameH = packBakeCharts(charts, w, h)
+		if err := buildCharts(); err != nil {
+			return err
+		}
 		width, height = frameW*frameCols, frameH*frameRows
 	}
+	result.bakeReferencePixels += width * height * passes
 	// Explicit requests keep the requested sampling rate. Choose spatial detail
 	// with the compact reference above, then grow/page the atlas in time. This
 	// keeps FPS comparisons at identical spatial quality instead of silently
@@ -821,14 +904,18 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 		frameCols = bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(frames)))))
 		frameRows = bakePowerOfTwo((frames + frameCols - 1) / frameCols)
 	}
-	// Paging is a safety valve for unusually complex static chart layouts.
-	frameCols = min(frameCols, max(1, 2048/frameW))
-	frameRows = min(frameRows, max(1, 2048/frameH))
-	pageFrames := frameCols * frameRows
-	width, height = frameW*frameCols, frameH*frameRows
 	if frameW > 4096 || frameH > 4096 {
 		return fmt.Errorf("%w: one frame is %dx%d", errUV2BakeUnsupported, frameW, frameH)
 	}
+	// Only the final texture needs power-of-two dimensions. Repeating each
+	// frame's rounded rectangle repeats its empty margin too. Retain every
+	// chart sample and gutter, then choose the cheapest uniform page layout.
+	// Spatial budgeting above deliberately uses the old reference dimensions.
+	layout := planBakePages(charts, frames)
+	frameW, frameH = layout.cellW, layout.cellH
+	frameCols = layout.cols
+	pageFrames := layout.capacity()
+	width, height = layout.width, layout.height
 	atlas := image.NewNRGBA(image.Rect(0, 0, width, height))
 	var emissionAtlas *image.NRGBA
 	var radianceAtlas *image.NRGBA
@@ -841,7 +928,10 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 	var pages, emissionPages, radiancePages []*components.Texture
 	textureBytes := 0
 	flushPage := func() error {
-		tex, err := registerBakeTexture(cfg, result, atlas)
+		tex, err := registerBakeTexture(cfg, result, atlas, bakeTextureOptions{
+			ignoreAlpha:    program.blend == 0 && !program.screen,
+			independentRGB: m2BakeRGBIndependent(program.blend, program.screen),
+		})
 		if err != nil {
 			return err
 		}
@@ -850,14 +940,14 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 			textureBytes += len(source.PNG)
 		}
 		if emissionAtlas != nil {
-			tex, err = registerBakeTexture(cfg, result, emissionAtlas)
+			tex, err = registerBakeTexture(cfg, result, compactBakeRadiance(emissionAtlas))
 			if err != nil {
 				return err
 			}
 			emissionPages = append(emissionPages, tex)
 		}
 		if radianceAtlas != nil {
-			tex, err = registerBakeTexture(cfg, result, radianceAtlas)
+			tex, err = registerBakeTexture(cfg, result, compactBakeRadiance(radianceAtlas))
 			if err != nil {
 				return err
 			}
@@ -992,7 +1082,7 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 		anim = &components.TextureAnim{Translation: &components.Animation{GlobalSeq: globalSeq, Type: components.AnimTypeTVertexAnim, Interpolation: components.InterpDontInterp, KeyFrames: map[int]any{}}}
 		for t, frame := range plan.keys {
 			frame %= pageFrames
-			anim.Translation.KeyFrames[t] = imath.Vector3{float64(frame%frameCols) / float64(frameCols), float64(frame/frameCols) / float64(frameRows), 0}
+			anim.Translation.KeyFrames[t] = layout.translation(frame)
 		}
 		anim.ID = len(result.MDL.TextureAnims)
 		result.MDL.TextureAnims = append(result.MDL.TextureAnims, *anim)
@@ -1120,16 +1210,54 @@ func bakeRasterSize(span imath.Vector2, p bakeProgram, domain2 bool, limit int) 
 	return bakePowerOfTwo(max(16, int(math.Ceil(w*scale)))), bakePowerOfTwo(max(16, int(math.Ceil(h*scale))))
 }
 
-func buildBakeCharts(g *components.Geoset, minUV, span imath.Vector2, w, h int, constantUV2 [2]bool, domain2 bool, env map[*components.GeosetVertex]imath.Vector2, options ...bakeChartOptions) ([]bakeChart, []int) {
+func buildBakeCharts(g *components.Geoset, minUV, span imath.Vector2, w, h int, constantUV2 [2]bool, domain2 bool, env map[*components.GeosetVertex]imath.Vector2, options ...bakeChartOptions) ([]bakeChart, []int, error) {
 	opt := bakeChartOptions{}
 	if len(options) > 0 {
 		opt = options[0]
 	}
-	charts := []bakeChart{{pixels: make([]bakePixel, w*h)}}
+	// Overlapping UV islands often occupy only a few pixels of a large domain.
+	// Keep samples sparse until packing instead of allocating w*h for every chart.
+	charts := []bakeChart{{pixels: map[int]bakePixel{}}}
+	sampleCount := 0
 	faceCharts := make([]int, len(g.Faces))
+	// A conflict layer is not necessarily one UV island. Track connectivity
+	// while sampling so distant compatible islands can be packed separately.
+	parents := make([]int, len(g.Faces))
+	for fi := range parents {
+		parents[fi] = fi
+	}
+	find := func(fi int) int {
+		for parents[fi] != fi {
+			parents[fi] = parents[parents[fi]]
+			fi = parents[fi]
+		}
+		return fi
+	}
+	join := func(a, b int) {
+		a, b = find(a), find(b)
+		parents[max(a, b)] = min(a, b)
+	}
+	type chartVertex struct {
+		chart  int
+		vertex *components.GeosetVertex
+	}
+	owners := map[chartVertex]int{}
+	occupancy := newBakeChartOccupancy(w, h)
+	type pixelWrite struct {
+		index int
+		pixel bakePixel
+	}
+	var writes []pixelWrite
 	for fi, face := range g.Faces {
 		var points [3]imath.Vector2
+		var coordinates [3][2]imath.Vector2
+		var environment [3]imath.Vector2
 		for i, v := range face.Vertices {
+			coordinates[i] = [2]imath.Vector2{v.TexPosition, *v.TexPosition2}
+			if original, ok := opt.sourceUV[v]; ok {
+				coordinates[i] = original
+			}
+			environment[i] = env[v]
 			uv := v.TexPosition
 			if domain2 {
 				uv = *v.TexPosition2
@@ -1140,11 +1268,7 @@ func buildBakeCharts(g *components.Geoset, minUV, span imath.Vector2, w, h int, 
 		x1 := min(w-1, int(math.Ceil(max(points[0][0], points[1][0], points[2][0]))))
 		y0 := max(0, int(math.Floor(min(points[0][1], points[1][1], points[2][1]))))
 		y1 := min(h-1, int(math.Ceil(max(points[0][1], points[1][1], points[2][1]))))
-		type pixelWrite struct {
-			index int
-			pixel bakePixel
-		}
-		var writes []pixelWrite
+		writes = writes[:0]
 		for y := y0; y <= y1; y++ {
 			for x := x0; x <= x1; x++ {
 				weights, inside := bakeBarycentric(points, imath.Vector2{float64(x) + 0.5, float64(y) + 0.5})
@@ -1171,15 +1295,11 @@ func buildBakeCharts(g *components.Geoset, minUV, span imath.Vector2, w, h int, 
 					}
 				}
 				p := bakePixel{set: true, covered: inside, face: fi, bary: weights}
-				for k, v := range face.Vertices {
-					coords := [2]imath.Vector2{v.TexPosition, *v.TexPosition2}
-					if original, ok := opt.sourceUV[v]; ok {
-						coords = original
-					}
+				for k, coords := range coordinates {
 					for axis := range 2 {
 						p.uv1[axis] += weights[k] * coords[0][axis]
 						p.uv2[axis] += weights[k] * coords[1][axis]
-						p.env[axis] += weights[k] * env[v][axis]
+						p.env[axis] += weights[k] * environment[k][axis]
 					}
 				}
 				// A constant mask axis cannot cause a sampling conflict. Collapsing
@@ -1196,40 +1316,125 @@ func buildBakeCharts(g *components.Geoset, minUV, span imath.Vector2, w, h int, 
 				writes = append(writes, pixelWrite{y*w + x, p})
 			}
 		}
-		ci := 0
-		for ; ci < len(charts); ci++ {
+		generation := occupancy.beginFace(len(charts))
+		for wi, write := range writes {
+			for node := occupancy.headAt(write.index); node != 0; node = occupancy.nodes[node-1].next {
+				ci := occupancy.nodes[node-1].chart
+				occupancy.addCandidate(ci, wi, generation)
+			}
+		}
+		ci := len(charts)
+		for candidateChart := range len(charts) {
+			head := occupancy.candidateHead(candidateChart, generation)
+			if head == 0 {
+				// No occupied sample can conflict with this face, so the first
+				// chart without candidates is immediately compatible.
+				ci = candidateChart
+				break
+			}
 			conflict := false
-			for _, write := range writes {
-				old := charts[ci].pixels[write.index]
+			for candidate := head; candidate != 0; candidate = occupancy.candidateWriteNext[candidate-1].next {
+				write := &writes[occupancy.candidateWriteNext[candidate-1].write]
+				old := charts[candidateChart].pixels[write.index]
+				// Conservative samples still represent a surface. Unrelated tiny
+				// islands must not overwrite each other when neither covers a texel
+				// centre. Adjacent faces may share their conservative edge samples.
+				checkConflict := old.set && old.covered && write.pixel.covered
+				if old.set && !checkConflict {
+					shared := 0
+					for _, a := range g.Faces[old.face].Vertices {
+						for _, b := range face.Vertices {
+							if a == b {
+								shared++
+							}
+						}
+					}
+					checkConflict = shared < 2
+				}
 				a, b := old.uv2, write.pixel.uv2
 				if domain2 {
 					a, b = old.uv1, write.pixel.uv1
 				}
-				if old.set && old.covered && write.pixel.covered && (math.Abs(a[0]-b[0]) > 1e-4 || math.Abs(a[1]-b[1]) > 1e-4 || math.Abs(old.env[0]-write.pixel.env[0]) > 1e-4 || math.Abs(old.env[1]-write.pixel.env[1]) > 1e-4) {
+				if checkConflict && opt.conflict == nil && (math.Abs(a[0]-b[0]) > 1e-4 || math.Abs(a[1]-b[1]) > 1e-4 || math.Abs(old.env[0]-write.pixel.env[0]) > 1e-4 || math.Abs(old.env[1]-write.pixel.env[1]) > 1e-4) {
 					conflict = true
 					break
 				}
-				if old.set && old.covered && write.pixel.covered && opt.conflict != nil && opt.conflict(old, write.pixel) {
-					conflict = true
-					break
+				if checkConflict && opt.conflict != nil {
+					// Most samples never overlap. Shade only an actual comparison,
+					// then reuse its color when other faces visit the same sample.
+					if opt.prepare != nil {
+						if !old.prepared {
+							opt.prepare(&old)
+							old.prepared = true
+							charts[candidateChart].pixels[write.index] = old
+						}
+						if !write.pixel.prepared {
+							opt.prepare(&write.pixel)
+							write.pixel.prepared = true
+						}
+					}
+					if opt.conflict(old, write.pixel) {
+						conflict = true
+						break
+					}
 				}
 			}
 			if !conflict {
+				ci = candidateChart
 				break
 			}
 		}
 		if ci == len(charts) {
-			charts = append(charts, bakeChart{pixels: make([]bakePixel, w*h)})
+			charts = append(charts, bakeChart{pixels: map[int]bakePixel{}})
 		}
 		for _, write := range writes {
 			old := charts[ci].pixels[write.index]
+			if old.set {
+				join(fi, old.face) // Compatible overlapping islands may reuse samples.
+			}
 			if !old.set || write.pixel.covered {
+				if !old.set {
+					if sampleCount == bakeChartPixels {
+						return nil, nil, errBakeChartLimit
+					}
+					sampleCount++
+					occupancy.add(write.index, ci)
+				}
 				charts[ci].pixels[write.index] = write.pixel
+			}
+		}
+		for _, vertex := range face.Vertices {
+			key := chartVertex{ci, vertex}
+			if owner, ok := owners[key]; ok {
+				join(fi, owner)
+			} else {
+				owners[key] = fi
 			}
 		}
 		faceCharts[fi] = ci
 	}
-	return charts, faceCharts
+	if len(g.Faces) == 0 {
+		return charts, faceCharts, nil
+	}
+	islands := []bakeChart{}
+	rootCharts := map[int]int{}
+	for fi := range g.Faces {
+		root := find(fi)
+		ci, ok := rootCharts[root]
+		if !ok {
+			ci = len(islands)
+			rootCharts[root] = ci
+			islands = append(islands, bakeChart{pixels: map[int]bakePixel{}})
+		}
+		faceCharts[fi] = ci
+	}
+	for ci := range charts {
+		for index, pixel := range charts[ci].pixels {
+			islands[faceCharts[pixel.face]].pixels[index] = pixel
+		}
+		charts[ci].pixels = nil
+	}
+	return islands, faceCharts, nil
 }
 
 func bakeConstantAxes(img *image.NRGBA) [2]bool {
@@ -1248,12 +1453,23 @@ func bakeConstantAxes(img *image.NRGBA) [2]bool {
 
 // Crop each UV chart to the pixels it actually occupies before packing. A
 // small island must not reserve an entire copy of the surface UV rectangle.
-func packBakeCharts(charts []bakeChart, w, h int) (int, int) {
+func packBakeCharts(charts []bakeChart, w, h int) (int, int, error) {
 	area, widest := 0, 1
 	order := make([]int, len(charts))
+	sampleCount := 0
+	for _, chart := range charts {
+		sampleCount += len(chart.pixels)
+	}
+	if sampleCount > bakeChartPixels {
+		return 0, 0, errBakeChartLimit
+	}
 	for ci := range charts {
 		chart := &charts[ci]
-		padBakeChart(chart.pixels, w, h)
+		previousCount := len(chart.pixels)
+		if err := padBakeChart(chart.pixels, w, h, bakeChartPixels-sampleCount+previousCount); err != nil {
+			return 0, 0, err
+		}
+		sampleCount += len(chart.pixels) - previousCount
 		chart.active = chart.active[:0]
 		x0, y0, x1, y1 := w, h, -1, -1
 		for pi, p := range chart.pixels {
@@ -1264,6 +1480,7 @@ func packBakeCharts(charts []bakeChart, w, h int) (int, int) {
 				x1, y1 = max(x1, x), max(y1, y)
 			}
 		}
+		sort.Ints(chart.active)
 		if x1 < 0 {
 			x0, y0, x1, y1 = 0, 0, w-1, h-1
 		}
@@ -1272,22 +1489,73 @@ func packBakeCharts(charts []bakeChart, w, h int) (int, int) {
 		widest = max(widest, chart.width)
 		order[ci] = ci
 	}
-	sort.SliceStable(order, func(i, j int) bool { return charts[order[i]].height > charts[order[j]].height })
-	rowWidth := bakePowerOfTwo(max(widest, int(math.Ceil(math.Sqrt(float64(area))))))
-	x, y, rowHeight, maxX := 0, 0, 0, 0
-	for _, ci := range order {
-		chart := &charts[ci]
-		if x+chart.width > rowWidth {
-			x = 0
-			y += rowHeight
-			rowHeight = 0
+	sort.SliceStable(order, func(i, j int) bool {
+		a, b := charts[order[i]], charts[order[j]]
+		if a.height != b.height {
+			return a.height > b.height
 		}
-		chart.x, chart.y = x, y
-		x += chart.width
-		rowHeight = max(rowHeight, chart.height)
-		maxX = max(maxX, x)
+		return a.width > b.width
+	})
+	// Pack padded silhouettes rather than bounding rectangles. Triangle islands
+	// can interlock without sharing any texel used by the mesh or its gutter.
+	type silhouette struct{ top, bottom []int }
+	shapes := make([]silhouette, len(charts))
+	for ci, chart := range charts {
+		s := silhouette{make([]int, chart.width), make([]int, chart.width)}
+		for x := range s.top {
+			s.top[x], s.bottom[x] = h, -1
+		}
+		for _, pi := range chart.active {
+			x, y := pi%w-chart.minX, pi/w-chart.minY
+			s.top[x], s.bottom[x] = min(s.top[x], y), max(s.bottom[x], y)
+		}
+		shapes[ci] = s
 	}
-	return bakePowerOfTwo(maxX), bakePowerOfTwo(y + rowHeight)
+	bestW, bestH, bestArea := 0, 0, math.MaxInt
+	positions, bestPositions := make([][2]int, len(charts)), make([][2]int, len(charts))
+	firstWidth := bakePowerOfTwo(widest)
+	lastWidth := max(firstWidth, min(4096, bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(area)))))*2))
+	for width := firstWidth; width <= lastWidth; width *= 2 {
+		skyline := make([]int, width)
+		maxX, maxY := 0, 0
+		for _, ci := range order {
+			chart, shape := charts[ci], shapes[ci]
+			bestX, bestY := 0, math.MaxInt
+			for x := 0; x+chart.width <= width; x++ {
+				y := 0
+				for col, top := range shape.top {
+					if shape.bottom[col] >= 0 {
+						y = max(y, skyline[x+col]-top)
+					}
+					if y >= bestY {
+						break
+					}
+				}
+				if y < bestY {
+					bestX, bestY = x, y
+				}
+				if bestY == 0 {
+					break
+				}
+			}
+			positions[ci] = [2]int{bestX, bestY}
+			for col, bottom := range shape.bottom {
+				if bottom >= 0 {
+					skyline[bestX+col] = max(skyline[bestX+col], bestY+bottom+1)
+				}
+			}
+			maxX, maxY = max(maxX, bestX+chart.width), max(maxY, bestY+chart.height)
+		}
+		packedW, packedH := bakePowerOfTwo(maxX), bakePowerOfTwo(maxY)
+		if packedW*packedH < bestArea || packedW*packedH == bestArea && max(packedW, packedH) < max(bestW, bestH) {
+			bestW, bestH, bestArea = packedW, packedH, packedW*packedH
+			copy(bestPositions, positions)
+		}
+	}
+	for ci := range charts {
+		charts[ci].x, charts[ci].y = bestPositions[ci][0], bestPositions[ci][1]
+	}
+	return bestW, bestH, nil
 }
 
 func bakeBarycentric(points [3]imath.Vector2, p imath.Vector2) ([3]float64, bool) {
@@ -1302,28 +1570,60 @@ func bakeBarycentric(points [3]imath.Vector2, p imath.Vector2) ([3]float64, bool
 	return [3]float64{x, y, z}, x >= -1e-8 && y >= -1e-8 && z >= -1e-8
 }
 
-func padBakeChart(pixels []bakePixel, w, h int) {
+func padBakeChart(pixels map[int]bakePixel, w, h, limit int) error {
 	// Extend sample coordinates beyond triangle edges, avoiding dark filtering
 	// seams while retaining the shader's straight (unpremultiplied) RGB.
-	for range bakePadding {
-		next := append([]bakePixel(nil), pixels...)
-		for y := range h {
-			for x := range w {
-				at := y*w + x
-				if pixels[at].set {
+	var frontier []int
+	for wave := range bakePadding {
+		next := map[int]bakePixel{}
+		directions := [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+		visit := func(pi int) error {
+			x, y := pi%w, pi/w
+			for _, d := range directions {
+				x2, y2 := x+d[0], y+d[1]
+				at := y2*w + x2
+				if x2 < 0 || x2 >= w || y2 < 0 || y2 >= h || pixels[at].set || next[at].set {
 					continue
 				}
-				for _, d := range [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
-					x2, y2 := x+d[0], y+d[1]
-					if x2 >= 0 && x2 < w && y2 >= 0 && y2 < h && pixels[y2*w+x2].set {
-						next[at] = pixels[y2*w+x2]
-						break
+				if len(pixels)+len(next) == limit {
+					return errBakeChartLimit
+				}
+				// Choose the same left/right/up/down neighbor as the dense raster,
+				// regardless of map iteration order. Read only the previous wave.
+				for _, neighbor := range directions {
+					nx, ny := x2+neighbor[0], y2+neighbor[1]
+					if nx >= 0 && nx < w && ny >= 0 && ny < h {
+						if sample := pixels[ny*w+nx]; sample.set {
+							next[at] = sample
+							break
+						}
 					}
 				}
 			}
+			return nil
 		}
-		copy(pixels, next)
+		if wave == 0 {
+			for pi := range pixels {
+				if err := visit(pi); err != nil {
+					return err
+				}
+			}
+		} else {
+			// Earlier samples already have all four neighbors filled. Only the
+			// previous wave's new boundary can expose another empty texel.
+			for _, pi := range frontier {
+				if err := visit(pi); err != nil {
+					return err
+				}
+			}
+		}
+		frontier = frontier[:0]
+		for pi, p := range next {
+			pixels[pi] = p
+			frontier = append(frontier, pi)
+		}
 	}
+	return nil
 }
 
 func bakePeriod(transforms [2]*components.TextureAnim) (int, error) {

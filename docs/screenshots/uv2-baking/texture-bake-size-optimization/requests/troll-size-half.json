@@ -1,0 +1,30 @@
+{
+  "textureBaking": {
+    "enabled": true,
+    "animate": true,
+    "resolutionScale": 0.5,
+    "fps": 15,
+    "windowMS": 4000
+  },
+  "character": {
+    "base": {
+      "type": "wowhead",
+      "value": "https://www.wowhead.com/dressing-room#fR80k0zg89c8ze8NH8zg8NA8zv8MxW8zE8Aw8zl8Ap8dM8Myp8zYx8dLh8Mta808dd8Mtr8dr8MtF8da8Mxg8dk8Mxb8df8MtA8dw8Mgz877wzzeq8m0i87Mzzga8m0i87m6kk8m0i8zzgI8m0i86oS8MIE8zztP8MIE8zMMZ8MIE8zoBI87M6oO8MIE87V"
+    },
+    "attackTag": "Auto",
+    "inGameMovespeed": 270,
+    "size": "hero",
+    "portraitCameraSequenceName": "Stand"
+  },
+  "outputFileName": "troll-size-half",
+  "optimization": {
+    "sortSequences": true,
+    "removeUnusedVertices": true,
+    "removeUnusedNodes": true,
+    "removeUnusedMaterialsTextures": true
+  },
+  "format": "mdl",
+  "formatVersion": "1000",
+  "isBrowse": false,
+  "skinId": ""
+}

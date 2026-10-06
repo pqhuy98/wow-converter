@@ -26,11 +26,11 @@ func TestBakedEmptyAlphaIsPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binary.LittleEndian.Uint32(raw[4:8]) != 1 || binary.LittleEndian.Uint32(raw[8:12]) != 8 {
-		t.Fatal("expected paletted BLP1 with explicit alpha")
+	if binary.LittleEndian.Uint32(raw[4:8]) != 1 || binary.LittleEndian.Uint32(raw[8:12]) != 1 {
+		t.Fatal("expected paletted BLP1 with a one-bit transparent alpha plane")
 	}
 	offset := int(binary.LittleEndian.Uint32(raw[28:32])) + 16*16
-	for _, alpha := range raw[offset : offset+16*16] {
+	for _, alpha := range raw[offset : offset+(16*16+7)/8] {
 		if alpha != 0 {
 			t.Fatal("empty shader output became opaque")
 		}

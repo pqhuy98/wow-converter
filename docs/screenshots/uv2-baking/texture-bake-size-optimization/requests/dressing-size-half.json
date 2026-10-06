@@ -1,0 +1,30 @@
+{
+  "textureBaking": {
+    "enabled": true,
+    "animate": true,
+    "resolutionScale": 0.5,
+    "fps": 15,
+    "windowMS": 1000
+  },
+  "character": {
+    "base": {
+      "type": "wowhead",
+      "value": "https://www.wowhead.com/dressing-room#fa80o0zg89c8z18nb8zZ8jl8z28ng8z38z4v8z48yo8aM8z5Q8Mz8yt8MM8yC8sW8z3g8zYv8dLv8Mtr808og8yh8M08yL877wzfHL808zhgL808zii2808zzZn8MDh8zVpU87VzhgN808zrdn808ziiY808zzZx8MDh8zflY87s"
+    },
+    "attackTag": "Auto",
+    "inGameMovespeed": 270,
+    "size": "hero",
+    "portraitCameraSequenceName": "Stand"
+  },
+  "outputFileName": "dressing-size-half",
+  "optimization": {
+    "sortSequences": true,
+    "removeUnusedVertices": true,
+    "removeUnusedNodes": true,
+    "removeUnusedMaterialsTextures": true
+  },
+  "format": "mdl",
+  "formatVersion": "1000",
+  "isBrowse": false,
+  "skinId": ""
+}

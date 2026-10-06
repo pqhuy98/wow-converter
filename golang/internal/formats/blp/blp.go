@@ -30,11 +30,11 @@ type BLPImage struct {
 	MapCount        int
 	Palette         [256][4]uint8
 
-	scale          int
-	ScaledWidth    int
-	ScaledHeight   int
-	scaledLength   int
-	rawData        []byte
+	scale        int
+	ScaledWidth  int
+	ScaledHeight int
+	scaledLength int
+	rawData      []byte
 }
 
 // NewBLPImage parses a BLP2 file.
@@ -172,10 +172,13 @@ func (img *BLPImage) getAlpha(index int) uint8 {
 		return 0xFF
 	case 4:
 		byteVal := img.rawData[img.scaledLength+index/2]
+		var nibble uint8
 		if index%2 == 0 {
-			return (byteVal & 0x0F) << 4
+			nibble = byteVal & 0x0F
+		} else {
+			nibble = byteVal >> 4
 		}
-		return byteVal & 0xF0
+		return nibble * 17
 	case 8:
 		return img.rawData[img.scaledLength+index]
 	default:

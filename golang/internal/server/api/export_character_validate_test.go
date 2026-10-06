@@ -1,11 +1,14 @@
 package api
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestTextureBakingRequestOptions(t *testing.T) {
 	raw := validExportCharacterBody()
 	body, issues := parseExportCharacterRequest(raw)
-	if len(issues) > 0 || body.TextureBaking.Enabled || body.TextureBaking.Animate != nil {
+	if len(issues) > 0 || body.TextureBaking.Enabled || body.TextureBaking.Animate != nil || body.TextureBaking.ResolutionFactor() != 1 {
 		t.Fatalf("baking should default off: %+v %v", body.TextureBaking, issues)
 	}
 	for _, fps := range []float64{12, 21, 30} {
@@ -30,6 +33,49 @@ func TestTextureBakingRequestOptions(t *testing.T) {
 		if _, issues := parseExportCharacterRequest(raw); len(issues) == 0 {
 			t.Fatalf("accepted invalid settings: %v", value)
 		}
+	}
+}
+
+func TestTextureBakingResolutionScaleContract(t *testing.T) {
+	for _, scale := range []float64{1, 0.5} {
+		for _, animate := range []bool{false, true} {
+			raw := validExportCharacterBody()
+			raw["textureBaking"] = map[string]any{
+				"enabled": true, "animate": animate, "resolutionScale": scale,
+			}
+			body, issues := parseExportCharacterRequest(raw)
+			if len(issues) > 0 || body.TextureBaking.ResolutionScale != scale || body.TextureBaking.ResolutionFactor() != scale {
+				t.Fatalf("resolution settings lost (animate=%t, scale=%v): %+v %v", animate, scale, body.TextureBaking, issues)
+			}
+
+			encoded, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var serialized map[string]any
+			if err := json.Unmarshal(encoded, &serialized); err != nil {
+				t.Fatal(err)
+			}
+			baking := serialized["textureBaking"].(map[string]any)
+			if baking["resolutionScale"] != scale {
+				t.Fatalf("serialized resolutionScale = %v, want %v", baking["resolutionScale"], scale)
+			}
+		}
+	}
+
+	for _, value := range []any{0, 0.25, 2, "0.5", nil} {
+		raw := validExportCharacterBody()
+		raw["textureBaking"] = map[string]any{"resolutionScale": value}
+		if _, issues := parseExportCharacterRequest(raw); len(issues) == 0 {
+			t.Fatalf("accepted invalid textureBaking.resolutionScale %v", value)
+		}
+	}
+
+	raw := validExportCharacterBody()
+	raw["textureBaking"] = map[string]any{"enabled": true}
+	body, issues := parseExportCharacterRequest(raw)
+	if len(issues) > 0 || body.TextureBaking.ResolutionFactor() != 1 {
+		t.Fatalf("omitted resolutionScale should default to full resolution: %+v %v", body.TextureBaking, issues)
 	}
 }
 

@@ -20,15 +20,25 @@ type Config struct {
 
 // TextureBakingOptions is request-scoped. Baking is off until Enabled is set.
 type TextureBakingOptions struct {
-	Enabled  bool  `json:"enabled,omitempty"`
-	Animate  *bool `json:"animate,omitempty"`
-	FPS      int   `json:"fps,omitempty"`
-	WindowMS int   `json:"windowMS,omitempty"`
+	Enabled         bool    `json:"enabled,omitempty"`
+	Animate         *bool   `json:"animate,omitempty"`
+	FPS             int     `json:"fps,omitempty"`
+	WindowMS        int     `json:"windowMS,omitempty"`
+	ResolutionScale float64 `json:"resolutionScale,omitempty"`
 }
 
 // Flipbook is true unless the request explicitly disables animation.
 func (o TextureBakingOptions) Flipbook() bool {
 	return o.Animate == nil || *o.Animate
+}
+
+// ResolutionFactor returns the render scale for baked textures. Zero and other
+// unrecognized values retain the full-resolution default for older requests.
+func (o TextureBakingOptions) ResolutionFactor() float64 {
+	if o.ResolutionScale == 0.5 {
+		return 0.5
+	}
+	return 1
 }
 
 // DefaultConfig returns converter defaults (asset dir from env or repo .cache/wow-export).

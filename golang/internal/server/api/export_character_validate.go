@@ -87,6 +87,12 @@ func validateExportCharacterShape(raw map[string]any) []string {
 		} else {
 			validateOptionalBoolWithPrefix(options, "enabled", "textureBaking", &issues)
 			validateOptionalBoolWithPrefix(options, "animate", "textureBaking", &issues)
+			if value, exists := options["resolutionScale"]; exists {
+				scale, ok := value.(float64)
+				if !ok || (scale != 1 && scale != 0.5) {
+					issues = append(issues, "textureBaking.resolutionScale must be 1 or 0.5")
+				}
+			}
 			for _, setting := range []struct {
 				field string
 				limit int

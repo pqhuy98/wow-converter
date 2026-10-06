@@ -18,6 +18,8 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	pngfmt "github.com/pqhuy98/wow-converter/internal/formats/png"
+	m2export "github.com/pqhuy98/wow-converter/internal/wow/export/m2"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 	"github.com/pqhuy98/wow-converter/internal/wowhead"
 )
 
@@ -258,11 +260,7 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 						sm := element.SkinnedModel
 						entry := collections[sm.CollectionFileDataID]
 						if entry == nil {
-							model, err := ExportModelFileIDAsMdl(ctx, sm.CollectionFileDataID, ExportModelOptions{})
-							if err != nil {
-								return err
-							}
-							entry = &collectionEntry{model: model, geosetIDs: map[int]struct{}{}}
+							entry = &collectionEntry{geosetIDs: map[int]struct{}{}}
 							collections[sm.CollectionFileDataID] = entry
 							collectionOrder = append(collectionOrder, sm.CollectionFileDataID)
 						}
@@ -287,10 +285,23 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 		}
 	}
 
+	collectionSourceTextures := cloneReplaceableTextureMap(replaceableTextures)
 	textureTypeToImage := reuseBakedCustomizationTextures(charMdl, replaceableTextures)
 
 	for _, fileDataID := range collectionOrder {
 		entry := collections[fileDataID]
+		if entry.model == nil {
+			model, err := ExportModelFileIDAsMdl(ctx, fileDataID, ExportModelOptions{
+				ReplaceableTextures: collectionSourceTextures,
+				GeosetMaskBuilder: func(skin *m2.Skin) []m2export.GeosetMaskEntry {
+					return collectionGeosetMask(skin, entry.geosetIDs)
+				},
+			})
+			if err != nil {
+				return err
+			}
+			entry.model = model
+		}
 		itemMdl := entry.model.MDL
 		filtered := itemMdl.Geosets[:0]
 		for _, g := range itemMdl.Geosets {
@@ -319,6 +330,9 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 func reuseBakedCustomizationTextures(charMdl *mdl.MDL, replaceableTextures map[string]int) map[int]string {
 	images := map[int]string{}
 	for _, t := range charMdl.Textures {
+		if t == nil || t.WowData.Type < 0 {
+			continue
+		}
 		key := strconv.Itoa(t.WowData.Type)
 		if replaceableTextures[key] != 0 && t.Image != "" {
 			images[t.WowData.Type] = t.Image
@@ -328,8 +342,16 @@ func reuseBakedCustomizationTextures(charMdl *mdl.MDL, replaceableTextures map[s
 	return images
 }
 
+func cloneReplaceableTextureMap(textures map[string]int) map[string]int {
+	cloned := make(map[string]int, len(textures))
+	for textureType, fileDataID := range textures {
+		cloned[textureType] = fileDataID
+	}
+	return cloned
+}
+
 func attachEquipmentsWithModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []EquipmentSlotData, metadata CharacterData) error {
-	collectionTemplates := map[int]*commonModel{}
+	collectionTemplates := map[string]*commonModel{}
 	attachmentList := map[wowhead.EquipmentSlot][]animmap.WoWAttachmentID{
 		wowhead.SlotHead:        {animmap.WoWAttachmentHelm},
 		wowhead.SlotShoulder:    {animmap.WoWAttachmentShoulderLeft, animmap.WoWAttachmentShoulderRight},
@@ -454,15 +476,16 @@ func logAttachResult(attachmentID animmap.WoWAttachmentID, itemMdl *mdl.MDL, ok 
 	}
 }
 
-func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []EquipmentSlotData, slotData EquipmentSlotData, idx int, attachmentID animmap.WoWAttachmentID, templates map[int]*commonModel, metadata CharacterData) error {
+func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []EquipmentSlotData, slotData EquipmentSlotData, idx int, attachmentID animmap.WoWAttachmentID, templates map[string]*commonModel, metadata CharacterData) error {
 	itemData := slotData.Data
 	if idx >= len(itemData.ModelFiles) {
 		return nil
 	}
 	fileDataID := itemData.ModelFiles[idx].FileDataID
 	replaceable := itemReplaceableTextures(itemData.ModelTextureFiles)
+	templateKey := modelTextureTemplateKey(fileDataID, replaceableTextureTypeMap(replaceable))
 
-	if template, ok := templates[fileDataID]; ok {
+	if template, ok := templates[templateKey]; ok {
 		enabled := FilterCollectionGeosets(equipmentSlots, slotData, template.MDL)
 		forked := mdl.ForkCollectionModel(mdl.CollectionModel{RelativePath: template.RelativePath, MDL: template.MDL}, enabled)
 		itemMdl := forked.MDL
@@ -474,14 +497,18 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 		return nil
 	}
 
-	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, ExportModelOptions{})
+	collectionMaskBuilder := equipmentCollectionGeosetMaskBuilder(ctx, equipmentSlots, fileDataID)
+	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, ExportModelOptions{
+		ReplaceableTextures: replaceable,
+		GeosetMaskBuilder:   collectionMaskBuilder,
+	})
 	if err != nil {
 		return err
 	}
 	isCollection := mdl.CanAddMdlCollectionItemToModel(charMdl, exported.MDL)
 	var itemMdl *mdl.MDL
 	if isCollection {
-		templates[fileDataID] = exported
+		templates[templateKey] = exported
 		enabled := FilterCollectionGeosets(equipmentSlots, slotData, exported.MDL)
 		forked := mdl.ForkCollectionModel(mdl.CollectionModel{RelativePath: exported.RelativePath, MDL: exported.MDL}, enabled)
 		itemMdl = forked.MDL
@@ -530,6 +557,21 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	charMdl.Modify.AddMdlItemToBone(itemMdl, attachment.Bone)
 	logAttachResult(attachmentID, itemMdl, true, fileDataID)
 	return nil
+}
+
+func modelTextureTemplateKey(fileDataID int, textures map[int]int) string {
+	types := make([]int, 0, len(textures))
+	for textureType, replacement := range textures {
+		if replacement > 0 {
+			types = append(types, textureType)
+		}
+	}
+	sort.Ints(types)
+	parts := []string{strconv.Itoa(fileDataID)}
+	for _, textureType := range types {
+		parts = append(parts, strconv.Itoa(textureType)+"="+strconv.Itoa(textures[textureType]))
+	}
+	return strings.Join(parts, ":")
 }
 
 func cloneMDL(src *mdl.MDL) *mdl.MDL {

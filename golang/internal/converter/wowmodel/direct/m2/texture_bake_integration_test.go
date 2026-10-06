@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +78,28 @@ func TestFirehawkUV2Bake(t *testing.T) {
 		}
 		baked++
 		effectTextures[layer.Texture.WowData.PngPath] = true
+		if g.Name == "Geoset2" || g.Name == "Geoset6" {
+			// The dense wing cards previously received under two texels per
+			// triangle even with large atlases. Guard spatial detail, not size.
+			source, ok := texturesource.Get(layer.Texture.WowData.PngPath)
+			if !ok {
+				t.Fatal("wing atlas source missing")
+			}
+			imageConfig, err := png.DecodeConfig(bytes.NewReader(source.PNG))
+			if err != nil {
+				t.Fatal(err)
+			}
+			areas := make([]float64, 0, len(g.Faces))
+			for _, face := range g.Faces {
+				a, b, c := face.Vertices[0].TexPosition, face.Vertices[1].TexPosition, face.Vertices[2].TexPosition
+				area := math.Abs((b[0]-a[0])*(c[1]-a[1])-(c[0]-a[0])*(b[1]-a[1])) * float64(imageConfig.Width*imageConfig.Height) / 2
+				areas = append(areas, area)
+			}
+			sort.Float64s(areas)
+			if len(areas) == 0 || areas[len(areas)/2] < 8 {
+				t.Fatalf("wing %s lost texel density: %v", g.Name, areas)
+			}
+		}
 		if !layer.Unshaded || !layer.TwoSided || !layer.NoDepthSet {
 			t.Fatalf("effect card %s lost material flags: %+v", g.Name, layer)
 		}

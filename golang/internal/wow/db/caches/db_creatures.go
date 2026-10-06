@@ -17,11 +17,11 @@ type ModelDisplay struct {
 }
 
 var (
-	creatureDisplays       = make(map[uint32][]ModelDisplay)
-	displayIDToFileDataID  = make(map[uint32]uint32)
-	creatureInitialized    bool
-	creatureOnce           sync.Once
-	creatureErr            error
+	creatureDisplays      = make(map[uint32][]ModelDisplay)
+	displayIDToFileDataID = make(map[uint32]uint32)
+	creatureInitialized   bool
+	creatureOnce          sync.Once
+	creatureErr           error
 )
 
 // InitializeCreatureData loads creature display tables.
@@ -60,7 +60,7 @@ func InitializeCreatureData(ctx context.Context) error {
 
 		for displayID, displayRow := range displayInfo.GetAllRows() {
 			modelID := toUint32(displayRow["ModelID"])
-			textures := filterPositive(toUint32Slice(displayRow["TextureVariationFileDataID"]))
+			textures := creatureTextureVariations(displayRow)
 			creatureDisplayInfoMap[displayID] = ModelDisplay{
 				ID: displayID, ModelID: modelID, Textures: textures,
 			}
@@ -134,6 +134,13 @@ func toUint32Slice(v any) []uint32 {
 	default:
 		return nil
 	}
+}
+
+// creatureTextureVariations preserves the DB2 array positions: entries map to
+// M2 replaceable texture types 11, 12, 13, and 5, and zero means that slot is
+// intentionally unfilled.
+func creatureTextureVariations(row db.DB2Row) []uint32 {
+	return toUint32Slice(row["TextureVariationFileDataID"])
 }
 
 func filterPositive(ids []uint32) []uint32 {

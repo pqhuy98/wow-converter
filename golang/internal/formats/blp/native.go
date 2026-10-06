@@ -28,12 +28,16 @@ func NativeEncoderAvailable() bool {
 	return cnative.Available()
 }
 
-func encodeNative(png []byte, blpPath string) error {
+func encodeNative(png []byte, blpPath string, ignoreAlpha bool) error {
 	if !NativeEncoderAvailable() {
 		return cnative.ErrUnavailable
 	}
 
 	blpData, err := cnative.EncodePng(png)
+	if err != nil {
+		return err
+	}
+	blpData, err = compactBLP1AlphaPlane(blpData, ignoreAlpha)
 	if err != nil {
 		return err
 	}

@@ -26,6 +26,7 @@ const tooltips = {
   bakeAnimate: 'Capture moving glows and scrolls as a short looping clip. Turn this off to bake one still picture instead — smaller files, but flames and energy will not flow.',
   bakeFps: 'How many pictures per second of moving glow to store. Higher is smoother and much larger. 15 is the default; 21 is closer to WoW and a bigger file.',
   bakeWindow: 'How many seconds of the effect loop to capture, then repeat. Longer captures more of a slow pattern and grows the file quickly. 4 seconds is usually enough; 0.5 seconds keeps the file small.',
+  bakeResolution: 'Half resolution renders each baked texture at 50% width and height, using about one-quarter as many pixels. It keeps the selected FPS and capture duration unchanged.',
 };
 
 function bakeTexturesLabel(baking: TextureBakingForm): string {
@@ -62,7 +63,7 @@ export function BakeTexturesButton({ textureBaking, setTextureBaking }: {
           <Alert className="border-yellow-500/50 bg-yellow-500/10 py-3 text-yellow-800 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
             <TriangleAlert className="h-4 w-4" />
             <AlertDescription>
-              Turning this on significantly increases file size. Check the size after export to see if it is suitable for you.
+              Turning this on significantly increases file size. Check the size after export to see if it is suitable for you. Increase FPS/Loop length to get closer to WoW quality. Decrease them to get smaller files.
             </AlertDescription>
           </Alert>
           <div className="space-y-4">
@@ -81,6 +82,31 @@ export function BakeTexturesButton({ textureBaking, setTextureBaking }: {
               className={`space-y-4 ${textureBaking.enabled ? '' : 'invisible'}`}
               aria-hidden={!textureBaking.enabled}
             >
+              <div className="space-y-2">
+                <Label htmlFor="bakeResolution" className="text-sm flex items-center gap-2">
+                  Texture resolution
+                  <TooltipHelp tooltips={tooltips.bakeResolution}/>
+                </Label>
+                <Select
+                  value={String(textureBaking.resolutionScale)}
+                  disabled={!textureBaking.enabled}
+                  onValueChange={(value) => setTextureBaking({
+                    ...textureBaking,
+                    resolutionScale: value === '0.5' ? 0.5 : 1,
+                  })}
+                >
+                  <SelectTrigger id="bakeResolution">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Full resolution</SelectItem>
+                    <SelectItem value="0.5">Half resolution (50% width and height)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Half resolution uses about one-quarter as many pixels. FPS and capture duration stay unchanged.
+                </p>
+              </div>
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="bakeAnimate"

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
@@ -19,12 +20,16 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
+	m2export "github.com/pqhuy98/wow-converter/internal/wow/export/m2"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
 // ExportModelOptions configures skin guessing for model export.
 type ExportModelOptions struct {
-	TextureIDs   []int
-	ExtraGeosets []int
+	TextureIDs          []int
+	ReplaceableTextures map[string]int
+	ExtraGeosets        []int
+	GeosetMaskBuilder   func(*m2.Skin) []m2export.GeosetMaskEntry
 }
 
 // commonModel wraps an exported MDL.
@@ -36,11 +41,99 @@ type commonModel struct {
 // ExportModelFileIDAsMdl exports an M2 by file data id.
 func ExportModelFileIDAsMdl(ctx *ExportContext, modelFileID int, opts ExportModelOptions) (*commonModel, error) {
 	skinName := pickSkin(ctx, modelFileID, opts.TextureIDs, opts.ExtraGeosets)
-	m, err := ctx.AssetManager.ParseDirect(context.Background(), modelFileID, skinName, "")
+	m, err := ctx.AssetManager.ParseDirectOptions(context.Background(), common.DirectParseOptions{
+		FileDataID:          modelFileID,
+		SkinName:            skinName,
+		ReplaceableTextures: replaceableTextureTypeMap(opts.ReplaceableTextures),
+		GeosetMaskBuilder:   opts.GeosetMaskBuilder,
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &commonModel{MDL: m.MDL, RelativePath: m.RelativePath}, nil
+}
+
+func replaceableTextureTypeMap(textures map[string]int) map[int]int {
+	if len(textures) == 0 {
+		return nil
+	}
+	out := make(map[int]int, len(textures))
+	for rawType, fileDataID := range textures {
+		textureType, err := strconv.Atoi(rawType)
+		if err == nil && fileDataID > 0 {
+			out[textureType] = fileDataID
+		}
+	}
+	return out
+}
+
+func collectionGeosetMask(skin *m2.Skin, selected map[int]struct{}) []m2export.GeosetMaskEntry {
+	mask := make([]m2export.GeosetMaskEntry, len(skin.SubMeshes))
+	for i, subMesh := range skin.SubMeshes {
+		id := int(subMesh.SubmeshID)
+		_, checked := selected[id]
+		mask[i] = m2export.GeosetMaskEntry{ID: id, Checked: checked}
+	}
+	return mask
+}
+
+func equipmentCollectionGeosetMaskBuilder(ctx *ExportContext, equipmentSlots []EquipmentSlotData, fileDataID int) func(*m2.Skin) []m2export.GeosetMaskEntry {
+	if ctx == nil || ctx.WowClient == nil {
+		return nil
+	}
+	entry, err := ctx.WowClient.GetFileByID(context.Background(), fileDataID)
+	if err != nil || !isCollectionModelPath(entry.FileName) {
+		return nil
+	}
+	return func(skin *m2.Skin) []m2export.GeosetMaskEntry {
+		proxy := collectionSelectionProxyModel(skin)
+		selected := make(map[int]struct{})
+		for _, slot := range equipmentSlots {
+			if !equipmentSlotUsesModel(slot, fileDataID) {
+				continue
+			}
+			for _, geoset := range FilterCollectionGeosets(equipmentSlots, slot, proxy) {
+				selected[geoset.WowData.SubmeshID] = struct{}{}
+			}
+		}
+		return collectionGeosetMask(skin, selected)
+	}
+}
+
+func isCollectionModelPath(fileName string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(fileName, "\\", "/"))
+	normalized = "/" + strings.TrimLeft(normalized, "/")
+	return strings.Contains(normalized, "/objectcomponents/collections/")
+}
+
+func equipmentSlotUsesModel(slot EquipmentSlotData, fileDataID int) bool {
+	for _, model := range slot.Data.ModelFiles {
+		if model.FileDataID == fileDataID {
+			return true
+		}
+	}
+	return false
+}
+
+func collectionSelectionProxyModel(skin *m2.Skin) *mdl.MDL {
+	proxy := mdl.New(mdl.NewMDLOptions{Name: "collection-selection"})
+	if skin == nil {
+		return proxy
+	}
+	for _, textureUnit := range skin.TextureUnits {
+		sectionIndex := int(textureUnit.SkinSectionIndex)
+		if sectionIndex >= len(skin.SubMeshes) {
+			continue
+		}
+		section := skin.SubMeshes[sectionIndex]
+		if section.TriangleCount == 0 {
+			continue
+		}
+		proxy.Geosets = append(proxy.Geosets, &components.Geoset{
+			WowData: components.GeosetWowData{SubmeshID: int(section.SubmeshID)},
+		})
+	}
+	return proxy
 }
 
 func pickSkin(ctx *ExportContext, modelFileID int, textureIDs, extraGeosets []int) string {
@@ -74,6 +167,11 @@ func pickSkin(ctx *ExportContext, modelFileID int, textureIDs, extraGeosets []in
 func skinMatchScore(wantGeosets, wantTextures, haveGeosets, haveTextures []int) int {
 	textureScore := 0
 	for _, id := range wantTextures {
+		// Creature variations retain empty DB2 slots for correct type binding.
+		// Two missing textures are not evidence that their skins match.
+		if id <= 0 {
+			continue
+		}
 		for _, h := range haveTextures {
 			if id == h {
 				textureScore++
@@ -108,7 +206,7 @@ func skinMatchScore(wantGeosets, wantTextures, haveGeosets, haveTextures []int) 
 func ApplyReplaceableTextures(ctx *ExportContext, m *mdl.MDL, replaceable map[string]int) error {
 	cache := map[int]string{}
 	replaceTexture := func(tex *components.Texture) error {
-		if tex == nil {
+		if tex == nil || tex.WowData.Type < 0 {
 			return nil
 		}
 		fileDataID, ok := replaceable[fmt.Sprintf("%d", tex.WowData.Type)]

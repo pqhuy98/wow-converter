@@ -31,6 +31,7 @@ type EncodeInput struct {
 	// only from visible pixels and the surface goes black.
 	Opaque        bool
 	PreserveAlpha bool
+	IgnoreAlpha   bool
 }
 
 // Size holds width and height dimensions.
@@ -71,7 +72,7 @@ func ConvertTextureToBlp(input EncodeInput, blpPath string) error {
 		}
 		pngData = forced
 	}
-	return convertPngToBlp(pngData, blpPath, input.PreserveAlpha)
+	return convertPngToBlp(pngData, blpPath, input.PreserveAlpha, input.IgnoreAlpha)
 }
 
 // forcePNGOpaque sets every pixel alpha to 255 so zero-alpha RGB survives quantization.
@@ -89,10 +90,10 @@ func forcePNGOpaque(pngData []byte) ([]byte, error) {
 // ConvertPngToBlp converts PNG bytes to a BLP1 file using the native C++ encoder
 // when CGO is enabled, otherwise the Go JS-fallback path.
 func ConvertPngToBlp(pngBufferOriginal []byte, blpPath string) error {
-	return convertPngToBlp(pngBufferOriginal, blpPath, false)
+	return convertPngToBlp(pngBufferOriginal, blpPath, false, false)
 }
 
-func convertPngToBlp(pngBufferOriginal []byte, blpPath string, preserveAlpha bool) error {
+func convertPngToBlp(pngBufferOriginal []byte, blpPath string, preserveAlpha, ignoreAlpha bool) error {
 	pngBuffer := pngBufferOriginal
 	if !preserveAlpha {
 		var err error
@@ -102,7 +103,7 @@ func convertPngToBlp(pngBufferOriginal []byte, blpPath string, preserveAlpha boo
 		}
 	}
 	if NativeEncoderAvailable() {
-		if err := encodeNative(pngBuffer, blpPath); err != nil {
+		if err := encodeNative(pngBuffer, blpPath, ignoreAlpha); err != nil {
 			return err
 		}
 		return nil
@@ -110,11 +111,15 @@ func convertPngToBlp(pngBufferOriginal []byte, blpPath string, preserveAlpha boo
 	logJSFallbackOnce.Do(func() {
 		log.Printf("Failed to load PNG->BLP's C++ native binding, will fallback to slower JavaScript implementation")
 	})
-	return Png2BlpJS(pngBuffer, blpPath)
+	return png2BlpJS(pngBuffer, blpPath, ignoreAlpha)
 }
 
 // Png2BlpJS encodes PNG bytes as WC3 BLP1 (JavaScript fallback path).
 func Png2BlpJS(pngBuffer []byte, distPath string) error {
+	return png2BlpJS(pngBuffer, distPath, false)
+}
+
+func png2BlpJS(pngBuffer []byte, distPath string, ignoreAlpha bool) error {
 	data, width, height, err := decodePNGToRGBA(pngBuffer)
 	if err != nil {
 		return err
@@ -237,6 +242,10 @@ func Png2BlpJS(pngBuffer []byte, distPath string) error {
 	}
 
 	copy(out, header)
+	out, err = compactBLP1AlphaPlane(out, ignoreAlpha)
+	if err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(filepath.Dir(distPath), 0o755); err != nil {
 		// Match TS: ignore mkdir errors.

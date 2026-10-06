@@ -7,6 +7,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
 	"github.com/pqhuy98/wow-converter/internal/config"
@@ -18,6 +19,8 @@ import (
 	objpkg "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/bundle/obj"
 	directm2 "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/direct/m2"
 	"github.com/pqhuy98/wow-converter/internal/formats/blp"
+	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
+	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/wmo"
@@ -407,8 +410,38 @@ func ConvertWmoToMdl(ctx context.Context, cfg config.Config, src directm2.FileSo
 }
 
 func bakeWmoMaterials(ctx context.Context, cfg config.Config, src directm2.FileSource, root *wmo.Loader, groups []*wmo.Loader, result *directm2.ConvertResult) error {
+	return bakeWmoMaterialsWithWorkers(ctx, cfg, src, root, groups, result, 2)
+}
+
+type wmoBakeTask struct {
+	geosetIndex       int
+	beforeGeosetCount int
+	additionalGeosets int
+	baseTextureCount  int
+	baseMaterialCount int
+	baseAnimCount     int
+	baseGlobalCount   int
+	g                 *components.Geoset
+	group             *wmo.Loader
+	batch             wmo.RenderBatch
+	material          wmo.Material
+	images            [9]*image.NRGBA
+	speed             [4]float32
+}
+
+type wmoBakeTaskResult struct {
+	result directm2.ConvertResult
+	err    error
+}
+
+// bakeWmoMaterialsWithWorkers keeps texture resolution serial, then bakes
+// independent render batches against private result graphs. Results are
+// applied in source order so IDs, texture paths, and emitted geometry remain
+// deterministic. workerLimit exists for equivalence and race tests.
+func bakeWmoMaterialsWithWorkers(ctx context.Context, cfg config.Config, src directm2.FileSource, root *wmo.Loader, groups []*wmo.Loader, result *directm2.ConvertResult, workerLimit int) error {
 	decoded := map[int]*image.NRGBA{}
 	originals := append(result.MDL.Geosets[:0:0], result.MDL.Geosets...)
+	tasks := make([]wmoBakeTask, 0, len(originals))
 	gi := 0
 	for _, group := range groups {
 		for _, batch := range group.RenderBatches {
@@ -477,13 +510,240 @@ func bakeWmoMaterials(ctx context.Context, cfg config.Config, src directm2.FileS
 				}
 				images[sampler] = img
 			}
-			if err := directm2.BakeWMOMaterial(ctx, cfg, result, g, group, batch, material, images, speed); err != nil {
+			additional, err := directm2.WMOAdditionalGeosetCount(cfg, material.Shader, material.BlendMode, images[0] != nil)
+			if err != nil {
+				return err
+			}
+			tasks = append(tasks, wmoBakeTask{
+				geosetIndex:       gi - 1,
+				beforeGeosetCount: len(originals) + totalAdditionalGeosets(tasks),
+				additionalGeosets: additional,
+				baseTextureCount:  len(result.MDL.Textures),
+				baseMaterialCount: len(result.MDL.Materials),
+				baseAnimCount:     len(result.MDL.TextureAnims),
+				baseGlobalCount:   len(result.MDL.GlobalSequences),
+				g:                 g,
+				group:             group,
+				batch:             batch,
+				material:          material,
+				images:            images,
+				speed:             speed,
+			})
+		}
+	}
+	if len(tasks) < 4 || workerLimit < 2 {
+		for _, task := range tasks {
+			if err := directm2.BakeWMOMaterial(ctx, cfg, result, task.g, task.group, task.batch, task.material, task.images, task.speed); err != nil {
 				return err
 			}
 		}
+		result.MDL.Sync()
+		return nil
 	}
+	if workerLimit > 2 {
+		workerLimit = 2
+	}
+	results := make([]wmoBakeTaskResult, len(tasks))
+	baseMaterialCount := len(result.MDL.Materials)
+	var next int
+	var nextMu sync.Mutex
+	var errorMu sync.Mutex
+	var firstErr error
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	defer cancelWorkers()
+	var workers sync.WaitGroup
+	for range min(workerLimit, len(tasks)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for {
+				if workerCtx.Err() != nil {
+					return
+				}
+				nextMu.Lock()
+				index := next
+				next++
+				nextMu.Unlock()
+				if index >= len(tasks) {
+					return
+				}
+				task := tasks[index]
+				workerResult := cloneWmoBakeResult(*result, task.geosetIndex, task.g, task.beforeGeosetCount)
+				err := directm2.BakeWMOMaterial(workerCtx, cfg, &workerResult, workerResult.MDL.Geosets[task.geosetIndex], task.group, task.batch, task.material, task.images, task.speed)
+				results[index] = wmoBakeTaskResult{result: workerResult, err: err}
+				if err != nil {
+					errorMu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					errorMu.Unlock()
+					cancelWorkers()
+					return
+				}
+			}
+		}()
+	}
+	workers.Wait()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if firstErr != nil {
+		return firstErr
+	}
+	for i := range results {
+		if got, want := len(results[i].result.MDL.Geosets), tasks[i].beforeGeosetCount+tasks[i].additionalGeosets; got != want {
+			return fmt.Errorf("WMO batch %d produced %d geosets after preflight expected %d", i, got-tasks[i].beforeGeosetCount, tasks[i].additionalGeosets)
+		}
+	}
+	for i, task := range tasks {
+		if err := mergeWmoBakeResult(result, results[i].result, task); err != nil {
+			return err
+		}
+	}
+	rebaseWmoTextureAnimations(result.MDL, baseMaterialCount)
 	result.MDL.Sync()
 	return nil
+}
+
+func totalAdditionalGeosets(tasks []wmoBakeTask) int {
+	total := 0
+	for _, task := range tasks {
+		total += task.additionalGeosets
+	}
+	return total
+}
+
+func cloneWmoBakeResult(base directm2.ConvertResult, geosetIndex int, geoset *components.Geoset, geosetCount int) directm2.ConvertResult {
+	model := *base.MDL
+	model.Geosets = append([]*components.Geoset(nil), base.MDL.Geosets...)
+	model.Geosets[geosetIndex] = cloneWmoBakeGeoset(geoset)
+	if geosetCount > len(model.Geosets) {
+		model.Geosets = append(model.Geosets, make([]*components.Geoset, geosetCount-len(model.Geosets))...)
+	}
+	model.Geosets = model.Geosets[:len(model.Geosets):len(model.Geosets)]
+	model.Textures = append([]*components.Texture(nil), base.MDL.Textures...)
+	model.Textures = model.Textures[:len(model.Textures):len(model.Textures)]
+	model.Materials = append([]*components.Material(nil), base.MDL.Materials...)
+	model.Materials = model.Materials[:len(model.Materials):len(model.Materials)]
+	model.TextureAnims = append([]components.TextureAnim(nil), base.MDL.TextureAnims...)
+	model.TextureAnims = model.TextureAnims[:len(model.TextureAnims):len(model.TextureAnims)]
+	model.GlobalSequences = append([]*components.GlobalSequence(nil), base.MDL.GlobalSequences...)
+	model.GlobalSequences = model.GlobalSequences[:len(model.GlobalSequences):len(model.GlobalSequences)]
+	// Match the serial model's virtual number of already emitted geosets for
+	// bakeM2Geoset's shared per-model texture budget.
+	model.Geosets = model.Geosets[:geosetCount]
+	texturePaths := make(map[string]struct{}, len(base.TexturePaths))
+	for path := range base.TexturePaths {
+		texturePaths[path] = struct{}{}
+	}
+	return directm2.ConvertResult{MDL: &model, TexturePaths: texturePaths, BakeStem: base.BakeStem}
+}
+
+func cloneWmoBakeGeoset(source *components.Geoset) *components.Geoset {
+	copyG := *source
+	copyG.Vertices = nil
+	copyG.Faces = append([]components.Face(nil), source.Faces...)
+	vertices := make(map[*components.GeosetVertex]*components.GeosetVertex, len(source.Vertices))
+	for _, vertex := range source.Vertices {
+		cloned := *vertex
+		vertices[vertex] = &cloned
+		copyG.Vertices = append(copyG.Vertices, &cloned)
+	}
+	for fi := range copyG.Faces {
+		for vi, vertex := range copyG.Faces[fi].Vertices {
+			copyG.Faces[fi].Vertices[vi] = vertices[vertex]
+		}
+	}
+	if source.Material != nil {
+		material := *source.Material
+		material.Layers = append([]components.Layer(nil), source.Material.Layers...)
+		copyG.Material = &material
+	}
+	return &copyG
+}
+
+func mergeWmoBakeResult(destination *directm2.ConvertResult, worker directm2.ConvertResult, task wmoBakeTask) error {
+	base := task.beforeGeosetCount
+	if len(destination.MDL.Geosets) != base {
+		return fmt.Errorf("WMO batch merge order mismatch: model has %d geosets, want %d", len(destination.MDL.Geosets), base)
+	}
+	originalGeoset := destination.MDL.Geosets[task.geosetIndex]
+	animationRefs := collectWmoWorkerTextureAnimRefs(worker, task)
+	destination.MDL.Geosets[task.geosetIndex] = worker.MDL.Geosets[task.geosetIndex]
+	destination.MDL.Geosets = append(destination.MDL.Geosets, worker.MDL.Geosets[base:]...)
+	for i := range destination.MDL.GeosetAnims {
+		if destination.MDL.GeosetAnims[i].Geoset == originalGeoset {
+			destination.MDL.GeosetAnims[i].Geoset = destination.MDL.Geosets[task.geosetIndex]
+		}
+	}
+	destination.MDL.Textures = append(destination.MDL.Textures, worker.MDL.Textures[task.baseTextureCount:]...)
+	destination.MDL.Materials = append(destination.MDL.Materials, worker.MDL.Materials[task.baseMaterialCount:]...)
+	baseAnimCount, baseGlobalCount := task.baseAnimCount, task.baseGlobalCount
+	animOffset := len(destination.MDL.TextureAnims)
+	newAnims := worker.MDL.TextureAnims[baseAnimCount:]
+	for i := range newAnims {
+		newAnims[i].ID = animOffset + i
+	}
+	destination.MDL.TextureAnims = append(destination.MDL.TextureAnims, newAnims...)
+	for animation, localID := range animationRefs {
+		if localID >= baseAnimCount && localID < len(worker.MDL.TextureAnims) {
+			animation.ID = animOffset + localID - baseAnimCount
+		}
+	}
+	for _, sequence := range worker.MDL.GlobalSequences[baseGlobalCount:] {
+		sequence.ID = len(destination.MDL.GlobalSequences)
+		if sequence.HasRawID {
+			sequence.RawID = sequence.ID
+		}
+		destination.MDL.GlobalSequences = append(destination.MDL.GlobalSequences, sequence)
+	}
+	for path := range worker.TexturePaths {
+		destination.TexturePaths[path] = struct{}{}
+	}
+	return nil
+}
+
+func collectWmoWorkerTextureAnimRefs(worker directm2.ConvertResult, task wmoBakeTask) map[*components.TextureAnim]int {
+	refs := make(map[*components.TextureAnim]int)
+	collectMaterial := func(material *components.Material) {
+		if material == nil {
+			return
+		}
+		for li := range material.Layers {
+			animation := material.Layers[li].TVertexAnim
+			if animation != nil {
+				if _, seen := refs[animation]; !seen {
+					refs[animation] = animation.ID
+				}
+			}
+		}
+	}
+	for _, material := range worker.MDL.Materials[task.baseMaterialCount:] {
+		collectMaterial(material)
+	}
+	if task.geosetIndex >= 0 && task.geosetIndex < len(worker.MDL.Geosets) {
+		collectMaterial(worker.MDL.Geosets[task.geosetIndex].Material)
+	}
+	for _, geoset := range worker.MDL.Geosets[task.beforeGeosetCount:] {
+		if geoset != nil {
+			collectMaterial(geoset.Material)
+		}
+	}
+	return refs
+}
+
+func rebaseWmoTextureAnimations(model *mdl.MDL, firstGeneratedMaterial int) {
+	for _, material := range model.Materials[firstGeneratedMaterial:] {
+		if material == nil {
+			continue
+		}
+		for li := range material.Layers {
+			layer := &material.Layers[li]
+			if layer.TVertexAnim != nil && layer.TVertexAnim.ID >= 0 && layer.TVertexAnim.ID < len(model.TextureAnims) {
+				layer.TVertexAnim = &model.TextureAnims[layer.TVertexAnim.ID]
+			}
+		}
+	}
 }
 
 func relPath(base, target string) string {

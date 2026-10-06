@@ -16,6 +16,7 @@
     "build:linux": "cd webui && bun run build && cd .. && bash scripts/build-go-app.sh",
     "test:unit": "cd golang && go test ./... && cd .. && bun test webui scripts tests/_deprecated-tests",
     "test:snapshot": "bun test --max-concurrency=1 tests/snapshot-tests",
+    "test:snapshot-update": "SNAPSHOT_UPDATE=1 bun test --max-concurrency=1 tests/snapshot-tests",
     "test:api": "bun test tests/api-tests",
     "test:regression-maps": "bun test --max-concurrency=1 tests/regression-maps",
     "test:regression-maps:fresh": "fresh=1 bun test --max-concurrency=1 tests/regression-maps",

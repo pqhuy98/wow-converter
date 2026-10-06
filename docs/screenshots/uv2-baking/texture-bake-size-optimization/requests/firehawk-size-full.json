@@ -1,0 +1,30 @@
+{
+  "textureBaking": {
+    "enabled": true,
+    "animate": true,
+    "resolutionScale": 1,
+    "fps": 12,
+    "windowMS": 4000
+  },
+  "character": {
+    "base": {
+      "type": "wowhead",
+      "value": "https://www.wowhead.com/npc=52530/alysrazor"
+    },
+    "attackTag": "Auto",
+    "inGameMovespeed": 270,
+    "size": "hero",
+    "portraitCameraSequenceName": "Stand"
+  },
+  "outputFileName": "firehawk-size-full",
+  "optimization": {
+    "sortSequences": true,
+    "removeUnusedVertices": true,
+    "removeUnusedNodes": true,
+    "removeUnusedMaterialsTextures": true
+  },
+  "format": "mdl",
+  "formatVersion": "1000",
+  "isBrowse": false,
+  "skinId": ""
+}

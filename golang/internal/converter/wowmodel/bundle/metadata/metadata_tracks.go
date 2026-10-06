@@ -156,6 +156,22 @@ func (f *File) m2TrackToAnimation(track m2TrackRaw, animType components.Animatio
 
 	accum := 0
 	for animID, timestamps := range track.Timestamps {
+		if result.GlobalSeq != nil {
+			if timestamps == nil {
+				continue
+			}
+			for ti, ts := range timestamps {
+				if ts == nil {
+					continue
+				}
+				var value []float64
+				if animID < len(track.Values) && ti < len(track.Values[animID]) {
+					value = track.Values[animID][ti]
+				}
+				result.KeyFrames[int(*ts)] = transform(value)
+			}
+			continue
+		}
 		duration, ok := f.sequenceDuration(animID)
 		if !ok {
 			continue

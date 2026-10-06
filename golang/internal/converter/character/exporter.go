@@ -663,6 +663,9 @@ func (e *CharacterExporter) OptimizeModels(opt ExportOptimization) {
 
 // OptimizeModelsTextures optimizes models and purges unused textures.
 func (e *CharacterExporter) OptimizeModelsTextures(opt ExportOptimization) {
+	if e.Config.TextureBaking.Enabled {
+		e.deduplicateBakedTexturePaths()
+	}
 	e.OptimizeModels(opt)
 	e.registerMdlTexturesFromModels()
 	var used []string

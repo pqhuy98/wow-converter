@@ -24,6 +24,8 @@ type Source struct {
 	Opaque bool
 	// PreserveAlpha keeps intentionally empty shader output transparent.
 	PreserveAlpha bool
+	// IgnoreAlpha removes the quantized alpha plane when the material ignores it.
+	IgnoreAlpha bool
 }
 
 var (

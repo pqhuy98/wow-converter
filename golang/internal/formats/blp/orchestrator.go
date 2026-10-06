@@ -15,6 +15,7 @@ type TaskInput struct {
 	ResizeTo      *Size
 	Opaque        bool
 	PreserveAlpha bool
+	IgnoreAlpha   bool
 }
 
 // WorkerPool runs BLP conversions with bounded parallelism.
@@ -74,7 +75,7 @@ func (p *WorkerPool) Submit(input TaskInput, blpPath string) error {
 	p.sem <- struct{}{}
 	defer func() { <-p.sem }()
 
-	encode := EncodeInput{ResizeTo: input.ResizeTo, Opaque: input.Opaque, PreserveAlpha: input.PreserveAlpha}
+	encode := EncodeInput{ResizeTo: input.ResizeTo, Opaque: input.Opaque, PreserveAlpha: input.PreserveAlpha, IgnoreAlpha: input.IgnoreAlpha}
 	switch input.Kind {
 	case "png":
 		encode.PNG = input.Data

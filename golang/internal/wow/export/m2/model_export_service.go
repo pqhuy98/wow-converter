@@ -23,19 +23,19 @@ func GetModelDisplays(fileDataID uint32) []caches.ModelDisplay {
 func skinVariantKey(display caches.ModelDisplay) string {
 	geosets := append([]uint32(nil), display.ExtraGeosets...)
 	sort.Slice(geosets, func(i, j int) bool { return geosets[i] < geosets[j] })
-	parts := make([]string, len(geosets))
-	for i, g := range geosets {
-		parts[i] = fmtUint(g)
+	parts := make([]string, 0, len(display.Textures)+len(geosets)+1)
+	for _, texture := range display.Textures {
+		parts = append(parts, fmtUint(texture))
 	}
-	tex := uint32(0)
-	if len(display.Textures) > 0 {
-		tex = display.Textures[0]
+	parts = append(parts, "|")
+	for _, g := range geosets {
+		parts = append(parts, fmtUint(g))
 	}
-	return fmtUint(tex) + "|" + strings.Join(parts, ",")
+	return strings.Join(parts, ",")
 }
 
 func getSkinForDisplay(display caches.ModelDisplay) casc.ModelSkin {
-	texture := display.Textures[0]
+	texture := firstPositiveTexture(display.Textures)
 	skinName, _ := archivecasc.GetByID(int(texture))
 	if skinName != "" {
 		skinName = strings.TrimSuffix(filepath.Base(skinName), ".blp")
@@ -54,11 +54,9 @@ func getSkinForDisplay(display caches.ModelDisplay) casc.ModelSkin {
 		}
 		label += " [" + strings.Join(parts, ", ") + "]"
 	}
-	texInts := make([]int, 0, len(display.Textures))
-	for _, t := range display.Textures {
-		if t > 0 {
-			texInts = append(texInts, int(t))
-		}
+	texInts := make([]int, len(display.Textures))
+	for i, t := range display.Textures {
+		texInts[i] = int(t)
 	}
 	var extraGeosets []int
 	if len(extra) > 0 {
@@ -70,6 +68,15 @@ func getSkinForDisplay(display caches.ModelDisplay) casc.ModelSkin {
 	return casc.ModelSkin{
 		ID: skinName, Label: label, DisplayID: int(display.ID), Textures: texInts, ExtraGeosets: extraGeosets,
 	}
+}
+
+func firstPositiveTexture(textures []uint32) uint32 {
+	for _, texture := range textures {
+		if texture > 0 {
+			return texture
+		}
+	}
+	return 0
 }
 
 func preferSkin(a, b casc.ModelSkin) casc.ModelSkin {
@@ -98,7 +105,7 @@ func GetAllSkinsForModel(fileDataID uint32) []casc.ModelSkin {
 	displays := GetModelDisplays(fileDataID)
 	byVariant := make(map[string]casc.ModelSkin)
 	for _, display := range displays {
-		if len(display.Textures) == 0 || display.Textures[0] == 0 {
+		if firstPositiveTexture(display.Textures) == 0 {
 			continue
 		}
 		key := skinVariantKey(display)
@@ -113,8 +120,22 @@ func GetAllSkinsForModel(fileDataID uint32) []casc.ModelSkin {
 	for _, skin := range byVariant {
 		out = append(out, skin)
 	}
+	disambiguateSkinVariants(out)
 	stringsort.SortBy(out, func(skin casc.ModelSkin) string { return skin.Label })
 	return out
+}
+
+func disambiguateSkinVariants(skins []casc.ModelSkin) {
+	counts := make(map[string]int, len(skins))
+	for _, skin := range skins {
+		counts[skin.Label]++
+	}
+	for i := range skins {
+		if counts[skins[i].Label] > 1 {
+			skins[i].Label += fmt.Sprintf(" [display %d]", skins[i].DisplayID)
+			skins[i].ID += fmt.Sprintf("_display%d", skins[i].DisplayID)
+		}
+	}
 }
 
 func fmtUint(v uint32) string {

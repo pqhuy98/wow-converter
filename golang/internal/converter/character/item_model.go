@@ -385,13 +385,15 @@ func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targ
 		return nil, ItemMetadata{}, fmt.Errorf("found no model for item %d", zam.DisplayID)
 	}
 	modelID := result.ModelFiles[0].FileDataID
+	replaceable := itemReplaceableTextures(result.ModelTextureFiles)
 	model, err := ExportModelFileIDAsMdl(ctx, modelID, ExportModelOptions{
-		TextureIDs: itemModelTextureIDs(result.ModelTextureFiles),
+		TextureIDs:          itemModelTextureIDs(result.ModelTextureFiles),
+		ReplaceableTextures: replaceable,
 	})
 	if err != nil {
 		return nil, ItemMetadata{}, err
 	}
-	if err := ApplyReplaceableTextures(ctx, model.MDL, itemReplaceableTextures(result.ModelTextureFiles)); err != nil {
+	if err := ApplyReplaceableTextures(ctx, model.MDL, replaceable); err != nil {
 		return nil, ItemMetadata{}, err
 	}
 	return model, result, nil
