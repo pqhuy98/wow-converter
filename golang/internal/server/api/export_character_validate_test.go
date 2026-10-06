@@ -24,8 +24,14 @@ func TestTextureBakingRequestOptions(t *testing.T) {
 	raw = validExportCharacterBody()
 	raw["textureBaking"] = map[string]any{"enabled": true}
 	body, issues = parseExportCharacterRequest(raw)
-	if len(issues) > 0 || !body.TextureBaking.Enabled || !body.TextureBaking.Flipbook() {
-		t.Fatalf("enabled bake should animate by default: %+v %v", body.TextureBaking, issues)
+	if len(issues) > 0 || !body.TextureBaking.Enabled || !body.TextureBaking.Flipbook() || body.TextureBaking.FPS != 15 {
+		t.Fatalf("enabled bake should animate at 15 fps by default: %+v %v", body.TextureBaking, issues)
+	}
+	raw = validExportCharacterBody()
+	raw["textureBaking"] = map[string]any{"enabled": true, "animate": false}
+	body, issues = parseExportCharacterRequest(raw)
+	if len(issues) > 0 || body.TextureBaking.FPS != 0 {
+		t.Fatalf("still bake should not gain an fps default: %+v %v", body.TextureBaking, issues)
 	}
 	for _, value := range []any{nil, "12", map[string]any{"fps": 0.0}, map[string]any{"fps": 21.5}, map[string]any{"windowMS": 60001.0}, map[string]any{"enabled": "yes"}} {
 		raw := validExportCharacterBody()

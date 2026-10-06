@@ -49,6 +49,15 @@ interface ModelViewerProps {
 // Normalises backslashes to forward slashes for safe URL usage
 const normalizePath = (p: string) => p.replace(/\\+/g, '/').replace(/\/+/, '/');
 
+function formatLoadedSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)}KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)}MB`;
+  return `${(mb / 1024).toFixed(1)}GB`;
+}
+
 const MAX_DISTANCE = 2000000;
 const FAR_CLIP_PLANE = 100_000_000;
 
@@ -192,8 +201,9 @@ export default function ModelViewerUi({
   const baseUrlRef = useRef<string>('/api/assets');
   const shotExtentsRef = useRef<ShotExtents | null>(null);
   const shotPoseRef = useRef<{ inst: MdxModelInstance; seq: number } | null>(null);
-  const loadedFilesRef = useRef<Set<string>>(new Set());
+  const loadedFilesRef = useRef<Map<string, number>>(new Map());
   const [loadedCount, setLoadedCount] = useState<number>(0);
+  const [loadedBytes, setLoadedBytes] = useState<number>(0);
   useEffect(() => {
     baseUrlRef.current = source === 'browse' ? '/api/browse-assets' : '/api/assets';
   }, [source]);
@@ -226,21 +236,7 @@ export default function ModelViewerUi({
     })();
 
     viewer.on('loadstart', (e) => {
-      const fetchUrl = String(e.fetchUrl ?? '');
-      console.log(`[Viewer] Loading ${fetchUrl}`);
-      // Record files that are fetched from our assets endpoints
-      const bases = ['/api/assets', '/api/browse-assets', baseUrlRef.current].filter(Boolean);
-      for (const b of bases) {
-        const base = String(b);
-        if (fetchUrl.startsWith(`${base}/`)) {
-          const rel = fetchUrl.slice((`${base}/`).length).replace(/^\/+/, '');
-          if (rel) {
-            loadedFilesRef.current.add(rel);
-            setLoadedCount((prev) => prev + 1);
-          }
-          break;
-        }
-      }
+      console.log(`[Viewer] Loading ${String(e.fetchUrl ?? '')}`);
     });
 
     viewer.on('loadend', (e) => {
@@ -276,8 +272,8 @@ export default function ModelViewerUi({
 
     // references for cleanup
     const canvas = canvasRef.current;
-    // reset loaded asset tracker on new load
-    loadedFilesRef.current = new Set();
+    const requestId = ++loadRequestIdRef.current;
+    loadedFilesRef.current = new Map();
     shotPoseRef.current = null;
     if (shot) delete document.documentElement.dataset.viewerReady;
 
@@ -290,14 +286,13 @@ export default function ModelViewerUi({
     resizeViewerToCanvas();
 
     setLoadedCount(0);
+    setLoadedBytes(0);
     if (!shot) {
       void (async () => {
         const gridInsts = await createGridModel(viewer, scene, 50, 128);
         gridInstancesRef.current = gridInsts;
       })();
     }
-
-    const requestId = ++loadRequestIdRef.current;
     let cancelled = false;
     let onMouseDown: ((e: MouseEvent) => void) | null = null;
     let onMouseMove: ((e: MouseEvent) => void) | null = null;
@@ -316,9 +311,34 @@ export default function ModelViewerUi({
           // ignore
         }
       }
-      // Path solver so the viewer fetches every dependant file via our assets route
+      // Path solver so the viewer fetches every dependant file via our assets route.
+      // Fetch here so each unique path is counted once, even if React Strict Mode
+      // remounts or the viewer asks for the same texture twice.
       const base = baseUrlRef.current;
-      const pathSolver = (src: unknown) => `${base}/${normalizePath(src as string)}`;
+      const inflight = new Map<string, Promise<ArrayBuffer>>();
+      const pathSolver = (src: unknown): Promise<ArrayBuffer> => {
+        const rel = normalizePath(String(src));
+        const url = `${base}/${rel}`;
+        const cached = inflight.get(url);
+        if (cached) return cached;
+        const pending = fetch(url).then(async (res) => {
+          if (!res.ok) throw new Error(`${res.status} ${url}`);
+          const buf = await res.arrayBuffer();
+          if (!cancelled && loadRequestIdRef.current === requestId) {
+            const files = loadedFilesRef.current;
+            if (!files.has(rel)) {
+              files.set(rel, buf.byteLength);
+              let total = 0;
+              for (const n of files.values()) total += n;
+              setLoadedCount(files.size);
+              setLoadedBytes(total);
+            }
+          }
+          return buf;
+        });
+        inflight.set(url, pending);
+        return pending;
+      };
       if (shot) {
         shotExtentsRef.current = null;
         try {
@@ -811,7 +831,7 @@ export default function ModelViewerUi({
 
   const handleDownloadAssets = async () => {
     try {
-      const files = Array.from(loadedFilesRef.current);
+      const files = Array.from(loadedFilesRef.current.keys());
       if (files.length === 0) return;
       const source = baseUrlRef.current.includes('/api/browse-assets') ? 'browse' : 'export';
       await downloadAssetsZip({ files, source });
@@ -976,6 +996,11 @@ export default function ModelViewerUi({
   return (
     <div className={`flex flex-col lg:flex-row w-full h-full ${alwaysFullscreen ? 'fixed inset-0 z-50' : isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
       <div ref={canvasContainerRef} className={`relative flex-1 min-h-0 ${alwaysFullscreen || isFullscreen ? 'h-full' : 'h-full'}`}>
+        {!shot && loadedBytes > 0 && (
+          <div className="absolute top-2 right-2 z-10 pointer-events-none text-white text-sm drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]">
+            {formatLoadedSize(loadedBytes)}
+          </div>
+        )}
         {!shot && <div className="absolute top-2 left-2 z-10 flex gap-2">
           {!alwaysFullscreen && (
             <Button

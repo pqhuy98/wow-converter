@@ -32,21 +32,36 @@ func parseExportCharacterRequest(raw map[string]any) (exportCharacterRequest, []
 }
 
 func applyExportCharacterDefaults(raw map[string]any) {
-	optimization, ok := raw["optimization"].(map[string]any)
+	if optimization, ok := raw["optimization"].(map[string]any); ok {
+		defaults := map[string]bool{
+			"sortSequences":                 true,
+			"allMaterialsUnshaded":          false,
+			"removeUnusedVertices":          true,
+			"removeUnusedNodes":             true,
+			"removeUnusedMaterialsTextures": true,
+		}
+		for key, value := range defaults {
+			if _, exists := optimization[key]; !exists {
+				optimization[key] = value
+			}
+		}
+	}
+	baking, ok := raw["textureBaking"].(map[string]any)
 	if !ok {
 		return
 	}
-	defaults := map[string]bool{
-		"sortSequences":                 true,
-		"allMaterialsUnshaded":          false,
-		"removeUnusedVertices":          true,
-		"removeUnusedNodes":             true,
-		"removeUnusedMaterialsTextures": true,
+	enabled, _ := baking["enabled"].(bool)
+	if !enabled {
+		return
 	}
-	for key, value := range defaults {
-		if _, exists := optimization[key]; !exists {
-			optimization[key] = value
+	if animate, exists := baking["animate"]; exists {
+		on, _ := animate.(bool)
+		if !on {
+			return
 		}
+	}
+	if _, exists := baking["fps"]; !exists {
+		baking["fps"] = 15
 	}
 }
 
