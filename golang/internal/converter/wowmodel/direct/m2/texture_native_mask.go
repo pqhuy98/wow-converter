@@ -14,7 +14,7 @@ type nativeMaskDraw struct {
 }
 
 func nativeMaskCompatible(p bakeProgram) bool {
-	if p.shader.pixel != 6 || p.count != 2 || (p.blend != 2 && p.blend != 4) || p.shader.coords[0] != coordT1M0 || p.shader.coords[1] != coordT2M1 {
+	if p.shader.pixel != 6 || p.count != 2 || (p.blend != 2 && p.blend != 4) || p.shader.edge || p.shader.coords[0] != coordT1M0 || p.shader.coords[1] != coordT2M1 {
 		return false
 	}
 	if p.transforms[0] != nil {

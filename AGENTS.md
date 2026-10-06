@@ -77,3 +77,6 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
 - For MCP integration setup or troubleshooting, consult
   [Cursor MCP configuration](.cursor/mcp.json). This describes Cursor's setup;
   referencing it does not configure or enable MCP servers in Codex.
+- Snapshot failures write `tests/snapshot-tests/model/review.html` (actual |
+  expected). Rebuild with `bun tests/snapshot-tests/model/_write-review.mjs`.
+  Full workflow is in [.cursor/rules/development.mdc](.cursor/rules/development.mdc).

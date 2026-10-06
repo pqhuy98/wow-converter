@@ -73,19 +73,7 @@ func bakeUV2Materials(ctx context.Context, cfg config.Config, src FileSource, lo
 }
 
 func bakeM2Materials(ctx context.Context, cfg config.Config, src FileSource, loader *m2.Loader, skin *m2.Skin, mask []m2export.GeosetMaskEntry, resolved ResolvedTextures, meta *bundlemeta.File, result *ConvertResult) error {
-	geosets := map[int]*components.Geoset{}
-	targets := map[int]*components.Geoset{}
-	gi := 0
-	for si := range skin.SubMeshes {
-		if mask != nil && (si >= len(mask) || !mask[si].Checked) {
-			continue
-		}
-		if gi < len(result.MDL.Geosets) {
-			geosets[si] = result.MDL.Geosets[gi]
-			targets[si] = result.MDL.Geosets[gi]
-		}
-		gi++
-	}
+	geosets, targets := mapBakeSkinGeosets(skin, mask, result.MDL.Geosets)
 	unitsPerSection := map[uint16]int{}
 	bakedGlobals := map[*components.GlobalSequence]bool{}
 	budgets := m2BakeBudgets(loader, skin, geosets)
@@ -228,7 +216,7 @@ units:
 			}
 		}
 		if description.edge {
-			log.Printf("M2 bake section %d: camera-dependent edge fade uses neutral opacity in Classic", unit.SkinSectionIndex)
+			log.Printf("M2 bake section %d: camera-dependent edge fade uses an all-angle average in Classic", unit.SkinSectionIndex)
 		}
 		bakeErr := error(nil)
 		didBake := false
@@ -624,6 +612,32 @@ func BakeStemFromListfile(fileName string) string {
 	return stem
 }
 
+// mapBakeSkinGeosets pairs skin sections with assembled geosets. OBJ assemble
+// only emits groups that have faces, so empty checked placeholders must not
+// consume a geoset slot or baking writes into the next real mesh.
+func mapBakeSkinGeosets(skin *m2.Skin, mask []m2export.GeosetMaskEntry, mdlGeosets []*components.Geoset) (mapped, targets map[int]*components.Geoset) {
+	mapped = map[int]*components.Geoset{}
+	targets = map[int]*components.Geoset{}
+	if skin == nil {
+		return mapped, targets
+	}
+	gi := 0
+	for si, section := range skin.SubMeshes {
+		if mask != nil && (si >= len(mask) || !mask[si].Checked) {
+			continue
+		}
+		if section.TriangleCount < 3 {
+			continue
+		}
+		if gi < len(mdlGeosets) {
+			mapped[si] = mdlGeosets[gi]
+			targets[si] = mdlGeosets[gi]
+		}
+		gi++
+	}
+	return mapped, targets
+}
+
 func m2BakeBlend(mode uint16) components.BlendMode {
 	return [8]components.BlendMode{components.BlendNone, components.BlendTransparent, components.BlendBlend, components.BlendAdditive, components.BlendAddAlpha, components.BlendModulate, components.BlendModulate2x, components.BlendBlend}[min(7, int(mode))]
 }
@@ -806,9 +820,6 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 		constantUV2 = bakeConstantAxes(program.images[other])
 	}
 	var env map[*components.GeosetVertex]imath.Vector2
-	// Classic cannot update edge fading with the camera or animated normals.
-	// Neutral opacity keeps effect shells visible from every view, matching the
-	// reference renderer's fallback until a runtime edge-fade representation exists.
 	if usesEnv {
 		log.Printf("M2 bake %s: environment combiner uses bind-normal reference projection (camera dependent)", g.Name)
 		env = map[*components.GeosetVertex]imath.Vector2{}
@@ -1001,6 +1012,9 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 				}
 				if program.shade != nil {
 					fragment = program.shade(p, moment)
+				}
+				if program.shader.edge {
+					fragment = averageM2EdgeFade(fragment, program.blend)
 				}
 				color := [4]float64{fragment.diffuse[0], fragment.diffuse[1], fragment.diffuse[2], fragment.alpha}
 				if program.alphaOnly {

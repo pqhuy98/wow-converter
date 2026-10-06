@@ -159,6 +159,10 @@ shader baking, using the existing exact-ID filter. Equipment collection filters
 also run early; models shared by equipment slots retain the union needed by all
 slots. Final collection filtering remains in place. This avoids baking hidden
 variants without losing parts required by later template reuse.
+Nonempty submesh 0 is always retained alongside the selected extras. A requested
+suffix-zero variant does not enable an arbitrary sibling when absent; fallback
+for missing nonzero variants stays within the requested groups. Exact selections
+are preserved regardless of vertex count.
 
 Chart construction indexes only overlapping raster samples and prepares still
 shader colours lazily for actual conflicts. Faces reuse raster-write buffers;
@@ -177,8 +181,12 @@ data-server process.
 
 WoW scene lighting, HDR bloom, depth fades, refraction and camera-dependent
 reflection cannot be reproduced exactly by Classic material layers. Environment
-coordinates use a reference direction; edge fade uses neutral coverage rather
-than baking a camera-specific silhouette into the model. Deferred character
+coordinates use a reference direction; edge fade uses a spherical viewing-angle
+average rather than baking a camera-specific silhouette into the model. For
+WoW's `clamp(2.7*max(dot(view,normal),0)^2-.4,0,1)`, the mean is 0.215282.
+Alpha-blended diffuse also preserves the second moment (0.187864), since WoW
+fades both mesh RGB and opacity. This softens shells from every angle; it cannot
+retain their exact camera-dependent outline or lighting. Deferred character
 textures retain the existing conversion until source pixels are available.
 This covers the renderer's known shader tables, not full WoW runtime parity.
 
@@ -245,6 +253,15 @@ equipment UV track with explicit component replacements, checking both animated
 and still export and MDL reload. WMO worker tests compare exact texture bytes and
 optimized serialized models, including several animated passes and pre-existing
 animation references.
+
+`TestAdvancedTextureAnimationRealM2Variants` checks the Akilzon, Aether Serpent,
+Elemental Primalist and Thunder Lizard skin variants and serialized animation.
+The elemental base rotates on the source 2667 ms global bone clock; global bone
+keys retain their raw timestamps and do not follow local sequence offsets.
+M2 and SKEL loop durations are retained as u32 values. Baked particles retain
+the same world-unit scale as native emitters. Ordinary refraction cards are
+omitted because their distortion textures require scene-color sampling; a
+multi-texture emitter retains its normal color path when both flags are set.
 
 From the repository root, `scripts/profile-wmo-texture-bake.ps1` profiles one
 direct WMO conversion against the existing data server. It writes CPU/heap

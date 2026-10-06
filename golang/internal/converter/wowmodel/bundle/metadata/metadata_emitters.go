@@ -278,6 +278,14 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 		return
 	}
 	for i, p := range f.particleEmitters {
+		if p.Flags&0x00100000 != 0 && p.Flags&0x10000000 == 0 {
+			// Refraction samples the scene behind the particle; its texture is
+			// a distortion field, not visible color. PRE2 cannot sample scene
+			// color, and an offline bake cannot preserve this background-dependent
+			// effect. Omit that draw instead of displaying its opaque noise card.
+			// MultiTexture takes precedence over Refraction in the WoW renderer.
+			continue
+		}
 		textureID := int(p.TexturePacked)
 		if p.Flags&0x10000000 != 0 {
 			textureID &= 0x1F

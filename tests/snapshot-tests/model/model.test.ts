@@ -6,6 +6,7 @@
  *   SNAPSHOT_UPDATE=1 SNAPSHOT_SUITE=retail SNAPSHOT_SLUG=<slug> bun test tests/snapshot-tests/model/model.test.ts
  *   `bun test` does not forward arguments after `--` into process.argv.
  *   The converter must already be listening (WOW_CONVERTER_URL, or http://127.0.0.1:3001).
+ *   Failures write tests/snapshot-tests/model/review.html (actual | expected).
  *
  * Export workers match map export (CPU-1, capped at 8). One browser shoots finished exports.
  * Retail and mounts use the wow product. Classic runs after a product switch.
@@ -23,6 +24,7 @@ import {
 import {
   type ModelCase, readSnapshotCases, type SnapshotSuite,
 } from './catalog';
+import { writeReview } from './_write-review.mjs';
 import {
   assertPngRoundTrip, decodePng, diffSheet, encodePng, type RgbaImage,
   stitchSheet,
@@ -70,6 +72,7 @@ const CASE_TIMEOUT_MS = 3 * 60 * 60_000;
 const results = new Map<string, Promise<Outcome>>();
 const resolvers: Map<string, (outcome: Outcome) => void> = new Map();
 const settled = new Set<string>();
+const failures: { suite: SnapshotSuite; slug: string; detail: string }[] = [];
 let done = 0;
 
 for (const job of jobs) {
@@ -129,6 +132,7 @@ async function runAll(): Promise<void> {
     if (original !== '') await ensureWowProduct(opts.base, original);
     const noun = jobs.length === 1 ? 'case' : 'cases';
     console.log(`${jobs.length} ${noun} in ${formatDuration(Date.now() - started)}`);
+    writeReview(failures);
   }
 }
 
@@ -139,6 +143,7 @@ function finish(job: CaseJob, ok: boolean, detail: string): void {
   done += 1;
   const line = `[${done}/${jobs.length}] ${ok ? 'OK' : 'FAIL'} ${id}${detail !== '' ? ` ${detail}` : ''}`;
   console.log(line);
+  if (!ok) failures.push({ suite: job.suite, slug: job.slug, detail });
   resolvers.get(id)?.({ ok, line });
 }
 
@@ -309,7 +314,7 @@ function listJobs(options: RunOptions): CaseJob[] {
   const out: CaseJob[] = [];
   for (const suite of suites) {
     for (const item of readSnapshotCases(suite)) {
-      if (options.slug !== '' && options.slug !== item.slug) continue;
+      if (options.slug !== '' && !options.slug.split(',').includes(item.slug)) continue;
       const { slug, ...testCase } = item;
       out.push({
         suite, slug, testCase, manifest: readManifest(suite, slug),

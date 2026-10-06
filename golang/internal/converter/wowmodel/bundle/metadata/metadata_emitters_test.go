@@ -30,6 +30,29 @@ func TestExtractMDLParticlesEmittersBasic(t *testing.T) {
 	}
 }
 
+func TestExtractMDLParticlesEmittersRefractionRouting(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		flags uint32
+		want  int
+	}{
+		{"ordinary gas", 0x20001, 1},
+		{"scene refraction", 0x00120001, 0},
+		{"multitexture takes precedence", 0x10120001, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &File{IsLoaded: true, particleEmitters: []m2.ParticleEmitterEntry{{Flags: tc.flags}}}
+			model := mdl.New(mdl.NewMDLOptions{Name: "particle shader routing"})
+			model.Bones = []*components.Bone{components.NewBone("root")}
+			f.BindMdl(model)
+			f.ExtractMDLParticlesEmitters([]components.Texture{{Image: "test.blp"}})
+			if got := len(model.ParticleEmitter2s); got != tc.want {
+				t.Fatalf("got %d visible emitters, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExtractMDLParticlesEmittersModelSpacePivots(t *testing.T) {
 	for _, tc := range []struct {
 		name         string

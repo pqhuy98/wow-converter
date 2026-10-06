@@ -3,6 +3,9 @@ exported-assets-browse
 tests/**/tmp/
 tests/snapshot-tests/model/**/*.actual.png
 tests/snapshot-tests/model/**/*.diff.png
+tests/snapshot-tests/model/**/*.expected-prev.png
+tests/snapshot-tests/model/review.html
+tests/snapshot-tests/model/review-failures.json
 golang/test/**/tmp/
 tmp/
 recent-exports.json

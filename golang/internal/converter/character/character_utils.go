@@ -67,14 +67,84 @@ func replaceableTextureTypeMap(textures map[string]int) map[int]int {
 	return out
 }
 
-func collectionGeosetMask(skin *m2.Skin, selected map[int]struct{}) []m2export.GeosetMaskEntry {
+func collectionGeosetMask(skin *m2.Skin, selected map[int]struct{}, requestedIDs ...[]int) []m2export.GeosetMaskEntry {
 	mask := make([]m2export.GeosetMaskEntry, len(skin.SubMeshes))
+	checkedN := 0
 	for i, subMesh := range skin.SubMeshes {
 		id := int(subMesh.SubmeshID)
-		_, checked := selected[id]
+		checked := false
+		if subMesh.TriangleCount >= 3 {
+			_, checked = selected[id]
+			// Base submesh 0 is always part of a collection variant. The
+			// selected set only chooses among optional submeshes.
+			checked = checked || id == 0
+		}
+		if checked && id != 0 {
+			checkedN++
+		}
 		mask[i] = m2export.GeosetMaskEntry{ID: id, Checked: checked}
 	}
+	if checkedN == 0 {
+		if len(requestedIDs) == 0 {
+			for i, subMesh := range skin.SubMeshes {
+				mask[i].Checked = subMesh.TriangleCount >= 3
+			}
+		} else {
+			fallbackGroups := collectionFallbackGroups(requestedIDs[0])
+			requestedGroupPresent := false
+			requestedNonzeroID := false
+			for _, id := range requestedIDs[0] {
+				if id%100 != 0 {
+					requestedNonzeroID = true
+				}
+			}
+			if requestedNonzeroID {
+				for _, subMesh := range skin.SubMeshes {
+					group := int(subMesh.SubmeshID) / 100
+					for _, id := range requestedIDs[0] {
+						if group == id/100 {
+							requestedGroupPresent = true
+							break
+						}
+					}
+					if requestedGroupPresent {
+						break
+					}
+				}
+			}
+			// Some standalone collection models use unrelated legacy submesh IDs
+			// (for example 201 and 2000) instead of the equipment's Zam group ID.
+			// If none of the requested groups exists in the source skin, there is
+			// no variant to filter: preserve the selected model's own geometry.
+			if requestedNonzeroID && !requestedGroupPresent {
+				for i, subMesh := range skin.SubMeshes {
+					mask[i].Checked = subMesh.TriangleCount >= 3
+				}
+				return mask
+			}
+			for i, subMesh := range skin.SubMeshes {
+				group := int(subMesh.SubmeshID) / 100
+				_, fallbackGroup := fallbackGroups[group]
+				mask[i].Checked = subMesh.TriangleCount >= 3 && (subMesh.SubmeshID == 0 || fallbackGroup)
+			}
+		}
+	}
 	return mask
+}
+
+func collectionFallbackGroups(requestedIDs []int) map[int]struct{} {
+	groups := make(map[int]struct{}, len(requestedIDs))
+	noneGroups := make(map[int]struct{})
+	for _, id := range requestedIDs {
+		group := id / 100
+		if id%100 == 0 {
+			noneGroups[group] = struct{}{}
+			delete(groups, group)
+		} else if _, hasNone := noneGroups[group]; !hasNone {
+			groups[group] = struct{}{}
+		}
+	}
+	return groups
 }
 
 func equipmentCollectionGeosetMaskBuilder(ctx *ExportContext, equipmentSlots []EquipmentSlotData, fileDataID int) func(*m2.Skin) []m2export.GeosetMaskEntry {
@@ -88,15 +158,18 @@ func equipmentCollectionGeosetMaskBuilder(ctx *ExportContext, equipmentSlots []E
 	return func(skin *m2.Skin) []m2export.GeosetMaskEntry {
 		proxy := collectionSelectionProxyModel(skin)
 		selected := make(map[int]struct{})
+		var requestedIDs []int
 		for _, slot := range equipmentSlots {
 			if !equipmentSlotUsesModel(slot, fileDataID) {
 				continue
 			}
+			slotIDs, _ := GetGeosetIdsFromEquipments(equipmentSlots, []EquipmentSlotData{slot})
+			requestedIDs = append(requestedIDs, slotIDs...)
 			for _, geoset := range FilterCollectionGeosets(equipmentSlots, slot, proxy) {
 				selected[geoset.WowData.SubmeshID] = struct{}{}
 			}
 		}
-		return collectionGeosetMask(skin, selected)
+		return collectionGeosetMask(skin, selected, requestedIDs)
 	}
 }
 
@@ -120,17 +193,13 @@ func collectionSelectionProxyModel(skin *m2.Skin) *mdl.MDL {
 	if skin == nil {
 		return proxy
 	}
-	for _, textureUnit := range skin.TextureUnits {
-		sectionIndex := int(textureUnit.SkinSectionIndex)
-		if sectionIndex >= len(skin.SubMeshes) {
-			continue
-		}
-		section := skin.SubMeshes[sectionIndex]
-		if section.TriangleCount == 0 {
+	for _, section := range skin.SubMeshes {
+		if section.TriangleCount < 3 {
 			continue
 		}
 		proxy.Geosets = append(proxy.Geosets, &components.Geoset{
-			WowData: components.GeosetWowData{SubmeshID: int(section.SubmeshID)},
+			WowData:  components.GeosetWowData{SubmeshID: int(section.SubmeshID)},
+			Vertices: make([]*components.GeosetVertex, int(section.TriangleCount)),
 		})
 	}
 	return proxy

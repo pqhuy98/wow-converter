@@ -53,6 +53,52 @@ func TestM2EmissionMaskAndCrossfadeAreSeparateFromDiffuse(t *testing.T) {
 	}
 }
 
+func TestM2EdgeFadeMatchesAllAngleFramebufferAverage(t *testing.T) {
+	// Integrate the reference shader independently over viewing directions.
+	// Check the composited result, not merely the constants in the baker.
+	const samples = 100000
+	const background = .31
+	compose := func(rgb, alpha float64, blend uint16) float64 {
+		switch blend {
+		case 2:
+			return rgb*alpha + background*(1-alpha)
+		case 3:
+			return rgb + background
+		case 4:
+			return rgb*alpha + background
+		case 5:
+			return rgb * background
+		case 6:
+			return 2 * rgb * background
+		case 7:
+			return rgb + background*(1-alpha)
+		default:
+			return rgb
+		}
+	}
+	for _, sourceAlpha := range []float64{0, .2, .65, 1, 1.5, 2} {
+		source := m2Fragment{diffuse: [3]float64{.8, .4, .2}, alpha: sourceAlpha}
+		for _, blend := range []uint16{0, 1, 2, 3, 4, 5, 6, 7} {
+			wantAlpha, want := 0.0, 0.0
+			for i := range samples {
+				x := -1 + 2*(float64(i)+.5)/samples
+				fade := clampM2(2.7*math.Pow(max(0, x), 2) - .4)
+				alpha := source.alpha
+				if blend == 2 || blend == 4 || blend == 7 {
+					alpha = clampM2(alpha * fade)
+				}
+				wantAlpha += alpha / samples
+				want += compose(source.diffuse[0]*fade, alpha, blend) / samples
+			}
+			got := averageM2EdgeFade(source, blend)
+			actual := compose(got.diffuse[0], got.alpha, blend)
+			if math.Abs(actual-want) > 1e-8 || math.Abs(got.alpha-wantAlpha) > 1e-8 {
+				t.Fatalf("blend %d source alpha %g: framebuffer %g, want %g; alpha %g, want %g", blend, sourceAlpha, actual, want, got.alpha, wantAlpha)
+			}
+		}
+	}
+}
+
 func TestParticleColorAndAlphaMultipliersAreIndependent(t *testing.T) {
 	tex := [3][4]float64{{.5, .5, .5, .5}, {.5, .5, .5, .5}, {.25, .25, .25, .25}}
 	for _, tc := range []struct {

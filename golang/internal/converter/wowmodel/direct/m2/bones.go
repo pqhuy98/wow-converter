@@ -63,6 +63,7 @@ func BuildBonesData(ctx context.Context, loader *m2.Loader, excluded map[int]str
 
 	f := &animation.File{}
 	f.LoadFromBonesData(boneData, anims, weights, indices, attachments)
+	f.GlobalLoops = graph.GlobalLoops
 	return f, nil
 }
 

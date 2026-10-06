@@ -37,6 +37,22 @@ func TestBakeSamplesCubicMaterialMotionBetweenEqualEndpoints(t *testing.T) {
 	}
 }
 
+func TestBakeSkinGeosetMapSkipsEmptyCheckedSections(t *testing.T) {
+	skin := &m2.Skin{SubMeshes: []m2.SkinSubMesh{
+		{SubmeshID: 2601, TriangleCount: 0},
+		{SubmeshID: 2601, TriangleCount: 3},
+	}}
+	mask := []m2export.GeosetMaskEntry{{ID: 2601, Checked: true}, {ID: 2601, Checked: true}}
+	real := &components.Geoset{Name: "shoulders"}
+	mapped, _ := mapBakeSkinGeosets(skin, mask, []*components.Geoset{real})
+	if mapped[0] != nil {
+		t.Fatal("empty placeholder consumed the assembled geoset")
+	}
+	if mapped[1] != real {
+		t.Fatal("real section was not mapped to the assembled geoset")
+	}
+}
+
 func TestSurfaceBudgetPrioritizesBodyAreaAndIgnoresMissingSections(t *testing.T) {
 	loader := &m2.Loader{Materials: []m2.MaterialEntry{{BlendingMode: 1}, {BlendingMode: 4}}}
 	skin := &m2.Skin{TextureUnits: []m2.SkinTextureUnit{
@@ -110,7 +126,7 @@ func TestNativeBlendRetainsDetailedColorAndAlphaWithSharedUVLoop(t *testing.T) {
 	model.GeosetAnims = []components.GeosetAnim{{Geoset: g, Alpha: &components.AnimatedOrStatic[float64]{Static: true, Value: .5}}}
 	result := ConvertResult{MDL: model, TexturePaths: map[string]struct{}{}}
 	loader := &m2.Loader{Textures: []m2.TextureEntry{{FileDataID: 1, Flags: 3}, {FileDataID: 2, Flags: 3}}, TextureCombos: []uint16{0, 1}, Materials: []m2.MaterialEntry{{BlendingMode: 2, Flags: 17}}, TextureTransformsLookup: []uint16{65535, 0}, TextureTransforms: []m2.TextureTransformEntry{{}}}
-	skin := &m2.Skin{SubMeshes: []m2.SkinSubMesh{{}}, TextureUnits: []m2.SkinTextureUnit{{TextureCount: 2, ShaderID: 0x4011, ColorIndex: 65535}}}
+	skin := &m2.Skin{SubMeshes: []m2.SkinSubMesh{{TriangleCount: 3}}, TextureUnits: []m2.SkinTextureUnit{{TextureCount: 2, ShaderID: 0x4011, ColorIndex: 65535}}}
 	if err := bakeM2Materials(context.Background(), config.Config{ExportAssetDir: root}, nil, loader, skin, nil, resolved, nil, &result); err != nil {
 		t.Fatal(err)
 	}

@@ -106,6 +106,42 @@ type m2Fragment struct {
 	alpha             float64
 }
 
+// Classic has no camera-dependent vertex alpha. Use the spherical average of
+// WoW's edgeScan: f(x)=clamp(2.7*max(x,0)^2-.4,0,1), x uniform on [-1,1].
+// Both mesh RGB and opacity carry f. Alpha blending therefore needs E[f] for
+// destination attenuation and E[f^2] for source radiance, rather than fading
+// both by E[f] and inadvertently making the shell too dark.
+// ponytail: this is an all-angle approximation; exact fading needs a runtime
+// material that can evaluate the camera and animated normals.
+func averageM2EdgeFade(f m2Fragment, blend uint16) m2Fragment {
+	const mean = .21528161734385554
+	const meanSquared = .1878637945490328
+	diffuseScale := mean
+	if blend == 2 || blend == 4 || blend == 7 {
+		alpha := max(0, f.alpha)
+		meanAlpha, meanFadeAlpha := alpha*mean, alpha*meanSquared
+		if alpha > 1 {
+			// Mod2x alpha can exceed one. The framebuffer clamps alpha after
+			// applying edge fade, so integrate min(alpha*f,1), not alpha*E[f].
+			const a = .3849001794597505 // f starts rising
+			const b = .7200822998230956 // f reaches one
+			t := math.Sqrt((.4 + 1/alpha) / 2.7)
+			integral := func(x float64) float64 { return .9*x*x*x - .4*x }
+			integralSquared := func(x float64) float64 { return 1.458*math.Pow(x, 5) - .72*x*x*x + .16*x }
+			meanAlpha = .5 * (alpha*(integral(t)-integral(a)) + 1 - t)
+			meanFadeAlpha = .5 * (alpha*(integralSquared(t)-integralSquared(a)) + integral(b) - integral(t) + 1 - b)
+		}
+		f.alpha = meanAlpha
+		if blend != 7 && meanAlpha > 0 {
+			diffuseScale = meanFadeAlpha / meanAlpha
+		}
+	}
+	for k := range f.diffuse {
+		f.diffuse[k] *= diffuseScale
+	}
+	return f
+}
+
 // Evaluate before lighting/framebuffer blending. Keep the emissive term apart:
 // adding it to a lit diffuse texture would darken Eranog's hands and chest.
 // Weights are texture-unit weights, not texture alpha. Guild tint constants are

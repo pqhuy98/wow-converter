@@ -16,6 +16,7 @@ type skeletonGraph struct {
 	Bones           []m2.BoneEntry
 	Animations      []m2.AnimationEntry
 	SkelAttachments []m2.AttachmentEntry
+	GlobalLoops     []uint32
 }
 
 var (
@@ -172,6 +173,7 @@ func loadSkeletonGraphUncached(ctx context.Context, loader *m2.Loader) (skeleton
 				Bones:           parentSkel.Bones,
 				Animations:      parentSkel.Animations,
 				SkelAttachments: skel.Attachments,
+				GlobalLoops:     parentSkel.GlobalLoops,
 			}, nil
 		}
 
@@ -179,6 +181,7 @@ func loadSkeletonGraphUncached(ctx context.Context, loader *m2.Loader) (skeleton
 			Bones:           skel.Bones,
 			Animations:      skel.Animations,
 			SkelAttachments: skel.Attachments,
+			GlobalLoops:     skel.GlobalLoops,
 		}, nil
 	}
 
@@ -186,8 +189,9 @@ func loadSkeletonGraphUncached(ctx context.Context, loader *m2.Loader) (skeleton
 		return skeletonGraph{}, err
 	}
 	return skeletonGraph{
-		Bones:      loader.Bones,
-		Animations: loader.Animations,
+		Bones:       loader.Bones,
+		Animations:  loader.Animations,
+		GlobalLoops: loader.GlobalLoops,
 	}, nil
 }
 

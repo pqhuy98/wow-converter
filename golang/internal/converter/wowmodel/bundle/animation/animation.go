@@ -72,6 +72,7 @@ type File struct {
 	BoneWeights []float64
 	BoneIndices []float64
 	Attachments []AttachmentData
+	GlobalLoops []uint32
 	IsLoaded    bool
 }
 
@@ -130,9 +131,15 @@ func (f *File) ToMdl(globalSequences *[]*components.GlobalSequence) ToMdlResult 
 			return nil
 		}
 		if gs, ok := gsMap[id]; ok {
+			if id >= 0 && id < len(f.GlobalLoops) {
+				gs.Duration = int(f.GlobalLoops[id])
+			}
 			return gs
 		}
 		created := components.NewGlobalSequence(id, 1)
+		if id >= 0 && id < len(f.GlobalLoops) {
+			created.Duration = int(f.GlobalLoops[id])
+		}
 		ptr := &created
 		*globalSequences = append(*globalSequences, ptr)
 		key := ptr.ID
@@ -306,6 +313,9 @@ func countKeyframes(b *components.Bone) int {
 }
 
 func applyTrack(anim *components.Animation, track TrackData, animations []AnimationData, excluded map[int]struct{}, conv func([]float64) any) {
+	if applyGlobalTrack(anim, track, 3, conv) {
+		return
+	}
 	accum := 0
 	for animID, timestamps := range track.Timestamps {
 		if animID >= len(animations) {
@@ -353,6 +363,11 @@ func applyTrack(anim *components.Animation, track TrackData, animations []Animat
 }
 
 func applyRotTrack(anim *components.Animation, track TrackData, animations []AnimationData, excluded map[int]struct{}) {
+	if applyGlobalTrack(anim, track, 4, func(vals []float64) any {
+		return imath.QuaternionRotation{vals[0], -vals[2], vals[1], vals[3]}
+	}) {
+		return
+	}
 	accum := 0
 	for animID, timestamps := range track.Timestamps {
 		if animID >= len(animations) {
@@ -394,6 +409,24 @@ func applyRotTrack(anim *components.Animation, track TrackData, animations []Ani
 			}
 		}
 	}
+}
+
+// Global tracks run on their own clock; their rows are not animation slots.
+func applyGlobalTrack(anim *components.Animation, track TrackData, components int, conv func([]float64) any) bool {
+	if int(track.GlobalSeq) == config.BlizzardNull {
+		return false
+	}
+	for row, timestamps := range track.Timestamps {
+		if row >= len(track.Values) || !validTimestamps(timestamps) {
+			continue
+		}
+		for i, ts := range timestamps {
+			if ts != nil && i < len(track.Values[row]) && len(track.Values[row][i]) >= components {
+				anim.KeyFrames[int(*ts)] = conv(track.Values[row][i])
+			}
+		}
+	}
+	return true
 }
 
 func validTimestamps(timestamps []*uint32) bool {

@@ -290,11 +290,20 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 
 	for _, fileDataID := range collectionOrder {
 		entry := collections[fileDataID]
+		wantedIDs := make([]int, 0, len(entry.geosetIDs))
+		for id := range entry.geosetIDs {
+			wantedIDs = append(wantedIDs, id)
+		}
+		sort.Ints(wantedIDs)
 		if entry.model == nil {
 			model, err := ExportModelFileIDAsMdl(ctx, fileDataID, ExportModelOptions{
 				ReplaceableTextures: collectionSourceTextures,
 				GeosetMaskBuilder: func(skin *m2.Skin) []m2export.GeosetMaskEntry {
-					return collectionGeosetMask(skin, entry.geosetIDs)
+					selected := make(map[int]struct{})
+					for _, geoset := range geosetsMatchingSubmeshIDs(collectionSelectionProxyModel(skin), wantedIDs) {
+						selected[geoset.WowData.SubmeshID] = struct{}{}
+					}
+					return collectionGeosetMask(skin, selected, wantedIDs)
 				},
 			})
 			if err != nil {
@@ -303,16 +312,7 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 			entry.model = model
 		}
 		itemMdl := entry.model.MDL
-		filtered := itemMdl.Geosets[:0]
-		for _, g := range itemMdl.Geosets {
-			if g == nil {
-				continue
-			}
-			if _, ok := entry.geosetIDs[g.WowData.SubmeshID]; ok {
-				filtered = append(filtered, g)
-			}
-		}
-		itemMdl.Geosets = filtered
+		itemMdl.Geosets = geosetsMatchingSubmeshIDs(itemMdl, wantedIDs)
 		for i := range itemMdl.Textures {
 			if img, ok := textureTypeToImage[itemMdl.Textures[i].WowData.Type]; ok {
 				itemMdl.Textures[i].Image = img

@@ -43,7 +43,10 @@ func getSkinForDisplay(display caches.ModelDisplay) casc.ModelSkin {
 		skinName = "unknown_" + fmtUint(texture)
 	}
 	label := skinName
-	extra := display.ExtraGeosets
+	// DB2 stores extra geosets as a set. Canonicalize the copy before building
+	// skin IDs and labels so cache iteration order cannot change API skin IDs.
+	extra := append([]uint32(nil), display.ExtraGeosets...)
+	sort.Slice(extra, func(i, j int) bool { return extra[i] < extra[j] })
 	if len(extra) > 0 {
 		for _, g := range extra {
 			skinName += fmtUint(g)

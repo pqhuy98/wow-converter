@@ -45,6 +45,29 @@ func TestFirstPositiveTextureFindsSparseDisplayTexture(t *testing.T) {
 	}
 }
 
+func TestGetSkinForDisplayCanonicalizesExtraGeosetOrder(t *testing.T) {
+	first := caches.ModelDisplay{ID: 10, Textures: []uint32{302203103}, ExtraGeosets: []uint32{302, 203, 103}}
+	second := caches.ModelDisplay{ID: 10, Textures: []uint32{302203103}, ExtraGeosets: []uint32{103, 302, 203}}
+	firstOriginal := append([]uint32(nil), first.ExtraGeosets...)
+	secondOriginal := append([]uint32(nil), second.ExtraGeosets...)
+
+	gotFirst := getSkinForDisplay(first)
+	gotSecond := getSkinForDisplay(second)
+	if gotFirst.ID != gotSecond.ID || gotFirst.Label != gotSecond.Label {
+		t.Fatalf("permuted geosets produced different skin identity: (%q, %q) vs (%q, %q)",
+			gotFirst.ID, gotFirst.Label, gotSecond.ID, gotSecond.Label)
+	}
+	if !strings.HasSuffix(gotFirst.ID, "103203302") {
+		t.Fatalf("canonical skin ID = %q, want sorted geoset suffix 103203302", gotFirst.ID)
+	}
+	if !reflect.DeepEqual(gotFirst.ExtraGeosets, []int{103, 203, 302}) || !reflect.DeepEqual(gotSecond.ExtraGeosets, []int{103, 203, 302}) {
+		t.Fatalf("export geosets were not canonical: %v / %v", gotFirst.ExtraGeosets, gotSecond.ExtraGeosets)
+	}
+	if !reflect.DeepEqual(first.ExtraGeosets, firstOriginal) || !reflect.DeepEqual(second.ExtraGeosets, secondOriginal) {
+		t.Fatal("canonicalizing skin IDs mutated cached source geosets")
+	}
+}
+
 func TestDisambiguateSkinVariantsOnlyChangesDuplicateLabels(t *testing.T) {
 	skins := []casc.ModelSkin{
 		{ID: "skin", Label: "skin", DisplayID: 10},

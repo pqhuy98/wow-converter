@@ -137,6 +137,20 @@ func TestAdvancedTextureAnimationRealM2Variants(t *testing.T) {
 			if testCase.requireGeoset3 && !animatedGeoset3 {
 				t.Fatal("Akilzon Geoset3 has no animated rendered layer; expected the selected skin's fourth texture to resolve rather than the static fallback")
 			}
+			if testCase.name == "Elemental Primalist" {
+				rotatingBaseBones := 0
+				for _, bone := range result.MDL.Bones {
+					if bone.Rotation != nil && bone.Rotation.GlobalSeq != nil && bone.Rotation.GlobalSeq.RawID == 5 && hasNonconstantGlobalTrack(bone.Rotation) {
+						if bone.Rotation.GlobalSeq.Duration != 2667 {
+							t.Fatalf("base rotation loop = %d ms, want source 2667 ms", bone.Rotation.GlobalSeq.Duration)
+						}
+						rotatingBaseBones++
+					}
+				}
+				if rotatingBaseBones < 2 {
+					t.Fatalf("only %d base bones have the source global rotation; want at least two", rotatingBaseBones)
+				}
+			}
 
 			assertSerializedTextureAnimations(t, result.MDL)
 		})

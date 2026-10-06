@@ -23,6 +23,7 @@ type SkelLoader struct {
 	AnimFileIDs      []AnimFileIDEntry
 	ParentSkelFileID uint32
 	BoneOffset       int
+	GlobalLoops      []uint32
 	Bones            []BoneEntry
 	Animations       []AnimationEntry
 	Attachments      []AttachmentEntry
@@ -113,7 +114,10 @@ func (l *SkelLoader) parseChunkSKS1() {
 	globalLoopOfs := int(readU32(l.Data))
 	prevPos := l.Data.Offset()
 	l.Data.Seek(globalLoopOfs + chunkOfs)
-	_ = readU16Slice(l.Data, globalLoopCount)
+	l.GlobalLoops = make([]uint32, globalLoopCount)
+	for i := range l.GlobalLoops {
+		l.GlobalLoops[i] = readU32(l.Data)
+	}
 	l.Data.Seek(prevPos)
 
 	animationCount := int(readU32(l.Data))
@@ -125,9 +129,9 @@ func (l *SkelLoader) parseChunkSKS1() {
 	for i := 0; i < animationCount; i++ {
 		entry := AnimationEntry{
 			ID: readU16(l.Data), VariationIndex: readU16(l.Data),
-			Duration: readU32(l.Data),
+			Duration:  readU32(l.Data),
 			MoveSpeed: l.Data.ReadFloatLE().(float32),
-			Flags: readU32(l.Data),
+			Flags:     readU32(l.Data),
 		}
 		entry.Frequency = uint32(int16(readU16(l.Data)))
 		_ = readU16(l.Data)

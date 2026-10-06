@@ -8,11 +8,12 @@ import (
 )
 
 type bonesJSON struct {
-	Bones        []BoneData        `json:"bones"`
-	Animations   []AnimationData   `json:"animations"`
-	BoneWeights  []float64         `json:"boneWeights"`
-	BoneIndices  []float64         `json:"boneIndices"`
-	Attachments  []AttachmentData  `json:"attachments"`
+	Bones       []BoneData       `json:"bones"`
+	Animations  []AnimationData  `json:"animations"`
+	BoneWeights []float64        `json:"boneWeights"`
+	BoneIndices []float64        `json:"boneIndices"`
+	Attachments []AttachmentData `json:"attachments"`
+	GlobalLoops []uint32         `json:"globalLoops"`
 }
 
 // Parse reads _bones.json from disk when present.
@@ -32,6 +33,7 @@ func (f *File) Parse() error {
 	f.BoneWeights = parsed.BoneWeights
 	f.BoneIndices = parsed.BoneIndices
 	f.Attachments = parsed.Attachments
+	f.GlobalLoops = parsed.GlobalLoops
 	f.IsLoaded = true
 	return nil
 }

@@ -167,7 +167,11 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 			baked := original
 			baked.Texture = tex
 			baked.Columns, baked.Rows = cols, rows
-			baked.SegmentScaling = [3]float64{maxScale * factor, maxScale * factor, maxScale * factor}
+			// Assembly already converted the native emitters into WC3 units.
+			// ScaleTrack is still in M2 units; use the same unit conversion when
+			// replacing their size, otherwise the baked gas becomes 56x smaller.
+			size := maxScale * factor * cfg.RawModelScaleUp
+			baked.SegmentScaling = [3]float64{size, size, size}
 			middle := math.Round(clampM2(node.TimeMiddle) * float64(frames-1))
 			baked.HeadIntervals = [3]float64{0, middle, 1}
 			baked.DecayIntervals = [3]float64{middle, float64(frames - 1), 1}

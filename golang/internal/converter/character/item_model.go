@@ -115,7 +115,6 @@ func GetGeosetIdsFromEquipments(equipments []EquipmentSlotData, chosenEquipments
 		return nil
 	}
 	head := find(wowhead.SlotHead)
-	shoulders := find(wowhead.SlotShoulder)
 	shirt := find(wowhead.SlotShirt)
 	chest := find(wowhead.SlotChest)
 	waist := find(wowhead.SlotWaist)
@@ -162,7 +161,7 @@ func GetGeosetIdsFromEquipments(equipments []EquipmentSlotData, chosenEquipments
 			addGeoset(head, 27, 0)
 			addGeoset(head, 21, 1)
 		case wowhead.SlotShoulder:
-			addGeoset(shoulders, 26, 0)
+			addGeoset(&s, 26, 0)
 		case wowhead.SlotShirt:
 			if !hasGeoset(hands, 0) {
 				addGeoset(shirt, 8, 0)
@@ -232,6 +231,13 @@ func GetGeosetIdsFromEquipments(equipments []EquipmentSlotData, chosenEquipments
 // FilterCollectionGeosets returns geosets to enable on a collection armor model.
 func FilterCollectionGeosets(equipmentSlots []EquipmentSlotData, slotData EquipmentSlotData, model *mdl.MDL) []*components.Geoset {
 	submeshIDList, _ := GetGeosetIdsFromEquipments(equipmentSlots, []EquipmentSlotData{slotData})
+	return geosetsMatchingSubmeshIDs(model, submeshIDList)
+}
+
+func geosetsMatchingSubmeshIDs(model *mdl.MDL, submeshIDList []int) []*components.Geoset {
+	if model == nil {
+		return nil
+	}
 	submeshIDs := map[int]struct{}{}
 	for _, id := range submeshIDList {
 		submeshIDs[id] = struct{}{}
@@ -249,14 +255,33 @@ func FilterCollectionGeosets(equipmentSlots []EquipmentSlotData, slotData Equipm
 		chosen[g] = struct{}{}
 		chosenOrder = append(chosenOrder, g)
 	}
+	for _, g := range model.Geosets {
+		if g == nil || g.WowData.SubmeshID != 0 {
+			continue
+		}
+		if len(g.Vertices) == 0 && len(g.Faces) == 0 {
+			continue
+		}
+		addChosen(g)
+	}
 	enabledGroups := map[int]struct{}{}
 	for _, g := range model.Geosets {
 		if g == nil {
 			continue
 		}
+		if len(g.Vertices) == 0 && len(g.Faces) == 0 {
+			continue
+		}
+		// Collection extra geosets replace optional variants, not the model's
+		// always-on base geometry. Ignore empty placeholders with submesh 0.
+		if g.WowData.SubmeshID == 0 && len(g.Faces) > 0 {
+			addChosen(g)
+			continue
+		}
 		if _, ok := submeshIDs[g.WowData.SubmeshID]; ok {
 			addChosen(g)
-			enabledGroups[g.WowData.SubmeshID/100] = struct{}{}
+			group := g.WowData.SubmeshID / 100
+			enabledGroups[group] = struct{}{}
 		}
 	}
 	seenSubmeshID := map[int]struct{}{}
@@ -265,17 +290,16 @@ func FilterCollectionGeosets(equipmentSlots []EquipmentSlotData, slotData Equipm
 			continue
 		}
 		seenSubmeshID[id] = struct{}{}
+		if id%100 == 0 {
+			// Suffix zero means no explicit variant. Keep a matching x00 mesh
+			// above, but never substitute an arbitrary nonzero sibling.
+			continue
+		}
 		group := id / 100
 		if _, ok := enabledGroups[group]; ok {
 			continue
 		}
-		var defaultGeoset *components.Geoset
-		for _, g := range model.Geosets {
-			if g != nil && g.WowData.SubmeshID/100 == group {
-				defaultGeoset = g
-				break
-			}
-		}
+		defaultGeoset := largestGeosetInGroup(model, group)
 		if defaultGeoset == nil {
 			continue
 		}
@@ -287,6 +311,22 @@ func FilterCollectionGeosets(equipmentSlots []EquipmentSlotData, slotData Equipm
 		enabledGroups[group] = struct{}{}
 	}
 	return chosenOrder
+}
+
+func largestGeosetInGroup(model *mdl.MDL, group int) *components.Geoset {
+	var best *components.Geoset
+	bestN := -1
+	for _, g := range model.Geosets {
+		if g == nil || g.WowData.SubmeshID/100 != group {
+			continue
+		}
+		n := len(g.Vertices)
+		if n > bestN {
+			bestN = n
+			best = g
+		}
+	}
+	return best
 }
 
 func resolveHideGeosetIDs(itemData wowhead.ItemData, targetRace, targetGender int) []int {

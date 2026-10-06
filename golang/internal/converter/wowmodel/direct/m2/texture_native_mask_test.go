@@ -55,6 +55,13 @@ func TestNativeMaskKeepsDetailedUVsAndBoundsTheMaskError(t *testing.T) {
 	if g.Vertices[0].TexPosition2 == nil || len(g.Faces) != 1 {
 		t.Fatal("input geometry mutated during native-path eligibility check")
 	}
+	// Effect 0x8015 uses this same combiner and UV routing, but also fades
+	// mesh RGB and alpha. Native detail must not bypass the fragment fade.
+	p.shader.edge = true
+	if nativeModulateMask(g, p) != nil {
+		t.Fatal("edge-faded shader bypassed the fragment baker")
+	}
+	p.shader.edge = false
 	gs := components.NewGlobalSequence(0, 1000)
 	p.transforms[0] = &components.TextureAnim{Translation: &components.Animation{GlobalSeq: &gs, KeyFrames: map[int]any{0: imath.Vector3{}, 1000: imath.Vector3{1, 0, 0}}}}
 	if nativeModulateMask(g, p) != nil {
