@@ -99,8 +99,8 @@ export function BakeTexturesButton({ textureBaking, setTextureBaking }: {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Full resolution</SelectItem>
                     <SelectItem value="0.5">Half resolution (50% width and height)</SelectItem>
+                    <SelectItem value="1">Full resolution</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">

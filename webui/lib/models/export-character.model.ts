@@ -60,7 +60,7 @@ export const defaultTextureBakingForm: TextureBakingForm = {
   animate: true,
   fps: 15,
   windowMS: 4000,
-  resolutionScale: 1,
+  resolutionScale: 0.5,
 };
 
 export function toTextureBakingRequest(form: TextureBakingForm): TextureBaking | undefined {
