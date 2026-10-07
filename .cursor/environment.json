@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "agentCanUpdateSnapshot": true,
+  "install": "bash -lc 'set -euo pipefail; command -v git >/dev/null 2>&1 || (sudo apt-get update -y && sudo apt-get install -y git curl ca-certificates); export BUN_INSTALL=\"${BUN_INSTALL:-$HOME/.bun}\"; export PATH=\"$BUN_INSTALL/bin:/usr/local/go/bin:$PATH\"; if ! command -v bun >/dev/null 2>&1; then curl -fsSL https://bun.sh/install | bash; export PATH=\"$HOME/.bun/bin:$PATH\"; fi; if ! command -v go >/dev/null 2>&1 || [[ \"$(go env GOVERSION 2>/dev/null)\" != go1.25* ]]; then curl -fsSL https://go.dev/dl/go1.25.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz; fi; cd /workspace && bun install'",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "bun run dev"
+    }
+  ]
+}

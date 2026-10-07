@@ -17,6 +17,14 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
 
   ```yaml
   description: AI agent development rules for wow-converter
+  alwaysApply: true
+  ```
+
+- [.cursor/rules/snapshot-tests.mdc](.cursor/rules/snapshot-tests.mdc)
+
+  ```yaml
+  description: Visual snapshot catalog, runner, and review.html workflow
+  globs: tests/snapshot-tests/**
   alwaysApply: false
   ```
 
@@ -31,7 +39,6 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
 
   ```yaml
   description: Ponytail, lazy senior dev mode. Always pick the simplest solution that works.
-  globs:
   alwaysApply: true
   ```
 
@@ -48,7 +55,7 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
 
   ```yaml
   name: parity-diff-debugging
-  description: Debug parity mismatches between TypeScript and Go exports by reproducing one failing case, adding matched stage logs on both sides, and identifying the earliest divergent stage. Use when TS and Go artifacts differ, parity loops fail, or the user asks to trace where a conversion mismatch begins.
+  description: Last-resort TS vs Go MDL byte parity under tests/_deprecated-tests/mdl-parity. Use when the user asks to trace a TypeScript/Go export artifact mismatch. Visual Wowhead mismatches use debug-wowhead-mismatch and snapshot tests instead. ADR 0001: Go-only features are not parity bugs.
   disable-model-invocation: true
   ```
 
@@ -74,9 +81,6 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
 
 - For development environment setup, consult
   [Cursor environment](.cursor/environment.json) for install and terminal commands.
-- For MCP integration setup or troubleshooting, consult
-  [Cursor MCP configuration](.cursor/mcp.json). This describes Cursor's setup;
-  referencing it does not configure or enable MCP servers in Codex.
 - Snapshot review writes `tests/snapshot-tests/model/review.html` (wowhead |
   expected | actual). Rebuild with `bun tests/snapshot-tests/model/write-review.ts`.
-  Full workflow is in [.cursor/rules/development.mdc](.cursor/rules/development.mdc).
+  Full workflow is in [.cursor/rules/snapshot-tests.mdc](.cursor/rules/snapshot-tests.mdc).

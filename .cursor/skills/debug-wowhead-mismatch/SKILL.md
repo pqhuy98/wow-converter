@@ -7,15 +7,21 @@ description: Investigate and fix a visual mismatch between a wowhead.com model a
 
 The shot skills only capture PNGs. This skill decides why those PNGs differ and where to change the converter.
 
-`bun dev` is the live Go server on http://127.0.0.1:3001. When the same function exists in Go and TypeScript, change both.
+`bun run dev` is the live Go server on http://127.0.0.1:3001. Shared conversion behavior that still has a TypeScript path: change both. Do not port Go-only features to TS (ADR 0001 in `docs/decisions/`).
 
 Investigation logs, scripts, and artifacts go in the repo `tmp/` folder. `tmp/` is gitignored.
 
 ## Shots
 
-Pass `--out tmp/shots/<slug>` to both shot scripts. Do not write PNGs under `.cursor/skills/`, and do not rely on a script's default output directory.
+Prefer one paired command so both sources share cameras:
 
-Shoot one view that shows the difference (`front` unless the difference is elsewhere). Use the same `--seq` pair: the Wowhead name for shot-export-wowhead, `wc3Name` from `getWc3AnimName` for shot-export-wow-converter. Read both PNGs before editing.
+```
+go -C golang run ./cmd/shot-converter <asset-path> --seq "Stand 1" --wowhead <url> --wow-seq Stand --view front --out tmp/shots/<slug>
+```
+
+Standalone: `go -C golang run ./cmd/shot-wowhead` and `go -C golang run ./cmd/shot-converter` (`bun run shot` is the converter CLI). Pass `--out tmp/shots/<slug>`. Do not write PNGs under `.cursor/skills/`. Default out is repo `tmp/shots`.
+
+Shoot one view that shows the difference (`front` unless the difference is elsewhere). Wowhead `--seq` is the WoW name; converter `--seq` is WC3 `name` from `result.reportMetadata.models[].sequences[]` (`wowName` / `wowVariant` vs `name`). Runtime table: `golang/internal/converter/wowmodel/animation/` (generated from `src/lib/converter/wow-model/animation/animation-mapper.ts`). Read both PNGs before editing.
 
 A blank Wowhead frame, or holes where a face or cloth should be, means that shot failed. Re-shoot it. The same look from wow-converter can be a conversion bug.
 
@@ -31,7 +37,7 @@ Export `format: "mdl"` and `formatVersion: "1000"`. Read geoset `Name` lines. Do
 
 `Name` comes from `GetGeosetName` in `golang/internal/wow/export/m2/geoset_mapper.go`. Submesh id 0 is `Geoset` plus the submesh index. Any other id is the group label plus `id % 100`, so id 2 is `Hair2` and id 702 is `Ears2`. A part that is not in the MDL was not exported. Vertex bounds confirm it: the missing part's extent is absent.
 
-The mask is `BuildGeosetMaskForSkin`. With no extra geosets it keeps ids ending in `0` or `01`, every id under 100, and a 100-group that has a single distinct id which is not a suffix default. Two non-default variants in one group stay off. When the display lists extra geosets, ids from 1 through 899 start off and only the listed ids turn on. Id 0 and ids at or above 900 stay on.
+The mask is `BuildGeosetMaskForSkin` in `golang/internal/converter/wowmodel/direct/m2/convert.go`. With no extra geosets it keeps ids ending in `0` or `01`, every id under 100, and a 100-group that has a single distinct id which is not a suffix default. Two non-default variants in one group stay off. When the display lists extra geosets, ids from 1 through 899 start off and only the listed ids turn on. Id 0 and ids at or above 900 stay on.
 
 Wowhead `meta/npc/<displayId>.json` can contain a `Creature` object whose `CreatureGeosetData` is null. That is an empty list. `mergeNpcMeta` keeps Wowhead's creature when the object is present, so the empty list does not fall through to the DB geosets.
 
@@ -43,7 +49,7 @@ The MDL only lists geosets the mask kept. To see a dropped id, log the mask for 
 
 Read `Textures` and `Materials` in the MDL: which bitmap each geoset uses, `FilterMode`, and `Unlit`. A present mesh with a bad surface is a texture or material bug. A missing mesh is the geoset mask.
 
-Creature color variants are the skin pick above. Dressing-room dye is the item-bonus display modifier in the development rule, not this skin pick. WMO black or magenta surfaces are the shader-23 and opaque-alpha rules in the development rule.
+Creature color variants are the skin pick above. Dressing-room dye is the item-bonus display modifier (`displayModByBonus` in `golang/internal/wowhead/gatherer_items.go`), not this skin pick. WMO black or magenta: shader 23 binds diffuse from texture2 (skip a filled texture1) in `wmoDiffuseFileID`; missing shader-23 environment textures must not emit an empty pass (ADR 0002). M2 native opaque/alpha coverage is `golang/internal/converter/wowmodel/direct/m2/texture_native_opaque.go`.
 
 ## Wrong pose
 
@@ -53,7 +59,7 @@ Confirm the two shots used the mapped animation pair, frozen at mid-sequence. `S
 
 Re-export, shoot the same `--out` and `--view`, and read both PNGs again. A geoset-mask change applies to every creature that uses the default mask. Re-shoot the reported model. Run `bun test tests/snapshot-tests/model/model.test.ts` before treating other catalog sheets as still valid. The converter must already be listening.
 
-Once the user confirms the shots match, add the reported model to `RetailCases` or `ClassicCases` in `golang/internal/testcases/cases.go` and write its expected sheet. `bun test` does not forward arguments after `--`. Use:
+Once the user confirms the shots match, add a folder `tests/snapshot-tests/model/<suite>/<slug>/` with `<slug>.manifest.json` (`retail`, `classic`, or `mount`; set `case.textureBaking` for bake cases) and write its expected sheet. `bun test` does not forward arguments after `--`. Use:
 
 ```
 SNAPSHOT_UPDATE=1 SNAPSHOT_SUITE=retail SNAPSHOT_SLUG=<slug> bun test tests/snapshot-tests/model/model.test.ts
@@ -61,4 +67,4 @@ SNAPSHOT_UPDATE=1 SNAPSHOT_SUITE=retail SNAPSHOT_SLUG=<slug> bun test tests/snap
 
 Read the new expected image. Do not rewrite an existing sheet unless the user explicitly asks.
 
-Delete temporary logs from the converter source. Leave the shot scripts unchanged.
+Delete temporary logs from the converter source. Leave the shot CLIs unchanged.

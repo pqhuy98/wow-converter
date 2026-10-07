@@ -1,8 +1,8 @@
 /**
  * Write review.html for failed snapshot cases: wowhead | expected | actual.
  *
- *   bun tests/snapshot-tests/model/_write-review.ts
- *   bun tests/snapshot-tests/model/_write-review.ts retail/npc-187590-merithra
+ *   bun tests/snapshot-tests/model/write-review.ts
+ *   bun tests/snapshot-tests/model/write-review.ts retail/npc-187590-merithra
  *
  * With no args, uses `review-failures.json` written by the snapshot test.
  * Open tests/snapshot-tests/model/review.html (or serve that folder).
@@ -104,7 +104,7 @@ function parseId(id: string): ReviewInput {
 }
 
 function loadCliCases(): ReviewInput[] {
-  const ids = process.argv.slice(2).filter((arg) => !arg.startsWith('--') && !/_write-review\.(mjs|ts)$/.test(arg));
+  const ids = process.argv.slice(2).filter((arg) => !arg.startsWith('--') && !/write-review\.(mjs|ts)$/.test(arg));
   if (ids.length > 0) return ids.map(parseId);
   if (!existsSync(sidecar)) return [];
   const parsed: unknown = JSON.parse(readFileSync(sidecar, 'utf8'));
