@@ -29,6 +29,9 @@ import (
 // assets from the already-running wow-data-server. Use go test's -cpuprofile
 // and -memprofile flags to capture the converter process, not an API client.
 func TestProfileWMOTextureBake(t *testing.T) {
+	if os.Getenv("TEXTURE_BAKE_PROFILE_OUTPUT") == "" {
+		t.Skip("opt-in profiler; set TEXTURE_BAKE_PROFILE_OUTPUT (scripts/profile-wmo-texture-bake.ps1)")
+	}
 	if os.Getenv("WOW_DATA_SERVER_URL") == "" {
 		transport.ConfigureBundled()
 	}

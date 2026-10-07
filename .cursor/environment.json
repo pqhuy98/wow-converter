@@ -1,8 +1,0 @@
-{
-  "$schema": "https://json-schema.org/draft/2019-09/schema",
-  "agentCanUpdateSnapshot": true,
-  "install": "bash -lc 'set -euo pipefail; export NVM_DIR=\"$HOME/.nvm\"; command -v git >/dev/null 2>&1 || (sudo apt-get update -y && sudo apt-get install -y git curl ca-certificates); if [ ! -d \"$NVM_DIR\" ]; then curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash; fi; . \"$NVM_DIR/nvm.sh\"; nvm install 24; nvm alias default 24; cd /workspace && npm install'",
-  "terminals": [
-  ]
-}
-
