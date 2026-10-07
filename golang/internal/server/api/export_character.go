@@ -75,6 +75,7 @@ func registerExportCharacter(r Router, d *Deps) {
 	if d.Config.IsSharedHosting {
 		timeout = 2 * time.Minute
 	}
+	const bakingTimeout = 240 * time.Second
 
 	var queue *util.JobQueue[exportCharacterRequest, exportCharacterResponse]
 	queue = util.NewJobQueue(util.QueueConfig[exportCharacterRequest, exportCharacterResponse]{
@@ -141,6 +142,9 @@ func registerExportCharacter(r Router, d *Deps) {
 		job := &util.Job[exportCharacterRequest, exportCharacterResponse]{
 			ID: id, Request: body, Status: util.JobPending,
 			SubmittedAt: time.Now().UnixMilli(), AddToRecent: !body.IsBrowse,
+		}
+		if body.TextureBaking.Enabled && timeout < bakingTimeout {
+			job.Timeout = bakingTimeout
 		}
 		queue.AddJob(job)
 		log.Printf("%s %s %s", ansi.Blue("POST"), "/export/character", ansi.Grayf("Queued job %s", job.ID))

@@ -6,31 +6,36 @@
  *   SNAPSHOT_UPDATE=1 SNAPSHOT_SUITE=retail SNAPSHOT_SLUG=<slug> bun test tests/snapshot-tests/model/model.test.ts
  *   `bun test` does not forward arguments after `--` into process.argv.
  *   The converter must already be listening (WOW_CONVERTER_URL, or http://127.0.0.1:3001).
- *   Failures write tests/snapshot-tests/model/review.html (actual | expected).
+ *   Failures write tests/snapshot-tests/model/review.html (wowhead | expected | actual).
+ *   Wowhead URL cases without weapons (not the mount suite) keep <slug>.wowhead.png for review.
+ *   Missing Wowhead sheets are captured during the run; shot.cameras is stored and unused by expected/actual.
  *
  * Export workers match map export (CPU-1, capped at 8). One browser shoots finished exports.
  * Retail and mounts use the wow product. Classic runs after a product switch.
  */
 import { afterAll, beforeAll, test } from 'bun:test';
+import { spawnSync } from 'child_process';
 import {
-  existsSync, mkdirSync, readFileSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync,
 } from 'fs';
 import path from 'path';
 
 import { ShotBrowser } from '../../../.cursor/skills/shot-export-wow-converter/shot-export';
 import {
-  clearExportedAssets, ensureWowProduct, exportCharacter, exportWorkers, readWowProduct, runWorkers,
+  clearExportedAssets, ensureWowProduct, exportCharacter, exportWorkers, readWowProduct, repoRoot, runWorkers,
 } from '../../helpers';
 import {
-  type ModelCase, readSnapshotCases, type SnapshotSuite,
+  type ModelCase, readSnapshotCases, type SnapshotSuite, wantsWowheadShot,
 } from './catalog';
-import { writeReview } from './_write-review.mjs';
 import {
   assertPngRoundTrip, decodePng, diffSheet, encodePng, type RgbaImage,
   stitchSheet,
 } from './visual-png.helper';
+import { writeReview } from './write-review';
 
 const TILE: readonly [number, number] = [640, 400];
+const wowheadBin = path.join(repoRoot, 'tmp', process.platform === 'win32' ? 'shot-wowhead.exe' : 'shot-wowhead');
+let wowheadBinReady = false;
 
 interface Manifest {
   readonly sequence: string;
@@ -38,6 +43,7 @@ interface Manifest {
   readonly layout: readonly (readonly string[])[];
   readonly thresholdPercent: number;
   readonly channelDelta: number;
+  readonly cameras?: Readonly<Record<string, unknown>>;
   readonly issue?: string;
 }
 
@@ -72,7 +78,7 @@ const CASE_TIMEOUT_MS = 3 * 60 * 60_000;
 const results = new Map<string, Promise<Outcome>>();
 const resolvers: Map<string, (outcome: Outcome) => void> = new Map();
 const settled = new Set<string>();
-const failures: { suite: SnapshotSuite; slug: string; detail: string }[] = [];
+const reviews: { suite: SnapshotSuite; slug: string; detail: string; ok: boolean }[] = [];
 let done = 0;
 
 for (const job of jobs) {
@@ -132,7 +138,7 @@ async function runAll(): Promise<void> {
     if (original !== '') await ensureWowProduct(opts.base, original);
     const noun = jobs.length === 1 ? 'case' : 'cases';
     console.log(`${jobs.length} ${noun} in ${formatDuration(Date.now() - started)}`);
-    writeReview(failures);
+    writeReview(reviews);
   }
 }
 
@@ -143,7 +149,9 @@ function finish(job: CaseJob, ok: boolean, detail: string): void {
   done += 1;
   const line = `[${done}/${jobs.length}] ${ok ? 'OK' : 'FAIL'} ${id}${detail !== '' ? ` ${detail}` : ''}`;
   console.log(line);
-  if (!ok) failures.push({ suite: job.suite, slug: job.slug, detail });
+  reviews.push({
+    suite: job.suite, slug: job.slug, detail, ok,
+  });
   resolvers.get(id)?.({ ok, line });
 }
 
@@ -246,6 +254,8 @@ async function compareSheet(job: ReadyJob, browser: ShotBrowser): Promise<{ ok: 
   const expectedPath = `${stem}.expected.png`;
   const diffPath = `${stem}.diff.png`;
   const manifest = job.manifest;
+  mkdirSync(dir, { recursive: true });
+  ensureWowheadSheet(job, `${stem}.wowhead.png`, manifest.sequence);
   console.log(`shooting ${label}`);
   const captured = await browser.capture({
     base: opts.base,
@@ -261,7 +271,6 @@ async function compareSheet(job: ReadyJob, browser: ShotBrowser): Promise<{ ok: 
   for (const [name, png] of captured.views) tiles.set(name, decodePng(png));
   const sheet = stitchSheet(tiles, manifest.layout, manifest.tile[0], manifest.tile[1]);
   const actualBytes = encodePng(sheet);
-  mkdirSync(dir, { recursive: true });
   writeFileSync(`${stem}.actual.png`, actualBytes);
 
   if (opts.update && manifest.issue && !existsSync(expectedPath) && opts.slug !== job.slug) {
@@ -269,7 +278,7 @@ async function compareSheet(job: ReadyJob, browser: ShotBrowser): Promise<{ ok: 
   }
   if (opts.update) {
     writeFileSync(expectedPath, actualBytes);
-    writeManifest(job, captured.sequence);
+    writeManifest(job, { sequence: captured.sequence });
     writeDiff(expectedPath, sheet, manifest.channelDelta, diffPath);
     return { ok: true, detail: `updated sequence ${captured.sequence}` };
   }
@@ -292,11 +301,13 @@ async function compareSheet(job: ReadyJob, browser: ShotBrowser): Promise<{ ok: 
   return { ok: true, detail: `${percent}% sequence ${captured.sequence}` };
 }
 
-function writeManifest(job: ReadyJob, sequence: string): void {
+function writeManifest(job: CaseJob, patch: { sequence?: string; cameras?: Readonly<Record<string, unknown>> }): void {
   const file = path.join('tests', 'snapshot-tests', 'model', job.suite, job.slug, `${job.slug}.manifest.json`);
   const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
   if (!isRecord(parsed) || !isRecord(parsed.shot)) throw new Error(`${file} has no shot`);
-  parsed.shot.sequence = sequence;
+  if (patch.sequence !== undefined) parsed.shot.sequence = patch.sequence;
+  if (patch.cameras !== undefined) parsed.shot.cameras = patch.cameras;
+  delete parsed.shot.wowheadPairHash;
   writeFileSync(file, `${JSON.stringify(parsed, null, 2)}\n`);
 }
 
@@ -351,12 +362,14 @@ function readManifest(suite: SnapshotSuite, slug: string): Manifest {
     }
     rows.push(cells);
   }
+  const cameras = readCameras(parsed.shot.cameras);
   return {
     sequence: parsed.shot.sequence,
     tile: [width, height],
     layout: rows,
     thresholdPercent: parsed.diff.thresholdPercent,
     channelDelta: parsed.diff.channelDelta,
+    ...(cameras !== undefined ? { cameras } : {}),
     ...(typeof parsed.issue === 'string' && parsed.issue !== '' ? { issue: parsed.issue } : {}),
   };
 }
@@ -377,6 +390,80 @@ function uniqueViews(layout: readonly (readonly string[])[]): string[] {
     }
   }
   return out;
+}
+
+function wowSequence(wc3: string): string {
+  const trimmed = wc3.trim();
+  const cut = trimmed.match(/^(.*)\s+\d+$/);
+  const name = cut?.[1]?.trim();
+  return name !== undefined && name !== '' ? name : (trimmed !== '' ? trimmed : 'Stand');
+}
+
+function readCameras(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [view, camera] of Object.entries(value)) {
+    if (isRecord(camera)) out[view] = camera;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function camerasComplete(cameras: Readonly<Record<string, unknown>> | undefined, layout: readonly (readonly string[])[]): boolean {
+  if (cameras === undefined) return false;
+  for (const row of layout) {
+    for (const view of row) {
+      if (!isRecord(cameras[view])) return false;
+    }
+  }
+  return true;
+}
+
+function ensureWowheadSheet(job: ReadyJob, wowheadPath: string, sequence: string): void {
+  if (!wantsWowheadShot(job.suite, job.testCase)) return;
+  if (existsSync(wowheadPath) && camerasComplete(job.manifest.cameras, job.manifest.layout)) return;
+  const label = caseId(job);
+  console.log(`shooting wowhead ${label}`);
+  const camerasPath = `${wowheadPath}.cameras.json`;
+  try {
+    captureWowheadSheet(job.testCase.base, sequence, wowheadPath, camerasPath);
+    const parsed: unknown = JSON.parse(readFileSync(camerasPath, 'utf8'));
+    const cameras = readCameras(parsed);
+    if (cameras === undefined) throw new Error('shot-wowhead did not write cameras');
+    writeManifest(job, { cameras });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(`wowhead ${label} skipped: ${message}`);
+  } finally {
+    if (existsSync(camerasPath)) unlinkSync(camerasPath);
+  }
+}
+
+function ensureWowheadBin(): void {
+  if (wowheadBinReady) return;
+  const built = spawnSync('go', ['build', '-o', wowheadBin, './cmd/shot-wowhead'], {
+    cwd: path.join(repoRoot, 'golang'),
+    stdio: 'inherit',
+    windowsHide: true,
+  });
+  if (built.error) throw built.error;
+  if (built.status !== 0) throw new Error(`go build shot-wowhead exited ${built.status ?? 'null'}`);
+  wowheadBinReady = true;
+}
+
+function captureWowheadSheet(url: string, sequence: string, dest: string, camerasPath: string): void {
+  ensureWowheadBin();
+  const sheet = path.resolve(dest);
+  const result = spawnSync(wowheadBin, [
+    url, '--seq', wowSequence(sequence), '--sheet', sheet, '--cameras', path.resolve(camerasPath), '--base', opts.base,
+  ], {
+    cwd: path.join(repoRoot, 'golang'),
+    stdio: 'inherit',
+    windowsHide: true,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`shot-wowhead exited ${result.status ?? 'null'}`);
+  if (!existsSync(sheet)) throw new Error(`shot-wowhead did not write ${sheet}`);
+  if (!existsSync(camerasPath)) throw new Error('shot-wowhead did not write cameras');
 }
 
 function parseArgs(argv: readonly string[]): RunOptions {

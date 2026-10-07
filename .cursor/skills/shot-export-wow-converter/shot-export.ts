@@ -204,6 +204,7 @@ export interface ShotCaptureRequest {
   readonly height: number;
   readonly views: readonly string[];
   readonly readyMs?: number;
+  readonly cameras?: Readonly<Record<string, unknown>>;
 }
 
 /** One headless browser, reused across models. */
@@ -270,8 +271,9 @@ export class ShotBrowser {
       });
       const views = new Map<string, Buffer>();
       for (const view of opts.views) {
+        const camera = opts.cameras?.[view];
         const switched = await this.cdp.send('Runtime.evaluate', {
-          expression: `window.__shotView && window.__shotView(${JSON.stringify(view)})`,
+          expression: `window.__shotView && window.__shotView(${JSON.stringify(view)}, ${camera !== undefined ? JSON.stringify(camera) : 'null'})`,
           returnByValue: true,
         });
         const remote = isRecord(switched.result) ? switched.result : undefined;
@@ -299,7 +301,7 @@ export class ShotBrowser {
   }
 }
 
-// Snapshot tests import ShotBrowser above; the skill CLI uses the Go server code.
+// Snapshot tests spawn shot-wowhead; this skill CLI uses the Go server code.
 if (import.meta.main) {
   const result = spawnSync('go', ['run', './cmd/shot-converter', ...process.argv.slice(2)], {
     cwd: fileURLToPath(new URL('../../../golang/', import.meta.url)),

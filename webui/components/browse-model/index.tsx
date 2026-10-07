@@ -428,6 +428,11 @@ export default function BrowseModelPage() {
                   textureBaking={textureBaking}
                   setTextureBaking={setTextureBaking}
                   disabled={isBusy}
+                  onChanged={() => {
+                    const file = exportTargetRef.current;
+                    if (!file || !modelPath) return;
+                    void triggerExport(file);
+                  }}
                 />
               </CardHeader>
               <CardContent className="flex flex-col flex-1 overflow-hidden p-3 min-w-0">

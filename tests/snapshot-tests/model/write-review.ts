@@ -1,76 +1,149 @@
 /**
- * Write review.html for failed snapshot cases: actual | expected.
+ * Write review.html for failed snapshot cases: wowhead | expected | actual.
  *
- *   bun tests/snapshot-tests/model/_write-review.mjs
- *   bun tests/snapshot-tests/model/_write-review.mjs retail/npc-187590-merithra
+ *   bun tests/snapshot-tests/model/_write-review.ts
+ *   bun tests/snapshot-tests/model/_write-review.ts retail/npc-187590-merithra
  *
  * With no args, uses `review-failures.json` written by the snapshot test.
  * Open tests/snapshot-tests/model/review.html (or serve that folder).
+ * The snapshot test prints a blue file:// link after each run.
  */
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { pathToFileURL } from 'url';
 
-const root = path.dirname(fileURLToPath(import.meta.url));
+const root = import.meta.dir;
 const sidecar = path.join(root, 'review-failures.json');
 
-/**
- * @typedef {{ suite: string, slug: string, detail?: string }} ReviewCase
- * @param {readonly ReviewCase[]} failures
- */
-export function writeReview(failures) {
-  const cases = [];
-  for (const item of failures) {
-    const actualSrc = `${item.suite}/${item.slug}/${item.slug}.actual.png`;
-    const expectedSrc = `${item.suite}/${item.slug}/${item.slug}.expected.png`;
-    if (!existsSync(path.join(root, actualSrc)) || !existsSync(path.join(root, expectedSrc))) continue;
-    cases.push({
-      suite: item.suite,
-      slug: item.slug,
-      name: `${item.suite}/${item.slug}`,
-      actualSrc,
-      expectedSrc,
-      ...(item.detail ? { detail: item.detail } : {}),
-    });
-  }
-  writeFileSync(path.join(root, 'review.html'), reviewHtml(cases));
-  writeFileSync(sidecar, `${JSON.stringify(failures, null, 2)}\n`);
-  console.log(`wrote ${path.join(root, 'review.html')} (${cases.length} failed)`);
+interface ReviewInput {
+  readonly suite: string;
+  readonly slug: string;
+  readonly detail?: string;
+  readonly ok?: boolean;
+}
+
+interface ReviewCard {
+  readonly suite: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly actualSrc: string;
+  readonly expectedSrc: string;
+  readonly ok: boolean;
+  readonly wowheadSrc?: string;
+  readonly base?: string;
+  readonly detail?: string;
+}
+
+export function writeReview(listed: readonly ReviewInput[]): number {
+  const cases = collectCases(listed);
+  const reviewPath = path.join(root, 'review.html');
+  writeFileSync(reviewPath, reviewHtml(cases));
+  writeFileSync(sidecar, `${JSON.stringify(listed, null, 2)}\n`);
+  const href = pathToFileURL(reviewPath).href;
+  const failed = cases.filter((item) => !item.ok).length;
+  const passed = cases.filter((item) => item.ok).length;
+  console.log(`Open \x1b[34m${href}\x1b[0m (${failed} failed, ${passed} passed)`);
   return cases.length;
 }
 
-function parseId(id) {
+function buildCase(suite: string, slug: string, detail: string | undefined, ok: boolean): ReviewCard | undefined {
+  const actualSrc = `${suite}/${slug}/${slug}.actual.png`;
+  const expectedSrc = `${suite}/${slug}/${slug}.expected.png`;
+  const wowheadSrc = `${suite}/${slug}/${slug}.wowhead.png`;
+  if (!existsSync(path.join(root, actualSrc)) || !existsSync(path.join(root, expectedSrc))) return undefined;
+  const base = readCaseBase(suite, slug);
+  return {
+    suite,
+    slug,
+    name: `${suite}/${slug}`,
+    actualSrc,
+    expectedSrc,
+    ok,
+    ...(existsSync(path.join(root, wowheadSrc)) ? { wowheadSrc } : {}),
+    ...(base ? { base } : {}),
+    ...(detail ? { detail } : {}),
+  };
+}
+
+function collectCases(listed: readonly ReviewInput[]): ReviewCard[] {
+  const byId = new Map<string, ReviewCard>();
+  for (const item of listed) {
+    const built = buildCase(item.suite, item.slug, item.detail, item.ok === true);
+    if (built) byId.set(built.name, built);
+  }
+  for (const suite of ['retail', 'classic', 'mount']) {
+    const dir = path.join(root, suite);
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const name = `${suite}/${entry.name}`;
+      if (byId.has(name)) continue;
+      const built = buildCase(suite, entry.name, undefined, true);
+      if (built) byId.set(name, built);
+    }
+  }
+  return [...byId.values()];
+}
+
+function readCaseBase(suite: string, slug: string): string {
+  const manifestPath = path.join(root, suite, slug, `${slug}.manifest.json`);
+  if (!existsSync(manifestPath)) return '';
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    if (!isRecord(parsed) || !isRecord(parsed.case) || typeof parsed.case.base !== 'string') return '';
+    return parsed.case.base;
+  } catch {
+    return '';
+  }
+}
+
+function parseId(id: string): ReviewInput {
   const slash = id.indexOf('/');
   if (slash <= 0 || slash === id.length - 1) throw new Error(`expected suite/slug, got ${id}`);
   return { suite: id.slice(0, slash), slug: id.slice(slash + 1) };
 }
 
-function loadCliCases() {
-  const ids = process.argv.slice(2).filter((arg) => !arg.startsWith('--') && !arg.endsWith('_write-review.mjs'));
+function loadCliCases(): ReviewInput[] {
+  const ids = process.argv.slice(2).filter((arg) => !arg.startsWith('--') && !/_write-review\.(mjs|ts)$/.test(arg));
   if (ids.length > 0) return ids.map(parseId);
   if (!existsSync(sidecar)) return [];
-  const parsed = JSON.parse(readFileSync(sidecar, 'utf8'));
+  const parsed: unknown = JSON.parse(readFileSync(sidecar, 'utf8'));
   if (!Array.isArray(parsed)) return [];
-  return parsed.filter((item) => item && typeof item.suite === 'string' && typeof item.slug === 'string');
+  const listed: ReviewInput[] = [];
+  for (const item of parsed) {
+    if (!isRecord(item) || typeof item.suite !== 'string' || typeof item.slug !== 'string') continue;
+    listed.push({
+      suite: item.suite,
+      slug: item.slug,
+      ...(typeof item.detail === 'string' && item.detail !== '' ? { detail: item.detail } : {}),
+      ok: item.ok === true,
+    });
+  }
+  return listed;
 }
 
-function reviewHtml(cases) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function reviewHtml(cases: readonly ReviewCard[]): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Snapshot failures</title>
+<title>Snapshot review</title>
 <style>
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: #111213; color: #e8e8ea; font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; }
 header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 16px; background: #111213e6; backdrop-filter: blur(8px); border-bottom: 1px solid #2a2b2e; }
 h1 { margin: 0; font-size: 16px; font-weight: 650; }
+.status { margin: 0; }
+.status select { background: #1c1d20; color: #e8e8ea; border: 1px solid #33343a; border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 16px; font-weight: 650; }
 .filters, .vote-filters { display: flex; gap: 6px; flex-wrap: wrap; }
 header button, .filters button, .vote-filters button { background: #1c1d20; color: #c8c8cc; border: 1px solid #33343a; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
 .filters button[aria-pressed="true"], .vote-filters button[aria-pressed="true"] { background: #2e3a52; border-color: #5b8def; color: #fff; }
-.copy { margin-left: auto; }
 .grid { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
 .card { margin: 0; background: #1a1b1e; border: 1px solid #2a2b2e; border-radius: 8px; overflow: hidden; }
 .card.good { border-color: #2f6d3a; }
@@ -83,8 +156,10 @@ header button, .filters button, .vote-filters button { background: #1c1d20; colo
 .votes button[aria-pressed="true"].down { background: #4a1e1e; border-color: #c45c5c; color: #f0a0a0; }
 .comment { margin: 0; padding: 8px 12px; font-size: 13px; font-weight: 400; color: #f0a0a0; background: #241616; border-bottom: 1px solid #2a2b2e; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; }
+.pair.triple { grid-template-columns: 1fr 1fr 1fr; }
 .col + .col { border-left: 1px solid #2a2b2e; }
 .col-head { padding: 6px 10px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.col-head.wowhead { background: #4a3a12; color: #e6c35a; }
 .col-head.actual { background: #2e3a52; color: #9ec1ff; }
 .col-head.expected { background: #1e4a28; color: #8ee0a0; }
 .shot { display: block; width: 100%; padding: 0; border: 0; background: #0b0c0d; cursor: pointer; }
@@ -100,18 +175,22 @@ header button, .filters button, .vote-filters button { background: #1c1d20; colo
 .lightbox.open { display: flex; align-items: center; justify-content: center; }
 .lb-stack { display: flex; flex-direction: column; align-items: center; }
 .lb-frame { display: table; margin: 0; }
-.lightbox img { display: block; max-width: calc(100vw - 96px); max-height: calc(100vh - 176px); object-fit: contain; background: #000; }
+.lightbox img { display: block; max-width: calc(100vw - 96px); max-height: calc(100vh - 200px); object-fit: contain; background: #000; }
 .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 72px; border: 0; background: #0008; color: #fff; font-size: 36px; cursor: pointer; }
 .nav:hover { background: #000c; }
 .prev { left: 8px; }
 .next { right: 8px; }
-.lb-head { display: table-caption; caption-side: top; padding: 0 0 8px; }
+.lb-head { display: table-caption; caption-side: top; padding: 0 0 8px; box-sizing: border-box; }
 .lb-head-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .lb-kind { flex: none; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+.lb-kind.wowhead { background: #4a3a12; color: #e6c35a; }
 .lb-kind.actual { background: #2e3a52; color: #9ec1ff; }
 .lb-kind.expected { background: #1e4a28; color: #8ee0a0; }
-.lb-name { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-name { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .lb-count { flex: none; margin-left: auto; color: #8a8a90; font-size: 13px; }
+.lb-base { margin-top: 4px; font-size: 12px; color: #8a8a90; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-base a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5b8def; text-decoration: none; }
+.lb-base a:hover { text-decoration: underline; }
 .lb-votes { gap: 24px; margin-top: 16px; }
 .lb-votes button { width: 88px; height: 88px; font-size: 44px; border-radius: 18px; border-width: 2px; }
 .close { position: absolute; top: 8px; right: 8px; z-index: 1; width: 40px; height: 40px; border: 0; background: #0008; color: #fff; font-size: 24px; cursor: pointer; }
@@ -126,15 +205,16 @@ dialog button[value="ok"] { background: #4a1e1e; border-color: #c45c5c; color: #
 </head>
 <body>
 <header>
-  <h1>Failed snapshots</h1>
+  <label class="status">
+    <select id="status" aria-label="Snapshot outcome"></select>
+  </label>
   <div class="filters" id="filters"></div>
   <div class="vote-filters" id="vote-filters"></div>
-  <button class="copy" type="button" id="copy">Copy results</button>
 </header>
 <main class="grid" id="grid"></main>
 <div class="lightbox" id="lightbox" hidden>
   <button class="close" type="button" aria-label="Close">×</button>
-  <button class="nav prev" type="button" aria-label="Previous">‹</button>
+  <button class="nav prev" type="button" aria-label="Previous image">‹</button>
   <div class="lb-stack">
     <div class="lb-frame">
       <div class="lb-head">
@@ -143,12 +223,13 @@ dialog button[value="ok"] { background: #4a1e1e; border-color: #c45c5c; color: #
           <span class="lb-name" id="lb-name"></span>
           <span class="lb-count" id="count"></span>
         </div>
+        <div class="lb-base" id="lb-base" hidden></div>
       </div>
       <img alt="">
     </div>
     <span class="votes lb-votes" id="lb-votes"></span>
   </div>
-  <button class="nav next" type="button" aria-label="Next">›</button>
+  <button class="nav next" type="button" aria-label="Next image">›</button>
 </div>
 <dialog id="comment-dialog">
   <form method="dialog">
@@ -165,11 +246,13 @@ const CASES = ${JSON.stringify(cases)};
 const VOTE_KEY = "snapshot-review-votes";
 const filtersEl = document.getElementById("filters");
 const voteFiltersEl = document.getElementById("vote-filters");
+const statusEl = document.getElementById("status");
 const grid = document.getElementById("grid");
 const box = document.getElementById("lightbox");
 const img = box.querySelector("img");
 const lbKind = document.getElementById("lb-kind");
 const lbName = document.getElementById("lb-name");
+const lbBase = document.getElementById("lb-base");
 const lbVotes = document.getElementById("lb-votes");
 const count = document.getElementById("count");
 const dialog = document.getElementById("comment-dialog");
@@ -177,6 +260,7 @@ const commentInput = document.getElementById("comment-input");
 const commentLabel = document.getElementById("comment-label");
 let filter = "all";
 let voteFilter = "all";
+let outcome = "failed";
 let index = 0;
 let pendingBad = "";
 const votes = loadVotes();
@@ -198,13 +282,16 @@ function voteOf(name) {
   return votes[name] || null;
 }
 
+function statusCases() {
+  return CASES.filter((item) => (outcome === "failed" ? !item.ok : item.ok));
+}
+
 function visibleCases() {
-  return CASES.filter((item) => {
+  return statusCases().filter((item) => {
     if (filter !== "all" && item.suite !== filter) return false;
     const vote = voteOf(item.name)?.vote;
     if (voteFilter === "good") return vote === "good";
     if (voteFilter === "bad") return vote === "bad";
-    if (voteFilter === "left") return vote !== "good" && vote !== "bad";
     return true;
   });
 }
@@ -212,20 +299,21 @@ function visibleCases() {
 function slides() {
   const out = [];
   for (const item of visibleCases()) {
-    out.push({ name: item.name, kind: "actual", src: item.actualSrc });
+    if (item.wowheadSrc) out.push({ name: item.name, kind: "wowhead", src: item.wowheadSrc });
     out.push({ name: item.name, kind: "expected", src: item.expectedSrc });
+    out.push({ name: item.name, kind: "actual", src: item.actualSrc });
   }
   return out;
 }
 
 function counts() {
   let good = 0, bad = 0;
-  for (const item of CASES) {
+  for (const item of statusCases()) {
     const vote = voteOf(item.name)?.vote;
     if (vote === "good") good += 1;
     if (vote === "bad") bad += 1;
   }
-  return { good, bad, left: CASES.length - good - bad };
+  return { good, bad };
 }
 
 function chip(label, pressed, onClick) {
@@ -238,9 +326,21 @@ function chip(label, pressed, onClick) {
 }
 
 function renderFilters() {
-  const suites = ["all", ...new Set(CASES.map((item) => item.suite))];
+  const failed = CASES.filter((item) => !item.ok).length;
+  const passed = CASES.filter((item) => item.ok).length;
+  const failedOpt = document.createElement("option");
+  failedOpt.value = "failed";
+  failedOpt.textContent = "Failed snapshots (" + failed + ")";
+  const passedOpt = document.createElement("option");
+  passedOpt.value = "successful";
+  passedOpt.textContent = "Successful snapshots (" + passed + ")";
+  statusEl.replaceChildren(failedOpt, passedOpt);
+  statusEl.value = outcome;
+  const pool = statusCases();
+  const suites = ["all", ...new Set(pool.map((item) => item.suite))];
+  if (filter !== "all" && !suites.includes(filter)) filter = "all";
   filtersEl.replaceChildren(...suites.map((suite) => {
-    const n = suite === "all" ? CASES.length : CASES.filter((item) => item.suite === suite).length;
+    const n = suite === "all" ? pool.length : pool.filter((item) => item.suite === suite).length;
     return chip(suite === "all" ? "All (" + n + ")" : suite + " (" + n + ")", suite === filter, () => {
       filter = suite;
       render();
@@ -248,7 +348,6 @@ function renderFilters() {
   }));
   const n = counts();
   voteFiltersEl.replaceChildren(
-    chip("Left (" + n.left + ")", voteFilter === "left", () => { voteFilter = voteFilter === "left" ? "all" : "left"; render(); }),
     chip("Good (" + n.good + ")", voteFilter === "good", () => { voteFilter = voteFilter === "good" ? "all" : "good"; render(); }),
     chip("Bad (" + n.bad + ")", voteFilter === "bad", () => { voteFilter = voteFilter === "bad" ? "all" : "bad"; render(); }),
   );
@@ -272,8 +371,19 @@ function voteButtons(name) {
   down.title = "Bad, with comment";
   down.setAttribute("aria-pressed", String(vote?.vote === "bad"));
   down.addEventListener("click", (e) => { e.stopPropagation(); markBad(name); });
-  wrap.append(up, down);
+  wrap.append(up, copyButton(), down);
   return wrap;
+}
+
+function copyButton() {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "copy";
+  btn.textContent = "📋";
+  btn.title = "Copy results";
+  btn.setAttribute("aria-label", "Copy results");
+  btn.addEventListener("click", (e) => { e.stopPropagation(); copyResults(); });
+  return btn;
 }
 
 function shotButton(src, kind, name, onClick) {
@@ -309,8 +419,10 @@ function render() {
     const empty = document.createElement("p");
     empty.className = "empty";
     empty.textContent = CASES.length === 0
-      ? "No failed cases with actual and expected images."
-      : "No cases in this filter.";
+      ? "No cases with actual and expected images."
+      : statusCases().length === 0
+        ? (outcome === "failed" ? "No failed cases." : "No successful cases.")
+        : "No cases in this filter.";
     grid.replaceChildren(empty);
     if (box.classList.contains("open")) syncLightbox();
     return;
@@ -335,8 +447,9 @@ function render() {
     }
     title.append(voteButtons(item.name));
     const pair = document.createElement("div");
-    pair.className = "pair";
-    pair.append(column(item, "actual", item.actualSrc, list), column(item, "expected", item.expectedSrc, list));
+    pair.className = "pair" + (item.wowheadSrc ? " triple" : "");
+    if (item.wowheadSrc) pair.append(column(item, "wowhead", item.wowheadSrc, list));
+    pair.append(column(item, "expected", item.expectedSrc, list), column(item, "actual", item.actualSrc, list));
     card.append(title);
     if (vote?.vote === "bad" && vote.comment) {
       const note = document.createElement("p");
@@ -389,27 +502,78 @@ function resultsText() {
   return "Good:\\n" + (good.join("\\n") || "- none") + "\\n\\nBad:\\n" + (bad.join("\\n") || "- none");
 }
 
-document.getElementById("copy").addEventListener("click", async () => {
+async function copyResults() {
   const text = resultsText();
   try {
     await navigator.clipboard.writeText(text);
   } catch {
     commentInput.value = text;
   }
-});
+}
 
 function syncLightbox() {
   const items = slides();
   if (items.length === 0) { close(); return; }
   index = ((index % items.length) + items.length) % items.length;
   const item = items[index];
+  const same = items.filter((slide) => slide.name === item.name);
   img.src = item.src;
   img.alt = item.kind + " " + item.name;
   lbKind.className = "lb-kind " + item.kind;
   lbKind.textContent = item.kind;
   lbName.textContent = item.name;
-  count.textContent = (index + 1) + " / " + items.length;
+  count.textContent = (same.findIndex((slide) => slide.kind === item.kind) + 1) + " / " + same.length;
+  fillBase(CASES.find((c) => c.name === item.name)?.base || "");
   lbVotes.replaceChildren(...voteButtons(item.name).children);
+  if (img.complete) fitLightboxHead();
+  else img.addEventListener("load", fitLightboxHead, { once: true });
+}
+
+function fitLightboxHead() {
+  const head = box.querySelector(".lb-head");
+  const w = img.clientWidth;
+  head.style.width = w > 0 ? w + "px" : "";
+}
+
+function shiftKind(delta) {
+  const items = slides();
+  const cur = items[index];
+  if (!cur) return;
+  const same = [];
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].name === cur.name) same.push(i);
+  }
+  const at = same.indexOf(index);
+  openAt(same[(at + delta + same.length) % same.length]);
+}
+
+function shiftCase(delta) {
+  const cases = visibleCases();
+  const items = slides();
+  const cur = items[index];
+  if (!cur || cases.length === 0) return;
+  const ci = cases.findIndex((item) => item.name === cur.name);
+  const next = cases[(ci + delta + cases.length) % cases.length];
+  let i = items.findIndex((slide) => slide.name === next.name && slide.kind === "wowhead");
+  if (i < 0) i = items.findIndex((slide) => slide.name === next.name);
+  openAt(i);
+}
+
+function fillBase(base) {
+  lbBase.replaceChildren();
+  if (!base) { lbBase.hidden = true; return; }
+  lbBase.hidden = false;
+  lbBase.title = base;
+  if (/^https?:\\/\\//i.test(base)) {
+    const a = document.createElement("a");
+    a.href = base;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    a.textContent = base;
+    lbBase.append(a);
+  } else {
+    lbBase.textContent = base;
+  }
 }
 
 function openAt(i) {
@@ -426,18 +590,28 @@ function close() {
   box.hidden = true;
 }
 
-box.querySelector(".prev").addEventListener("click", (e) => { e.stopPropagation(); openAt(index - 1); });
-box.querySelector(".next").addEventListener("click", (e) => { e.stopPropagation(); openAt(index + 1); });
+box.querySelector(".prev").addEventListener("click", (e) => { e.stopPropagation(); shiftKind(-1); });
+box.querySelector(".next").addEventListener("click", (e) => { e.stopPropagation(); shiftKind(1); });
 box.querySelector(".close").addEventListener("click", (e) => { e.stopPropagation(); close(); });
 box.addEventListener("click", (e) => { if (e.target === box) close(); });
 img.addEventListener("click", (e) => e.stopPropagation());
+img.addEventListener("load", fitLightboxHead);
+window.addEventListener("resize", () => { if (box.classList.contains("open")) fitLightboxHead(); });
 box.querySelector(".lb-stack").addEventListener("click", (e) => e.stopPropagation());
 document.addEventListener("keydown", (e) => {
   if (dialog.open) return;
   if (!box.classList.contains("open")) return;
   if (e.key === "Escape") close();
-  if (e.key === "ArrowLeft") openAt(index - 1);
-  if (e.key === "ArrowRight") openAt(index + 1);
+  if (e.key === "ArrowLeft") { e.preventDefault(); shiftKind(-1); }
+  if (e.key === "ArrowRight") { e.preventDefault(); shiftKind(1); }
+  if (e.key === "ArrowUp") { e.preventDefault(); shiftCase(-1); }
+  if (e.key === "ArrowDown") { e.preventDefault(); shiftCase(1); }
+});
+statusEl.addEventListener("change", () => {
+  outcome = statusEl.value === "successful" ? "successful" : "failed";
+  filter = "all";
+  voteFilter = "all";
+  render();
 });
 render();
 </script>

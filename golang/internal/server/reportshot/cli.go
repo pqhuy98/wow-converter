@@ -2,6 +2,7 @@ package reportshot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -30,9 +31,12 @@ func RunCLI(source string) {
 }
 
 type shotOptions struct {
-	request Request
-	indices []int
-	out     string
+	request  Request
+	indices  []int
+	out      string
+	sheet    string
+	aimSheet string
+	cameras  string
 }
 
 func runCLI(source string, args []string) error {
@@ -59,18 +63,34 @@ func runCLI(source string, args []string) error {
 			return err
 		}
 		if source == "converter" {
-			frames[1], sequence, err = captureConverter(ctx, b, opts.request, opts.indices)
-		} else {
-			if err = loadConverterAims(&opts); err != nil {
+			if err = loadShotCameras(&opts); err != nil {
 				return err
 			}
+			frames[1], sequence, err = captureConverter(ctx, b, opts.request, opts.indices)
+		} else {
+			if err = loadWowheadAims(&opts); err != nil {
+				return err
+			}
+			var cams []cameraReference
 			if err = prepareWowheadPage(ctx, b, opts.request); err == nil {
-				frames[0], err = shootWowheadViews(ctx, b, opts.request, opts.indices)
+				frames[0], cams, err = shootWowheadViews(ctx, b, opts.request, opts.indices)
+			}
+			if err == nil && opts.cameras != "" {
+				err = writeShotCameras(opts.cameras, opts.indices, cams)
 			}
 		}
 	}
 	if err != nil {
 		return err
+	}
+	if opts.sheet != "" {
+		if err = writeSheet(opts.sheet, pickSheetFrames(source, frames)); err != nil {
+			return err
+		}
+		if sequence != "" {
+			fmt.Println("sequence " + sequence)
+		}
+		return nil
 	}
 	if err = os.MkdirAll(opts.out, 0755); err != nil {
 		return err
@@ -119,6 +139,9 @@ func parseShotArgs(source string, args []string, output io.Writer) (shotOptions,
 	flags.StringVar(&sequence, "seq", "Stand", "animation name (prefix accepted)")
 	flags.StringVar(&view, "view", "", "one view or comma-separated views; default all six")
 	flags.StringVar(&opts.out, "out", "", "output directory")
+	flags.StringVar(&opts.sheet, "sheet", "", "write a 1920x800 2x3 sheet PNG instead of per-view files")
+	flags.StringVar(&opts.aimSheet, "aim-sheet", "", "1920x800 converter sheet whose side-view silhouettes aim Wowhead")
+	flags.StringVar(&opts.cameras, "cameras", "", "JSON camera map written by Wowhead and read by the converter")
 	flags.StringVar(&opts.request.Model, "model", "", "exported model for a paired Wowhead shot")
 	flags.StringVar(&opts.request.WowheadURL, "wowhead", "", "Wowhead URL for a paired converter shot")
 	flags.StringVar(&opts.request.WowSequence, "wow-seq", "Stand", "Wowhead animation for a paired converter shot")
@@ -159,15 +182,21 @@ func parseShotArgs(source string, args []string, output io.Writer) (shotOptions,
 	}
 	if opts.out == "" {
 		opts.out = workspace.ResolveRepoPath("tmp/shots")
-		if source == "wowhead" {
-			opts.out = workspace.ResolveRepoPath(".cursor/skills/shot-export-wowhead/out")
-		}
 	}
 	opts.out = workspace.ResolveRepoPath(opts.out)
+	if opts.aimSheet != "" {
+		opts.aimSheet = workspace.ResolveRepoPath(opts.aimSheet)
+	}
+	if opts.cameras != "" {
+		opts.cameras = workspace.ResolveRepoPath(opts.cameras)
+	}
 	opts.request.Model = assetPath(opts.request.Model)
 	opts.request.BaseURL = strings.TrimRight(opts.request.BaseURL, "/")
 	opts.request.sequencePrefix = true
-	if view == "" {
+	if opts.sheet != "" {
+		opts.sheet = workspace.ResolveRepoPath(opts.sheet)
+		opts.indices = []int{0, 1, 2, 3, 4, 5}
+	} else if view == "" {
 		opts.indices = []int{0, 1, 2, 3, 4, 5}
 	} else {
 		for _, name := range strings.Split(view, ",") {
@@ -182,6 +211,74 @@ func parseShotArgs(source string, args []string, output io.Writer) (shotOptions,
 		return opts, errors.New("variant must be nonnegative")
 	}
 	return opts, nil
+}
+
+func pickSheetFrames(source string, frames [2][][]byte) [][]byte {
+	if source == "converter" {
+		return frames[1]
+	}
+	return frames[0]
+}
+
+func writeShotCameras(dest string, indices []int, cams []cameraReference) error {
+	out := make(map[string]cameraReference, len(indices))
+	for i, index := range indices {
+		if i >= len(cams) {
+			break
+		}
+		out[views[index]] = cams[i]
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err = os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(dest, append(data, '\n'), 0644)
+}
+
+func loadShotCameras(opts *shotOptions) error {
+	if opts.cameras == "" {
+		return nil
+	}
+	data, err := os.ReadFile(opts.cameras)
+	if err != nil {
+		return err
+	}
+	var byView map[string]cameraReference
+	if err = json.Unmarshal(data, &byView); err != nil {
+		return err
+	}
+	opts.request.cameras = make([]chan cameraReference, len(views))
+	for _, index := range opts.indices {
+		cam, ok := byView[views[index]]
+		if !ok {
+			continue
+		}
+		opts.request.cameras[index] = make(chan cameraReference, 1)
+		opts.request.cameras[index] <- cam
+	}
+	return nil
+}
+
+func writeSheet(dest string, frames [][]byte) error {
+	data, err := composeSheet(frames, false)
+	if err != nil {
+		return err
+	}
+	if err = os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
+	if err = os.WriteFile(dest, data, 0644); err != nil {
+		return err
+	}
+	absolute, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
+	fmt.Println(absolute)
+	return nil
 }
 
 func assetPath(input string) string {
@@ -211,6 +308,54 @@ func safeSequence(sequence string) string {
 		}
 		return r
 	}, sequence)
+}
+
+func loadWowheadAims(opts *shotOptions) error {
+	if opts.aimSheet != "" {
+		aims, err := loadAimsFromSheet(opts.aimSheet, opts.indices)
+		if err != nil {
+			return err
+		}
+		opts.request.aims = aims
+		return nil
+	}
+	return loadConverterAims(opts)
+}
+
+func loadAimsFromSheet(path string, indices []int) ([]chan frameAim, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	img, err := png.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+	bounds := img.Bounds()
+	if bounds.Dx() != 1920 || bounds.Dy() != 800 {
+		return nil, fmt.Errorf("aim sheet must be 1920x800, got %dx%d", bounds.Dx(), bounds.Dy())
+	}
+	aims := make([]chan frameAim, len(views))
+	for _, index := range indices {
+		if index < 0 || index >= 4 {
+			continue
+		}
+		origin := image.Pt(bounds.Min.X+(index%3)*640, bounds.Min.Y+(index/3)*400)
+		tile := image.NewRGBA(image.Rect(0, 0, 640, 400))
+		draw.Draw(tile, tile.Bounds(), img, origin, draw.Src)
+		raw, err := encodePNG(tile)
+		if err != nil {
+			return nil, err
+		}
+		aim, err := measureFrame(raw)
+		if err != nil {
+			return nil, fmt.Errorf("aim sheet %s: %w", views[index], err)
+		}
+		aims[index] = make(chan frameAim, 1)
+		aims[index] <- aim
+	}
+	return aims, nil
 }
 
 // Preserve standalone Wowhead alignment to existing comparison-folder converter shots.

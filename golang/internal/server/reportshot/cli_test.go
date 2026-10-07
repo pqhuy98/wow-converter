@@ -44,6 +44,24 @@ func TestShotArgsPreserveSingleAndMultipleViews(t *testing.T) {
 	if got := groupViews([]int{5, 0}); !reflect.DeepEqual(got, [][]int{{0}, {5}}) {
 		t.Fatalf("capture groups %v", got)
 	}
+	sheet, err := parseShotArgs("wowhead", []string{"https://www.wowhead.com/npc=1", "--view", "front", "--sheet", "tmp/x.wowhead.png"}, io.Discard)
+	if err != nil || !reflect.DeepEqual(sheet.indices, []int{0, 1, 2, 3, 4, 5}) {
+		t.Fatalf("sheet views %v, error %v", sheet.indices, err)
+	}
+	if !strings.HasSuffix(sheet.sheet, "x.wowhead.png") {
+		t.Fatalf("sheet path %q", sheet.sheet)
+	}
+	aimed, err := parseShotArgs("wowhead", []string{"https://www.wowhead.com/npc=1", "--aim-sheet", "tmp/x.expected.png", "--sheet", "tmp/x.wowhead.png", "--cameras", "tmp/x.cameras.json"}, io.Discard)
+	if err != nil || !strings.HasSuffix(aimed.aimSheet, "x.expected.png") || !strings.HasSuffix(aimed.cameras, "x.cameras.json") {
+		t.Fatalf("aim-sheet %q cameras %q error %v", aimed.aimSheet, aimed.cameras, err)
+	}
+	converter := [2][][]byte{{[]byte("wowhead")}, {[]byte("converter")}}
+	if got := pickSheetFrames("converter", converter); len(got) != 1 || string(got[0]) != "converter" {
+		t.Fatalf("converter sheet frames %v", got)
+	}
+	if got := pickSheetFrames("wowhead", converter); len(got) != 1 || string(got[0]) != "wowhead" {
+		t.Fatalf("wowhead sheet frames %v", got)
+	}
 }
 
 // Uses a local page to prove that a CLI single-view shot does not shoot the other five.
@@ -90,6 +108,55 @@ window.__shotView=async name=>{const c=document.querySelector('canvas').getConte
 	label := tileMask(img, image.Point{}, 64, 26)
 	if !strings.Contains(string(label), string([]byte{1})) {
 		t.Fatal("single-view shot has no label")
+	}
+}
+
+func TestShotCamerasJSONRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cameras.json")
+	want := cameraReference{Target: [3]float64{1, 2, 3}, Eye: [3]float64{4, 5, 6}, Up: [3]float64{0, 0, 1}, Height: 7}
+	if err := writeShotCameras(path, []int{0}, []cameraReference{want}); err != nil {
+		t.Fatal(err)
+	}
+	opts := shotOptions{cameras: path, indices: []int{0}}
+	if err := loadShotCameras(&opts); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-opts.request.cameras[0]:
+		if got != want {
+			t.Fatalf("camera %+v", got)
+		}
+	default:
+		t.Fatal("missing loaded camera")
+	}
+}
+
+func TestLoadAimsFromSheetUsesSideTiles(t *testing.T) {
+	sheet := image.NewRGBA(image.Rect(0, 0, 1920, 800))
+	draw.Draw(sheet, sheet.Bounds(), image.NewUniform(color.RGBA{38, 38, 38, 255}), image.Point{}, draw.Src)
+	draw.Draw(sheet, image.Rect(200, 100, 400, 300), image.NewUniform(color.RGBA{255, 0, 0, 255}), image.Point{}, draw.Src)
+	path := filepath.Join(t.TempDir(), "expected.png")
+	data, err := encodePNG(sheet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	aims, err := loadAimsFromSheet(path, []int{0, 4, 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aims[4] != nil || aims[5] != nil {
+		t.Fatal("top/bottom must not consume sheet aims")
+	}
+	select {
+	case aim := <-aims[0]:
+		if aim.CX < 0.45 || aim.CX > 0.5 || aim.CY < 0.48 || aim.CY > 0.51 {
+			t.Fatalf("front sheet aim %+v", aim)
+		}
+	default:
+		t.Fatal("missing front sheet aim")
 	}
 }
 

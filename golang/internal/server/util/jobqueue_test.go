@@ -89,6 +89,26 @@ func TestCancelJobSkipsPendingJob(t *testing.T) {
 	}
 }
 
+func TestJobTimeoutOverride(t *testing.T) {
+	queue := NewJobQueue(QueueConfig[string, string]{
+		Concurrency: 1,
+		JobTTL:      time.Minute,
+		JobTimeout:  time.Second,
+	}, func(_ *Job[string, string]) (string, error) {
+		time.Sleep(200 * time.Millisecond)
+		return "done", nil
+	})
+	queue.AddJob(&Job[string, string]{
+		ID: "short", Request: "request", Status: JobPending, SubmittedAt: time.Now().UnixMilli(),
+		Timeout: 50 * time.Millisecond,
+	})
+	waitForJobStatus(t, queue, "short", JobFailed)
+	status := queue.GetJobStatus("short")
+	if status == nil || status.Error != "Job timeout" {
+		t.Fatalf("short job error = %v, want Job timeout", status)
+	}
+}
+
 func waitForJobStatus[T, V any](t *testing.T, queue *JobQueue[T, V], id string, want JobStatus) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)

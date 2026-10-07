@@ -137,7 +137,7 @@ func captureFrames(ctx context.Context, request Request, indices []int) ([2][][]
 			return
 		}
 		close(loaded)
-		frames, err := shootWowheadViews(ctx, wow0, request, groups[0])
+		frames, _, err := shootWowheadViews(ctx, wow0, request, groups[0])
 		if err != nil {
 			failures <- err
 			cancel()
@@ -181,7 +181,7 @@ func captureFrames(ctx context.Context, request Request, indices []int) ([2][][]
 				cancel()
 				return
 			}
-			frames, err := shootWowheadViews(ctx, tab, request, indices)
+			frames, _, err := shootWowheadViews(ctx, tab, request, indices)
 			if err != nil {
 				failures <- err
 				cancel()
@@ -261,7 +261,7 @@ func captureConverter(ctx context.Context, b *browser, request Request, indices 
 	_ = b.evaluate(ctx, `document.head.insertAdjacentHTML('beforeend','<style>nextjs-portal{display:none!important}</style>')`, nil)
 	// Preserve Wowhead's existing side fit, then transfer its final cameras back.
 	// These preliminary frames only supply aims; the sheet uses reference cameras.
-	if request.cameras != nil {
+	if request.cameras != nil && request.aims != nil {
 		for _, index := range indices {
 			if index >= 4 {
 				continue
@@ -333,7 +333,7 @@ func captureWowhead(ctx context.Context, b *browser, request Request) ([]byte, e
 	if err := prepareWowheadPage(ctx, b, request); err != nil {
 		return nil, err
 	}
-	frames, err := shootWowheadViews(ctx, b, request, []int{0, 1, 2, 3, 4, 5})
+	frames, _, err := shootWowheadViews(ctx, b, request, []int{0, 1, 2, 3, 4, 5})
 	if err != nil {
 		return nil, err
 	}
@@ -387,8 +387,9 @@ func prepareWowheadPage(ctx context.Context, b *browser, request Request) error 
 	return nil
 }
 
-func shootWowheadViews(ctx context.Context, b *browser, request Request, indices []int) ([][]byte, error) {
+func shootWowheadViews(ctx context.Context, b *browser, request Request, indices []int) ([][]byte, []cameraReference, error) {
 	var wowheadFrames [][]byte
+	var cameras []cameraReference
 	for _, index := range indices {
 		view := views[index]
 		log.Printf("report screenshot: Wowhead %s", view)
@@ -400,13 +401,13 @@ func shootWowheadViews(ctx context.Context, b *browser, request Request, indices
 			case measured := <-request.aims[index]:
 				aim = &measured
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
 		}
 		config, _ := json.Marshal(map[string]any{"view": view, "sequence": request.WowSequence, "variant": request.WowVariant, "aim": aim})
 		expr := `(()=>{const c=` + string(config) + `;window.__whAim=c.aim;window.__whWantView=c.view;window.__whWantSeq=c.sequence;window.__whWantVariant=c.variant;window.__whPng='';window.__whShot='';window.__whPending=false;})()`
 		if err := b.evaluate(ctx, expr, nil); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var shot string
 		type sample struct {
@@ -437,32 +438,32 @@ func shootWowheadViews(ctx context.Context, b *browser, request Request, indices
 		})
 		if err != nil {
 			log.Printf("report screenshot: Wowhead %s failed: phase=%s frame=%d fit=%d size=%.2fx%.2f pixels=%.0f", view, lastState.Phase, lastState.Seq, lastState.FitN, lastState.BoxW, lastState.BoxH, lastState.Colored)
-			return nil, fmt.Errorf("Wowhead screenshot: %w", err)
+			return nil, nil, fmt.Errorf("Wowhead screenshot: %w", err)
+		}
+		var reference cameraReference
+		if err := b.evaluate(ctx, `(() => {
+			const actor = window.__whViewer.renderer.actors[0];
+			const classic = !!(actor.b && actor.b.aq);
+			const model = classic ? actor.b : actor.a;
+			const vertices = classic ? model.aq.l : model.bf.Q;
+			const matrix = classic ? model.al : model.j;
+			if (!vertices || !vertices.length || !matrix || matrix.length !== 16) throw new Error('Missing camera geometry');
+			let minZ = Infinity, maxZ = -Infinity;
+			for (const vertex of vertices) {
+				const z = (classic ? vertex.f : vertex.a)[2];
+				minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+			}
+			const camera = window.__whPlaced;
+			const eye = Array.from(window.__whViewer.renderer.eye);
+			const up = camera.view === 'top' || camera.view === 'bottom' ? [0, 1, 0] : [0, 0, 1];
+			return {target: camera.target, eye, up, modelMatrix: Array.from(matrix), height: maxZ - minZ};
+		})()`, &reference); err != nil {
+			return nil, nil, err
+		}
+		if reference.Height <= 0 || reference.Eye == reference.Target {
+			return nil, nil, errors.New("Wowhead did not provide a valid reference camera.")
 		}
 		if request.cameras != nil {
-			var reference cameraReference
-			if err := b.evaluate(ctx, `(() => {
-				const actor = window.__whViewer.renderer.actors[0];
-				const classic = !!(actor.b && actor.b.aq);
-				const model = classic ? actor.b : actor.a;
-				const vertices = classic ? model.aq.l : model.bf.Q;
-				const matrix = classic ? model.al : model.j;
-				if (!vertices || !vertices.length || !matrix || matrix.length !== 16) throw new Error('Missing camera geometry');
-				let minZ = Infinity, maxZ = -Infinity;
-				for (const vertex of vertices) {
-					const z = (classic ? vertex.f : vertex.a)[2];
-					minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
-				}
-				const camera = window.__whPlaced;
-				const eye = Array.from(window.__whViewer.renderer.eye);
-				const up = camera.view === 'top' || camera.view === 'bottom' ? [0, 1, 0] : [0, 0, 1];
-				return {target: camera.target, eye, up, modelMatrix: Array.from(matrix), height: maxZ - minZ};
-			})()`, &reference); err != nil {
-				return nil, err
-			}
-			if reference.Height <= 0 || reference.Eye == reference.Target {
-				return nil, errors.New("Wowhead did not provide a valid reference camera.")
-			}
 			request.cameras[index] <- reference
 		}
 		var cam string
@@ -470,11 +471,12 @@ func shootWowheadViews(ctx context.Context, b *browser, request Request, indices
 		log.Printf("report screenshot: Wowhead %s ready: frames=%d fit=%d size=%.2fx%.2f cam=%s", view, lastState.Seq, lastState.FitN, lastState.BoxW, lastState.BoxH, cam)
 		frame, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(shot, "data:image/png;base64,"))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		wowheadFrames = append(wowheadFrames, frame)
+		cameras = append(cameras, reference)
 	}
-	return wowheadFrames, nil
+	return wowheadFrames, cameras, nil
 }
 
 func wowheadBlocked(ctx context.Context, b *browser) error {
@@ -582,12 +584,20 @@ func encodePNG(img image.Image) ([]byte, error) {
 }
 
 func makeSheet(frames [][]byte) ([]byte, error) {
+	return composeSheet(frames, true)
+}
+
+func composeSheet(frames [][]byte, captions bool) ([]byte, error) {
 	if len(frames) != len(views) {
 		return nil, errors.New("All six views are required.")
 	}
 	sheet := image.NewRGBA(image.Rect(0, 0, 1920, 800))
 	for i, frame := range frames {
-		img, err := renderFrame(frame, 640, 400, views[i])
+		caption := ""
+		if captions {
+			caption = views[i]
+		}
+		img, err := renderFrame(frame, 640, 400, caption)
 		if err != nil {
 			return nil, err
 		}
@@ -627,7 +637,9 @@ func renderFrame(frame []byte, width, height int, view string) (image.Image, err
 	}
 	out := image.NewRGBA(img.Bounds())
 	draw.Draw(out, out.Bounds(), img, img.Bounds().Min, draw.Src)
-	label := font.Drawer{Dst: out, Src: image.NewUniform(color.White), Face: basicfont.Face7x13, Dot: fixed.P(10, 20)}
-	label.DrawString(view)
+	if view != "" {
+		label := font.Drawer{Dst: out, Src: image.NewUniform(color.White), Face: basicfont.Face7x13, Dot: fixed.P(10, 20)}
+		label.DrawString(view)
+	}
 	return out, nil
 }

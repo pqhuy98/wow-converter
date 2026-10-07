@@ -22,6 +22,17 @@ export interface SnapshotCase extends ModelCase {
   readonly slug: string;
 }
 
+export function isWowheadUrl(base: string): boolean {
+  return /^https?:\/\//i.test(base) && /wowhead\.com/i.test(base);
+}
+
+/** Wowhead sheets and camera transfer: any Wowhead URL except mount cases and attached weapons. */
+export function wantsWowheadShot(suite: SnapshotSuite, testCase: ModelCase): boolean {
+  if (suite === 'mount') return false;
+  if (!isWowheadUrl(testCase.base)) return false;
+  return testCase.weaponR === '' && testCase.weaponL === '';
+}
+
 export function readSnapshotCases(suite: SnapshotSuite): SnapshotCase[] {
   const root = path.join('tests', 'snapshot-tests', 'model', suite);
   if (!existsSync(root)) throw new Error(`missing snapshot catalog ${root}`);

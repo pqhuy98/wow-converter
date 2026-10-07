@@ -23,16 +23,17 @@ const (
 
 // Job is a unit of work in the queue.
 type Job[T, V any] struct {
-	ID            string    `json:"id"`
-	Request       T         `json:"request"`
-	Status        JobStatus `json:"status"`
-	Result        *V        `json:"result,omitempty"`
-	Error         string    `json:"error,omitempty"`
-	SubmittedAt   int64     `json:"submittedAt"`
-	StartedAt     *int64    `json:"startedAt,omitempty"`
-	FinishedAt    *int64    `json:"finishedAt,omitempty"`
-	AddToRecent   bool      `json:"addToRecent,omitempty"`
-	NoTimeout     bool      `json:"noTimeout,omitempty"`
+	ID            string        `json:"id"`
+	Request       T             `json:"request"`
+	Status        JobStatus     `json:"status"`
+	Result        *V            `json:"result,omitempty"`
+	Error         string        `json:"error,omitempty"`
+	SubmittedAt   int64         `json:"submittedAt"`
+	StartedAt     *int64        `json:"startedAt,omitempty"`
+	FinishedAt    *int64        `json:"finishedAt,omitempty"`
+	AddToRecent   bool          `json:"addToRecent,omitempty"`
+	NoTimeout     bool          `json:"noTimeout,omitempty"`
+	Timeout       time.Duration `json:"-"`
 	resultOnError bool
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -283,10 +284,14 @@ func (q *JobQueue[T, V]) runJob(job *Job[T, V]) {
 			r, e := q.handle(job)
 			ch <- outcome{r, e}
 		}()
+		timeout := q.config.JobTimeout
+		if job.Timeout > 0 {
+			timeout = job.Timeout
+		}
 		select {
 		case out := <-ch:
 			result, err = out.result, out.err
-		case <-time.After(q.config.JobTimeout):
+		case <-time.After(timeout):
 			err = errJobTimeout
 			if q.config.OnTimeout != nil {
 				q.config.OnTimeout()

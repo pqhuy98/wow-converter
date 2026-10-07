@@ -1,6 +1,7 @@
 'use client';
 
 import { Settings } from 'lucide-react';
+import { useRef } from 'react';
 
 import { BakeTexturesButton } from '@/components/character-converter/optimization-options';
 import { BasicCharacterConfig } from '@/components/common/basic-character-config';
@@ -37,6 +38,7 @@ export function SettingsDialogButton({
   setTextureBaking,
   disabled,
   className,
+  onChanged,
 }: {
   character: Character
   setCharacter: React.Dispatch<React.SetStateAction<Character>>
@@ -52,9 +54,21 @@ export function SettingsDialogButton({
   setTextureBaking: React.Dispatch<React.SetStateAction<TextureBakingForm>>
   disabled?: boolean
   className?: string
+  onChanged?: () => void
   }) {
+  const snapshotRef = useRef('');
+  const settingsSnapshot = JSON.stringify({ character, format, formatVersion, textureBaking });
+
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(open) => {
+        if (open) {
+          snapshotRef.current = settingsSnapshot;
+          return;
+        }
+        if (snapshotRef.current !== settingsSnapshot) onChanged?.();
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="icon" title="Export settings" disabled={disabled} className={className}>
           <Settings className="h-4 w-4" />

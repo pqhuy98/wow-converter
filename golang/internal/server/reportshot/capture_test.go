@@ -45,6 +45,40 @@ func TestSixViewSheetDimensionsAndBlankDetection(t *testing.T) {
 	if _, err = makeSheet([][]byte{frame}); err == nil {
 		t.Fatal("missing views accepted")
 	}
+	labeled, err := composeSheet([][]byte{frame, frame, frame, frame, frame, frame}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := composeSheet([][]byte{frame, frame, frame, frame, frame, frame}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	labeledImg, err := png.Decode(bytes.NewReader(labeled))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plainImg, err := png.Decode(bytes.NewReader(plain))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasWhiteCaption(labeledImg) {
+		t.Fatal("labeled sheet missing caption")
+	}
+	if hasWhiteCaption(plainImg) {
+		t.Fatal("unlabeled sheet still captioned")
+	}
+}
+
+func hasWhiteCaption(img image.Image) bool {
+	for y := 0; y < 26; y++ {
+		for x := 0; x < 64; x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			if r > 60000 && g > 60000 && b > 60000 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Opt-in real-browser check: local export plus Wowhead, without submitting to production.
