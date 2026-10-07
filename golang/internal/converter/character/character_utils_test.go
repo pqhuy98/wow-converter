@@ -247,6 +247,19 @@ func TestGeosetsMatchingSubmeshIDsDoesNotFallbackForNoneVariant(t *testing.T) {
 	}
 }
 
+func TestEquippedCollectionDefaultIsNotCustomizationNone(t *testing.T) {
+	mask := &components.Geoset{Name: "bandit-mask", WowData: components.GeosetWowData{SubmeshID: 2701}, Vertices: make([]*components.GeosetVertex, 397)}
+	model := mdl.New(mdl.NewMDLOptions{Name: "armor_banditmask"})
+	model.Geosets = []*components.Geoset{mask}
+	head := EquipmentSlotData{SlotID: wowhead.SlotHead, Data: ItemMetadata{ZamGeosetGroup: []int{0, 0}}}
+	if got := FilterCollectionGeosets([]EquipmentSlotData{head}, head, model); len(got) != 1 || got[0] != mask {
+		t.Fatalf("equipped default lost its face mask: %v", got)
+	}
+	if got := geosetsMatchingSubmeshIDs(model, []int{2700}); len(got) != 0 {
+		t.Fatalf("customization None retained mask: %v", got)
+	}
+}
+
 func TestGeosetsMatchingSubmeshIDsKeepsRequestedVariantAndBaseForNone(t *testing.T) {
 	base := &components.Geoset{Name: "base", WowData: components.GeosetWowData{SubmeshID: 0}, Faces: []components.Face{{}}}
 	wanted := &components.Geoset{Name: "horns", WowData: components.GeosetWowData{SubmeshID: 2404}, Faces: []components.Face{{}}}

@@ -88,7 +88,12 @@ export function canAddMdlCollectionItemToModel(main: MDL, item: MDL) {
   }
 
   const boneMap = new Map<string, Bone>(main.bones.map((b) => [b.name, b]));
-  return item.bones.every((b) => boneMap.has(b.name));
+  return item.bones.every((b) => {
+    const mainBone = boneMap.get(b.name);
+    // Partial collections omit parents but retain character-space bind pivots.
+    return mainBone !== undefined && (b.parent || !mainBone.parent
+      || V3.distance(b.pivotPoint, mainBone.pivotPoint) <= 1e-3);
+  });
 }
 
 function mergeItemObjects(main: MDL, item: MDL) {

@@ -2,6 +2,7 @@ package blp
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -104,7 +105,10 @@ func convertPngToBlp(pngBufferOriginal []byte, blpPath string, preserveAlpha, ig
 	}
 	if NativeEncoderAvailable() {
 		if err := encodeNative(pngBuffer, blpPath, ignoreAlpha); err != nil {
-			return err
+			log.Printf("Native PNG->BLP encoder failed; using Go fallback: %v", err)
+			if fallbackErr := png2BlpJS(pngBuffer, blpPath, ignoreAlpha); fallbackErr != nil {
+				return errors.Join(fmt.Errorf("native encoder: %w", err), fmt.Errorf("Go fallback: %w", fallbackErr))
+			}
 		}
 		return nil
 	}

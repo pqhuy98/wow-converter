@@ -7,6 +7,14 @@ import path from 'path';
 
 export type SnapshotSuite = 'retail' | 'classic' | 'mount';
 
+export interface TextureBakingOptions {
+  readonly enabled?: boolean;
+  readonly animate?: boolean;
+  readonly fps?: number;
+  readonly windowMS?: number;
+  readonly resolutionScale?: 1 | 0.5;
+}
+
 export interface ModelCase {
   readonly base: string;
   readonly weaponR: string;
@@ -16,6 +24,7 @@ export interface ModelCase {
   readonly mountScale?: number;
   readonly seatOffset?: readonly [number, number, number];
   readonly animation?: string;
+  readonly textureBaking?: TextureBakingOptions;
 }
 
 export interface SnapshotCase extends ModelCase {
@@ -26,11 +35,11 @@ export function isWowheadUrl(base: string): boolean {
   return /^https?:\/\//i.test(base) && /wowhead\.com/i.test(base);
 }
 
-/** Wowhead sheets and camera transfer: any Wowhead URL except mount cases and attached weapons. */
+/** Wowhead cannot reproduce externally attached weapons or mounts. */
 export function wantsWowheadShot(suite: SnapshotSuite, testCase: ModelCase): boolean {
   if (suite === 'mount') return false;
   if (!isWowheadUrl(testCase.base)) return false;
-  return testCase.weaponR === '' && testCase.weaponL === '';
+  return testCase.weaponR === '' && testCase.weaponL === '' && !testCase.mount;
 }
 
 export function readSnapshotCases(suite: SnapshotSuite): SnapshotCase[] {
@@ -65,6 +74,7 @@ export function modelCase(value: unknown, where: string): ModelCase {
     weaponR: value.weaponR,
     weaponL: value.weaponL,
     size: value.size,
+    ...(value.textureBaking !== undefined ? { textureBaking: readTextureBaking(value.textureBaking, where) } : {}),
   };
   if (value.mount === undefined || value.mount === '') return parsed;
   if (typeof value.mount !== 'string') throw new Error(`${where} mount must be a string`);
@@ -81,6 +91,32 @@ export function modelCase(value: unknown, where: string): ModelCase {
     ...(typeof value.mountScale === 'number' ? { mountScale: value.mountScale } : {}),
     ...(seatOffset ? { seatOffset } : {}),
     ...(typeof value.animation === 'string' && value.animation !== '' ? { animation: value.animation } : {}),
+  };
+}
+
+function readTextureBaking(value: unknown, where: string): TextureBakingOptions {
+  if (!isRecord(value)) throw new Error(`${where} textureBaking must be an object`);
+  if (value.enabled !== undefined && typeof value.enabled !== 'boolean') {
+    throw new Error(`${where} textureBaking.enabled must be a boolean`);
+  }
+  if (value.animate !== undefined && typeof value.animate !== 'boolean') {
+    throw new Error(`${where} textureBaking.animate must be a boolean`);
+  }
+  if (value.fps !== undefined && (typeof value.fps !== 'number' || !Number.isInteger(value.fps) || value.fps < 1 || value.fps > 60)) {
+    throw new Error(`${where} textureBaking.fps must be an integer from 1 to 60`);
+  }
+  if (value.windowMS !== undefined && (typeof value.windowMS !== 'number' || !Number.isInteger(value.windowMS) || value.windowMS < 1 || value.windowMS > 60000)) {
+    throw new Error(`${where} textureBaking.windowMS must be an integer from 1 to 60000`);
+  }
+  if (value.resolutionScale !== undefined && value.resolutionScale !== 1 && value.resolutionScale !== 0.5) {
+    throw new Error(`${where} textureBaking.resolutionScale must be 1 or 0.5`);
+  }
+  return {
+    ...(typeof value.enabled === 'boolean' ? { enabled: value.enabled } : {}),
+    ...(typeof value.animate === 'boolean' ? { animate: value.animate } : {}),
+    ...(typeof value.fps === 'number' ? { fps: value.fps } : {}),
+    ...(typeof value.windowMS === 'number' ? { windowMS: value.windowMS } : {}),
+    ...(value.resolutionScale === 1 || value.resolutionScale === 0.5 ? { resolutionScale: value.resolutionScale } : {}),
   };
 }
 

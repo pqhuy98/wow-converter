@@ -193,22 +193,23 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 }
 
 func combineParticleSamples(t [3][4]float64, flags uint32) [4]float64 {
-	color := [4]float64{}
-	colorFactor, alphaFactor := 2.0, 2.0
+	// Match WebWowViewerCpp's particle shader IDs 2 and 3 in
+	// wowViewerLib/shaders/glsl/forwardRendering/m2ParticleShader.frag.
+	// particleEmitter.cpp selects ID 3 when 0x40000000 is set. The reference
+	// multiplies two or three RGB textures, and always multiplies all three
+	// alpha channels; there are no extra 2x/4x factors.
+	result := [4]float64{
+		t[0][0] * t[1][0],
+		t[0][1] * t[1][1],
+		t[0][2] * t[1][2],
+		t[0][3] * t[1][3] * t[2][3],
+	}
 	if flags&0x40000000 != 0 {
-		colorFactor = 4
-	}
-	if flags&0x20000000 != 0 {
-		alphaFactor = 4
-	}
-	for k := range 3 {
-		color[k] = t[0][k] * t[1][k] * colorFactor
-		if flags&0x40000000 != 0 {
-			color[k] *= t[2][k]
+		for channel := range 3 {
+			result[channel] *= t[2][channel]
 		}
 	}
-	color[3] = t[0][3] * t[1][3] * t[2][3] * alphaFactor
-	return color
+	return result
 }
 
 func scaleBakeRate(rate components.AnimatedOrStatic[float64], scale float64) components.AnimatedOrStatic[float64] {

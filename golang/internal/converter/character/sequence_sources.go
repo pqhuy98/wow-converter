@@ -16,15 +16,16 @@ type SequenceSource struct {
 }
 
 type ModelSequenceSources struct {
-	Path      string           `json:"path"`
-	Sequences []SequenceSource `json:"sequences"`
+	Path       string           `json:"path"`
+	ModelScale float64          `json:"modelScale"`
+	Sequences  []SequenceSource `json:"sequences"`
 }
 
 func (e *CharacterExporter) SequenceSources(format string) []ModelSequenceSources {
 	models := make([]ModelSequenceSources, 0, len(e.Models))
 	for _, pair := range e.Models {
 		model := pair[0].(*mdl.MDL)
-		source := ModelSequenceSources{Path: filepath.ToSlash(pair[1].(string)) + "." + format, Sequences: make([]SequenceSource, 0, len(model.Sequences))}
+		source := ModelSequenceSources{Path: filepath.ToSlash(pair[1].(string)) + "." + format, ModelScale: e.Config.RawModelScaleUp * model.AccumScale, Sequences: make([]SequenceSource, 0, len(model.Sequences))}
 		counts := map[string]int{}
 		for i, seq := range model.Sequences {
 			counts[seq.Name]++

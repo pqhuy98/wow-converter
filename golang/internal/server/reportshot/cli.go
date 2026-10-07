@@ -11,6 +11,7 @@ import (
 	"image/draw"
 	"image/png"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -147,6 +148,7 @@ func parseShotArgs(source string, args []string, output io.Writer) (shotOptions,
 	flags.StringVar(&opts.request.WowSequence, "wow-seq", "Stand", "Wowhead animation for a paired converter shot")
 	flags.StringVar(&opts.request.Sequence, "converter-seq", "Stand", "WC3 animation for a paired Wowhead shot")
 	flags.IntVar(&opts.request.WowVariant, "variant", 0, "Wowhead animation variant")
+	flags.Float64Var(&opts.request.ModelScale, "model-scale", 0, "exported units per source unit (default 56); use export metadata for resized models")
 	flags.Usage = func() {
 		fmt.Fprintf(output, "usage: go run ./cmd/shot-%s <model-or-url> [--seq Stand] [--view front] [--out dir]\n", source)
 		flags.PrintDefaults()
@@ -210,6 +212,9 @@ func parseShotArgs(source string, args []string, output io.Writer) (shotOptions,
 	if opts.request.WowVariant < 0 {
 		return opts, errors.New("variant must be nonnegative")
 	}
+	if math.IsNaN(opts.request.ModelScale) || math.IsInf(opts.request.ModelScale, 0) || opts.request.ModelScale < 0 {
+		return opts, errors.New("model-scale must be finite and nonnegative")
+	}
 	return opts, nil
 }
 
@@ -255,6 +260,9 @@ func loadShotCameras(opts *shotOptions) error {
 		cam, ok := byView[views[index]]
 		if !ok {
 			continue
+		}
+		if opts.request.ModelScale > 0 {
+			cam.ModelScale = opts.request.ModelScale
 		}
 		opts.request.cameras[index] = make(chan cameraReference, 1)
 		opts.request.cameras[index] <- cam

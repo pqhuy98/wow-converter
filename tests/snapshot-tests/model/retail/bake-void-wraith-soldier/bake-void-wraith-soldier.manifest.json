@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "slug": "bake-void-wraith-soldier",
+  "suite": "retail",
+  "case": {
+    "base": "local::creature/voidwraithsoldier/voidwraithsoldier.m2",
+    "weaponR": "",
+    "weaponL": "",
+    "size": "hero",
+    "textureBaking": {
+      "enabled": true,
+      "animate": true,
+      "fps": 15,
+      "windowMS": 4000,
+      "resolutionScale": 0.5
+    }
+  },
+  "export": {
+    "format": "mdx",
+    "formatVersion": "1000"
+  },
+  "shot": {
+    "sequence": "Stand 1",
+    "tile": [
+      640,
+      400
+    ],
+    "layout": [
+      [
+        "front",
+        "left",
+        "back"
+      ],
+      [
+        "right",
+        "top",
+        "bottom"
+      ]
+    ]
+  },
+  "diff": {
+    "thresholdPercent": 1,
+    "channelDelta": 4
+  }
+}

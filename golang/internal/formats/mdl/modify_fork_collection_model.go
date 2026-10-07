@@ -1,6 +1,9 @@
 package mdl
 
-import "github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
+import (
+	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
+	imath "github.com/pqhuy98/wow-converter/internal/math"
+)
 
 // CollectionModel is a minimal model wrapper for collection armor fork/merge.
 type CollectionModel struct {
@@ -46,7 +49,10 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 			textureMap[tex] = textures[i]
 		}
 	}
-	textureAnims := append([]components.TextureAnim(nil), src.TextureAnims...)
+	textureAnims := make([]components.TextureAnim, len(src.TextureAnims))
+	for i, textureAnim := range src.TextureAnims {
+		textureAnims[i] = cloneTextureAnim(textureAnim)
+	}
 	textureAnimMap := map[*components.TextureAnim]*components.TextureAnim{}
 	for i := range src.TextureAnims {
 		textureAnimMap[&src.TextureAnims[i]] = &textureAnims[i]
@@ -57,6 +63,9 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 		cloned := *mat
 		cloned.Layers = append([]components.Layer(nil), mat.Layers...)
 		for i := range cloned.Layers {
+			if !cloned.Layers[i].Alpha.Static {
+				cloned.Layers[i].Alpha.Anim = cloneAnimation(cloned.Layers[i].Alpha.Anim)
+			}
 			if anim := cloned.Layers[i].TextureIDAnim; anim != nil {
 				anim = cloneAnimation(anim)
 				for time, value := range anim.KeyFrames {
@@ -79,6 +88,8 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 			if tv := cloned.Layers[i].TVertexAnim; tv != nil {
 				if mapped := textureAnimMap[tv]; mapped != nil {
 					cloned.Layers[i].TVertexAnim = mapped
+				} else if tv.ID >= 0 && tv.ID < len(textureAnims) {
+					cloned.Layers[i].TVertexAnim = &textureAnims[tv.ID]
 				}
 			}
 		}
@@ -108,6 +119,8 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 		if _, ok := enabledSet[ga.Geoset]; ok {
 			cloned := ga
 			cloned.Geoset = geosetMap[ga.Geoset]
+			cloned.Alpha = cloneAnimatedValue(cloned.Alpha)
+			cloned.Color = cloneAnimatedValue(cloned.Color)
 			filteredGeosetAnims = append(filteredGeosetAnims, cloned)
 		}
 	}
@@ -122,22 +135,167 @@ func ForkCollectionModel(template CollectionModel, enabledGeosets []*components.
 	mdl.GeosetAnims = filteredGeosetAnims
 	mdl.GlobalSequences = append([]*components.GlobalSequence(nil), src.GlobalSequences...)
 	mdl.Sequences = append([]components.Sequence(nil), src.Sequences...)
-	mdl.Attachments = append([]*components.AttachmentPoint(nil), src.Attachments...)
-	mdl.Lights = append([]*components.Light(nil), src.Lights...)
+	mdl.Attachments = cloneAttachments(src.Attachments)
+	mdl.Lights = cloneLights(src.Lights)
 	mdl.RibbonEmitters = append([]*components.RibbonEmitter(nil), src.RibbonEmitters...)
 	for i, ribbon := range mdl.RibbonEmitters {
 		cloned := *ribbon
+		cloneNodeBaseAnimations(&cloned.NodeBase)
+		cloned.HeightAbove = cloneAnimatedValue(cloned.HeightAbove)
+		cloned.HeightBelow = cloneAnimatedValue(cloned.HeightBelow)
+		cloned.Alpha = cloneAnimatedValue(cloned.Alpha)
+		cloned.Color = cloneAnimatedValue(cloned.Color)
+		cloned.TextureSlot = cloneAnimatedValue(cloned.TextureSlot)
+		cloned.Visibility = cloneAnimation(cloned.Visibility)
 		cloned.Material = materialMap[ribbon.Material]
 		mdl.RibbonEmitters[i] = &cloned
 	}
-	mdl.ParticleEmitter2s = append([]*components.ParticleEmitter2(nil), src.ParticleEmitter2s...)
-	mdl.Helpers = append([]*components.Helper(nil), src.Helpers...)
+	mdl.ParticleEmitter2s = cloneParticleEmitters(src.ParticleEmitter2s)
+	mdl.Helpers = cloneHelpers(src.Helpers)
 	mdl.Cameras = append([]components.Camera(nil), src.Cameras...)
-	mdl.EventObjects = append([]*components.EventObject(nil), src.EventObjects...)
+	for i := range mdl.Cameras {
+		mdl.Cameras[i].Translation = cloneAnimation(mdl.Cameras[i].Translation)
+		mdl.Cameras[i].Rotation = cloneAnimation(mdl.Cameras[i].Rotation)
+		mdl.Cameras[i].Scaling = cloneAnimation(mdl.Cameras[i].Scaling)
+	}
+	mdl.EventObjects = cloneEventObjects(src.EventObjects)
+	mdl.CollisionShapes = cloneCollisionShapes(src.CollisionShapes)
 	mdl.Bones = src.Bones
 	mdl.WowAttachments = src.WowAttachments
+	rebindForkNodeParents(src, mdl)
 
 	return CollectionModel{RelativePath: template.RelativePath, MDL: mdl}
+}
+
+func rebindForkNodeParents(source, fork *MDL) {
+	sourceNodes := source.GetNodes()
+	forkNodes := fork.GetNodes()
+	if len(sourceNodes) != len(forkNodes) {
+		return
+	}
+	nodeMap := make(map[components.Node]components.Node, len(sourceNodes))
+	for i, sourceNode := range sourceNodes {
+		nodeMap[sourceNode] = forkNodes[i]
+	}
+	for _, forkNode := range forkNodes {
+		if parent := forkNode.NodeParent(); parent != nil {
+			if clonedParent, ok := nodeMap[parent]; ok {
+				forkNode.SetNodeParent(clonedParent)
+			}
+		}
+	}
+}
+
+func cloneNodeBaseAnimations(base *components.NodeBase) {
+	base.Translation = cloneAnimation(base.Translation)
+	base.Rotation = cloneAnimation(base.Rotation)
+	base.Scaling = cloneAnimation(base.Scaling)
+}
+
+func cloneAnimatedValue[T any](value *components.AnimatedOrStatic[T]) *components.AnimatedOrStatic[T] {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	if !cloned.Static {
+		cloned.Anim = cloneAnimation(cloned.Anim)
+	}
+	return &cloned
+}
+
+func cloneAttachments(source []*components.AttachmentPoint) []*components.AttachmentPoint {
+	out := make([]*components.AttachmentPoint, len(source))
+	for i, value := range source {
+		if value == nil {
+			continue
+		}
+		cloned := *value
+		cloneNodeBaseAnimations(&cloned.NodeBase)
+		out[i] = &cloned
+	}
+	return out
+}
+
+func cloneLights(source []*components.Light) []*components.Light {
+	out := make([]*components.Light, len(source))
+	for i, value := range source {
+		if value == nil {
+			continue
+		}
+		cloned := *value
+		cloneNodeBaseAnimations(&cloned.NodeBase)
+		cloned.AttenuationStart.Anim = cloneAnimation(cloned.AttenuationStart.Anim)
+		cloned.AttenuationEnd.Anim = cloneAnimation(cloned.AttenuationEnd.Anim)
+		cloned.Intensity.Anim = cloneAnimation(cloned.Intensity.Anim)
+		cloned.Color.Anim = cloneAnimation(cloned.Color.Anim)
+		cloned.AmbientIntensity.Anim = cloneAnimation(cloned.AmbientIntensity.Anim)
+		cloned.AmbientColor.Anim = cloneAnimation(cloned.AmbientColor.Anim)
+		cloned.Visibility = cloneAnimation(cloned.Visibility)
+		out[i] = &cloned
+	}
+	return out
+}
+
+func cloneParticleEmitters(source []*components.ParticleEmitter2) []*components.ParticleEmitter2 {
+	out := make([]*components.ParticleEmitter2, len(source))
+	for i, value := range source {
+		if value == nil {
+			continue
+		}
+		cloned := *value
+		cloneNodeBaseAnimations(&cloned.NodeBase)
+		cloned.Visibility = cloneAnimation(cloned.Visibility)
+		cloned.Width.Anim = cloneAnimation(cloned.Width.Anim)
+		cloned.Length.Anim = cloneAnimation(cloned.Length.Anim)
+		cloned.EmissionRate.Anim = cloneAnimation(cloned.EmissionRate.Anim)
+		cloned.Latitude.Anim = cloneAnimation(cloned.Latitude.Anim)
+		cloned.Speed.Anim = cloneAnimation(cloned.Speed.Anim)
+		cloned.Variation.Anim = cloneAnimation(cloned.Variation.Anim)
+		cloned.Gravity.Anim = cloneAnimation(cloned.Gravity.Anim)
+		out[i] = &cloned
+	}
+	return out
+}
+
+func cloneHelpers(source []*components.Helper) []*components.Helper {
+	out := make([]*components.Helper, len(source))
+	for i, value := range source {
+		if value == nil {
+			continue
+		}
+		cloned := *value
+		cloneNodeBaseAnimations(&cloned.NodeBase)
+		out[i] = &cloned
+	}
+	return out
+}
+
+func cloneEventObjects(source []*components.EventObject) []*components.EventObject {
+	out := make([]*components.EventObject, len(source))
+	for i, value := range source {
+		if value == nil {
+			continue
+		}
+		cloned := *value
+		cloneNodeBaseAnimations(&cloned.NodeBase)
+		cloned.Track = append([]components.EventTrackEntry(nil), value.Track...)
+		out[i] = &cloned
+	}
+	return out
+}
+
+func cloneCollisionShapes(source []*components.CollisionShape) []*components.CollisionShape {
+	out := make([]*components.CollisionShape, len(source))
+	for i, value := range source {
+		if value == nil {
+			continue
+		}
+		cloned := *value
+		cloneNodeBaseAnimations(&cloned.NodeBase)
+		cloned.Vertices = append([]imath.Vector3(nil), value.Vertices...)
+		out[i] = &cloned
+	}
+	return out
 }
 
 func cloneGeosetVertices(vertices []*components.GeosetVertex) []*components.GeosetVertex {

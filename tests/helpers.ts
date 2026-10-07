@@ -177,6 +177,23 @@ export async function exportedAssetsDir(base: string): Promise<string> {
 /** Same bound as Go map export: NumCPU()-1, at least 1, at most 8. */
 export const exportWorkers = mapExportWorkerCount();
 
+export interface SourceSequence {
+  readonly index: number;
+  readonly name: string;
+  readonly wowName: string;
+  readonly wowVariant: number;
+}
+
+export interface ExportedCharacterSource {
+  readonly modelScale: number;
+  readonly sequences: readonly SourceSequence[];
+}
+
+export interface ExportedCharacter {
+  readonly modelPath: string;
+  readonly source?: ExportedCharacterSource;
+}
+
 function mapExportWorkerCount(): number {
   const cpus = os.availableParallelism();
   const max = cpus <= 1 ? 1 : cpus - 1;
@@ -199,6 +216,24 @@ export async function runWorkers<T>(count: number, items: readonly T[], run: (it
 
 /** Writes `{outputFileName}.mdx`, or `{outputFileName}_mount.mdx` when the case has a mount. Returns that path. */
 export async function exportCharacter(base: string, outputFileName: string, testCase: ModelCase): Promise<string> {
+  return (await runCharacterExport(base, outputFileName, testCase, false)).modelPath;
+}
+
+/** Exports a model and reads its source scale and sequence identities when report metadata is available. */
+export async function exportCharacterWithMetadata(
+  base: string,
+  outputFileName: string,
+  testCase: ModelCase,
+): Promise<ExportedCharacter> {
+  return runCharacterExport(base, outputFileName, testCase, true);
+}
+
+async function runCharacterExport(
+  base: string,
+  outputFileName: string,
+  testCase: ModelCase,
+  includeMetadata: boolean,
+): Promise<ExportedCharacter> {
   const character: {
     base: { type: string; value: string };
     inGameMovespeed: number;
@@ -237,6 +272,7 @@ export async function exportCharacter(base: string, outputFileName: string, test
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       character,
+      ...(testCase.textureBaking !== undefined ? { textureBaking: testCase.textureBaking } : {}),
       outputFileName,
       optimization: {},
       format: 'mdx',
@@ -252,7 +288,11 @@ export async function exportCharacter(base: string, outputFileName: string, test
   let current = posted;
   while (Date.now() < deadline) {
     const status = readString(current, 'status');
-    if (status === 'done') return writtenModel(current, wanted);
+    if (status === 'done') {
+      const modelPath = writtenModel(current, wanted);
+      const source = includeMetadata ? readModelSourceMetadata(current, modelPath) : undefined;
+      return source ? { modelPath, source } : { modelPath };
+    }
     if (status === 'failed' || status === 'cancelled') {
       const error = readString(current, 'error');
       throw new Error(error !== '' ? error : status);
@@ -277,10 +317,54 @@ function writtenModel(body: unknown, wanted: string): string {
   }
   for (const item of body.result.exportedModels) {
     if (!isRecord(item) || typeof item.path !== 'string') continue;
-    const modelPath = item.path.replace(/\\/g, '/');
+    const modelPath = normalizeExportPath(item.path);
     if (modelPath === wanted) return modelPath;
   }
   throw new Error(`export did not write ${wanted}`);
+}
+
+function readModelSourceMetadata(body: unknown, modelPath: string): ExportedCharacterSource | undefined {
+  if (!isRecord(body) || !isRecord(body.result)) return undefined;
+  const reportMetadata = body.result.reportMetadata;
+  if (reportMetadata == null) return undefined;
+  if (!isRecord(reportMetadata) || !Array.isArray(reportMetadata.models)) {
+    throw new Error('export report metadata had no model list');
+  }
+  let model: Record<string, unknown> | undefined;
+  for (const candidate of reportMetadata.models) {
+    if (isRecord(candidate) && typeof candidate.path === 'string' && normalizeExportPath(candidate.path) === modelPath) {
+      model = candidate;
+      break;
+    }
+  }
+  if (!model) throw new Error(`export report metadata had no entry for ${modelPath}`);
+
+  const modelScale = model.modelScale;
+  if (typeof modelScale !== 'number' || !Number.isFinite(modelScale) || modelScale <= 0) {
+    throw new Error(`export report metadata had an invalid model scale for ${modelPath}`);
+  }
+  if (!Array.isArray(model.sequences)) throw new Error(`export report metadata had no sequence list for ${modelPath}`);
+  const sequences: SourceSequence[] = [];
+  for (const source of model.sequences) {
+    if (!isRecord(source)
+      || typeof source.index !== 'number' || !Number.isInteger(source.index) || source.index < 0
+      || typeof source.name !== 'string'
+      || typeof source.wowName !== 'string'
+      || typeof source.wowVariant !== 'number' || !Number.isInteger(source.wowVariant) || source.wowVariant < 0) {
+      throw new Error(`export report metadata had an invalid sequence for ${modelPath}`);
+    }
+    sequences.push({
+      index: source.index,
+      name: source.name,
+      wowName: source.wowName,
+      wowVariant: source.wowVariant,
+    });
+  }
+  return { modelScale, sequences };
+}
+
+function normalizeExportPath(modelPath: string): string {
+  return modelPath.replace(/\\/g, '/');
 }
 
 function readString(value: unknown, key: string): string {

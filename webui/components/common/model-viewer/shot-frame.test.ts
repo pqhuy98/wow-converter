@@ -90,12 +90,13 @@ describe('shot framing', () => {
       eye: vec3.fromValues(1 + offset[0], 2 + offset[1], 8 + offset[2]),
       up: vec3.fromValues(up[0], up[1], up[2]),
       modelMatrix,
-      height: 5,
+      height: 500, // Deliberately unrelated to the exported mesh's bounds.
+      modelScale: 20,
     };
     const points = new Float32Array([-20, -40, 0, 20, 40, 100, 40, -20, 60]);
     const camera = new Camera();
     camera.perspective(Math.PI / 4, 640 / 400, 8, 1_000_000);
-    frameReferenceCamera(camera, reference, points);
+    frameReferenceCamera(camera, reference);
     const sourceView = mat4.lookAt(mat4.create(), reference.eye, reference.target, reference.up);
     const sourceVP = mat4.multiply(mat4.create(), camera.projectionMatrix, sourceView);
     for (let i = 0; i < points.length; i += 3) {
@@ -108,11 +109,11 @@ describe('shot framing', () => {
     }
   });
 
-  test('rejects a missing reference height instead of making a blank shot', () => {
+  test('rejects an invalid export scale instead of making a blank shot', () => {
     const reference: ShotCameraReference = {
-      target: vec3.create(), eye: vec3.fromValues(0, 0, 10), up: vec3.fromValues(0, 1, 0), modelMatrix: mat4.create(), height: 0,
+      target: vec3.create(), eye: vec3.fromValues(0, 0, 10), up: vec3.fromValues(0, 1, 0), modelMatrix: mat4.create(), height: 0, modelScale: 0,
     };
-    expect(() => frameReferenceCamera(new Camera(), reference, new Float32Array([0, 0, 0, 0, 0, 10]))).toThrow();
+    expect(() => frameReferenceCamera(new Camera(), reference)).toThrow();
   });
 
   test('top is a true top-down with model forward toward the top of the frame', () => {

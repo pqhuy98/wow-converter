@@ -44,11 +44,12 @@ function buildCharacterGeosetMask(
     const matchingGeosets = geosetMask.filter((geoset) => geoset.id === subMeshId);
     if (matchingGeosets.length > 0) {
       matchingGeosets.forEach((geoset) => { geoset.checked = true; });
-      if (group === 0 || !turnOffOthers) return; // base geometry cannot be overridden
-      geosetMask.forEach((geoset) => {
-        if (group === geosetGroup(geoset.id) && geoset.id !== subMeshId) geoset.checked = false;
-      });
     }
+    if (group === 0 || !turnOffOthers || (matchingGeosets.length === 0 && subMeshId % 100 !== 0)) return;
+    // A missing x00 section represents None and still clears the group's default mesh.
+    geosetMask.forEach((geoset) => {
+      if (group === geosetGroup(geoset.id) && geoset.id !== subMeshId) geoset.checked = false;
+    });
   };
 
   const hideGeosetIds = body.hideGeosetIds ?? [];

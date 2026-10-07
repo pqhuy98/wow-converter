@@ -254,6 +254,55 @@ func TestUV2BakePreservesDeferredCharacterTextures(t *testing.T) {
 	}
 }
 
+func TestUV2BakeUsesTransparentBlackForUnboundOptionalReplaceable(t *testing.T) {
+	root := t.TempDir()
+	var vertices [3]*components.GeosetVertex
+	for i, uv := range []imath.Vector2{{0, 0}, {1, 0}, {0, 1}} {
+		vertices[i] = &components.GeosetVertex{TexPosition: uv}
+	}
+	geoset := &components.Geoset{
+		Material: &components.Material{Layers: []components.Layer{{Texture: &components.Texture{Image: "wrong-fallback.blp"}}}},
+		Vertices: vertices[:],
+		Faces:    []components.Face{{Vertices: vertices}},
+	}
+	model := mdl.New(mdl.NewMDLOptions{FormatVersion: 1000})
+	model.Geosets = []*components.Geoset{geoset}
+	result := ConvertResult{MDL: model, TexturePaths: map[string]struct{}{}}
+	loader := &m2.Loader{
+		Textures:      []m2.TextureEntry{{}},
+		TextureTypes:  []uint32{4},
+		TextureCombos: []uint16{0},
+		Materials:     []m2.MaterialEntry{{BlendingMode: 0}},
+	}
+	skin := &m2.Skin{
+		SubMeshes:    []m2.SkinSubMesh{{TriangleCount: 3}},
+		TextureUnits: []m2.SkinTextureUnit{{TextureCount: 1, ShaderID: 0x8022, ColorIndex: 65535}},
+	}
+	if err := bakeM2Materials(context.Background(), config.Config{ExportAssetDir: root}, nil, loader, skin, nil, ResolvedTextures{ValidTextures: map[any]m2export.TextureManifestEntry{}}, nil, &result); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		for rel := range result.TexturePaths {
+			texturesource.Unregister(rel)
+		}
+	})
+	texture := geoset.Material.Layers[0].Texture
+	if texture == nil || texture.WowData.PngPath == "" {
+		t.Fatal("unbound optional texture retained the original material instead of being baked")
+	}
+	source, ok := texturesource.Get(texture.WowData.PngPath)
+	if !ok {
+		t.Fatal("transparent-black replacement was not registered")
+	}
+	img, err := png.Decode(bytes.NewReader(source.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := color.NRGBAModel.Convert(img.At(0, 0)).(color.NRGBA); got != (color.NRGBA{}) {
+		t.Fatalf("unbound replaceable sampled %v, want transparent black", got)
+	}
+}
+
 func TestUV2BakeTransformAndSampler(t *testing.T) {
 	gs := components.NewGlobalSequence(0, 1000)
 	anim := &components.TextureAnim{Translation: &components.Animation{GlobalSeq: &gs, Interpolation: components.InterpLinear, KeyFrames: map[int]any{0: imath.Vector3{}, 1000: imath.Vector3{1, 0, 0}}}}

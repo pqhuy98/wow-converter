@@ -99,19 +99,6 @@ func TestM2EdgeFadeMatchesAllAngleFramebufferAverage(t *testing.T) {
 	}
 }
 
-func TestParticleColorAndAlphaMultipliersAreIndependent(t *testing.T) {
-	tex := [3][4]float64{{.5, .5, .5, .5}, {.5, .5, .5, .5}, {.25, .25, .25, .25}}
-	for _, tc := range []struct {
-		flags      uint32
-		rgb, alpha float64
-	}{{0, .5, .125}, {0x20000000, .5, .25}, {0x40000000, .25, .125}, {0x60000000, .25, .25}} {
-		out := combineParticleSamples(tex, tc.flags)
-		if out[0] != tc.rgb || out[3] != tc.alpha {
-			t.Fatalf("flags %#x: %v", tc.flags, out)
-		}
-	}
-}
-
 func TestLocalUVAtlasUsesSequenceIntervalsAndNoGlobalSequence(t *testing.T) {
 	track := &components.Animation{Interpolation: components.InterpLinear, KeyFrames: map[int]any{0: imath.Vector3{}, 100: imath.Vector3{1, 0, 0}, 101: imath.Vector3{2, 0, 0}, 201: imath.Vector3{3, 0, 0}}}
 	seqs := []components.Sequence{{Interval: [2]int{0, 100}}, {Interval: [2]int{101, 201}}}

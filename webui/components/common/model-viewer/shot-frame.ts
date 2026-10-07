@@ -27,13 +27,14 @@ export interface ShotCamera {
 /** Direction from the target to the camera, then the camera's world up. */
 export type ShotOffset = readonly [number, number, number, number, number, number]
 
-/** Captured Wowhead camera, plus its model-to-world transform and unscaled mesh height. */
+/** Captured Wowhead camera, its model-to-world transform, and exported units per source unit. */
 export interface ShotCameraReference {
   readonly target: vec3
   readonly eye: vec3
   readonly up: vec3
   readonly modelMatrix: mat4
   readonly height: number
+  readonly modelScale?: number
 }
 
 const SEQUENCE_STRIDE = 132;
@@ -129,11 +130,11 @@ export function frameShotCamera(camera: ShotCamera, box: ExtentBox, offset: Shot
 export function frameReferenceCamera(
   camera: ShotCamera,
   reference: ShotCameraReference,
-  points: Float32Array,
 ): void {
   const inverse = mat4.invert(mat4.create(), reference.modelMatrix);
-  const box = boundsOf(points);
-  const scale = (box.max[2] - box.min[2]) / reference.height;
+  // Legacy camera maps predate modelScale and describe default (56x) exports.
+  // Mesh bounds cannot calibrate units: equipment changes them independently.
+  const scale = reference.modelScale ?? 56;
   if (!inverse || !Number.isFinite(scale) || scale <= 0 || vec3.distance(reference.eye, reference.target) <= 0) {
     throw new Error('Invalid reference camera');
   }

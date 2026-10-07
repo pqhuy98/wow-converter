@@ -231,6 +231,27 @@ func GetGeosetIdsFromEquipments(equipments []EquipmentSlotData, chosenEquipments
 // FilterCollectionGeosets returns geosets to enable on a collection armor model.
 func FilterCollectionGeosets(equipmentSlots []EquipmentSlotData, slotData EquipmentSlotData, model *mdl.MDL) []*components.Geoset {
 	submeshIDList, _ := GetGeosetIdsFromEquipments(equipmentSlots, []EquipmentSlotData{slotData})
+	// An equipped item's zero group offset asks for its default mesh. This is
+	// different from a character customization's explicit None selection.
+	// For example the bandit mask requests 2700 but supplies default mesh 2701.
+	if model != nil {
+		for i, id := range submeshIDList {
+			group := id / 100
+			if id%100 != 0 || group >= len(zamGroupBaseOffset) || zamGroupBaseOffset[group] != 0 {
+				continue
+			}
+			hasExact := false
+			for _, g := range model.Geosets {
+				if g != nil && g.WowData.SubmeshID == id {
+					hasExact = true
+					break
+				}
+			}
+			if !hasExact {
+				submeshIDList[i] = id + 1
+			}
+		}
+	}
 	return geosetsMatchingSubmeshIDs(model, submeshIDList)
 }
 

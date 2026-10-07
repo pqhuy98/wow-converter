@@ -21,11 +21,13 @@ import (
 )
 
 type browser struct {
-	cmd     *exec.Cmd
-	conn    *websocket.Conn
-	profile string
-	address string
-	next    int
+	cmd           *exec.Cmd
+	conn          *websocket.Conn
+	profile       string
+	address       string
+	assetRequests map[string]bool
+	assetActivity time.Time
+	next          int
 }
 
 func openBrowser(ctx context.Context) (*browser, error) {
@@ -160,6 +162,8 @@ func (b *browser) call(ctx context.Context, method string, params any) (json.Raw
 	}
 	for {
 		var response struct {
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
 			ID     int             `json:"id"`
 			Result json.RawMessage `json:"result"`
 			Error  *struct {
@@ -169,6 +173,7 @@ func (b *browser) call(ctx context.Context, method string, params any) (json.Raw
 		if err := b.conn.ReadJSON(&response); err != nil {
 			return nil, err
 		}
+		b.trackAssetRequest(response.Method, response.Params)
 		if response.ID != b.next {
 			continue
 		}
@@ -177,6 +182,42 @@ func (b *browser) call(ctx context.Context, method string, params any) (json.Raw
 		}
 		return response.Result, nil
 	}
+}
+
+// Viewer readiness precedes its asynchronous body, equipment and texture loads.
+// Ignore page ads and analytics, which may keep loading indefinitely.
+func (b *browser) trackAssetRequest(method string, raw json.RawMessage) {
+	if method != "Network.requestWillBeSent" && method != "Network.loadingFinished" && method != "Network.loadingFailed" {
+		return
+	}
+	var event struct {
+		RequestID string `json:"requestId"`
+		Request   struct {
+			URL string `json:"url"`
+		} `json:"request"`
+	}
+	if json.Unmarshal(raw, &event) != nil {
+		return
+	}
+	if method == "Network.requestWillBeSent" {
+		if !strings.Contains(event.Request.URL, "/modelviewer/") {
+			return
+		}
+		if b.assetRequests == nil {
+			b.assetRequests = map[string]bool{}
+		}
+		b.assetRequests[event.RequestID] = true
+	} else {
+		if !b.assetRequests[event.RequestID] {
+			return
+		}
+		delete(b.assetRequests, event.RequestID)
+	}
+	b.assetActivity = time.Now()
+}
+
+func (b *browser) assetsReady() bool {
+	return len(b.assetRequests) == 0 && !b.assetActivity.IsZero() && time.Since(b.assetActivity) >= 750*time.Millisecond
 }
 
 func (b *browser) evaluate(ctx context.Context, expression string, dst any) error {

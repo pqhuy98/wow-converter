@@ -147,32 +147,21 @@ func (mod *Modify) AddDecayAnimation() *Modify {
 		return newKeyFrame
 	}
 
-	for _, bone := range mod.MDL.Bones {
-		if bone.Translation != nil && bone.Translation.GlobalSeq == nil {
-			bone.Translation.KeyFrames = updateKeyFrame(bone.Translation.KeyFrames)
-		}
-		if bone.Scaling != nil && bone.Scaling.GlobalSeq == nil {
-			bone.Scaling.KeyFrames = updateKeyFrame(bone.Scaling.KeyFrames)
-		}
-		if bone.Rotation != nil && bone.Rotation.GlobalSeq == nil {
-			bone.Rotation.KeyFrames = updateKeyFrame(bone.Rotation.KeyFrames)
-		}
-	}
-	for _, texAnim := range mod.MDL.TextureAnims {
-		if texAnim.Translation != nil && texAnim.Translation.GlobalSeq == nil {
-			texAnim.Translation.KeyFrames = updateKeyFrame(texAnim.Translation.KeyFrames)
-		}
-		if texAnim.Scaling != nil && texAnim.Scaling.GlobalSeq == nil {
-			texAnim.Scaling.KeyFrames = updateKeyFrame(texAnim.Scaling.KeyFrames)
-		}
-		if texAnim.Rotation != nil && texAnim.Rotation.GlobalSeq == nil {
-			texAnim.Rotation.KeyFrames = updateKeyFrame(texAnim.Rotation.KeyFrames)
-		}
-	}
-	for i := range mod.MDL.GeosetAnims {
-		ga := &mod.MDL.GeosetAnims[i]
-		if ga.Alpha != nil && !ga.Alpha.Static && ga.Alpha.Anim != nil {
-			ga.Alpha.Anim.KeyFrames = updateKeyFrame(ga.Alpha.Anim.KeyFrames)
+	// Every local channel shares the sequence timeline, including baked atlas
+	// page selection. Moving UV keys alone selects the wrong texture page.
+	for _, anim := range mod.MDL.GetAnimated() {
+		if anim.GlobalSeq == nil {
+			anim.KeyFrames = updateKeyFrame(anim.KeyFrames)
+			if anim.InOutTans != nil {
+				tans := make(map[int]components.InOutTan, len(anim.InOutTans))
+				for timestamp, tan := range anim.InOutTans {
+					if timestamp > deathTimestamp {
+						timestamp += offsetDuration
+					}
+					tans[timestamp] = tan
+				}
+				anim.InOutTans = tans
+			}
 		}
 	}
 	for i := range mod.MDL.Sequences {
@@ -227,20 +216,8 @@ func (mod *Modify) AddDecayAnimation() *Modify {
 		updateAnimKeyFrames(deathTimestamp, decayBoneSequence.Interval[1])
 	}
 
-	for i := range mod.MDL.GeosetAnims {
-		ga := &mod.MDL.GeosetAnims[i]
-		if ga.Alpha != nil && !ga.Alpha.Static {
-			copyAnimKeyFrames(ga.Alpha.Anim)
-		}
-		if ga.Color != nil && !ga.Color.Static {
-			copyAnimKeyFrames(ga.Color.Anim)
-		}
-	}
-	for i := range mod.MDL.TextureAnims {
-		ta := &mod.MDL.TextureAnims[i]
-		copyAnimKeyFrames(ta.Translation)
-		copyAnimKeyFrames(ta.Rotation)
-		copyAnimKeyFrames(ta.Scaling)
+	for _, anim := range mod.MDL.GetAnimated() {
+		copyAnimKeyFrames(anim)
 	}
 
 	for _, p := range mod.MDL.ParticleEmitter2s {

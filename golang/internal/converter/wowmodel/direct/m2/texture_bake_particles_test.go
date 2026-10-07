@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"image/color"
+	"math"
 	"testing"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
@@ -46,5 +47,34 @@ func TestParticleBakeKeepsAssembledWorldSize(t *testing.T) {
 				t.Fatalf("unit scale %v: baked size %v, want %v", unitScale, size, 4*unitScale)
 			}
 		}
+	}
+}
+
+func TestCombineParticleSamplesMatchesReferenceShader(t *testing.T) {
+	tex := [3][4]float64{
+		{.5, .8, .4, .6},
+		{.4, .5, .9, .7},
+		{.25, .5, .2, .3},
+	}
+	wantTwoColorTextures := [4]float64{.2, .4, .36, .126}
+	wantThreeColorTextures := [4]float64{.05, .2, .072, .126}
+	for _, tc := range []struct {
+		name  string
+		flags uint32
+		want  [4]float64
+	}{
+		{name: "two RGB textures and three alpha textures", want: wantTwoColorTextures},
+		{name: "0x20000000 does not add multipliers", flags: 0x20000000, want: wantTwoColorTextures},
+		{name: "three RGB textures", flags: 0x40000000, want: wantThreeColorTextures},
+		{name: "three RGB textures with 0x20000000", flags: 0x60000000, want: wantThreeColorTextures},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := combineParticleSamples(tex, tc.flags)
+			for channel := range got {
+				if math.Abs(got[channel]-tc.want[channel]) > 1e-12 {
+					t.Fatalf("flags %#x channel %d = %g, want %g (result %v)", tc.flags, channel, got[channel], tc.want[channel], got)
+				}
+			}
+		})
 	}
 }

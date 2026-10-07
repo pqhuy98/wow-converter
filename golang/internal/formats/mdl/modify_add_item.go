@@ -10,13 +10,18 @@ import (
 )
 
 func (mod *Modify) AddMdlItemToBone(item *MDL, bone *components.Bone) *Modify {
-	for i, seq := range item.Sequences {
-		if seq.Name == "Stand" {
-			item.Sequences = []components.Sequence{item.Sequences[i]}
-			break
-		}
+	sequence, hasSequence := selectedItemSequence(item.Sequences)
+	if hasSequence {
+		item.Sequences = []components.Sequence{sequence}
+		item.Modify.globalizeLocalAnimations(sequence)
+	} else {
+		// With no sequence clock, keep local keys intact instead of letting the
+		// optimizer discard every non-global animation.
+		item.Sequences = nil
 	}
-	item.Modify.OptimizeKeyFrames()
+	if hasSequence {
+		item.Modify.OptimizeKeyFrames()
+	}
 
 	for _, b := range item.GetNodes() {
 		if b.NodeParent() == nil {
@@ -59,8 +64,9 @@ func (mod *Modify) AddItemPathToBone(itemPath string, bone *components.Bone, kee
 }
 
 func (mod *Modify) AddMdlCollectionItemToModel(item *MDL) *Modify {
-	if len(item.Sequences) > 0 {
-		item.Sequences = []components.Sequence{item.Sequences[0]}
+	sequence, hasSequence := selectedItemSequence(item.Sequences)
+	if hasSequence {
+		item.Sequences = []components.Sequence{sequence}
 	}
 	boneMap := map[string]*components.Bone{}
 	for _, b := range mod.MDL.Bones {
@@ -94,9 +100,81 @@ func (mod *Modify) AddMdlCollectionItemToModel(item *MDL) *Modify {
 			}
 		}
 	}
+	for _, node := range item.GetNodes() {
+		if _, isBone := node.(*components.Bone); isBone {
+			continue
+		}
+		parentBone, ok := node.NodeParent().(*components.Bone)
+		if !ok {
+			continue
+		}
+		mainBone, err := getMainBone(parentBone)
+		if err != nil {
+			panic(err)
+		}
+		node.SetNodeParent(mainBone)
+	}
 	item.Bones = nil
+	if hasSequence {
+		item.Modify.globalizeLocalAnimations(sequence)
+	}
 	mergeItemObjects(mod.MDL, item)
 	return mod
+}
+
+func selectedItemSequence(sequences []components.Sequence) (components.Sequence, bool) {
+	for _, sequence := range sequences {
+		if sequence.Name == "Stand" {
+			return sequence, true
+		}
+	}
+	if len(sequences) > 0 {
+		return sequences[0], true
+	}
+	return components.Sequence{}, false
+}
+
+func (mod *Modify) globalizeLocalAnimations(sequence components.Sequence) {
+	start, end := sequence.Interval[0], sequence.Interval[1]
+	duration := end - start
+	if duration <= 0 {
+		return
+	}
+	animations := mod.MDL.GetAnimated()
+	needsGlobalSequence := false
+	for _, anim := range animations {
+		if anim.GlobalSeq == nil {
+			needsGlobalSequence = true
+			break
+		}
+	}
+	if !needsGlobalSequence {
+		return
+	}
+	globalSequence := components.NewGlobalSequence(len(mod.MDL.GlobalSequences), duration)
+	globalSequence.HasRawID = false
+	mod.MDL.GlobalSequences = append(mod.MDL.GlobalSequences, &globalSequence)
+
+	for _, anim := range animations {
+		if anim.GlobalSeq != nil {
+			continue
+		}
+		keyFrames := components.CloneKeyFrames(anim.KeyFrames)
+		inOutTans := anim.InOutTans
+		anim.KeyFrames = map[int]any{}
+		anim.InOutTans = map[int]components.InOutTan{}
+		for timestamp := range keyFrames {
+			if timestamp < start || timestamp > end {
+				continue
+			}
+			rebased := timestamp - start
+			anim.KeyFrames[rebased] = keyFrames[timestamp]
+			if tangent, ok := inOutTans[timestamp]; ok {
+				anim.InOutTans[rebased] = tangent
+			}
+		}
+		anim.GlobalSeq = &globalSequence
+	}
 }
 
 func CanAddMdlCollectionItemToModel(main *MDL, item *MDL) bool {
@@ -105,12 +183,19 @@ func CanAddMdlCollectionItemToModel(main *MDL, item *MDL) bool {
 			return false
 		}
 	}
-	boneMap := map[string]struct{}{}
+	boneMap := map[string]*components.Bone{}
 	for _, b := range main.Bones {
-		boneMap[b.Name] = struct{}{}
+		boneMap[b.Name] = b
 	}
 	for _, b := range item.Bones {
-		if _, ok := boneMap[b.Name]; !ok {
+		mainBone, ok := boneMap[b.Name]
+		if !ok {
+			return false
+		}
+		// A local attachment can reuse a key-bone name (for example Buckle)
+		// as its root. A partial collection can also omit that bone's parent,
+		// but retains its character-space bind pivot. Allow float roundoff.
+		if b.NodeParent() == nil && mainBone.NodeParent() != nil && imath.V3Distance(b.PivotPoint, mainBone.PivotPoint) > 1e-3 {
 			return false
 		}
 	}

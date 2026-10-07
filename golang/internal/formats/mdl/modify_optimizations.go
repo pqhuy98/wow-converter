@@ -279,7 +279,7 @@ func (mod *Modify) OptimizeKeyFrames() *Modify {
 
 	inSequence := func(anim *components.Animation, timestamp int, cursor *int) bool {
 		if anim.GlobalSeq != nil {
-			return timestamp < anim.GlobalSeq.Duration
+			return timestamp <= anim.GlobalSeq.Duration
 		}
 		i := *cursor
 		for i < len(seqIntervals) && seqIntervals[i][1] < timestamp {

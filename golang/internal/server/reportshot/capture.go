@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	appconfig "github.com/pqhuy98/wow-converter/internal/config"
+
 	pngtools "github.com/pqhuy98/wow-converter/internal/formats/png"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
@@ -42,6 +44,7 @@ type Request struct {
 	WowheadURL     string
 	WowSequence    string
 	WowVariant     int
+	ModelScale     float64
 	aims           []chan frameAim
 	cameras        []chan cameraReference
 	sequencePrefix bool
@@ -53,6 +56,7 @@ type cameraReference struct {
 	Up          [3]float64  `json:"up"`
 	ModelMatrix [16]float64 `json:"modelMatrix"`
 	Height      float64     `json:"height"`
+	ModelScale  float64     `json:"modelScale,omitempty"`
 }
 
 type frameAim struct {
@@ -380,7 +384,7 @@ func prepareWowheadPage(ctx context.Context, b *browser, request Request) error 
 		}
 		var ready bool
 		err := b.evaluate(ctx, `!!(window.__whViewer&&window.__whViewer.renderer)`, &ready)
-		return ready, err
+		return ready && b.assetsReady(), err
 	}); err != nil {
 		return fmt.Errorf("Wowhead viewer could not load: %w", err)
 	}
@@ -462,6 +466,10 @@ func shootWowheadViews(ctx context.Context, b *browser, request Request, indices
 		}
 		if reference.Height <= 0 || reference.Eye == reference.Target {
 			return nil, nil, errors.New("Wowhead did not provide a valid reference camera.")
+		}
+		reference.ModelScale = request.ModelScale
+		if reference.ModelScale == 0 {
+			reference.ModelScale = appconfig.DefaultConfig().RawModelScaleUp
 		}
 		if request.cameras != nil {
 			request.cameras[index] <- reference

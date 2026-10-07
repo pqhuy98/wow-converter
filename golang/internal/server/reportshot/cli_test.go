@@ -64,6 +64,31 @@ func TestShotArgsPreserveSingleAndMultipleViews(t *testing.T) {
 	}
 }
 
+func TestShotArgsModelScale(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want float64
+	}{
+		{name: "default", args: []string{"model.mdx"}, want: 0},
+		{name: "explicit", args: []string{"model.mdx", "--model-scale", "84.5"}, want: 84.5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts, err := parseShotArgs("converter", tc.args, io.Discard)
+			if err != nil || opts.request.ModelScale != tc.want {
+				t.Fatalf("model scale %v, error %v; want %v", opts.request.ModelScale, err, tc.want)
+			}
+		})
+	}
+	for _, value := range []string{"-1", "NaN", "+Inf", "-Inf"} {
+		t.Run(value, func(t *testing.T) {
+			if _, err := parseShotArgs("converter", []string{"model.mdx", "--model-scale", value}, io.Discard); err == nil {
+				t.Fatalf("accepted invalid model scale %q", value)
+			}
+		})
+	}
+}
+
 // Uses a local page to prove that a CLI single-view shot does not shoot the other five.
 func TestShotCLISingleViewUsesServerCaptureAndLabel(t *testing.T) {
 	if os.Getenv("REPORT_SHOT_CLI_TEST") != "1" {
@@ -113,7 +138,7 @@ window.__shotView=async name=>{const c=document.querySelector('canvas').getConte
 
 func TestShotCamerasJSONRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cameras.json")
-	want := cameraReference{Target: [3]float64{1, 2, 3}, Eye: [3]float64{4, 5, 6}, Up: [3]float64{0, 0, 1}, Height: 7}
+	want := cameraReference{Target: [3]float64{1, 2, 3}, Eye: [3]float64{4, 5, 6}, Up: [3]float64{0, 0, 1}, Height: 7, ModelScale: 56}
 	if err := writeShotCameras(path, []int{0}, []cameraReference{want}); err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +150,29 @@ func TestShotCamerasJSONRoundTrip(t *testing.T) {
 	case got := <-opts.request.cameras[0]:
 		if got != want {
 			t.Fatalf("camera %+v", got)
+		}
+	default:
+		t.Fatal("missing loaded camera")
+	}
+}
+
+func TestShotCamerasJSONUsesRequestedModelScale(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cameras.json")
+	camera := cameraReference{Target: [3]float64{1, 2, 3}, Eye: [3]float64{4, 5, 6}, Up: [3]float64{0, 0, 1}, Height: 7, ModelScale: 56}
+	if err := writeShotCameras(path, []int{0}, []cameraReference{camera}); err != nil {
+		t.Fatal(err)
+	}
+	opts, err := parseShotArgs("converter", []string{"model.mdx", "--view", "front", "--model-scale", "84", "--cameras", path}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := loadShotCameras(&opts); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-opts.request.cameras[0]:
+		if got.ModelScale != 84 {
+			t.Fatalf("camera model scale %v, want CLI override 84", got.ModelScale)
 		}
 	default:
 		t.Fatal("missing loaded camera")

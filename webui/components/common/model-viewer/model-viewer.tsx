@@ -316,27 +316,42 @@ export default function ModelViewerUi({
       // remounts or the viewer asks for the same texture twice.
       const base = baseUrlRef.current;
       const inflight = new Map<string, Promise<ArrayBuffer>>();
+      let pendingPathRequests = 0;
+      let releasePendingPathRequests: (() => void) | undefined;
+      const releasePathRequest = () => {
+        pendingPathRequests--;
+        if (pendingPathRequests === 0) {
+          releasePendingPathRequests?.();
+          releasePendingPathRequests = undefined;
+        }
+      };
       const pathSolver = (src: unknown): Promise<ArrayBuffer> => {
         const rel = normalizePath(String(src));
         const url = `${base}/${rel}`;
-        const cached = inflight.get(url);
-        if (cached) return cached;
-        const pending = fetch(url).then(async (res) => {
-          if (!res.ok) throw new Error(`${res.status} ${url}`);
-          const buf = await res.arrayBuffer();
-          if (!cancelled && loadRequestIdRef.current === requestId) {
-            const files = loadedFilesRef.current;
-            if (!files.has(rel)) {
-              files.set(rel, buf.byteLength);
-              let total = 0;
-              for (const n of files.values()) total += n;
-              setLoadedCount(files.size);
-              setLoadedBytes(total);
+        let pending = inflight.get(url);
+        if (!pending) {
+          pending = fetch(url).then(async (res) => {
+            if (!res.ok) throw new Error(`${res.status} ${url}`);
+            const buf = await res.arrayBuffer();
+            if (!cancelled && loadRequestIdRef.current === requestId) {
+              const files = loadedFilesRef.current;
+              if (!files.has(rel)) {
+                files.set(rel, buf.byteLength);
+                let total = 0;
+                for (const n of files.values()) total += n;
+                setLoadedCount(files.size);
+                setLoadedBytes(total);
+              }
             }
-          }
-          return buf;
-        });
-        inflight.set(url, pending);
+            return buf;
+          });
+          inflight.set(url, pending);
+        }
+        // viewer.load() awaits this solver promise before registering its own
+        // promiseMap entry, so hold the viewer's idle gate across that gap.
+        if (pendingPathRequests === 0) releasePendingPathRequests = viewer.promise();
+        pendingPathRequests++;
+        void pending.then(releasePathRequest, releasePathRequest);
         return pending;
       };
       if (shot) {
@@ -741,7 +756,8 @@ export default function ModelViewerUi({
     let cancelled = false;
     delete document.documentElement.dataset.viewerReady;
     void (async () => {
-      await viewer.whenAllLoaded();
+      // A queued idle event can arrive after another dependency starts loading.
+      do { await viewer.whenAllLoaded(); } while (viewer.promiseMap.size > 0);
       if (cancelled) return;
       const scene = sceneRef.current;
       const live = instanceRef.current;
@@ -1238,8 +1254,8 @@ function shotExtentBox(extents: ShotExtents, inst: MdxModelInstance): ExtentBox 
 function applyShotView(scene: Scene, inst: MdxModelInstance, view: string, extents: ShotExtents | null, reference?: ShotCameraReference): void {
   const offset = shotViewOffset(view);
   const topDown = view === 'top' || view === 'bottom';
-  if (reference && extents?.points.length) {
-    frameReferenceCamera(scene.camera, reference, extents.points);
+  if (reference) {
+    frameReferenceCamera(scene.camera, reference);
     return;
   }
   const box = extents ? shotExtentBox(extents, inst) : null;

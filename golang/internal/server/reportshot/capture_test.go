@@ -135,8 +135,9 @@ func exportLichKing(ctx context.Context, base string) (Request, error) {
 			ExportedModels []struct{ Path string }
 			ReportMetadata struct {
 				Models []struct {
-					Path      string
-					Sequences []struct {
+					Path       string
+					ModelScale float64
+					Sequences  []struct {
 						Name, WowName string
 						WowVariant    int
 					}
@@ -185,6 +186,7 @@ func exportLichKing(ctx context.Context, base string) (Request, error) {
 			for _, seq := range model.Sequences {
 				if seq.WowName == "Stand" && seq.WowVariant == 0 {
 					request.Model, request.Sequence = asset.Path, seq.Name
+					request.ModelScale = model.ModelScale
 					request.WowSequence, request.WowVariant = seq.WowName, seq.WowVariant
 					return request, nil
 				}
@@ -207,12 +209,12 @@ func TestLichKingCaptureAlwaysExportsAndUsesReturnedMetadata(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprint(w, `{"id":"fresh","status":"done","result":{"exportedModels":[{"path":"fresh-lich-king.mdx"}],"reportMetadata":{"models":[{"path":"fresh-lich-king.mdx","sequences":[{"name":"Stand 7","wowName":"Stand","wowVariant":0}]}]}}}`)
+		fmt.Fprint(w, `{"id":"fresh","status":"done","result":{"exportedModels":[{"path":"fresh-lich-king.mdx"}],"reportMetadata":{"models":[{"path":"fresh-lich-king.mdx","modelScale":32.5,"sequences":[{"name":"Stand 7","wowName":"Stand","wowVariant":0}]}]}}}`)
 	}))
 	defer server.Close()
 	for i := 0; i < 2; i++ {
 		request, err := exportLichKing(context.Background(), server.URL)
-		if err != nil || request.Model != "fresh-lich-king.mdx" || request.Sequence != "Stand 7" || request.WowSequence != "Stand" {
+		if err != nil || request.Model != "fresh-lich-king.mdx" || request.Sequence != "Stand 7" || request.WowSequence != "Stand" || request.ModelScale != 32.5 {
 			t.Fatalf("fresh request: %+v %v", request, err)
 		}
 	}

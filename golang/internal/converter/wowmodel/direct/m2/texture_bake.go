@@ -42,6 +42,25 @@ const bakeChartPixels = 1024 * 1024
 var errUV2BakeUnsupported = errors.New("UV2 baking unavailable")
 var errBakeChartLimit = errors.New("shader chart working-memory limit")
 
+func unboundOptionalReplaceableTexture(loader *m2.Loader, index int, resolved ResolvedTextures) bool {
+	if index < 0 || index >= len(loader.Textures) || index >= len(loader.TextureTypes) {
+		return false
+	}
+	tex := loader.Textures[index]
+	textureType := loader.TextureTypes[index]
+	if textureType <= 0 || textureType == 1 || tex.FileDataID != 0 || tex.FileName != "" {
+		return false
+	}
+	if _, found := resolved.ValidTextures[tex.FileDataID]; found {
+		return false
+	}
+	if _, found := resolved.ValidTextures[tex.FileName]; found {
+		return false
+	}
+	_, found := resolved.ValidTextures[fmt.Sprintf("data-%d", textureType)]
+	return !found
+}
+
 type bakePixel struct {
 	uv1, uv2 imath.Vector2
 	env      imath.Vector2
@@ -60,9 +79,10 @@ type bakeChart struct {
 }
 
 type bakeChartOptions struct {
-	conflict func(bakePixel, bakePixel) bool
-	sourceUV map[*components.GeosetVertex][2]imath.Vector2
-	prepare  func(*bakePixel)
+	conflict      func(bakePixel, bakePixel) bool
+	sourceUV      map[*components.GeosetVertex][2]imath.Vector2
+	domain2ByFace []bool
+	prepare       func(*bakePixel)
 }
 
 // bakeUV2Materials evaluates the WoW fragment combiner before framebuffer
@@ -98,6 +118,15 @@ func bakeM2Materials(ctx context.Context, cfg config.Config, src FileSource, loa
 		}
 		if !found && index < len(loader.TextureTypes) {
 			entry, found = resolved.ValidTextures[fmt.Sprintf("data-%d", loader.TextureTypes[index])]
+		}
+		if unboundOptionalReplaceableTexture(loader, index, resolved) {
+			// WCpp binds an unbound replaceable sampler to a transparent black
+			// texture. Keep that behavior for optional shader slots. Type 1 is the
+			// deferred character skin and must remain unsupported until baking has
+			// access to the selected skin image.
+			img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+			decoded[index] = img
+			return img, nil
 		}
 		var img *image.NRGBA
 		if found {
@@ -227,7 +256,14 @@ units:
 		var nativeMasks []nativeMaskDraw
 		var opaqueRemainder *components.Geoset
 		var opaqueBase *components.Geoset
-		if cfg.TextureBaking.Flipbook() {
+		allTexturesBound := true
+		for sampler := range program.count {
+			index := int(loader.TextureCombos[combo+sampler])
+			if unboundOptionalReplaceableTexture(loader, index, resolved) {
+				allTexturesBound = false
+			}
+		}
+		if allTexturesBound && cfg.TextureBaking.Flipbook() {
 			if unit.ColorIndex == 65535 && layer.Alpha.Static && layer.Alpha.Value == 1 && !layer.NoDepthSet && !layer.NoDepthTest {
 				opaqueRemainder, opaqueBase, environmentFactor = nativeOpaqueProduct(g, program)
 			}
@@ -337,7 +373,7 @@ units:
 			}
 			result.MDL.Materials = append(result.MDL.Materials, g.Material)
 			log.Printf("M2 native detail %s: %d mask groups, full-resolution %dx%d texture", g.Name, len(nativeMasks), program.images[1].Bounds().Dx(), program.images[1].Bounds().Dy())
-		} else if description.pixel == 12 && material.BlendingMode == 0 {
+		} else if allTexturesBound && description.pixel == 12 && material.BlendingMode == 0 {
 			// Opaque_EnvMetal factorizes exactly as diffuse * reflectionFactor.
 			// Keep the full-resolution source diffuse; only the smoother factor
 			// needs a chart atlas and Classic's framebuffer Modulate2x pass.
@@ -358,7 +394,7 @@ units:
 				v.TexPosition2 = nil
 			}
 			result.MDL.Materials = append(result.MDL.Materials, g.Material)
-		} else if unitsPerSection[unit.SkinSectionIndex] == 0 && program.count == 1 && !description.edge && description.coords[0] != coordEnv && material.BlendingMode != 3 && material.BlendingMode != 6 && material.BlendingMode != 7 && (description.pixel == 1 || description.pixel == 0 && material.BlendingMode == 0) {
+		} else if allTexturesBound && unitsPerSection[unit.SkinSectionIndex] == 0 && program.count == 1 && !description.edge && description.coords[0] != coordEnv && material.BlendingMode != 3 && material.BlendingMode != 6 && material.BlendingMode != 7 && (description.pixel == 1 || description.pixel == 0 && material.BlendingMode == 0) {
 			coord := description.coords[0]
 			matrix := 0
 			if coord == coordT1M1 || coord == coordT2M1 {
@@ -755,15 +791,15 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 	minUV2, maxUV2 := minUV, maxUV
 	for _, f := range g.Faces {
 		for _, v := range f.Vertices {
-			if v.TexPosition2 == nil {
-				uv := v.TexPosition
-				v.TexPosition2 = &uv
-			}
 			for axis := range 2 {
 				minUV[axis] = min(minUV[axis], v.TexPosition[axis])
 				maxUV[axis] = max(maxUV[axis], v.TexPosition[axis])
-				minUV2[axis] = min(minUV2[axis], (*v.TexPosition2)[axis])
-				maxUV2[axis] = max(maxUV2[axis], (*v.TexPosition2)[axis])
+				uv2 := v.TexPosition
+				if v.TexPosition2 != nil {
+					uv2 = *v.TexPosition2
+				}
+				minUV2[axis] = min(minUV2[axis], uv2[axis])
+				maxUV2[axis] = max(maxUV2[axis], uv2[axis])
 			}
 		}
 	}
@@ -772,10 +808,36 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 	// Triangle coverage detects compressed gradient swatches even when a few
 	// outlying UVs make their overall bounding box look like a full unwrap.
 	domain2 := span2[0] > 1e-9 && span2[1] > 1e-9 && (span[0] <= 1e-9 || span[1] <= 1e-9 || bakePreferUV2(g, program))
-	if domain2 {
+	domain2ByFace := bakeDomainsByFace(g, program, domain2)
+	mixedDomains := false
+	for _, faceDomain2 := range domain2ByFace {
+		if faceDomain2 != domain2 {
+			mixedDomains = true
+			break
+		}
+	}
+	if mixedDomains {
+		minUV, maxUV = imath.Vector2{math.Inf(1), math.Inf(1)}, imath.Vector2{math.Inf(-1), math.Inf(-1)}
+		for fi, f := range g.Faces {
+			for _, v := range f.Vertices {
+				uv := v.TexPosition
+				if domain2ByFace[fi] && v.TexPosition2 != nil {
+					uv = *v.TexPosition2
+				}
+				for axis := range 2 {
+					minUV[axis] = min(minUV[axis], uv[axis])
+					maxUV[axis] = max(maxUV[axis], uv[axis])
+				}
+			}
+		}
+		span = imath.Vector2{maxUV[0] - minUV[0], maxUV[1] - minUV[1]}
+	} else if domain2 {
 		minUV, maxUV, span = minUV2, maxUV2, span2
 	}
 	chartOptions := bakeChartOptions{conflict: program.conflict, prepare: program.prepare}
+	if mixedDomains {
+		chartOptions.domain2ByFace = domain2ByFace
+	}
 	if span[0] <= 1e-9 || span[1] <= 1e-9 {
 		// Uniform/gradient swatches can have no surface unwrap at all. Make a
 		// planar raster domain while preserving the UVs used by the shader.
@@ -794,13 +856,19 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 		})
 		chartOptions.sourceUV = map[*components.GeosetVertex][2]imath.Vector2{}
 		for _, v := range g.Vertices {
-			chartOptions.sourceUV[v] = [2]imath.Vector2{v.TexPosition, *v.TexPosition2}
+			uv2 := v.TexPosition
+			if v.TexPosition2 != nil {
+				uv2 = *v.TexPosition2
+			}
+			chartOptions.sourceUV[v] = [2]imath.Vector2{v.TexPosition, uv2}
 			v.TexPosition = imath.Vector2{v.Position[axes[0]], v.Position[axes[1]]}
 		}
 		minUV = imath.Vector2{boundsMin[axes[0]], boundsMin[axes[1]]}
 		maxUV = imath.Vector2{boundsMax[axes[0]], boundsMax[axes[1]]}
 		span = imath.Vector2{maxUV[0] - minUV[0], maxUV[1] - minUV[1]}
 		domain2 = false
+		domain2ByFace = nil
+		chartOptions.domain2ByFace = nil
 		log.Printf("Shader bake %s: generated a planar surface domain for degenerate UVs", g.Name)
 	}
 	if span[0] <= 1e-9 || span[1] <= 1e-9 || !finiteBakeUV(minUV) || !finiteBakeUV(maxUV) {
@@ -811,6 +879,10 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 		limit = 1024
 	}
 	w, h := bakeRasterSize(span, program, domain2, limit)
+	if mixedDomains {
+		otherW, otherH := bakeRasterSize(span, program, !domain2, limit)
+		w, h = max(w, otherW), max(h, otherH)
+	}
 	constantUV2 := [2]bool{}
 	other := 1
 	if domain2 {
@@ -878,29 +950,25 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 	for frameW > 2048 || frameH > 2048 || width*height*passes > budget {
 		// Preserve surface detail before spending the budget on temporal samples.
 		// Crowded effect meshes use fewer frames rather than tiny, blurred charts.
-		if w <= 256 && h <= 256 && frames > 4 {
-			plan = reduceBakeTimeline(plan)
+		reduced := plan
+		if w <= 256 && h <= 256 && (frames > 4 || w <= 16 && h <= 16) {
+			reduced = reduceBakeTimeline(plan)
+		}
+		if len(reduced.moments) < frames {
+			plan = reduced
 			frames = len(plan.moments)
 			frameCols = bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(frames)))))
 			frameRows = bakePowerOfTwo((frames + frameCols - 1) / frameCols)
 		} else if w <= 16 && h <= 16 {
-			if frames > 1 {
-				reduced := reduceBakeTimeline(plan)
-				if len(reduced.moments) == frames {
-					break // Every sequence needs at least one distinct material state.
-				}
-				plan = reduced
-				frames = len(plan.moments)
-				frameCols = bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(frames)))))
-				frameRows = bakePowerOfTwo((frames + frameCols - 1) / frameCols)
-			} else {
-				break
-			}
+			break // Every local sequence needs at least one material state.
 		} else {
+			// Reduction can reach one frame per sequence while frames is still
+			// greater than four. Shrink space then; retrying the same timeline
+			// would loop forever. Temporal changes do not require new charts.
 			shrinkRaster()
-		}
-		if err := buildCharts(); err != nil {
-			return err
+			if err := buildCharts(); err != nil {
+				return err
+			}
 		}
 		width, height = frameW*frameCols, frameH*frameRows
 	}
@@ -1145,19 +1213,28 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 	}
 	g.Material = &material
 	result.MDL.Materials = append(result.MDL.Materials, g.Material)
-	vertices := make([]map[*components.GeosetVertex]*components.GeosetVertex, len(charts))
+	type bakeVertexKey struct {
+		vertex  *components.GeosetVertex
+		domain2 bool
+	}
+	vertices := make([]map[bakeVertexKey]*components.GeosetVertex, len(charts))
 	for ci := range vertices {
-		vertices[ci] = map[*components.GeosetVertex]*components.GeosetVertex{}
+		vertices[ci] = map[bakeVertexKey]*components.GeosetVertex{}
 	}
 	g.Vertices = nil
 	for fi := range g.Faces {
 		ci := faceCharts[fi]
+		faceDomain2 := domain2
+		if len(domain2ByFace) > fi {
+			faceDomain2 = domain2ByFace[fi]
+		}
 		for vi, original := range g.Faces[fi].Vertices {
-			v := vertices[ci][original]
+			key := bakeVertexKey{vertex: original, domain2: faceDomain2}
+			v := vertices[ci][key]
 			if v == nil {
 				copyVertex := *original
 				uv := original.TexPosition
-				if domain2 {
+				if faceDomain2 && original.TexPosition2 != nil {
 					uv = *original.TexPosition2
 				}
 				copyVertex.TexPosition = imath.Vector2{
@@ -1166,7 +1243,7 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 				}
 				copyVertex.TexPosition2 = nil
 				v = &copyVertex
-				vertices[ci][original] = v
+				vertices[ci][key] = v
 				g.Vertices = append(g.Vertices, v)
 			}
 			g.Faces[fi].Vertices[vi] = v
@@ -1177,6 +1254,16 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 }
 
 func bakePreferUV2(g *components.Geoset, p bakeProgram) bool {
+	weight := bakeUVTexelWeights(p)
+	area := [2]float64{}
+	for _, f := range g.Faces {
+		area[0] += bakeFaceUVArea(f, false)
+		area[1] += bakeFaceUVArea(f, true)
+	}
+	return area[1]*weight[1] > area[0]*weight[0]*1.01
+}
+
+func bakeUVTexelWeights(p bakeProgram) [2]float64 {
 	weight := [2]float64{}
 	for i := range p.count {
 		axis := -1
@@ -1190,20 +1277,33 @@ func bakePreferUV2(g *components.Geoset, p bakeProgram) bool {
 			weight[axis] = max(weight[axis], float64(p.images[i].Bounds().Dx()*p.images[i].Bounds().Dy()))
 		}
 	}
-	area := [2]float64{}
-	for _, f := range g.Faces {
-		for axis := range 2 {
-			uv := [3]imath.Vector2{}
-			for i, v := range f.Vertices {
-				uv[i] = v.TexPosition
-				if axis == 1 && v.TexPosition2 != nil {
-					uv[i] = *v.TexPosition2
-				}
-			}
-			area[axis] += math.Abs((uv[1][0]-uv[0][0])*(uv[2][1]-uv[0][1]) - (uv[1][1]-uv[0][1])*(uv[2][0]-uv[0][0]))
+	return weight
+}
+
+func bakeFaceUVArea(face components.Face, domain2 bool) float64 {
+	var uv [3]imath.Vector2
+	for i, v := range face.Vertices {
+		uv[i] = v.TexPosition
+		if domain2 && v.TexPosition2 != nil {
+			uv[i] = *v.TexPosition2
 		}
 	}
-	return area[1]*weight[1] > area[0]*weight[0]*1.01
+	return math.Abs((uv[1][0]-uv[0][0])*(uv[2][1]-uv[0][1]) - (uv[1][1]-uv[0][1])*(uv[2][0]-uv[0][0]))
+}
+
+func bakeDomainsByFace(g *components.Geoset, p bakeProgram, preferUV2 bool) []bool {
+	weights := bakeUVTexelWeights(p)
+	domains := make([]bool, len(g.Faces))
+	for i, face := range g.Faces {
+		domains[i] = preferUV2
+		area1, area2 := bakeFaceUVArea(face, false)*weights[0], bakeFaceUVArea(face, true)*weights[1]
+		if area1 > area2*1.01 {
+			domains[i] = false
+		} else if area2 > area1*1.01 {
+			domains[i] = true
+		}
+	}
+	return domains
 }
 
 // Preserve source texel proportions when shrinking charts. Atlas packing can
@@ -1262,19 +1362,36 @@ func buildBakeCharts(g *components.Geoset, minUV, span imath.Vector2, w, h int, 
 		pixel bakePixel
 	}
 	var writes []pixelWrite
+	mixedDomains := false
+	if len(opt.domain2ByFace) == len(g.Faces) {
+		for _, faceDomain2 := range opt.domain2ByFace {
+			if faceDomain2 != domain2 {
+				mixedDomains = true
+				break
+			}
+		}
+	}
 	for fi, face := range g.Faces {
 		var points [3]imath.Vector2
 		var coordinates [3][2]imath.Vector2
 		var environment [3]imath.Vector2
+		faceDomain2 := domain2
+		if len(opt.domain2ByFace) == len(g.Faces) {
+			faceDomain2 = opt.domain2ByFace[fi]
+		}
 		for i, v := range face.Vertices {
-			coordinates[i] = [2]imath.Vector2{v.TexPosition, *v.TexPosition2}
+			uv2 := v.TexPosition
+			if v.TexPosition2 != nil {
+				uv2 = *v.TexPosition2
+			}
+			coordinates[i] = [2]imath.Vector2{v.TexPosition, uv2}
 			if original, ok := opt.sourceUV[v]; ok {
 				coordinates[i] = original
 			}
 			environment[i] = env[v]
 			uv := v.TexPosition
-			if domain2 {
-				uv = *v.TexPosition2
+			if faceDomain2 {
+				uv = uv2
 			}
 			points[i] = imath.Vector2{float64(bakePadding) + (uv[0]-minUV[0])/span[0]*float64(w-2*bakePadding), float64(bakePadding) + (uv[1]-minUV[1])/span[1]*float64(h-2*bakePadding)}
 		}
@@ -1366,10 +1483,14 @@ func buildBakeCharts(g *components.Geoset, minUV, span imath.Vector2, w, h int, 
 					checkConflict = shared < 2
 				}
 				a, b := old.uv2, write.pixel.uv2
-				if domain2 {
+				uvMismatch := math.Abs(a[0]-b[0]) > 1e-4 || math.Abs(a[1]-b[1]) > 1e-4
+				if mixedDomains {
+					uvMismatch = uvMismatch || math.Abs(old.uv1[0]-write.pixel.uv1[0]) > 1e-4 || math.Abs(old.uv1[1]-write.pixel.uv1[1]) > 1e-4
+				} else if domain2 {
 					a, b = old.uv1, write.pixel.uv1
+					uvMismatch = math.Abs(a[0]-b[0]) > 1e-4 || math.Abs(a[1]-b[1]) > 1e-4
 				}
-				if checkConflict && opt.conflict == nil && (math.Abs(a[0]-b[0]) > 1e-4 || math.Abs(a[1]-b[1]) > 1e-4 || math.Abs(old.env[0]-write.pixel.env[0]) > 1e-4 || math.Abs(old.env[1]-write.pixel.env[1]) > 1e-4) {
+				if checkConflict && opt.conflict == nil && (uvMismatch || math.Abs(old.env[0]-write.pixel.env[0]) > 1e-4 || math.Abs(old.env[1]-write.pixel.env[1]) > 1e-4) {
 					conflict = true
 					break
 				}

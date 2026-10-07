@@ -36,8 +36,8 @@ type ExportCharacterParams struct {
 	Race                int            `json:"race"`
 	Gender              int            `json:"gender"`
 	FileDataIDOverride  *int           `json:"fileDataIdOverride,omitempty"`
-	Customizations       map[string]int `json:"customizations"`
-	CustomizationOrder   []int          `json:"-"`
+	Customizations      map[string]int `json:"customizations"`
+	CustomizationOrder  []int          `json:"-"`
 	ExcludeAnimationIDs []int          `json:"excludeAnimationIds,omitempty"`
 	GeosetIDs           []int          `json:"geosetIds,omitempty"`
 	HideGeosetIDs       []int          `json:"hideGeosetIds,omitempty"`
@@ -109,9 +109,11 @@ func buildCharacterGeosetMask(skin *m2.Skin, choices map[int]parsedChoiceMeta, b
 				found = true
 			}
 		}
-		if !found || group == 0 || !turnOffOthers {
+		if group == 0 || !turnOffOthers || (!found && subMeshID%100 != 0) {
 			return
 		}
+		// A missing x00 section represents None, so it still disables the
+		// group's default mesh (for example a clean-shaven face has no 100).
 		for i := range mask {
 			if geosetGroup(mask[i].ID) == group && mask[i].ID != subMeshID {
 				mask[i].Checked = false

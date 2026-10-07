@@ -141,7 +141,7 @@ export interface ExportReportMetadata {
   buildKey: string
   product: string
   exportedAt: number
-  models: { path: string; sequences: ReportSequence[] }[]
+  models: { path: string; modelScale?: number; sequences: ReportSequence[] }[]
 }
 
 export interface JobStatus {

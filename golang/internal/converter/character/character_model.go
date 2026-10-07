@@ -297,6 +297,7 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 		sort.Ints(wantedIDs)
 		if entry.model == nil {
 			model, err := ExportModelFileIDAsMdl(ctx, fileDataID, ExportModelOptions{
+				TextureIDs:          textureIDsFromReplaceableTextures(collectionSourceTextures),
 				ReplaceableTextures: collectionSourceTextures,
 				GeosetMaskBuilder: func(skin *m2.Skin) []m2export.GeosetMaskEntry {
 					selected := make(map[int]struct{})
@@ -498,10 +499,7 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	}
 
 	collectionMaskBuilder := equipmentCollectionGeosetMaskBuilder(ctx, equipmentSlots, fileDataID)
-	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, ExportModelOptions{
-		ReplaceableTextures: replaceable,
-		GeosetMaskBuilder:   collectionMaskBuilder,
-	})
+	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, itemAttachmentModelOptions(itemData, collectionMaskBuilder))
 	if err != nil {
 		return err
 	}
@@ -557,6 +555,31 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	charMdl.Modify.AddMdlItemToBone(itemMdl, attachment.Bone)
 	logAttachResult(attachmentID, itemMdl, true, fileDataID)
 	return nil
+}
+
+func itemAttachmentModelOptions(itemData ItemMetadata, maskBuilder func(*m2.Skin) []m2export.GeosetMaskEntry) ExportModelOptions {
+	return ExportModelOptions{
+		TextureIDs:          itemModelTextureIDs(itemData.ModelTextureFiles),
+		ReplaceableTextures: itemReplaceableTextures(itemData.ModelTextureFiles),
+		GeosetMaskBuilder:   maskBuilder,
+	}
+}
+
+func textureIDsFromReplaceableTextures(textures map[string]int) []int {
+	seen := make(map[int]struct{}, len(textures))
+	ids := make([]int, 0, len(textures))
+	for _, id := range textures {
+		if id <= 0 {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	return ids
 }
 
 func modelTextureTemplateKey(fileDataID int, textures map[int]int) string {

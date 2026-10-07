@@ -15,7 +15,7 @@ go -C golang run ./cmd/shot-converter <asset-path> --seq "Stand 1" --view front
 
 The command runs the same Go capture code as the report server. It prints one labeled 1440×900 PNG path per selected view. Read the PNGs; blank frames fail. `<asset-path>` is relative to `exported-assets`; a full path containing that directory also works.
 
-Flags: `--seq Stand` (default, prefix matches `Stand 1`), `--view front` (omit for all six; comma-separated views also work), `--out tmp/shots`, `--base http://127.0.0.1:3001` (or `WOW_CONVERTER_URL`). Relative output directories are relative to the repository root. Standalone files are `<model>-<matched-sequence>-<view>.png`.
+Flags: `--seq Stand` (default, prefix matches `Stand 1`), `--view front` (omit for all six; comma-separated views also work), `--out tmp/shots`, `--base http://127.0.0.1:3001` (or `WOW_CONVERTER_URL`). `--cameras <Wowhead map.json>` applies saved source cameras; `--model-scale <export metadata modelScale>` overrides their units for a differently sized export. Relative output directories are relative to the repository root. Standalone files are `<model>-<matched-sequence>-<view>.png`.
 
 For a Wowhead comparison, freshly export the model first, then capture both sources in one command:
 

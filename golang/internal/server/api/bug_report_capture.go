@@ -96,7 +96,7 @@ func registerReportCapture(r Router, d *Deps, exports *util.JobQueue[exportChara
 			for _, seq := range model.Sequences {
 				if seq.Index == job.Request.SequenceIndex {
 					payload.Sequence = seq
-					selected = &reportshot.Request{BaseURL: fmt.Sprintf("http://127.0.0.1:%d", d.Config.Port), Model: model.Path, Sequence: seq.Name, WowheadURL: payload.WowheadURL, WowSequence: seq.WowName, WowVariant: seq.WowVariant}
+					selected = &reportshot.Request{BaseURL: fmt.Sprintf("http://127.0.0.1:%d", d.Config.Port), Model: model.Path, Sequence: seq.Name, WowheadURL: payload.WowheadURL, WowSequence: seq.WowName, WowVariant: seq.WowVariant, ModelScale: model.ModelScale}
 				}
 			}
 		}
