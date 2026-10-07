@@ -1,4 +1,61 @@
+import path from 'node:path';
+
+const repoRoot = path.resolve(import.meta.dir, '../..');
 const baseURL = (process.env.WOW_CONVERTER_URL ?? 'http://127.0.0.1:3001').replace(/\/$/, '');
+
+export interface DataServerEndpoint {
+  readonly label: string;
+  readonly base: string;
+  readonly unix?: string;
+}
+
+export async function detectDataServer(): Promise<DataServerEndpoint> {
+  const explicitSocket = process.env.WOW_DATA_SERVER_SOCKET?.trim();
+  if (explicitSocket) return { label: explicitSocket, base: 'http://localhost', unix: explicitSocket };
+  const explicitURL = process.env.WOW_DATA_SERVER_URL?.trim();
+  if (explicitURL) {
+    const base = explicitURL.replace(/\/$/, '');
+    return { label: base, base };
+  }
+  for (const socket of [
+    path.join(repoRoot, '.cache', 'wow-data-server.sock'),
+    path.join(repoRoot, 'dist-go', '.cache', 'wow-data-server.sock'),
+  ]) {
+    try {
+      const response = await fetch('http://localhost/rest/getCascInfo', {
+        unix: socket,
+        signal: AbortSignal.timeout(2_000),
+      });
+      await response.body?.cancel();
+      return { label: socket, base: 'http://localhost', unix: socket };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+      if (!/FailedToOpenSocket|ENOENT|ECONNREFUSED|EACCES/i.test(`${code} ${message}`)) throw error;
+    }
+  }
+  return { label: 'http://127.0.0.1:17753', base: 'http://127.0.0.1:17753' };
+}
+
+export async function waitForCascInfo(endpoint: DataServerEndpoint, timeoutMs = 180_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let last = '';
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${endpoint.base}/rest/getCascInfo`, {
+        ...(endpoint.unix ? { unix: endpoint.unix } : {}),
+        signal: AbortSignal.timeout(5_000),
+      });
+      const body: unknown = await response.json();
+      if (isRecord(body) && body.id === 'CASC_INFO') return;
+      last = JSON.stringify(body).slice(0, 300);
+    } catch (error: unknown) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    await Bun.sleep(1_000);
+  }
+  throw new Error(`wow-data-server at ${endpoint.label} did not load CASC: ${last}`);
+}
 
 export function converterURL(): string {
   return baseURL;

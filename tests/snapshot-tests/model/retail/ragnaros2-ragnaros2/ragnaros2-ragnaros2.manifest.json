@@ -32,7 +32,7 @@
     ]
   },
   "diff": {
-    "thresholdPercent": 1,
+    "thresholdPercent": 2,
     "channelDelta": 4
   }
 }

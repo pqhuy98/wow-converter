@@ -1,50 +1,15 @@
-import path from 'node:path';
-
 import { beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 
-import { isRecord } from './client';
+import { type DataServerEndpoint, detectDataServer, isRecord, waitForCascInfo } from './client';
 
 setDefaultTimeout(120_000);
 
-const repoRoot = path.resolve(import.meta.dir, '../..');
-
-type Endpoint = { readonly label: string; readonly base: string; readonly unix?: string };
-
-let endpoint: Endpoint;
+let endpoint: DataServerEndpoint;
 
 function dataFetch(requestPath: string, timeoutMs = 60_000): Promise<Response> {
   const signal = AbortSignal.timeout(timeoutMs);
   if (endpoint.unix) return fetch(`${endpoint.base}${requestPath}`, { unix: endpoint.unix, signal });
   return fetch(`${endpoint.base}${requestPath}`, { signal });
-}
-
-// stat() on a Windows AF_UNIX socket is EACCES, so the choice is one connect, not a file check.
-async function detectEndpoint(): Promise<Endpoint> {
-  const explicitSocket = process.env.WOW_DATA_SERVER_SOCKET?.trim();
-  if (explicitSocket) return { label: explicitSocket, base: 'http://localhost', unix: explicitSocket };
-  const explicitURL = process.env.WOW_DATA_SERVER_URL?.trim();
-  if (explicitURL) {
-    const base = explicitURL.replace(/\/$/, '');
-    return { label: base, base };
-  }
-  for (const socket of [
-    path.join(repoRoot, '.cache', 'wow-data-server.sock'),
-    path.join(repoRoot, 'dist-go', '.cache', 'wow-data-server.sock'),
-  ]) {
-    try {
-      const response = await fetch('http://localhost/rest/getCascInfo', {
-        unix: socket,
-        signal: AbortSignal.timeout(2_000),
-      });
-      await response.body?.cancel();
-      return { label: socket, base: 'http://localhost', unix: socket };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const code = error instanceof Error && 'code' in error ? String(error.code) : '';
-      if (!/FailedToOpenSocket|ENOENT|ECONNREFUSED|EACCES/i.test(`${code} ${message}`)) throw error;
-    }
-  }
-  return { label: 'http://127.0.0.1:17753', base: 'http://127.0.0.1:17753' };
 }
 
 const samples = [
@@ -66,21 +31,8 @@ const samples = [
 ] as const;
 
 beforeAll(async () => {
-  endpoint = await detectEndpoint();
-  const deadline = Date.now() + 180_000;
-  let last = '';
-  while (Date.now() < deadline) {
-    try {
-      const response = await dataFetch('/rest/getCascInfo', 5_000);
-      const body: unknown = await response.json();
-      if (isRecord(body) && body.id === 'CASC_INFO') return;
-      last = JSON.stringify(body).slice(0, 300);
-    } catch (error: unknown) {
-      last = error instanceof Error ? error.message : String(error);
-    }
-    await Bun.sleep(1_000);
-  }
-  throw new Error(`wow-data-server at ${endpoint.label} did not load CASC: ${last}`);
+  endpoint = await detectDataServer();
+  await waitForCascInfo(endpoint);
 }, 180_000);
 
 for (const sample of samples) {

@@ -5,25 +5,19 @@ package metadata
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"testing"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
 	"github.com/pqhuy98/wow-converter/internal/config"
+	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
 func TestLoadFromDataParticleEmittersRealLoaderJSON(t *testing.T) {
-	base := os.Getenv("WOW_DATA_SERVER_URL")
-	if base == "" {
-		base = "http://127.0.0.1:17753"
-	}
-	rawFile := downloadParticleTestCasc(t, base, 165893)
+	ctx := context.Background()
+	rawFile := downloadParticleTestCasc(t, ctx, 165893)
 	loader := m2.NewLoader(buffer.NewBuffer(rawFile), nil)
-	if err := loader.Load(context.Background()); err != nil {
+	if err := loader.Load(ctx); err != nil {
 		t.Fatal(err)
 	}
 	metaObj := map[string]any{
@@ -47,14 +41,9 @@ func TestLoadFromDataParticleEmittersRealLoaderJSON(t *testing.T) {
 	}
 }
 
-func downloadParticleTestCasc(t *testing.T, base string, id uint32) []byte {
+func downloadParticleTestCasc(t *testing.T, ctx context.Context, id uint32) []byte {
 	t.Helper()
-	resp, err := http.Get(fmt.Sprintf("%s/rest/cascFile?fileDataID=%d", base, id))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	data, err := client.NewHTTPClient("").DownloadCascFile(ctx, int(id))
 	if err != nil {
 		t.Fatal(err)
 	}

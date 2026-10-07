@@ -5,20 +5,13 @@ package m2
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"testing"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
+	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
 
 func TestBloodboilParticleEmitters(t *testing.T) {
-	base := os.Getenv("WOW_DATA_SERVER_URL")
-	if base == "" {
-		base = "http://127.0.0.1:17753"
-	}
 	cases := map[string]uint32{
 		"spells/deathknight_bloodboil":     165893,
 		"spells/deathknight_bloodboil_new": 467953,
@@ -26,7 +19,7 @@ func TestBloodboilParticleEmitters(t *testing.T) {
 	ctx := context.Background()
 	for name, id := range cases {
 		t.Run(name, func(t *testing.T) {
-			raw := downloadCascFile(t, base, id)
+			raw := downloadCascFile(t, ctx, id)
 			loader := NewLoader(buffer.NewBuffer(raw), nil)
 			if err := loader.Load(ctx); err != nil {
 				t.Fatalf("Load: %v", err)
@@ -52,19 +45,11 @@ func TestBloodboilParticleEmitters(t *testing.T) {
 	}
 }
 
-func downloadCascFile(t *testing.T, base string, fileDataID uint32) []byte {
+func downloadCascFile(t *testing.T, ctx context.Context, fileDataID uint32) []byte {
 	t.Helper()
-	resp, err := http.Get(fmt.Sprintf("%s/rest/cascFile?fileDataID=%d", base, fileDataID))
+	data, err := client.NewHTTPClient("").DownloadCascFile(ctx, int(fileDataID))
 	if err != nil {
 		t.Fatalf("download: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("download status %d", resp.StatusCode)
-	}
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read: %v", err)
 	}
 	return data
 }

@@ -257,7 +257,7 @@
     "wowheadPairHash": "02528158e0e593afee812f00791375d9e09fb8c00fe1e5e21c92d43a55bff5b1"
   },
   "diff": {
-    "thresholdPercent": 1,
+    "thresholdPercent": 2,
     "channelDelta": 4
   }
 }

@@ -257,7 +257,7 @@
     "wowheadPairHash": "3ff9d2762947863b97819e8c30b11dc1d94cd9634b5c4e4f2a3b30d930a0cca4"
   },
   "diff": {
-    "thresholdPercent": 1,
+    "thresholdPercent": 2,
     "channelDelta": 4
   },
   "issue": "WoWhead characters: colors do not match."

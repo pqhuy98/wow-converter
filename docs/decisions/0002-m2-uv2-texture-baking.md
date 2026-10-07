@@ -197,16 +197,11 @@ UV-chart, timeline and spatial-budget checks. The explicit-settings regression
 checks all six 12/21/30 FPS × 4000/12000 ms combinations under a small pixel
 budget and verifies every generated frame key.
 
-With `bun dev` already running, the WMO still-frame OOM regression is:
-
-```
-go test -tags integration_tests ./internal/server/api -run TestAmaniHubStillTextureBake -v -count=1
-```
-
-It exports `12tr_amani_hub03-wmo-fixed.mdl`, checks baked textures without
-flipbook tracks, and reports sampled server heap peaks including loaded CASC.
-`TestVoidPylonStillTextureBake` exercises `12vd_void_pylon01-wmo-fixed.mdl`.
-`TestAmaniEagleTempleStillTextureBake` covers masonry/grass height blending.
+WMO still-frame bake coverage is the retail snapshot cases
+`troll-12tr_amani_hub03`, `void-12vd_void_pylon01`, and
+`troll-12tr_amani_eagletemple01` (`textureBaking.enabled`, `animate: false`,
+`resolutionScale: 0.5`). Direct conversion profiling of the hub remains
+`go test -tags integration_tests ./internal/converter/wowmodel/direct/wmo -run TestProfileWMOTextureBake -v -count=1`.
 
 Still WMO baking uses four times the effect spatial budget, capped at one
 megapixel per material. Missing shader-23 environment textures generate no

@@ -1,53 +1,43 @@
 /**
  * Runs Go tests marked `//go:build integration_tests`.
  *
- * Those files are left out of `go test ./...`. This suite starts wow-data-server
- * on port 18753 (dev default is 17753) and points the tests at it.
+ * Those files are left out of `go test ./...`. This suite does not start a
+ * server. It uses the boot converter's data server (WOW_DATA_SERVER_SOCKET /
+ * WOW_DATA_SERVER_URL), then the bun-dev sockets, then localhost:17753.
+ * Texture-bake API tests use WOW_CONVERTER_URL (default http://127.0.0.1:3001).
  *
  *   bun test --max-concurrency=1 tests/golang-integration-tests
  */
-import {
-  afterAll, beforeAll, setDefaultTimeout, test,
-} from 'bun:test';
+import { beforeAll, setDefaultTimeout, test } from 'bun:test';
 import { spawnSync } from 'child_process';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
-import {
-  killPorts, repoRoot, spawnManaged, stopChildren, waitForEndpoint,
-} from '../helpers';
+import { detectDataServer, waitForCascInfo } from '../api-tests/client';
+import { converterUrl, repoRoot } from '../helpers';
 
-const port = 18753;
-const baseURL = `http://127.0.0.1:${port}`;
 const golangDir = path.join(repoRoot, 'golang');
-const timeoutMs = 60 * 60_000;
 
-const dataServerEnv = {
-  WOW_DATA_SERVER_PORT: String(port),
-  WOW_DATA_SERVER_URL: baseURL,
-  WOW_DATA_SERVER_SOCKET: '',
-  WOW_DATA_TRANSPORT: '',
-  WOW_CONVERTER_BUNDLED: '',
-};
-
-setDefaultTimeout(timeoutMs);
+setDefaultTimeout(60 * 60_000);
 
 beforeAll(async () => {
-  killPorts([port]);
-  const child = spawnManaged(
-    'wow-data-server',
-    'go',
-    ['run', './cmd/wow-data-server'],
-    golangDir,
-    { ...dataServerEnv, WOW_LOG_PREFIX: 'go-integration' },
-    port,
-  );
-  await waitForEndpoint(child, `${baseURL}/rest/getCascInfo`, 10 * 60_000, cascInfoReady);
+  const endpoint = await detectDataServer();
+  await waitForCascInfo(endpoint);
+  if (endpoint.unix) {
+    process.env.WOW_DATA_SERVER_SOCKET = endpoint.unix;
+    process.env.WOW_DATA_TRANSPORT = 'socket';
+    delete process.env.WOW_DATA_SERVER_URL;
+    delete process.env.WOW_DATA_SERVER_PORT;
+  } else {
+    process.env.WOW_DATA_SERVER_URL = endpoint.base;
+    delete process.env.WOW_DATA_SERVER_SOCKET;
+    delete process.env.WOW_DATA_TRANSPORT;
+  }
+  if (!process.env.WOW_CONVERTER_URL?.trim()) {
+    process.env.WOW_CONVERTER_URL = converterUrl();
+  }
+  console.log(`wow-data-server ${endpoint.label}; converter ${process.env.WOW_CONVERTER_URL}`);
 }, 10 * 60_000);
-
-afterAll(() => {
-  stopChildren();
-});
 
 test('integration-tagged go tests', () => {
   const { packages, pattern } = integrationTests(golangDir);
@@ -56,15 +46,11 @@ test('integration-tagged go tests', () => {
   ], {
     cwd: golangDir,
     stdio: 'inherit',
-    env: { ...process.env, ...dataServerEnv },
+    env: process.env,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`go test exited ${result.status ?? 'unknown'}`);
 });
-
-function cascInfoReady(value: unknown): boolean {
-  return typeof value === 'object' && value !== null && 'id' in value && value.id === 'CASC_INFO';
-}
 
 function integrationTests(root: string): { packages: string[]; pattern: string } {
   const names = new Set<string>();

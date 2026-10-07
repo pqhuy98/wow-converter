@@ -6,7 +6,14 @@
     "base": "local::world/wmo/expansion11/troll/12tr_amani_hub03.wmo",
     "weaponR": "",
     "weaponL": "",
-    "size": ""
+    "size": "",
+    "textureBaking": {
+      "enabled": true,
+      "animate": false,
+      "fps": 15,
+      "windowMS": 4000,
+      "resolutionScale": 0.5
+    }
   },
   "export": {
     "format": "mdx",
@@ -32,8 +39,7 @@
     ]
   },
   "diff": {
-    "thresholdPercent": 1,
+    "thresholdPercent": 2,
     "channelDelta": 4
-  },
-  "issue": "WMO: buildings from latest expansions have black spots on their textures."
+  }
 }

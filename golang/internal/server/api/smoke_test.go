@@ -43,7 +43,7 @@ func TestGetConfigEndpoint(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	if os.Getenv("WOW_DATA_SERVER_URL") == "" {
+	if os.Getenv("WOW_DATA_SERVER_URL") == "" && os.Getenv("WOW_DATA_SERVER_SOCKET") == "" {
 		os.Setenv("WOW_DATA_SERVER_URL", "http://127.0.0.1:17753")
 	}
 	os.Exit(m.Run())
