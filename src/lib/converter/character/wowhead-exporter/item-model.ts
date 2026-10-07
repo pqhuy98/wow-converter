@@ -302,14 +302,21 @@ function resolveHideGeosetIds(itemData: ItemData, targetRace: number, targetGend
   return Array.from(result).sort((a, b) => a - b);
 }
 
-export function itemReplaceableTextures(modelTextureFiles: [FileWithComponent[], FileWithComponent[]]) {
-  return Object.fromEntries(
-    [...modelTextureFiles[0], ...modelTextureFiles[1]].map((f) => [f.componentId, f.fileDataId]),
-  );
+export function itemModelTextureFiles(
+  itemData: Pick<ItemMetata, 'modelFiles' | 'modelTextureFiles'>,
+  modelIndex: number,
+) {
+  const componentId = itemData.modelFiles[modelIndex]?.componentId;
+  if (componentId == null || componentId < 0 || componentId >= itemData.modelTextureFiles.length) return [];
+  return itemData.modelTextureFiles[componentId];
 }
 
-function itemModelTextureIds(modelTextureFiles: [FileWithComponent[], FileWithComponent[]]) {
-  return [...new Set([...modelTextureFiles[0], ...modelTextureFiles[1]].map((f) => f.fileDataId))];
+export function itemReplaceableTextures(modelTextureFiles: FileWithComponent[]) {
+  return Object.fromEntries(modelTextureFiles.map((f) => [f.componentId, f.fileDataId]));
+}
+
+function itemModelTextureIds(modelTextureFiles: FileWithComponent[]) {
+  return [...new Set(modelTextureFiles.map((f) => f.fileDataId))];
 }
 
 export async function processItemData(url: ItemZamUrl, targetRace: number, targetGender: number, targetClass: number): Promise<ItemMetata> {
@@ -450,9 +457,10 @@ export async function exportZamItemAsMdl({
   if (!modelId) {
     throw new Error(`Found no model found for item ${zam.displayId}`);
   }
-  const allTextureIds = itemModelTextureIds(result.modelTextureFiles);
+  const modelTextureFiles = itemModelTextureFiles(result, 0);
+  const allTextureIds = itemModelTextureIds(modelTextureFiles);
   const model = await exportModelFileIdAsMdl(ctx, modelId, { textureIds: allTextureIds });
-  await applyReplaceableTextures(ctx, model.mdl, itemReplaceableTextures(result.modelTextureFiles));
+  await applyReplaceableTextures(ctx, model.mdl, itemReplaceableTextures(modelTextureFiles));
   return { model, itemData: result };
 }
 

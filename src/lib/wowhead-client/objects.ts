@@ -2,7 +2,7 @@ import chalk from 'chalk';
 
 import {
   fetchWithCache, getLatestExpansionHavingUrl, getZamBaseUrl, ItemVisualZamUrl, NpcZamUrl,
-  ObjectZamUrl,
+  ObjectZamUrl, ZamExpansion,
 } from './zam-url';
 
 export interface FileEntry {
@@ -20,6 +20,7 @@ export interface Customization {
 
 export interface CharacterMeta {
   Class: number;
+  ChrModelFlags?: number;
   Race: number;
   Gender: number;
   ChrModelId: number;
@@ -68,6 +69,12 @@ export interface CharacterData {
 export interface ItemVisualData extends CharacterData {}
 
 const debug = false;
+
+export async function fetchCharacterMeta(expansion: ZamExpansion, modelId: number): Promise<CharacterData> {
+  const path = `meta/character/${modelId}.json`;
+  const resolved = expansion === 'latest-available' ? await getLatestExpansionHavingUrl(path) : expansion;
+  return JSON.parse(await fetchWithCache(`${getZamBaseUrl(resolved)}/${path}`));
+}
 
 export async function fetchNpcMeta(zam: NpcZamUrl): Promise<CharacterData> {
   if (zam.type !== 'npc') throw new Error('fetchNpcMeta expects a ZamUrl of type npc');

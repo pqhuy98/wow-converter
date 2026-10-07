@@ -131,6 +131,11 @@ async function isAbnormalTransparency(png: string | Buffer): Promise<boolean> {
     .raw()
     .toBuffer();
 
+  // An empty equipment overlay is valid, not a damaged alpha pattern.
+  if (width < 2 || !alphaBuffer.some((alpha) => alpha !== 0)) {
+    return false;
+  }
+
   // Abnormal if every pixel in 0-based odd columns (1, 3, 5...) are all fully transparent
   for (let i = 1; i < width; i += 2) {
     for (let j = 0; j < height; j++) {

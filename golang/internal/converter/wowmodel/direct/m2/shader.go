@@ -106,21 +106,34 @@ type m2Fragment struct {
 	alpha             float64
 }
 
-// Classic has no camera-dependent vertex alpha. Use the spherical average of
-// WoW's edgeScan: f(x)=clamp(2.7*max(x,0)^2-.4,0,1), x uniform on [-1,1].
+// Classic has no camera-dependent vertex alpha. Average WoW's edgeScan:
+// f(x)=clamp(2.7*max(x,0)^2-.4,0,1). For a culled surface, viewing directions
+// behind it cannot contribute pixels. Weight its visible hemisphere by projected
+// area (2*x); averaging the whole sphere made single-sided swirling shells fade
+// almost away. Two-sided cards retain the full-sphere average.
 // Both mesh RGB and opacity carry f. Alpha blending therefore needs E[f] for
 // destination attenuation and E[f^2] for source radiance, rather than fading
 // both by E[f] and inadvertently making the shell too dark.
 // ponytail: this is an all-angle approximation; exact fading needs a runtime
 // material that can evaluate the camera and animated normals.
-func averageM2EdgeFade(f m2Fragment, blend uint16) m2Fragment {
-	const mean = .21528161734385554
-	const meanSquared = .1878637945490328
+func averageM2EdgeFade(f m2Fragment, blend uint16, twoSided bool) m2Fragment {
+	mean, meanSquared := .21528161734385554, .1878637945490328
+	if !twoSided {
+		mean, meanSquared = 2.0/3, 49.0/81
+	}
 	diffuseScale := mean
 	if blend == 2 || blend == 4 || blend == 7 {
 		alpha := max(0, f.alpha)
 		meanAlpha, meanFadeAlpha := alpha*mean, alpha*meanSquared
-		if alpha > 1 {
+		if alpha > 1 && !twoSided {
+			// x^2 is uniform under projected-area weighting, so the clipped ramp
+			// integrates directly without including invisible back-facing views.
+			a, b, t := .4/2.7, 1.4/2.7, (.4+1/alpha)/2.7
+			integral := func(s float64) float64 { return 1.35*s*s - .4*s }
+			integralSquared := func(s float64) float64 { return 2.43*s*s*s - 1.08*s*s + .16*s }
+			meanAlpha = alpha*(integral(t)-integral(a)) + 1 - t
+			meanFadeAlpha = alpha*(integralSquared(t)-integralSquared(a)) + integral(b) - integral(t) + 1 - b
+		} else if alpha > 1 {
 			// Mod2x alpha can exceed one. The framebuffer clamps alpha after
 			// applying edge fade, so integrate min(alpha*f,1), not alpha*E[f].
 			const a = .3849001794597505 // f starts rising

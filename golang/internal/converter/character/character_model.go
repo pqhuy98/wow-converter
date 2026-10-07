@@ -89,6 +89,7 @@ type characterPrep struct {
 	EquipmentSlots      []EquipmentSlotData
 	ReplaceableTextures map[string]int
 	ChrModelID          int
+	ChrModelFlags       int
 }
 
 func prepareCharacterExport(ctx *ExportContext, metadata CharacterData, expansion wowhead.Expansion) (characterPrep, error) {
@@ -160,7 +161,7 @@ func prepareCharacterExport(ctx *ExportContext, metadata CharacterData, expansio
 	return characterPrep{
 		RPCParams: rpcParams, PrebakedTexture: prebaked,
 		EquipmentSlots: equipmentSlots, ReplaceableTextures: metadata.Textures,
-		ChrModelID: character.ChrModel,
+		ChrModelID: character.ChrModel, ChrModelFlags: character.ChrModelFlags,
 	}, nil
 }
 
@@ -225,13 +226,9 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 	if err != nil {
 		return err
 	}
-	customizations := metadata.Creature.CreatureCustomizations
-	if metadata.Creature == nil {
-		customizations = nil
-	}
-	choiceIDs := map[int]struct{}{}
-	for _, c := range customizations {
-		choiceIDs[c.ChoiceID] = struct{}{}
+	var customizations []wowhead.Customization
+	if metadata.Creature != nil {
+		customizations = metadata.Creature.CreatureCustomizations
 	}
 	type collectionEntry struct {
 		model     *commonModel
@@ -241,43 +238,26 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 	var collectionOrder []int
 	replaceableTextures := map[string]int{}
 
-	for _, option := range charCus.Options {
-		for _, choice := range option.Choices {
-			var customization *wowhead.Customization
-			for i := range customizations {
-				if customizations[i].OptionID == option.ID && customizations[i].ChoiceID == choice.ID {
-					customization = &customizations[i]
-					break
-				}
+	for _, element := range selectedCustomizationElements(charCus, customizations) {
+		if element.SkinnedModel != nil {
+			sm := element.SkinnedModel
+			entry := collections[sm.CollectionFileDataID]
+			if entry == nil {
+				entry = &collectionEntry{geosetIDs: map[int]struct{}{}}
+				collections[sm.CollectionFileDataID] = entry
+				collectionOrder = append(collectionOrder, sm.CollectionFileDataID)
 			}
-			if customization == nil {
-				continue
-			}
-			for _, element := range choice.Elements {
-				if element.SkinnedModel != nil {
-					_, hasVarChoice := choiceIDs[element.VariationChoiceID]
-					if element.VariationChoiceID <= 0 || hasVarChoice {
-						sm := element.SkinnedModel
-						entry := collections[sm.CollectionFileDataID]
-						if entry == nil {
-							entry = &collectionEntry{geosetIDs: map[int]struct{}{}}
-							collections[sm.CollectionFileDataID] = entry
-							collectionOrder = append(collectionOrder, sm.CollectionFileDataID)
-						}
-						geosetID := sm.GeosetType*100 + sm.GeosetID
-						entry.geosetIDs[geosetID] = struct{}{}
-					}
-				}
-				if element.Material != nil {
-					texFiles := charCus.TextureFiles[strconv.Itoa(element.Material.MaterialResourcesID)]
-					for _, t := range texFiles {
-						if (t.Race == prep.RPCParams.Race || t.Race == 0) &&
-							(t.Gender == prep.RPCParams.Gender || t.Gender > 1) {
-							for _, layer := range charCus.TextureLayers {
-								if layer.ChrModelTextureTargetID == element.Material.TextureTarget {
-									replaceableTextures[strconv.Itoa(layer.TextureType)] = t.FileDataID
-								}
-							}
+			geosetID := sm.GeosetType*100 + sm.GeosetID
+			entry.geosetIDs[geosetID] = struct{}{}
+		}
+		if element.Material != nil {
+			texFiles := charCus.TextureFiles[strconv.Itoa(element.Material.MaterialResourcesID)]
+			for _, t := range texFiles {
+				if (t.Race == prep.RPCParams.Race || t.Race == 0) &&
+					(t.Gender == prep.RPCParams.Gender || t.Gender > 1) {
+					for _, layer := range charCus.TextureLayers {
+						if layer.ChrModelTextureTargetID == element.Material.TextureTarget {
+							replaceableTextures[strconv.Itoa(layer.TextureType)] = t.FileDataID
 						}
 					}
 				}
@@ -325,6 +305,30 @@ func applyCustomizationCollections(ctx *ExportContext, charMdl *mdl.MDL, metadat
 		charMdl.Modify.AddMdlCollectionItemToModel(itemMdl)
 	}
 	return nil
+}
+
+// Material and mesh entries share the same variation condition.
+func selectedCustomizationElements(meta wowhead.CharacterCustomization, customizations []wowhead.Customization) []wowhead.CustomizationElement {
+	choices := map[int]bool{}
+	selected := map[[2]int]bool{}
+	for _, c := range customizations {
+		choices[c.ChoiceID] = true
+		selected[[2]int{c.OptionID, c.ChoiceID}] = true
+	}
+	var elements []wowhead.CustomizationElement
+	for _, option := range meta.Options {
+		for _, choice := range option.Choices {
+			if !selected[[2]int{option.ID, choice.ID}] {
+				continue
+			}
+			for _, element := range choice.Elements {
+				if element.VariationChoiceID <= 0 || choices[element.VariationChoiceID] {
+					elements = append(elements, element)
+				}
+			}
+		}
+	}
+	return elements
 }
 
 // Collections share the base character's composited textures, including hair highlights.
@@ -483,7 +487,8 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 		return nil
 	}
 	fileDataID := itemData.ModelFiles[idx].FileDataID
-	replaceable := itemReplaceableTextures(itemData.ModelTextureFiles)
+	modelTextureFiles := itemModelTextureFiles(itemData, idx)
+	replaceable := itemReplaceableTextures(modelTextureFiles)
 	templateKey := modelTextureTemplateKey(fileDataID, replaceableTextureTypeMap(replaceable))
 
 	if template, ok := templates[templateKey]; ok {
@@ -499,7 +504,7 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	}
 
 	collectionMaskBuilder := equipmentCollectionGeosetMaskBuilder(ctx, equipmentSlots, fileDataID)
-	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, itemAttachmentModelOptions(itemData, collectionMaskBuilder))
+	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, itemAttachmentModelOptions(modelTextureFiles, collectionMaskBuilder))
 	if err != nil {
 		return err
 	}
@@ -557,10 +562,10 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	return nil
 }
 
-func itemAttachmentModelOptions(itemData ItemMetadata, maskBuilder func(*m2.Skin) []m2export.GeosetMaskEntry) ExportModelOptions {
+func itemAttachmentModelOptions(modelTextureFiles []FileWithComponent, maskBuilder func(*m2.Skin) []m2export.GeosetMaskEntry) ExportModelOptions {
 	return ExportModelOptions{
-		TextureIDs:          itemModelTextureIDs(itemData.ModelTextureFiles),
-		ReplaceableTextures: itemReplaceableTextures(itemData.ModelTextureFiles),
+		TextureIDs:          itemModelTextureIDs(modelTextureFiles),
+		ReplaceableTextures: itemReplaceableTextures(modelTextureFiles),
 		GeosetMaskBuilder:   maskBuilder,
 	}
 }
@@ -733,7 +738,7 @@ func applyEquipmentsBodyTextures(ctx *ExportContext, charMdl *mdl.MDL, prep char
 		if s.SlotID == wowhead.SlotLegs && len(s.Data.ZamGeosetGroup) > 2 && s.Data.ZamGeosetGroup[2] > 0 {
 			priority += 2
 		}
-		for _, f := range s.Data.BodyTextureFiles {
+		for _, f := range characterBodyTextureFiles(s.Data.BodyTextureFiles, prep.ChrModelFlags) {
 			overlays = append(overlays, overlay{priority: priority, componentID: f.ComponentID, fileDataID: f.FileDataID})
 		}
 	}
@@ -810,6 +815,21 @@ func applyEquipmentsBodyTextures(ctx *ExportContext, charMdl *mdl.MDL, prep char
 	}
 	ctx.AssetManager.AddPngTexture(newName, true)
 	return nil
+}
+
+// WoW preserves the natural feet on models with ChrModelFlags bit 0 set.
+// This is a model contract, independent of the race and equipped item IDs.
+func characterBodyTextureFiles(files []FileWithComponent, modelFlags int) []FileWithComponent {
+	if modelFlags&1 == 0 {
+		return files
+	}
+	filtered := make([]FileWithComponent, 0, len(files))
+	for _, f := range files {
+		if f.ComponentID != 7 {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
 }
 
 func getExcludedAnimIDs(keepCinematic bool, attackTag animmap.AttackTag) []int {

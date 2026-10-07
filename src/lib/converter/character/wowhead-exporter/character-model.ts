@@ -28,8 +28,12 @@ import { exportCharacterDirectAsModel } from './character-direct';
 import {
   EquipmentSlotData,
   filterCollectionGeosets,
-  getEquipmentSlotName, getGeosetIdsFromEquipments,
-  getSubmeshName, itemReplaceableTextures, processItemData,
+  getEquipmentSlotName,
+  getGeosetIdsFromEquipments,
+  getSubmeshName,
+  itemModelTextureFiles,
+  itemReplaceableTextures,
+  processItemData,
 } from './item-model';
 
 export async function exportCharacterAsMdl({
@@ -83,6 +87,7 @@ type Prep = {
   equipmentSlots: EquipmentSlotData[];
   replaceableTextures: Record<string, number>;
   chrModelId: number;
+  chrModelFlags: number;
 }
 
 async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExpansion): Promise<Prep> {
@@ -147,6 +152,7 @@ async function prepareCharacterExport(metadata: CharacterData, expansion: ZamExp
     equipmentSlots,
     replaceableTextures: metadata.Textures || {},
     chrModelId: character.ChrModelId,
+    chrModelFlags: character.ChrModelFlags ?? 0,
   };
 }
 
@@ -191,8 +197,9 @@ async function applyCustomzationCollections(ctx: ExportContext, charMdl: MDL, me
       const customization = customizations.find((c) => c.optionId === option.Id && c.choiceId === choice.Id);
       if (!customization) continue;
       for (const element of choice.Elements) {
+        if (element.VariationChoiceID > 0 && !choiceIds.has(element.VariationChoiceID)) continue;
         const skinnedModel = element.SkinnedModel;
-        if (skinnedModel && (element.VariationChoiceID <= 0 || choiceIds.has(element.VariationChoiceID))) {
+        if (skinnedModel) {
           const collectionFileId = skinnedModel.CollectionFileDataID;
           if (!collections.has(collectionFileId)) {
             const collectionModel = await exportModelFileIdAsMdl(ctx, skinnedModel.CollectionFileDataID, {});
@@ -261,10 +268,11 @@ async function attachEquipmentsWithModel(ctx: ExportContext, charMdl: MDL, equip
   const attachItemModel = async (slotData: EquipmentSlotData, idx: number, attachmentId: WoWAttachmentID | undefined) => {
     const itemData = slotData.data;
     const fileDataId = itemData.modelFiles[idx].fileDataId;
+    const modelTextureFiles = itemModelTextureFiles(itemData, idx);
 
     debug && console.log('attachItemModel', attachmentId != null ? getWoWAttachmentName(attachmentId) : 'undefined', idx);
 
-    const itemReplaceableTexturesMap = itemReplaceableTextures(itemData.modelTextureFiles);
+    const itemReplaceableTexturesMap = itemReplaceableTextures(modelTextureFiles);
     debug && console.log(fileDataId, 'itemReplaceableTextures', itemReplaceableTexturesMap);
 
     if (collectionTemplates.has(fileDataId)) {
@@ -559,7 +567,7 @@ async function applyEquipmentsBodyTextures(ctx: ExportContext, charMdl: MDL, pre
       if (s.slotId === EquipmentSlot.Legs && s.data.originalData?.Item?.GeosetGroup?.[2] > 0) {
         basePriority += 2;
       }
-      return s.data.bodyTextureFiles.map((f) => ({
+      return s.data.bodyTextureFiles.filter((f) => !(prep.chrModelFlags & 1) || f.componentId !== 7).map((f) => ({
         slotId: s.slotId,
         priority: basePriority,
         componentId: f.componentId,

@@ -129,11 +129,20 @@ func DecodeDressingRoom(client *HTTPClient, expansion Expansion, hash string) (C
 	race := data.Settings["race"]
 	gender := data.Settings["gender"]
 	class := data.Settings["class"]
+	modelID := chrModelIDFor(race, gender)
+	modelMeta, err := FetchCharacterMeta(client, expansion, modelID)
+	if err != nil {
+		return CharacterData{}, err
+	}
+	modelFlags := 0
+	if modelMeta.Character != nil {
+		modelFlags = modelMeta.Character.ChrModelFlags
+	}
 
 	return CharacterData{
 		Character: &CharacterMeta{
 			Class: class, Race: race, Gender: gender,
-			ChrModel: chrModelIDFor(race, gender),
+			ChrModel: modelID, ChrModelFlags: modelFlags,
 		},
 		Creature: &CreatureMeta{
 			CreatureCustomizations: customizations,

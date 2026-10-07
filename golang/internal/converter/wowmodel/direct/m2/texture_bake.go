@@ -1082,7 +1082,7 @@ func bakeM2Geoset(ctx context.Context, cfg config.Config, result *ConvertResult,
 					fragment = program.shade(p, moment)
 				}
 				if program.shader.edge {
-					fragment = averageM2EdgeFade(fragment, program.blend)
+					fragment = averageM2EdgeFade(fragment, program.blend, g.Material.Layers[0].TwoSided)
 				}
 				color := [4]float64{fragment.diffuse[0], fragment.diffuse[1], fragment.diffuse[2], fragment.alpha}
 				if program.alphaOnly {

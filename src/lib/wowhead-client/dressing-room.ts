@@ -1,7 +1,7 @@
 import { gatherItems } from './gatherer';
 import { EquipmentSlot } from './item-armor';
 import {
-  CharacterData, EquipmentMap, fetchItemVisualMeta, ItemVisualMap,
+  CharacterData, EquipmentMap, fetchCharacterMeta, fetchItemVisualMeta, ItemVisualMap,
 } from './objects';
 import { itemEnchants } from './snipped-data/dressing-room/item-enchants';
 import { raceGenderMap } from './snipped-data/dressing-room/transmog-data';
@@ -80,12 +80,15 @@ export async function decodeDressingRoom(expansion: ZamExpansion, hash: string):
     return [slotId, itemEnchants[item.enchant]?.visual];
   }).filter(([k, v]) => k !== undefined && v !== undefined));
 
+  const chrModelId = raceGenderMap[data.settings.race][data.settings.gender];
+  const modelMeta = await fetchCharacterMeta(expansion, chrModelId);
   return {
     Character: {
       Class: data.settings.class,
       Race: data.settings.race,
       Gender: data.settings.gender,
-      ChrModelId: raceGenderMap[data.settings.race][data.settings.gender],
+      ChrModelId: chrModelId,
+      ChrModelFlags: modelMeta.Character?.ChrModelFlags ?? 0,
     },
     Creature: {
       CreatureCustomizations: Object.entries(data.custChoices)

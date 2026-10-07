@@ -169,6 +169,18 @@ func IsAbnormalTransparency(pngBuffer []byte) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// Empty overlays are intentional (for example, a belt with no painted
+	// abdomen section). Removing their alpha would paint an opaque black bar.
+	if width < 2 {
+		return false, nil
+	}
+	visible := false
+	for i := 3; i < len(data); i += 4 {
+		visible = visible || data[i] != 0
+	}
+	if !visible {
+		return false, nil
+	}
 	for x := 1; x < width; x += 2 {
 		for y := 0; y < height; y++ {
 			if data[(y*width+x)*4+3] != 0 {

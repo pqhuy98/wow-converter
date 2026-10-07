@@ -66,6 +66,32 @@ func TestRemoveAlphaRGB(t *testing.T) {
 	}
 }
 
+func TestEmptyEquipmentOverlayPreservesBody(t *testing.T) {
+	base, err := EncodeRGBA(bytes.Repeat([]byte{120, 80, 160, 255}, 8), 4, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty, err := EncodeRGBA(make([]byte, 8*4), 4, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if abnormal, err := IsAbnormalTransparency(empty); err != nil || abnormal {
+		t.Fatalf("empty overlay classified as damaged: %v, %v", abnormal, err)
+	}
+	composite, err := DrawPngsOnBasePng(base, []Draw{{PngData: empty, Width: 1, Height: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, _, err := DecodeRGBA(composite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _, _, _ := DecodeRGBA(base)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("transparent belt overlay changed underlying skin: %v", got)
+	}
+}
+
 func TestResizePngFill(t *testing.T) {
 	src := bytes.Repeat([]byte{1, 2, 3, 4}, 1)
 	pngBytes, err := EncodeRGBA(append([]byte(nil), src...), 1, 1)

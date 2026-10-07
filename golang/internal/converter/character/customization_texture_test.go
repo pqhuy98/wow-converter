@@ -5,7 +5,22 @@ import (
 
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
+	"github.com/pqhuy98/wow-converter/internal/wowhead"
 )
+
+func TestCollectionMaterialRespectsSelectedColorVariation(t *testing.T) {
+	meta := wowhead.CharacterCustomization{Options: []wowhead.CustomizationOption{{ID: 57, Choices: []wowhead.CustomizationChoice{{ID: 902, Elements: []wowhead.CustomizationElement{
+		{SkinnedModel: &wowhead.ElementSkinnedModel{CollectionFileDataID: 7760204, GeosetType: 25, GeosetID: 1}},
+		{VariationChoiceID: 7636, Material: &wowhead.ElementMaterial{TextureTarget: 40, MaterialResourcesID: 1104902}},
+		{VariationChoiceID: 62818, Material: &wowhead.ElementMaterial{TextureTarget: 40, MaterialResourcesID: 1104901}},
+	}}}}}}
+	for _, color := range []int{7636, 62818} {
+		selected := selectedCustomizationElements(meta, []wowhead.Customization{{OptionID: 57, ChoiceID: 902}, {OptionID: 683, ChoiceID: color}})
+		if len(selected) != 2 || selected[0].SkinnedModel == nil || selected[1].Material == nil || selected[1].VariationChoiceID != color {
+			t.Fatalf("color %d did not retain only its collection material: %+v", color, selected)
+		}
+	}
+}
 
 func TestCollectionsReuseBakedHairInsteadOfRawHighlights(t *testing.T) {
 	base := &mdl.MDL{Textures: []*components.Texture{

@@ -10,6 +10,9 @@ import (
 type haranirGathererTransport struct{}
 
 func (haranirGathererTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.Contains(req.URL.Path, "/meta/character/") {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"Character":{"ChrModelFlags":1}}`))}, nil
+	}
 	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`WH.Gatherer.addData(3, 1, {"209902":{"json":{"displayid":671002}},"235587":{"json":{"displayid":696565}}});`))}, nil
 }
 
@@ -22,6 +25,9 @@ func TestDecodeHaranirSeparateShoulders(t *testing.T) {
 	}
 	if !meta.SeparateShoulders || meta.Equipment["3"] != 671002 || meta.Equipment["20"] != 696565 {
 		t.Fatalf("separate shoulder appearances were lost: %+v", meta)
+	}
+	if meta.Character == nil || meta.Character.ChrModelFlags != 1 {
+		t.Fatal("dressing-room decoding discarded the model's foot-painting flag")
 	}
 }
 

@@ -47,6 +47,56 @@ func TestTexturePagesSurviveForkDeduplicationAndSerialization(t *testing.T) {
 	}
 }
 
+func TestAnimationOnlyLayerKeepsItsTexturePagesAcrossItemMergeAndCleanup(t *testing.T) {
+	main := New(NewMDLOptions{Name: "character"})
+	main.Bones = []*components.Bone{components.NewBone("root")}
+	baseTexture := &components.Texture{Image: "base.blp"}
+	baseMaterial := &components.Material{Layers: []components.Layer{{Texture: baseTexture}}}
+	main.Textures = []*components.Texture{baseTexture}
+	main.Materials = []*components.Material{baseMaterial}
+	main.Geosets = []*components.Geoset{{Name: "body", Material: baseMaterial}}
+
+	makeItem := func(name string, textures []*components.Texture, layer components.Layer) *MDL {
+		item := New(NewMDLOptions{Name: name})
+		item.Bones = []*components.Bone{components.NewBone("root")}
+		material := &components.Material{Layers: []components.Layer{layer}}
+		item.Textures = textures
+		item.Materials = []*components.Material{material}
+		item.Geosets = []*components.Geoset{{Name: name, Material: material}}
+		return item
+	}
+
+	headPage0 := &components.Texture{Image: "head-page-0.blp"}
+	headPage1 := &components.Texture{Image: "head-page-1.blp"}
+	headTrack := &components.Animation{
+		Type:          components.AnimTypeOthers,
+		Interpolation: components.InterpDontInterp,
+		KeyFrames:     map[int]any{0: headPage0, 100: headPage1},
+	}
+	head := makeItem("head", []*components.Texture{headPage0, headPage1}, components.Layer{TextureIDAnim: headTrack})
+	main.Modify.AddMdlCollectionItemToModel(head)
+
+	// This later static item takes the ID that the animation-only layer's first
+	// page had before unused textures are removed. If the page is discarded,
+	// the stale KMTF ID silently points at this unrelated chest texture.
+	chestTexture := &components.Texture{Image: "chest.blp"}
+	chest := makeItem("chest", []*components.Texture{chestTexture}, components.Layer{Texture: chestTexture})
+	main.Modify.AddMdlCollectionItemToModel(chest)
+
+	main.Modify.RemoveUnusedMaterialsTextures()
+	main.UpdateIDs()
+
+	if len(main.Textures) != 4 {
+		t.Fatalf("retained %d textures, want base, head pages, and chest page", len(main.Textures))
+	}
+	for _, page := range []*components.Texture{headPage0, headPage1} {
+		id := page.ID
+		if id < 0 || id >= len(main.Textures) || main.Textures[id].Image != page.Image {
+			t.Fatalf("head KMTF page %q has ID %d resolving to the wrong texture", page.Image, id)
+		}
+	}
+}
+
 func TestRibbonMaterialSurvivesOptimizationAndMerge(t *testing.T) {
 	body := &components.Material{Layers: []components.Layer{{Texture: &components.Texture{Image: "body.blp"}}}}
 	trail := &components.Material{Layers: []components.Layer{{Texture: &components.Texture{Image: "trail.blp"}}}}

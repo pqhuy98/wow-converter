@@ -87,16 +87,15 @@ func (mod *Modify) RemoveUnusedMaterialsTextures() *Modify {
 	for i, mat := range geosetMaterials {
 		for li := range mat.Layers {
 			layer := &mat.Layers[li]
-			if layer.Texture == nil {
-				continue
+			if layer.Texture != nil {
+				if layer.Texture.Image == "" {
+					log.Printf("%s", ansi.Redf("Empty texture, i: %d, wow type: %d", i, layer.Texture.WowData.Type))
+				}
+				layer.Texture = getTexture(layer.Texture)
 			}
-			if layer.Texture.Image == "" {
-				log.Printf("%s", ansi.Redf("Empty texture, i: %d, wow type: %d", i, layer.Texture.WowData.Type))
-			}
-			layer.Texture = getTexture(layer.Texture)
 			if layer.TextureIDAnim != nil {
-				for time, value := range layer.TextureIDAnim.KeyFrames {
-					if texture, ok := value.(*components.Texture); ok {
+				for _, time := range components.SortedKeyInts(layer.TextureIDAnim.KeyFrames) {
+					if texture, ok := layer.TextureIDAnim.KeyFrames[time].(*components.Texture); ok && texture != nil {
 						layer.TextureIDAnim.KeyFrames[time] = getTexture(texture)
 					}
 				}

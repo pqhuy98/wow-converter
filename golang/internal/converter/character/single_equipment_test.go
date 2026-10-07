@@ -48,7 +48,8 @@ func TestSingleEquipmentItem185188Metadata(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		replaceable := itemReplaceableTextures(item.ModelTextureFiles)
+		modelTextureFiles := itemModelTextureFiles(item, 0)
+		replaceable := itemReplaceableTextures(modelTextureFiles)
 		t.Logf("replaceable: %#v", replaceable)
 		if len(replaceable) == 0 {
 			t.Fatal("expected replaceable textures from Textures2")

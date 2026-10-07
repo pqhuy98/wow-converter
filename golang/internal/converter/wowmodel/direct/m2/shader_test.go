@@ -76,24 +76,29 @@ func TestM2EdgeFadeMatchesAllAngleFramebufferAverage(t *testing.T) {
 			return rgb
 		}
 	}
-	for _, sourceAlpha := range []float64{0, .2, .65, 1, 1.5, 2} {
-		source := m2Fragment{diffuse: [3]float64{.8, .4, .2}, alpha: sourceAlpha}
-		for _, blend := range []uint16{0, 1, 2, 3, 4, 5, 6, 7} {
-			wantAlpha, want := 0.0, 0.0
-			for i := range samples {
-				x := -1 + 2*(float64(i)+.5)/samples
-				fade := clampM2(2.7*math.Pow(max(0, x), 2) - .4)
-				alpha := source.alpha
-				if blend == 2 || blend == 4 || blend == 7 {
-					alpha = clampM2(alpha * fade)
+	for _, twoSided := range []bool{false, true} {
+		for _, sourceAlpha := range []float64{0, .2, .65, 1, 1.5, 2} {
+			source := m2Fragment{diffuse: [3]float64{.8, .4, .2}, alpha: sourceAlpha}
+			for _, blend := range []uint16{0, 1, 2, 3, 4, 5, 6, 7} {
+				wantAlpha, want := 0.0, 0.0
+				for i := range samples {
+					x := -1 + 2*(float64(i)+.5)/samples
+					if !twoSided {
+						x = math.Sqrt((float64(i) + .5) / samples)
+					}
+					fade := clampM2(2.7*math.Pow(max(0, x), 2) - .4)
+					alpha := source.alpha
+					if blend == 2 || blend == 4 || blend == 7 {
+						alpha = clampM2(alpha * fade)
+					}
+					wantAlpha += alpha / samples
+					want += compose(source.diffuse[0]*fade, alpha, blend) / samples
 				}
-				wantAlpha += alpha / samples
-				want += compose(source.diffuse[0]*fade, alpha, blend) / samples
-			}
-			got := averageM2EdgeFade(source, blend)
-			actual := compose(got.diffuse[0], got.alpha, blend)
-			if math.Abs(actual-want) > 1e-8 || math.Abs(got.alpha-wantAlpha) > 1e-8 {
-				t.Fatalf("blend %d source alpha %g: framebuffer %g, want %g; alpha %g, want %g", blend, sourceAlpha, actual, want, got.alpha, wantAlpha)
+				got := averageM2EdgeFade(source, blend, twoSided)
+				actual := compose(got.diffuse[0], got.alpha, blend)
+				if math.Abs(actual-want) > 1e-8 || math.Abs(got.alpha-wantAlpha) > 1e-8 {
+					t.Fatalf("blend %d source alpha %g: framebuffer %g, want %g; alpha %g, want %g", blend, sourceAlpha, actual, want, got.alpha, wantAlpha)
+				}
 			}
 		}
 	}

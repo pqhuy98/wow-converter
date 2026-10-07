@@ -377,27 +377,34 @@ func resolveHideGeosetIDs(itemData wowhead.ItemData, targetRace, targetGender in
 	return ids
 }
 
-func itemReplaceableTextures(files [2][]FileWithComponent) map[string]int {
+func itemModelTextureFiles(itemData ItemMetadata, modelIndex int) []FileWithComponent {
+	if modelIndex < 0 || modelIndex >= len(itemData.ModelFiles) {
+		return nil
+	}
+	componentID := itemData.ModelFiles[modelIndex].ComponentID
+	if componentID < 0 || componentID >= len(itemData.ModelTextureFiles) {
+		return nil
+	}
+	return itemData.ModelTextureFiles[componentID]
+}
+
+func itemReplaceableTextures(files []FileWithComponent) map[string]int {
 	replaceable := map[string]int{}
-	for _, set := range files {
-		for _, f := range set {
-			replaceable[strconv.Itoa(f.ComponentID)] = f.FileDataID
-		}
+	for _, f := range files {
+		replaceable[strconv.Itoa(f.ComponentID)] = f.FileDataID
 	}
 	return replaceable
 }
 
-func itemModelTextureIDs(files [2][]FileWithComponent) []int {
+func itemModelTextureIDs(files []FileWithComponent) []int {
 	seen := map[int]struct{}{}
 	out := make([]int, 0)
-	for _, set := range files {
-		for _, f := range set {
-			if _, ok := seen[f.FileDataID]; ok {
-				continue
-			}
-			seen[f.FileDataID] = struct{}{}
-			out = append(out, f.FileDataID)
+	for _, f := range files {
+		if _, ok := seen[f.FileDataID]; ok {
+			continue
 		}
+		seen[f.FileDataID] = struct{}{}
+		out = append(out, f.FileDataID)
 	}
 	return out
 }
@@ -446,9 +453,10 @@ func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targ
 		return nil, ItemMetadata{}, fmt.Errorf("found no model for item %d", zam.DisplayID)
 	}
 	modelID := result.ModelFiles[0].FileDataID
-	replaceable := itemReplaceableTextures(result.ModelTextureFiles)
+	modelTextureFiles := itemModelTextureFiles(result, 0)
+	replaceable := itemReplaceableTextures(modelTextureFiles)
 	model, err := ExportModelFileIDAsMdl(ctx, modelID, ExportModelOptions{
-		TextureIDs:          itemModelTextureIDs(result.ModelTextureFiles),
+		TextureIDs:          itemModelTextureIDs(modelTextureFiles),
 		ReplaceableTextures: replaceable,
 	})
 	if err != nil {

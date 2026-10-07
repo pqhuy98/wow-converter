@@ -16,10 +16,30 @@ type FileEntry struct {
 
 // CharacterMeta holds character metadata fields.
 type CharacterMeta struct {
-	Class    int `json:"Class"`
-	Race     int `json:"Race"`
-	Gender   int `json:"Gender"`
-	ChrModel int `json:"ChrModelId"`
+	Class         int `json:"Class"`
+	ChrModelFlags int `json:"ChrModelFlags"`
+	Race          int `json:"Race"`
+	Gender        int `json:"Gender"`
+	ChrModel      int `json:"ChrModelId"`
+}
+
+// FetchCharacterMeta returns the model's flags, including its bare-foot rule.
+func FetchCharacterMeta(client *HTTPClient, expansion Expansion, modelID int) (CharacterData, error) {
+	path := fmt.Sprintf("meta/character/%d.json", modelID)
+	if expansion == ExpansionLatestAvailable {
+		var err error
+		expansion, err = GetLatestExpansionHavingURL(client, path)
+		if err != nil {
+			return CharacterData{}, err
+		}
+	}
+	text, err := FetchWithCache(client, GetZamBaseURL(expansion)+"/"+path)
+	if err != nil {
+		return CharacterData{}, err
+	}
+	var data CharacterData
+	err = json.Unmarshal([]byte(text), &data)
+	return data, err
 }
 
 // CreatureMeta holds creature customization metadata.
