@@ -39,7 +39,7 @@ type Job[T, V any] struct {
 	cancel        context.CancelFunc
 }
 
-// Context is cancelled when CancelJob is called for this job.
+// Context is cancelled on the processing deadline or when CancelJob is called.
 func (j *Job[T, V]) Context() context.Context {
 	if j.ctx == nil {
 		return context.Background()
@@ -207,7 +207,12 @@ func (q *JobQueue[T, V]) jobPositionLocked(id string) *int {
 	if !ok {
 		return nil
 	}
-	pos := idx - q.queueHead + 1
+	pos := 0
+	for i := q.queueHead; i <= idx; i++ {
+		if q.pending[i].Status == JobPending {
+			pos++
+		}
+	}
 	return &pos
 }
 
@@ -215,10 +220,7 @@ func (q *JobQueue[T, V]) jobPositionLocked(id string) *int {
 func (q *JobQueue[T, V]) GetQueueSnapshot() (pendingCount, processingCount int) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	pendingCount = len(q.pending) - q.queueHead
-	if pendingCount < 0 {
-		pendingCount = 0
-	}
+	pendingCount = len(q.pendingIndex)
 	return pendingCount, q.activeJobs
 }
 
@@ -249,7 +251,9 @@ func (q *JobQueue[T, V]) tryProcessQueue() {
 		q.queueHead = 0
 		q.pendingIndex = make(map[string]int)
 		for i, job := range q.pending {
-			q.pendingIndex[job.ID] = i
+			if job.Status == JobPending {
+				q.pendingIndex[job.ID] = i
+			}
 		}
 	}
 	for q.activeJobs < q.config.Concurrency && q.queueHead < len(q.pending) {
@@ -263,47 +267,61 @@ func (q *JobQueue[T, V]) tryProcessQueue() {
 		job.Status = JobProcessing
 		now := time.Now().UnixMilli()
 		job.StartedAt = &now
+		if !job.NoTimeout {
+			timeout := q.config.JobTimeout
+			if job.Timeout > 0 {
+				timeout = job.Timeout
+			}
+			parentCancel := job.cancel
+			var deadlineCancel context.CancelFunc
+			job.ctx, deadlineCancel = context.WithTimeout(job.ctx, timeout)
+			job.cancel = func() {
+				parentCancel()
+				deadlineCancel()
+			}
+		}
 		go q.runJob(job)
 	}
 	q.mu.Unlock()
 }
 
 func (q *JobQueue[T, V]) runJob(job *Job[T, V]) {
-	var result V
-	var err error
-
-	if job.NoTimeout {
-		result, err = q.handle(job)
-	} else {
-		type outcome struct {
-			result V
-			err    error
-		}
-		ch := make(chan outcome, 1)
-		go func() {
-			r, e := q.handle(job)
-			ch <- outcome{r, e}
-		}()
-		timeout := q.config.JobTimeout
-		if job.Timeout > 0 {
-			timeout = job.Timeout
-		}
+	// Cancellation requests stopping; it does not release the worker slot.
+	// Native encoders and other uninterruptible stages must finish before a
+	// replacement job can start or a terminal status can be published.
+	finished := make(chan struct{})
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
 		select {
-		case out := <-ch:
-			result, err = out.result, out.err
-		case <-time.After(timeout):
-			err = errJobTimeout
-			if q.config.OnTimeout != nil {
+		case <-job.Context().Done():
+			q.mu.Lock()
+			if errors.Is(job.Context().Err(), context.DeadlineExceeded) {
+				job.Error = "Job timeout; stopping export"
+			} else {
+				job.Error = "Stopping export"
+			}
+			q.mu.Unlock()
+			if errors.Is(job.Context().Err(), context.DeadlineExceeded) && q.config.OnTimeout != nil {
 				q.config.OnTimeout()
 			}
+		case <-finished:
 		}
-	}
-
+	}()
+	result, err := q.handle(job)
+	close(finished)
+	<-watcherDone
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	contextErr := job.Context().Err()
+	job.cancel() // Release the deadline timer after physical work completes.
+	if errors.Is(contextErr, context.DeadlineExceeded) {
+		err = errJobTimeout
+	}
+
 	now := time.Now().UnixMilli()
 	job.FinishedAt = &now
-	if errors.Is(job.Context().Err(), context.Canceled) {
+	if errors.Is(contextErr, context.Canceled) {
 		job.Status = JobCancelled
 		job.Error = "Export halted"
 		log.Printf("Job cancelled: %s", job.ID)
@@ -316,6 +334,7 @@ func (q *JobQueue[T, V]) runJob(job *Job[T, V]) {
 		log.Printf("%s", ansi.Redf("Job failed: %s: %v", job.ID, err))
 	} else {
 		job.Status = JobDone
+		job.Error = ""
 		job.Result = &result
 		if job.AddToRecent {
 			q.RecentCompletedJobs = append([]*Job[T, V]{job}, q.RecentCompletedJobs...)

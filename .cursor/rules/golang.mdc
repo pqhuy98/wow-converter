@@ -45,9 +45,19 @@ exporter.MapExportConfig = mapCfg
 - Store an ordered slice when order matters. Keep a map beside it only for lookup by key.
 - Classic CASC root variants are `[]RootRecord` for this reason. One fileDataID has a high-res entry (`ContentHighResTexture`) and a low-res twin; ranging `map[int]CascKey` picked one at random, so the same build wrote 1024 and 256 textures. `selectRootContentKey` walks the slice and prefers the high-res entry.
 
-## Not encountered yet
+### Typed conversion metadata
 
-Shared memory, nil checks, and races that have not shown up as bugs here. This module is Go 1.25, so the pre-1.22 loop-variable capture (`v := v` inside the loop) is already fixed. Do not add that workaround.
+- Direct M2/WMO conversion builds `bundle/metadata.Data` and calls `File.LoadFromData`; disk companion files use `Parse` as their typed JSON boundary. Keep direct conversion in memory: no `map[string]any`, marshal/unmarshal type conversion, or JSON normalization passes.
+- `LoadFromData` owns its assembly snapshot. Preserve nested slice ownership and nullable animation timestamps when adding fields; test source/snapshot isolation as well as decoded values.
+
+### Job cancellation and capacity
+
+- Queue handlers must pass `job.Context()` through conversion, workers, and asset writes. Timeout/cancel requests ask work to stop; they do not prove it stopped. Keep the job processing and its slot occupied until the handler and started workers return; discard late success after cancellation. `WorkerPoolContext` joins started work before returning.
+- Native encoding, optimization, and serialization may not stop mid-call. Check context around these stages and retain capacity while they finish. Never reset shared bundled CASC state to interrupt one job.
+
+## Other Go pitfalls
+
+This module is Go 1.25, so the pre-1.22 loop-variable capture (`v := v` inside the loop) is already fixed. Do not add that workaround.
 
 - **Slice backing array.** A reslice shares the array. `append` reuses that capacity and overwrites the parent, or reallocates so the caller's header never sees the new elements. Reassign `s = append(s, x)`. Detach with `s[:len(s):len(s)]` or `copy` before returning a small window of a large buffer. ([slices](https://go.dev/blog/slices-intro))
 - **nil map vs nil slice.** Appending to a nil slice is fine. Writing a nil map panics. A missing key reads back as the zero value, so use the comma-ok form when a stored zero is meaningful.

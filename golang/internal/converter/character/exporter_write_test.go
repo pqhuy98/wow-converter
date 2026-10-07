@@ -1,6 +1,8 @@
 package character
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,13 +12,30 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 )
 
+func TestCancelledModelWriteDoesNotSerializeOrCreateOutput(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	dir := t.TempDir()
+	exporter := &CharacterExporter{Models: [][2]interface{}{{(*mdl.MDL)(nil), "cancelled"}}}
+	if _, err := exporter.WriteAllModels(ctx, dir, "mdx"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("write error = %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatal("cancelled export created output")
+	}
+}
+
 func TestWriteAllModelsReturnsWrittenPaths(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	exporter := &CharacterExporter{Config: config.DefaultConfig()}
 	exporter.IncludeMdlToOutput(mdl.New(mdl.NewMDLOptions{Name: "test"}), "the-lich-king")
 
-	paths, err := exporter.WriteAllModels(dir, "mdx")
+	paths, err := exporter.WriteAllModels(context.Background(), dir, "mdx")
 	if err != nil {
 		t.Fatal(err)
 	}

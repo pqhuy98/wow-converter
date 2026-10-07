@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -45,6 +46,11 @@ func openBrowser(ctx context.Context) (*browser, error) {
 		"--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
 		"--force-device-scale-factor=1", "--enable-webgl", "--ignore-gpu-blocklist", "about:blank")
 	hideWindow(b.cmd)
+	stdout, err := b.cmd.StdoutPipe()
+	if err != nil {
+		b.close()
+		return nil, err
+	}
 	stderr, err := b.cmd.StderrPipe()
 	if err != nil {
 		b.close()
@@ -54,30 +60,14 @@ func openBrowser(ctx context.Context) (*browser, error) {
 		b.close()
 		return nil, errors.New("Could not start your browser. Close other screenshot attempts and try again.")
 	}
-	ready := make(chan string, 1)
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if at := strings.Index(line, "DevTools listening on "); at >= 0 {
-				select {
-				case ready <- strings.TrimSpace(line[at+len("DevTools listening on "):]):
-				default:
-				}
-			}
+	address, err := waitDevTools(ctx, b.profile, stdout, stderr)
+	if err != nil {
+		b.close()
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
-	}()
-	var socket string
-	select {
-	case socket = <-ready:
-	case <-ctx.Done():
-		b.close()
-		return nil, ctx.Err()
-	case <-time.After(20 * time.Second):
-		b.close()
 		return nil, errors.New("Your browser did not start screenshot capture. Please try again.")
 	}
-	address := strings.Split(strings.TrimPrefix(socket, "ws://"), "/")[0]
 	b.address = address
 	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+address+"/json/list", nil)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
@@ -113,6 +103,69 @@ func openBrowser(ctx context.Context) (*browser, error) {
 		}
 	}
 	return b, nil
+}
+
+func waitDevTools(ctx context.Context, profile string, streams ...io.Reader) (string, error) {
+	ready := make(chan string, 1)
+	send := func(address string) {
+		if address == "" {
+			return
+		}
+		select {
+		case ready <- address:
+		default:
+		}
+	}
+	for _, stream := range streams {
+		if stream == nil {
+			continue
+		}
+		go func(r io.Reader) {
+			scanner := bufio.NewScanner(r)
+			for scanner.Scan() {
+				send(devToolsAddress(scanner.Text()))
+			}
+		}(stream)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case address := <-ready:
+			return address, nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-tick.C:
+			if address := readDevToolsAddress(profile); address != "" {
+				return address, nil
+			}
+			if !time.Now().Before(deadline) {
+				return "", errors.New("Your browser did not start screenshot capture. Please try again.")
+			}
+		}
+	}
+}
+
+func devToolsAddress(line string) string {
+	at := strings.Index(line, "DevTools listening on ")
+	if at < 0 {
+		return ""
+	}
+	socket := strings.TrimSpace(line[at+len("DevTools listening on "):])
+	return strings.Split(strings.TrimPrefix(socket, "ws://"), "/")[0]
+}
+
+func readDevToolsAddress(profile string) string {
+	data, err := os.ReadFile(filepath.Join(profile, "DevToolsActivePort"))
+	if err != nil {
+		return ""
+	}
+	port := strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
+	if _, err = strconv.Atoi(port); err != nil || port == "0" {
+		return ""
+	}
+	return "127.0.0.1:" + port
 }
 
 // Each tab has its own CDP connection, so capture can run concurrently in one browser.

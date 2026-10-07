@@ -80,7 +80,7 @@ func (CharacterMetaService) GetCharacterMeta(ctx context.Context, params apicasc
 		allChoiceValues = append(allChoiceValues, id)
 	}
 
-	choices := map[string]any{}
+	choices := map[string]character.ChoiceMeta{}
 	for choiceID := range choiceIDs {
 		geosets := make([]int, 0)
 		for _, chrCustGeoID := range lookups.choiceToGeoset[choiceID] {

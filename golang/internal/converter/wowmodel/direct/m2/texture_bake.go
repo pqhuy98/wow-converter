@@ -51,13 +51,13 @@ func unboundOptionalReplaceableTexture(loader *m2.Loader, index int, resolved Re
 	if textureType <= 0 || textureType == 1 || tex.FileDataID != 0 || tex.FileName != "" {
 		return false
 	}
-	if _, found := resolved.ValidTextures[tex.FileDataID]; found {
+	if _, found := resolved.ValidTextures[textureKey{fileDataID: tex.FileDataID}]; found {
 		return false
 	}
-	if _, found := resolved.ValidTextures[tex.FileName]; found {
+	if _, found := resolved.ValidTextures[textureKey{fileName: tex.FileName}]; found {
 		return false
 	}
-	_, found := resolved.ValidTextures[fmt.Sprintf("data-%d", textureType)]
+	_, found := resolved.ValidTextures[textureKey{data: true, dataType: int(textureType)}]
 	return !found
 }
 
@@ -112,12 +112,12 @@ func bakeM2Materials(ctx context.Context, cfg config.Config, src FileSource, loa
 			return nil, fmt.Errorf("texture index %d out of range", index)
 		}
 		tex := loader.Textures[index]
-		entry, found := resolved.ValidTextures[tex.FileDataID]
+		entry, found := resolved.ValidTextures[textureKey{fileDataID: tex.FileDataID}]
 		if !found && tex.FileName != "" {
-			entry, found = resolved.ValidTextures[tex.FileName]
+			entry, found = resolved.ValidTextures[textureKey{fileName: tex.FileName}]
 		}
 		if !found && index < len(loader.TextureTypes) {
-			entry, found = resolved.ValidTextures[fmt.Sprintf("data-%d", loader.TextureTypes[index])]
+			entry, found = resolved.ValidTextures[textureKey{data: true, dataType: int(loader.TextureTypes[index])}]
 		}
 		if unboundOptionalReplaceableTexture(loader, index, resolved) {
 			// WCpp binds an unbound replaceable sampler to a transparent black

@@ -89,7 +89,7 @@ func registerExportCharacter(r Router, d *Deps) {
 	}, func(job *util.Job[exportCharacterRequest, exportCharacterResponse]) (exportCharacterResponse, error) {
 		exportlog.Begin()
 		defer exportlog.End()
-		return runCharacterExport(job.Request, job.ID, d)
+		return runCharacterExport(job.Context(), job.Request, job.ID, d)
 	})
 	loadRecentExports(queue, d.Config.RecentExports)
 
@@ -289,7 +289,10 @@ func optimizationBool(v *bool, defaultVal bool) bool {
 	return *v
 }
 
-func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (exportCharacterResponse, error) {
+func runCharacterExport(ctx context.Context, req exportCharacterRequest, jobID string, d *Deps) (exportCharacterResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return exportCharacterResponse{}, err
+	}
 	var exporter *character.CharacterExporter
 	defer func() {
 		// The parsed model stays on this exporter until the handler returns. Drop it and
@@ -325,7 +328,7 @@ func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (expo
 	}
 
 	exporter = character.NewCharacterExporter(cfg, d.Client)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 
 	if err := client.SyncConfig(ctx, d.Client); err != nil {
@@ -336,6 +339,9 @@ func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (expo
 		LocalModelSkinID: req.SkinID,
 	})
 	if err != nil {
+		return exportCharacterResponse{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return exportCharacterResponse{}, err
 	}
 	exporter.OptimizeModelsTextures(character.ExportOptimization{
@@ -354,11 +360,11 @@ func runCharacterExport(req exportCharacterRequest, jobID string, d *Deps) (expo
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		texturePaths, texErr = exporter.WriteAllTextures(outDir)
+		texturePaths, texErr = exporter.WriteAllTextures(ctx, outDir)
 	}()
 	go func() {
 		defer wg.Done()
-		modelPaths, modelErr = exporter.WriteAllModels(outDir, req.Format)
+		modelPaths, modelErr = exporter.WriteAllModels(ctx, outDir, req.Format)
 	}()
 	wg.Wait()
 	if texErr != nil {

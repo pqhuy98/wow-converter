@@ -67,7 +67,8 @@ func (f *File) GeosetAnimation(colorIndex int, geoset *components.Geoset) compon
 		return ga
 	}
 	wowColor := f.colors[colorIndex]
-	if track, ok := parseM2TrackRaw(firstKey(wowColor, "color", "Color")); ok {
+	{
+		track := wowColor.Color
 		transform := func(v []float64) imath.Vector3 {
 			if len(v) < 3 {
 				return imath.Vector3{}
@@ -82,7 +83,8 @@ func (f *File) GeosetAnimation(colorIndex int, geoset *components.Geoset) compon
 			ga.Color = &components.AnimatedOrStatic[imath.Vector3]{Static: false, Anim: anim}
 		}
 	}
-	if track, ok := parseM2TrackRaw(firstKey(wowColor, "alpha", "Alpha")); ok {
+	{
+		track := wowColor.Alpha
 		transform := func(v []float64) float64 {
 			if len(v) == 0 {
 				return float64(1)

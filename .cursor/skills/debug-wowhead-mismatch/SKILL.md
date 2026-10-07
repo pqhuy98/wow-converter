@@ -7,7 +7,7 @@ description: Investigate and fix a visual mismatch between a wowhead.com model a
 
 The shot skills only capture PNGs. This skill decides why those PNGs differ and where to change the converter.
 
-`bun run dev` is the live Go server on http://127.0.0.1:3001. Shared conversion behavior that still has a TypeScript path: change both. Do not port Go-only features to TS (ADR 0001 in `docs/decisions/`).
+`bun run dev` is the live Go server on http://127.0.0.1:3001. Fix the owning Go layer and trace its character/map callers. Update a TypeScript path when the supported compatibility workflow is affected; do not duplicate Go-only work for parity (ADR 0001 in `docs/decisions/`).
 
 Investigation logs, scripts, and artifacts go in the repo `tmp/` folder. `tmp/` is gitignored.
 

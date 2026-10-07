@@ -9,7 +9,6 @@ Go ports of:
 
 ```bash
 cd golang
-go mod tidy
 go build ./...
 ```
 
@@ -29,7 +28,7 @@ Listens on `http://127.0.0.1:17753` by default.
 go run ./cmd/wow-converter
 ```
 
-**Bundled mode** (in-process wow runtime via `InProcessClient`, unix socket transport):
+**Bundled mode** (in-process wow runtime via `InProcessClient`, with a unix socket for external tools):
 
 ```bash
 WOW_CONVERTER_BUNDLED=1 go run ./cmd/wow-converter
@@ -42,7 +41,7 @@ Bundled mode sets `WOW_DATA_TRANSPORT=socket` and listens on `.cache/wow-data-se
 **Production build** (from repo root):
 
 ```bash
-npm run build
+bun run build
 ```
 
 Output directory: `dist-go/` (Go binary, `webui/out`, `bin/`, `resources/` including `template-empty.w3x`).
@@ -60,12 +59,12 @@ Run: `.\dist-go\wow-converter.exe`
 
 ### Root development scripts
 
-`npm run dev` is the default single-process Go development mode
+`bun run dev` is the default single-process Go development mode
 (`WOW_CONVERTER_BUNDLED=1` + Air), with wow-data-server in-process and no
 separate `:17753` listener. The Next.js UI remains on `:3000`; converter API
 and UI proxy are on `:3001`.
 
-Use `npm run dev:ts` only for legacy TS wrapper compatibility work. To debug
+Use `bun run dev:ts` only for legacy TS wrapper compatibility work. To debug
 the Go data server independently, run `go run ./cmd/wow-data-server` from
 `golang/` alongside the converter.
 
@@ -168,7 +167,9 @@ Unit (no WoW install):
 go test ./...
 ```
 
-`//go:build integration_tests` files are compiled only with `-tags integration_tests`, so `go test ./...` never sees them. From the repo root, `bun run test:golang-integration` starts wow-data-server on `:18753` and runs those tests against it. `bun run verify` runs that suite immediately after the unit tests.
+`//go:build integration_tests` files are compiled only with `-tags integration_tests`, so `go test ./...` never sees them. From the repo root, `bun run test:golang-integration` uses an already-running data server (`WOW_DATA_SERVER_SOCKET`, `WOW_DATA_SERVER_URL`, detected development sockets, or `:17753`). Baking API tests also need the converter (`WOW_CONVERTER_URL`, default `http://127.0.0.1:3001`). This suite does not start either server. `bun run verify` builds and boots `dist-go` after unit tests, then runs integration, API, and snapshot checks against it.
+
+Use [architecture and verification](../docs/architecture.md) to choose focused checks. Map regression is currently disabled in `verify`; its success does not certify map output or behavior in Warcraft III.
 
 Module benchmarks in `test/bench` use the same tag:
 

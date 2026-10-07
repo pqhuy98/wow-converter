@@ -68,11 +68,14 @@ func (a *AssetManager) Models() map[string]*Model { return a.models }
 
 // Parse resolves and caches a model by path.
 func (a *AssetManager) Parse(objectPath string, noCache bool) (*Model, error) {
-	return a.ResolveModel(objectPath, 0, WowObjectM2, noCache)
+	return a.ResolveModel(context.Background(), objectPath, 0, WowObjectM2, noCache)
 }
 
 // ResolveModel loads ADT terrain from OBJ or M2/WMO from CASC.
-func (a *AssetManager) ResolveModel(objectPath string, fileDataID int, typ WowObjectType, noCache bool) (*Model, error) {
+func (a *AssetManager) ResolveModel(ctx context.Context, objectPath string, fileDataID int, typ WowObjectType, noCache bool) (*Model, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if m, ok := a.models[objectPath]; ok && !noCache {
 		return m, nil
 	}
@@ -117,7 +120,7 @@ func (a *AssetManager) ResolveModel(objectPath string, fileDataID int, typ WowOb
 		ext = ".wmo"
 	}
 	skinName := ""
-	model, err := a.ParseDirect(context.Background(), fileDataID, skinName, CachePathForLocalRef(a.config.ExportAssetDir, objectPath, ext))
+	model, err := a.ParseDirect(ctx, fileDataID, skinName, CachePathForLocalRef(a.config.ExportAssetDir, objectPath, ext))
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +151,9 @@ type DirectParseOptions struct {
 
 // ParseDirectOptions converts M2/WMO with full direct pipeline options.
 func (a *AssetManager) ParseDirectOptions(ctx context.Context, opts DirectParseOptions) (*Model, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	src := characterCascSource{client: a.wowClient}
 	raw, err := src.GetRawFile(ctx, opts.FileDataID)
 	if err != nil {
@@ -269,7 +275,10 @@ func (a *AssetManager) ReleaseAfterExport() {
 }
 
 // ExportModels writes MDL/MDX files to assetPath.
-func (a *AssetManager) ExportModels(assetPath string) error {
+func (a *AssetManager) ExportModels(ctx context.Context, assetPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	log.Printf("Exporting models to %s ...", assetPath)
 	start := time.Now()
 	var writeCountAtomic atomic.Int32
@@ -299,17 +308,26 @@ func (a *AssetManager) ExportModels(assetPath string) error {
 				if err != nil {
 					return err
 				}
+				if err := ctx.Err(); err != nil {
+					return err
+				}
 				if err := os.WriteFile(full, data, 0o644); err != nil {
 					return err
 				}
-			} else if err := os.WriteFile(full, []byte(mdlModel.ToMdl()), 0o644); err != nil {
-				return err
+			} else {
+				data := []byte(mdlModel.ToMdl())
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if err := os.WriteFile(full, data, 0o644); err != nil {
+					return err
+				}
 			}
 			writeCountAtomic.Add(1)
 			return nil
 		})
 	}
-	if err := WorkerPool(config.MaxConcurrency(), tasks); err != nil {
+	if err := WorkerPoolContext(ctx, config.MaxConcurrency(), tasks); err != nil {
 		return err
 	}
 	writeCount := int(writeCountAtomic.Load())
@@ -341,7 +359,10 @@ type texturePrepResult struct {
 }
 
 // ExportTextures writes BLP textures.
-func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
+func (a *AssetManager) ExportTextures(ctx context.Context, assetPath string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	log.Printf("Exporting textures to %s ...", assetPath)
 	_ = os.MkdirAll(assetPath, 0o755)
 
@@ -355,11 +376,11 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 	for i, rel := range relPaths {
 		i, rel := i, rel
 		prepTasks[i] = func() error {
-			results[i] = a.prepTextureForExport(rel, assetPath)
-			return nil
+			results[i] = a.prepTextureForExport(ctx, rel, assetPath)
+			return ctx.Err()
 		}
 	}
-	if err := WorkerPool(config.MaxConcurrency(), prepTasks); err != nil {
+	if err := WorkerPoolContext(ctx, config.MaxConcurrency(), prepTasks); err != nil {
 		return nil, err
 	}
 
@@ -403,11 +424,11 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 				}
 				switch {
 				case len(item.rawBLP) > 0:
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "blp2", Data: item.rawBLP, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTaskContext(ctx, blp.TaskInput{Kind: "blp2", Data: item.rawBLP, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
 						return err
 					}
 				case len(item.pngData) > 0:
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: item.pngData, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTaskContext(ctx, blp.TaskInput{Kind: "png", Data: item.pngData, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
 						return err
 					}
 				case item.pngPath != "":
@@ -415,7 +436,7 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 					if err != nil {
 						return nil
 					}
-					if err := blp.SubmitBlpTask(blp.TaskInput{Kind: "png", Data: data, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
+					if err := blp.SubmitBlpTaskContext(ctx, blp.TaskInput{Kind: "png", Data: data, ResizeTo: item.resizeTo, Opaque: item.opaque, PreserveAlpha: item.preserveAlpha, IgnoreAlpha: item.ignoreAlpha}, item.outPath); err != nil {
 						return err
 					}
 				default:
@@ -425,7 +446,7 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 				return nil
 			}
 		}
-		if err := WorkerPool(workers, convTasks); err != nil {
+		if err := WorkerPoolContext(ctx, workers, convTasks); err != nil {
 			return exported, err
 		}
 		for _, p := range converted {
@@ -452,7 +473,10 @@ func (a *AssetManager) ExportTextures(assetPath string) ([]string, error) {
 	return exported, nil
 }
 
-func (a *AssetManager) prepTextureForExport(rel, assetPath string) texturePrepResult {
+func (a *AssetManager) prepTextureForExport(ctx context.Context, rel, assetPath string) texturePrepResult {
+	if ctx.Err() != nil {
+		return texturePrepResult{}
+	}
 	fromPath := filepath.Join(a.config.ExportAssetDir, rel)
 	source, hasSource := texturesource.Get(rel)
 	if !hasSource && !ExportAssetExists(fromPath) {
@@ -464,7 +488,10 @@ func (a *AssetManager) prepTextureForExport(rel, assetPath string) texturePrepRe
 	if maxSize <= 0 {
 		maxSize = stdmath.MaxInt32
 	}
-	width, height := readTextureDimensions(source, hasSource, fromPath, a)
+	width, height := readTextureDimensions(ctx, source, hasSource, fromPath, a)
+	if ctx.Err() != nil {
+		return texturePrepResult{}
+	}
 	if width == 0 && height == 0 && hasSource {
 		log.Printf("Failed to read texture metadata, proceeding without resize: %s", fromPath)
 	}
@@ -490,7 +517,7 @@ func (a *AssetManager) prepTextureForExport(rel, assetPath string) texturePrepRe
 	item := blpConvertItem{outPath: outPath, resizeTo: resizeTo, opaque: hasSource && source.Opaque, preserveAlpha: hasSource && source.PreserveAlpha, ignoreAlpha: hasSource && source.IgnoreAlpha}
 	switch {
 	case hasSource && source.Kind == texturesource.KindBLP && a.wowClient != nil:
-		raw, err := a.wowClient.DownloadCascFile(context.Background(), source.FileDataID)
+		raw, err := a.wowClient.DownloadCascFile(ctx, source.FileDataID)
 		if err != nil {
 			return texturePrepResult{}
 		}
@@ -503,9 +530,12 @@ func (a *AssetManager) prepTextureForExport(rel, assetPath string) texturePrepRe
 	return texturePrepResult{item: &item, countsWork: true}
 }
 
-func readTextureDimensions(source texturesource.Source, hasSource bool, fromPath string, a *AssetManager) (int, int) {
+func readTextureDimensions(ctx context.Context, source texturesource.Source, hasSource bool, fromPath string, a *AssetManager) (int, int) {
+	if ctx.Err() != nil {
+		return 0, 0
+	}
 	if hasSource && source.Kind == texturesource.KindBLP && a.wowClient != nil {
-		raw, err := a.wowClient.DownloadCascFile(context.Background(), source.FileDataID)
+		raw, err := a.wowClient.DownloadCascFile(ctx, source.FileDataID)
 		if err == nil && len(raw) >= 20 {
 			b := buffer.From(raw)
 			b.Seek(12)
@@ -513,6 +543,9 @@ func readTextureDimensions(source texturesource.Source, hasSource bool, fromPath
 			b.Seek(16)
 			h := int(b.ReadUInt32LE().(int64))
 			return w, h
+		}
+		if ctx.Err() != nil {
+			return 0, 0
 		}
 	}
 	if hasSource && source.Kind == texturesource.KindPNG {

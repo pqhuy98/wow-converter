@@ -44,16 +44,6 @@ func virtualExportPath(exportRoot, file string) string {
 	return filepath.Clean(filepath.Join(exportRoot, strings.ReplaceAll(file, " ", "")))
 }
 
-func wmoMaterialJSON(m wmo.Material) map[string]any {
-	return map[string]any{
-		"flags": m.Flags, "shader": m.Shader, "blendMode": m.BlendMode,
-		"texture1": m.Texture1, "color1": m.Color1, "color1b": m.Color1b,
-		"texture2": m.Texture2, "color2": m.Color2, "groupType": m.GroupType,
-		"texture3": m.Texture3, "color3": m.Color3, "flags3": m.Flags3,
-		"runtimeData": m.RuntimeData,
-	}
-}
-
 // wmoDiffuseFileID is the texture file data ID bound as the WC3 diffuse.
 // Shader 23 ignores texture1 only when that slot is filled; an empty texture1
 // must not also skip texture2.
@@ -288,47 +278,24 @@ func buildWmoObjResult(root *wmo.Loader, allGroups []*wmo.Loader, materialMap ma
 	return directm2.BuildRawObjResult(vertsArray, normalsArray, uvArrays, meshes, modelName, mtlLib)
 }
 
-func buildWmoMetadataObject(
-	ctx context.Context,
-	root *wmo.Loader,
-	fileDataID int,
-	fileName string,
-	textureMap map[int]textureMapEntry,
-	getName func(context.Context, int) (string, error),
-) map[string]any {
-	textures := []any{}
+func buildWmoMetadata(root *wmo.Loader, textureMap map[int]textureMapEntry) bundlemeta.Data {
+	var textures []bundlemeta.Texture
 	textureCache := map[int]struct{}{}
 	for _, material := range root.Materials {
 		for _, materialTexture := range metaTextureSlots(material) {
 			texID := int(materialTexture)
-			if materialTexture == 0 {
+			if texID == 0 {
 				continue
 			}
-			if _, ok := textureCache[texID]; ok {
+			if _, found := textureCache[texID]; found {
 				continue
 			}
 			textureCache[texID] = struct{}{}
 			entry := textureMap[texID]
-			internalName, _ := getName(ctx, texID)
-			textures = append(textures, map[string]any{
-				"fileDataID":       texID,
-				"fileNameInternal": internalName,
-				"fileNameExternal": entry.matPathRelative,
-				"mtlName":          entry.matName,
-			})
+			textures = append(textures, bundlemeta.Texture{FileDataID: texID, FileNameExternal: entry.matPathRelative, MtlName: entry.matName})
 		}
 	}
-	materials := make([]any, len(root.Materials))
-	for i, m := range root.Materials {
-		materials[i] = wmoMaterialJSON(m)
-	}
-	return map[string]any{
-		"fileType":   "wmo",
-		"fileDataID": fileDataID,
-		"fileName":   fileName,
-		"textures":   textures,
-		"materials":  materials,
-	}
+	return bundlemeta.Data{FileType: "wmo", Textures: textures, WMOMaterials: root.Materials}
 }
 
 // ConvertWmoToMdl converts a WMO root file to MDL via the direct pipeline.
@@ -376,12 +343,7 @@ func ConvertWmoToMdl(ctx context.Context, cfg config.Config, src directm2.FileSo
 	}
 
 	animFile := bundleanim.NewFile(writers.ReplaceExtension(exportPath, "_bones.json"), cfg)
-	metaObj := buildWmoMetadataObject(ctx, root, opts.FileDataID, listfileName, textureMap, getName)
-	if norm := directm2.NormalizeJSONValues(metaObj); norm != nil {
-		if normMap, ok := norm.(map[string]any); ok {
-			metaObj = normMap
-		}
-	}
+	metaObj := buildWmoMetadata(root, textureMap)
 	meta := bundlemeta.NewFile(writers.ReplaceExtension(exportPath, ".json"), cfg, animFile)
 	meta.LoadFromData(metaObj)
 

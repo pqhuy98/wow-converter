@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"log"
@@ -82,7 +83,10 @@ func (m *WowObjectManager) IterateObjects(fn func(obj *WowObject, abs ObjectAbso
 }
 
 // ReadTerrainsDoodads parses exported OBJ roots matching patterns or in-memory tile snapshots.
-func (m *WowObjectManager) ReadTerrainsDoodads(patterns []string, filter func(id string, typ WowObjectType) bool) error {
+func (m *WowObjectManager) ReadTerrainsDoodads(ctx context.Context, patterns []string, filter func(id string, typ WowObjectType) bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	start := time.Now()
 	rootSet := map[*WowObject]struct{}{}
 
@@ -128,7 +132,7 @@ func (m *WowObjectManager) ReadTerrainsDoodads(patterns []string, filter func(id
 		}
 		m.Roots = append(m.Roots, root)
 		rootSet[root] = struct{}{}
-		if err := m.parseRecursive(fileName, root, filter); err != nil {
+		if err := m.parseRecursive(ctx, fileName, root, filter); err != nil {
 			return err
 		}
 		if isEmptyModel(root) {
@@ -155,8 +159,11 @@ func (m *WowObjectManager) ReadTerrainsDoodads(patterns []string, filter func(id
 }
 
 // ReadCreatures loads creatures for each ADT tile from AzerothCore DB.
-func (m *WowObjectManager) ReadCreatures(mapID int) error {
+func (m *WowObjectManager) ReadCreatures(ctx context.Context, mapID int) error {
 	for _, adt := range m.Terrains {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		tx, ty, ok := AsAdt(adt)
 		if !ok {
 			continue
@@ -215,13 +222,16 @@ func (m *WowObjectManager) full(relativePath string) string {
 	return filepath.Join(m.config.ExportAssetDir, relativePath)
 }
 
-func (m *WowObjectManager) parseRecursive(objectPath string, current *WowObject, filter func(string, WowObjectType) bool) error {
+func (m *WowObjectManager) parseRecursive(ctx context.Context, objectPath string, current *WowObject, filter func(string, WowObjectType) bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if _, ok := m.Objects[current.ID]; ok {
 		return nil
 	}
 	m.Objects[current.ID] = current
 
-	model, err := m.AssetManager.ResolveModel(objectPath, current.FileDataID, current.Type, false)
+	model, err := m.AssetManager.ResolveModel(ctx, objectPath, current.FileDataID, current.Type, false)
 	if err != nil {
 		return err
 	}
@@ -305,7 +315,7 @@ func (m *WowObjectManager) parseRecursive(objectPath string, current *WowObject,
 		}
 		current.Children = append(current.Children, child)
 		childObjectPath := filepath.ToSlash(filepath.Join(filepath.Dir(objectPath), fileName))
-		if err := m.parseRecursive(childObjectPath, child, filter); err != nil {
+		if err := m.parseRecursive(ctx, childObjectPath, child, filter); err != nil {
 			return err
 		}
 	}

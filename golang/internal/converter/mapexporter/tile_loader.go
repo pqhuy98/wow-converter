@@ -86,6 +86,9 @@ func LoadADTTilesForConversionSummary(
 				resultMu.Unlock()
 				return nil
 			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			registry.Register(snapshot)
 			registry.RegisterTerrainTexturesFor(snapshot.ObjectPath)
 			resultMu.Lock()
@@ -99,7 +102,9 @@ func LoadADTTilesForConversionSummary(
 			return nil
 		})
 	}
-	_ = common.WorkerPool(MapExportWorkerCount(), tasks)
+	if err := common.WorkerPoolContext(ctx, MapExportWorkerCount(), tasks); err != nil {
+		return loaded, failures, err
+	}
 	if err := ctx.Err(); err != nil {
 		return loaded, failures, err
 	}

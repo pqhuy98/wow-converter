@@ -11,9 +11,9 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
 	"github.com/pqhuy98/wow-converter/internal/math"
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/bootstrap"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
-	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
 // WowMap identifies a WoW continent/instance.
@@ -23,26 +23,26 @@ type WowMap struct {
 }
 
 var (
-	WowMapAzeroth           = WowMap{ID: 0, Folder: "azeroth"}
-	WowMapKalimdor          = WowMap{ID: 1, Folder: "kalimdor"}
-	WowMapNorthrend         = WowMap{ID: 571, Folder: "northrend"}
-	WowMapOutland           = WowMap{ID: 530, Folder: "outland"}
-	WowMapDeathKnightStart  = WowMap{ID: 609, Folder: "deathknightstart"}
-	WowMapIcecrownCitadel   = WowMap{ID: 631, Folder: "icecrowncitadel"}
-	WowMapTheMaw            = WowMap{ID: 2456, Folder: "2456"}
-	WowMapDurnhole          = WowMap{ID: 560, Folder: "HillsbradPast"}
-	WowMapStratholmeRaid    = WowMap{ID: 533, Folder: "stratholmeraid"}
+	WowMapAzeroth          = WowMap{ID: 0, Folder: "azeroth"}
+	WowMapKalimdor         = WowMap{ID: 1, Folder: "kalimdor"}
+	WowMapNorthrend        = WowMap{ID: 571, Folder: "northrend"}
+	WowMapOutland          = WowMap{ID: 530, Folder: "outland"}
+	WowMapDeathKnightStart = WowMap{ID: 609, Folder: "deathknightstart"}
+	WowMapIcecrownCitadel  = WowMap{ID: 631, Folder: "icecrowncitadel"}
+	WowMapTheMaw           = WowMap{ID: 2456, Folder: "2456"}
+	WowMapDurnhole         = WowMap{ID: 560, Folder: "HillsbradPast"}
+	WowMapStratholmeRaid   = WowMap{ID: 533, Folder: "stratholmeraid"}
 )
 
 type mapEntry struct {
-	mapInfo   WowMap
-	min       math.Vector2
-	max       math.Vector2
-	output    string
-	lowerPct  float64
-	upperPct  float64
-	angleDeg  float64
-	wmoSet    []string
+	mapInfo  WowMap
+	min      math.Vector2
+	max      math.Vector2
+	output   string
+	lowerPct float64
+	upperPct float64
+	angleDeg float64
+	wmoSet   []string
 }
 
 func main() {
@@ -117,20 +117,20 @@ func run() error {
 
 	start := time.Now()
 	exporter := mapexporter.NewMapExporter(cfg, &mapCfg, wowClient, registry)
-	if err := exporter.ParseObjects(nil); err != nil {
+	if err := exporter.ParseObjects(ctx, nil); err != nil {
 		return err
 	}
 	mapexporter.PruneDepth(exporter, depth)
 	if autoChooseClamp {
 		mapexporter.AutoChooseClampPercent(exporter, creatureScaleUp)
 	}
-	if err := exporter.ExportTerrainsDoodads(mapOutputDir); err != nil {
+	if err := exporter.ExportTerrainsDoodads(ctx, mapOutputDir); err != nil {
 		return err
 	}
-	if err := exporter.ExportCreatures(mapOutputDir, nil); err != nil {
+	if err := exporter.ExportCreatures(ctx, mapOutputDir, nil); err != nil {
 		return err
 	}
-	if err := exporter.SaveWar3mapFiles(mapOutputDir, ""); err != nil {
+	if err := exporter.SaveWar3mapFiles(ctx, mapOutputDir, ""); err != nil {
 		return err
 	}
 	log.Printf("Total map export time: %.2f s", time.Since(start).Seconds())

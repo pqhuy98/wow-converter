@@ -14,7 +14,7 @@ type ObjMesh struct {
 }
 
 // BuildMeshes mirrors M2Exporter.exportAsOBJ submesh loop.
-func BuildMeshes(loader *m2.Loader, skin *m2.Skin, geosetMask []m2export.GeosetMaskEntry, validTextures map[any]m2export.TextureManifestEntry, dataTextures map[int]struct{}) []ObjMesh {
+func BuildMeshes(loader *m2.Loader, skin *m2.Skin, geosetMask []m2export.GeosetMaskEntry, validTextures textureManifest, dataTextures map[int]struct{}) []ObjMesh {
 	var meshes []ObjMesh
 	for mI, mesh := range skin.SubMeshes {
 		if geosetMask != nil && mI < len(geosetMask) && !geosetMask[mI].Checked {
@@ -36,13 +36,13 @@ func BuildMeshes(loader *m2.Loader, skin *m2.Skin, geosetMask []m2export.GeosetM
 					if texIdx < len(loader.Textures) {
 						tex := loader.Textures[texIdx]
 						texType := loader.TextureTypes[texIdx]
-						fileDataID := any(tex.FileDataID)
+						fileDataID := textureKey{fileDataID: tex.FileDataID}
 						if tex.FileDataID == 0 && tex.FileName != "" {
-							fileDataID = tex.FileName
+							fileDataID = textureKey{fileName: tex.FileName}
 						}
 						if dataTextures != nil {
 							if _, ok := dataTextures[int(texType)]; ok {
-								fileDataID = "data-" + itoa(int(texType))
+								fileDataID = textureKey{data: true, dataType: int(texType)}
 							}
 						}
 						if entry, ok := validTextures[fileDataID]; ok {
@@ -177,23 +177,4 @@ func intsFromU16(in []uint16) []int {
 		out[i] = int(v)
 	}
 	return out
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var digits []byte
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	if neg {
-		return "-" + string(digits)
-	}
-	return string(digits)
 }

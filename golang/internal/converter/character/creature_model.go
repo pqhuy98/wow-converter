@@ -47,12 +47,11 @@ type DefaultWowheadClient struct {
 }
 
 func (c DefaultWowheadClient) FetchNpcMeta(ctx context.Context, url ZamURL) (CharacterData, error) {
-	_ = ctx
 	exp := wowhead.Expansion(url.Expansion)
 	if exp == "" {
 		exp = wowhead.ExpansionLive
 	}
-	data, err := wowhead.FetchNpcMeta(c.HTTP, exp, url.DisplayID)
+	data, err := wowhead.FetchNpcMeta(c.HTTP.WithContext(ctx), exp, url.DisplayID)
 	if err != nil {
 		return CharacterData{}, err
 	}

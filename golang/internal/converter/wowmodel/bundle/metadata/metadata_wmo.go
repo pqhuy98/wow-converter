@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/wmo"
 	"path/filepath"
 	"strings"
 
@@ -8,21 +9,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 )
 
-type wmoMaterialMeta struct {
-	Flags       uint32   `json:"flags"`
-	Shader      uint32   `json:"shader"`
-	BlendMode   uint32   `json:"blendMode"`
-	Texture1    uint32   `json:"texture1"`
-	Color1      uint32   `json:"color1"`
-	Color1b     uint32   `json:"color1b"`
-	Texture2    uint32   `json:"texture2"`
-	Color2      uint32   `json:"color2"`
-	GroupType   uint32   `json:"groupType"`
-	Texture3    uint32   `json:"texture3"`
-	Color3      uint32   `json:"color3"`
-	Flags3      uint32   `json:"flags3"`
-	RuntimeData []uint32 `json:"runtimeData"`
-}
+type wmoMaterialMeta = wmo.Material
 
 // IsWmo reports whether metadata describes a WMO model.
 func (f *File) IsWmo() bool {

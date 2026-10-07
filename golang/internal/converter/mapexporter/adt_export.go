@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
-	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
 type adtTileCoord struct {
@@ -68,7 +68,9 @@ func EnsureADTTilesExported(ctx context.Context, exportDir string, mc MapExportC
 			return nil
 		})
 	}
-	_ = common.WorkerPool(MapExportWorkerCount(), tasks)
+	if err := common.WorkerPoolContext(ctx, MapExportWorkerCount(), tasks); err != nil {
+		return err
+	}
 	if v := firstErr.Load(); v != nil {
 		return v.(error)
 	}

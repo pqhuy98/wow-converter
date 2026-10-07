@@ -1,6 +1,7 @@
 package blp
 
 import (
+	"context"
 	"os"
 	"runtime"
 	"strconv"
@@ -72,8 +73,20 @@ func GetWorkerPoolSize() int {
 
 // Submit runs one conversion task with pool concurrency limits.
 func (p *WorkerPool) Submit(input TaskInput, blpPath string) error {
-	p.sem <- struct{}{}
+	return p.SubmitContext(context.Background(), input, blpPath)
+}
+
+// SubmitContext cancels waiting tasks; an encoder already running is joined.
+func (p *WorkerPool) SubmitContext(ctx context.Context, input TaskInput, blpPath string) error {
+	select {
+	case p.sem <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	defer func() { <-p.sem }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	encode := EncodeInput{ResizeTo: input.ResizeTo, Opaque: input.Opaque, PreserveAlpha: input.PreserveAlpha, IgnoreAlpha: input.IgnoreAlpha}
 	switch input.Kind {
@@ -82,12 +95,21 @@ func (p *WorkerPool) Submit(input TaskInput, blpPath string) error {
 	case "blp2":
 		encode.BLP2 = input.Data
 	}
-	return ConvertTextureToBlp(encode, blpPath)
+	err := ConvertTextureToBlp(encode, blpPath)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 // SubmitBlpTask submits a task through the worker pool.
 func SubmitBlpTask(input TaskInput, blpPath string) error {
 	return EnsureWorkerPool(0).Submit(input, blpPath)
+}
+
+// SubmitBlpTaskContext submits cancellable work through the shared encoder pool.
+func SubmitBlpTaskContext(ctx context.Context, input TaskInput, blpPath string) error {
+	return EnsureWorkerPool(0).SubmitContext(ctx, input, blpPath)
 }
 
 // ShutdownWorkerPool stops native bridge workers used by the encoder.

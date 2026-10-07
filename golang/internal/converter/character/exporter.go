@@ -55,6 +55,10 @@ type ExportOptions struct {
 
 // ExportCharacter exports a character or creature to MDL.
 func (e *CharacterExporter) ExportCharacter(ctx context.Context, char Character, outputFile string, opts ...ExportOptions) (*mdl.MDL, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	e.HTTP = e.HTTP.WithContext(ctx)
 	start := time.Now()
 	var skinID string
 	if len(opts) > 0 {
@@ -64,6 +68,9 @@ func (e *CharacterExporter) ExportCharacter(ctx context.Context, char Character,
 		if err := e.WowClient.InitModelCaches(ctx); err != nil {
 			log.Printf("InitModelCaches: %v", err)
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	log.Printf("Exporting character %s", char.Base.Value)
 
@@ -77,11 +84,18 @@ func (e *CharacterExporter) ExportCharacter(ctx context.Context, char Character,
 	}
 
 	exportCtx := e.newExportContext(outputFile, char, skinID)
+	exportCtx.ctx = ctx
 	model, err := e.exportBaseMdl(ctx, &exportCtx, char)
 	if err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	model = e.postProcessModel(model, char, &exportCtx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	model.Model.Name = outputFile
 	e.IncludeMdlToOutput(model, outputFile)
 	log.Printf("Total character export took %s", ansi.Yellowf("%.2fs", time.Since(start).Seconds()))
@@ -462,7 +476,7 @@ func lastOrAddGlobalSequence(m *mdl.MDL) *components.GlobalSequence {
 func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *ExportContext, char Character) (*mdl.MDL, error) {
 	switch char.Base.Type {
 	case "local":
-		model, collision, err := ExportLocalModelAsMdl(e.AssetManager, e.Config, e.WowClient, char.Base.Value, LocalModelOptions{
+		model, collision, err := ExportLocalModelAsMdl(ctx, e.AssetManager, e.Config, e.WowClient, char.Base.Value, LocalModelOptions{
 			WithCollision: exportCtx.WithCollision, SkinIDOverride: exportCtx.LocalModelSkinID,
 			KeepCinematic: char.KeepCinematic, AttackTag: char.AttackTag,
 		})
@@ -545,7 +559,7 @@ func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *Export
 func (e *CharacterExporter) exportItem(ctx *ExportContext, ref Ref) (*commonModel, *int, error) {
 	switch ref.Type {
 	case "local":
-		model, _, err := ExportLocalModelAsMdl(e.AssetManager, e.Config, e.WowClient, ref.Value, LocalModelOptions{})
+		model, _, err := ExportLocalModelAsMdl(ctx.Context(), e.AssetManager, e.Config, e.WowClient, ref.Value, LocalModelOptions{})
 		return model, nil, err
 	case "wowhead", "displayID":
 		var zam wowhead.ZamURL
@@ -702,9 +716,12 @@ func (e *CharacterExporter) registerMdlTexturesFromModels() {
 }
 
 // WriteAllModels writes registered models to disk.
-func (e *CharacterExporter) WriteAllModels(outputDir, format string) ([]string, error) {
+func (e *CharacterExporter) WriteAllModels(ctx context.Context, outputDir, format string) ([]string, error) {
 	var paths []string
 	for _, pair := range e.Models {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		m := pair[0].(*mdl.MDL)
 		rel := pair[1].(string)
 		full, err := safeExportPath(outputDir, rel)
@@ -726,6 +743,9 @@ func (e *CharacterExporter) WriteAllModels(outputDir, format string) ([]string, 
 			data = []byte(m.ToMdl())
 			full += ".mdl"
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err := os.WriteFile(full, data, 0o644); err != nil {
 			return nil, err
 		}
@@ -736,8 +756,8 @@ func (e *CharacterExporter) WriteAllModels(outputDir, format string) ([]string, 
 }
 
 // WriteAllTextures exports textures to disk.
-func (e *CharacterExporter) WriteAllTextures(outputDir string) ([]string, error) {
-	return e.AssetManager.ExportTextures(outputDir)
+func (e *CharacterExporter) WriteAllTextures(ctx context.Context, outputDir string) ([]string, error) {
+	return e.AssetManager.ExportTextures(ctx, outputDir)
 }
 
 // AggregateModelStats sums stats across all registered models.

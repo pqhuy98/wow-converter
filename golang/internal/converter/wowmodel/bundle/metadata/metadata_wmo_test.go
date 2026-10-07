@@ -14,7 +14,7 @@ func TestExtractWmoTexturesMaterialsUsesBlendMode(t *testing.T) {
 		FilePath: cfg.ExportAssetDir + "/world/test.wmo",
 		fileType: "wmo",
 		IsLoaded: true,
-		textures: []textureMeta{
+		textures: []Texture{
 			{
 				FileDataID:       100,
 				FileNameExternal: "mm_street_03.png",
@@ -52,7 +52,7 @@ func TestExtractWmoTexturesMaterialsAlphaBlend(t *testing.T) {
 		FilePath: cfg.ExportAssetDir + "/world/test.wmo",
 		fileType: "wmo",
 		IsLoaded: true,
-		textures: []textureMeta{
+		textures: []Texture{
 			{FileDataID: 200, FileNameExternal: "window.png", MtlName: "mat_window"},
 		},
 		wmoMaterials: []wmoMaterialMeta{

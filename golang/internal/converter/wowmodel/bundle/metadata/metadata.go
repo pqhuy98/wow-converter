@@ -1,10 +1,10 @@
 package metadata
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
@@ -22,25 +22,24 @@ type File struct {
 	Config    config.Config
 	Animation *bundleanim.File
 	IsLoaded  bool
-	raw       map[string]any
 
 	fileType                string
-	textures                []textureMeta
+	textures                []Texture
 	textureTypes            []int
-	materials               []materialMeta
+	materials               []m2.MaterialEntry
 	textureCombos           []int
-	textureTransforms       []map[string]any
+	textureTransforms       []TextureTransform
 	textureTransformsLookup []int
 	transparencyLookup      []uint16
 	textureWeights          []m2.Track
 	globalLoops             []uint32
 	m2Animations            []m2AnimMeta
-	colors                  []map[string]any
+	colors                  []Color
 	cameras                 []m2.CameraEntry
 	lights                  []m2.LightEntry
 	ribbonEmitters          []m2.RibbonEmitterEntry
 	particleEmitters        []m2.ParticleEmitterEntry
-	skin                    skinMeta
+	skin                    Skin
 	objToSubmesh            map[int]int
 	mdl                     *mdl.MDL
 	globalSequenceMap       map[int]*components.GlobalSequence
@@ -48,172 +47,60 @@ type File struct {
 	wmoMaterialNameToMat    map[string]*components.Material
 }
 
-type textureMeta struct {
-	FileNameExternal string `json:"fileNameExternal"`
-	MtlName          string `json:"mtlName"`
-	Flags            int    `json:"flags"`
-	FileDataID       int    `json:"fileDataID"`
-}
-
-type materialMeta struct {
-	Flags        int `json:"flags"`
-	BlendingMode int `json:"blendingMode"`
-}
-
-type skinMeta struct {
-	SubMeshes    []subMeshMeta     `json:"subMeshes"`
-	TextureUnits []textureUnitMeta `json:"textureUnits"`
-}
-
-type subMeshMeta struct {
-	Enabled     bool `json:"enabled"`
-	SubmeshID   int  `json:"submeshID"`
-	VertexStart int  `json:"vertexStart"`
-	VertexCount int  `json:"vertexCount"`
-}
-
-type textureUnitMeta struct {
-	Flags                      int `json:"flags"`
-	Priority                   int `json:"priority"`
-	ShaderID                   int `json:"shaderID"`
-	SkinSectionIndex           int `json:"skinSectionIndex"`
-	MaterialIndex              int `json:"materialIndex"`
-	TextureCount               int `json:"textureCount"`
-	TextureComboIndex          int `json:"textureComboIndex"`
-	TextureTransformComboIndex int `json:"textureTransformComboIndex"`
-	TextureWeightComboIndex    int `json:"textureWeightComboIndex"`
-	ColorIndex                 int `json:"colorIndex"`
-}
-
 // NewFile creates an empty metadata file.
 func NewFile(filePath string, cfg config.Config, anim *bundleanim.File) *File {
 	return &File{FilePath: filePath, Config: cfg, Animation: anim}
 }
 
-// LoadFromData populates metadata from a direct pipeline object.
-func (f *File) LoadFromData(data map[string]any) {
-	f.raw = data
-	f.fileType, _ = data["fileType"].(string)
-	if f.fileType == "wmo" {
-		if v, ok := data["textures"].([]any); ok {
-			b, _ := json.Marshal(v)
-			_ = json.Unmarshal(b, &f.textures)
-		}
-		if v, ok := data["materials"].([]any); ok {
-			b, _ := json.Marshal(v)
-			_ = json.Unmarshal(b, &f.wmoMaterials)
-		}
-		f.IsLoaded = true
-		return
+// LoadFromData replaces metadata with an owned, typed assembly snapshot.
+func (f *File) LoadFromData(data Data) {
+	f.fileType = data.FileType
+	f.textures = slices.Clone(data.Textures)
+	f.materials = slices.Clone(data.Materials)
+	f.wmoMaterials = slices.Clone(data.WMOMaterials)
+	for i := range f.wmoMaterials {
+		f.wmoMaterials[i].RuntimeData = slices.Clone(f.wmoMaterials[i].RuntimeData)
 	}
-	if f.fileType != "m2" {
-		f.IsLoaded = false
-		return
+	f.textureTypes = integerSlice(data.TextureTypes)
+	f.textureCombos = integerSlice(data.TextureCombos)
+	f.textureTransformsLookup = integerSlice(data.TextureTransformsLookup)
+	f.transparencyLookup = slices.Clone(data.TransparencyLookup)
+	f.globalLoops = slices.Clone(data.GlobalLoops)
+	f.m2Animations = nil
+	for _, anim := range data.M2Animations {
+		f.m2Animations = append(f.m2Animations, m2AnimMeta{Duration: anim.Duration})
 	}
-	if v, ok := data["textures"].([]any); ok {
-		b, _ := json.Marshal(v)
-		_ = json.Unmarshal(b, &f.textures)
+	f.skin = Skin{SubMeshes: slices.Clone(data.Skin.SubMeshes), TextureUnits: slices.Clone(data.Skin.TextureUnits)}
+	f.textureTransforms = slices.Clone(data.TextureTransforms)
+	for i := range f.textureTransforms {
+		t := &f.textureTransforms[i]
+		t.Translation, t.Rotation, t.Scaling = cloneAnimationTrack(t.Translation), cloneAnimationTrack(t.Rotation), cloneAnimationTrack(t.Scaling)
 	}
-	if v, ok := data["textureTypes"].([]any); ok {
-		for _, x := range v {
-			switch n := x.(type) {
-			case float64:
-				f.textureTypes = append(f.textureTypes, int(n))
-			case int:
-				f.textureTypes = append(f.textureTypes, n)
-			}
-		}
-	} else if v, ok := data["textureTypes"].([]uint32); ok {
-		for _, n := range v {
-			f.textureTypes = append(f.textureTypes, int(n))
-		}
-	} else if v, ok := data["textureTypes"].([]int); ok {
-		f.textureTypes = append(f.textureTypes, v...)
+	f.colors = slices.Clone(data.Colors)
+	for i := range f.colors {
+		f.colors[i].Color, f.colors[i].Alpha = cloneAnimationTrack(f.colors[i].Color), cloneAnimationTrack(f.colors[i].Alpha)
 	}
-	if v, ok := data["materials"].([]any); ok {
-		b, _ := json.Marshal(v)
-		_ = json.Unmarshal(b, &f.materials)
+	f.textureWeights = slices.Clone(data.TextureWeights)
+	for i := range f.textureWeights {
+		f.textureWeights[i] = cloneTrack(f.textureWeights[i])
 	}
-	if v, ok := data["textureCombos"].([]any); ok {
-		for _, x := range v {
-			switch n := x.(type) {
-			case float64:
-				f.textureCombos = append(f.textureCombos, int(n))
-			case int:
-				f.textureCombos = append(f.textureCombos, n)
-			}
-		}
-	}
-	if v, ok := data["textureTransforms"].([]any); ok {
-		for _, x := range v {
-			if m, ok := x.(map[string]any); ok {
-				f.textureTransforms = append(f.textureTransforms, m)
-			}
-		}
-	}
-	if v, ok := data["textureTransformsLookup"].([]any); ok {
-		for _, x := range v {
-			switch n := x.(type) {
-			case float64:
-				f.textureTransformsLookup = append(f.textureTransformsLookup, int(n))
-			case int:
-				f.textureTransformsLookup = append(f.textureTransformsLookup, n)
-			}
-		}
-	}
-	loadM2AnimationDurations(data["m2Animations"], &f.m2Animations)
-	if v, ok := data["colors"].([]any); ok {
-		for _, x := range v {
-			if m, ok := x.(map[string]any); ok {
-				f.colors = append(f.colors, m)
-			}
-		}
-	}
-	if skinRaw, ok := data["skin"].(map[string]any); ok {
-		b, _ := json.Marshal(skinRaw)
-		_ = json.Unmarshal(b, &f.skin)
-	}
-	loadJSONField(data, "cameras", &f.cameras)
-	loadJSONField(data, "lights", &f.lights)
-	loadJSONField(data, "ribbonEmitters", &f.ribbonEmitters)
-	loadJSONField(data, "particleEmitters", &f.particleEmitters)
-	loadJSONField(data, "transparencyLookup", &f.transparencyLookup)
-	loadJSONField(data, "textureWeights", &f.textureWeights)
-	loadJSONField(data, "globalLoops", &f.globalLoops)
-	f.IsLoaded = true
+	f.cameras = cloneCameras(data.Cameras)
+	f.lights = cloneLights(data.Lights)
+	f.ribbonEmitters = cloneRibbons(data.RibbonEmitters)
+	f.particleEmitters = cloneParticles(data.ParticleEmitters)
+	f.objToSubmesh, f.globalSequenceMap, f.wmoMaterialNameToMat, f.mdl = nil, nil, nil, nil
+	f.IsLoaded = data.FileType == "m2" || data.FileType == "wmo"
 }
 
-func loadM2AnimationDurations(raw any, out *[]m2AnimMeta) {
-	if raw == nil {
-		return
+func integerSlice[T ~uint16 | ~uint32](values []T) []int {
+	if values == nil {
+		return nil
 	}
-	var animations []m2.AnimationEntry
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return
+	out := make([]int, len(values))
+	for i, value := range values {
+		out[i] = int(value)
 	}
-	if err := json.Unmarshal(b, &animations); err != nil {
-		return
-	}
-	for _, anim := range animations {
-		*out = append(*out, m2AnimMeta{Duration: anim.Duration})
-	}
-}
-
-func loadJSONField[T any](data map[string]any, key string, out *[]T) {
-	v, ok := data[key]
-	if !ok || v == nil {
-		return
-	}
-	if typed, ok := v.([]T); ok {
-		*out = typed
-		return
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return
-	}
-	_ = json.Unmarshal(b, out)
+	return out
 }
 
 // IsM2 reports whether metadata includes M2 skin/geoset layout.
@@ -241,7 +128,7 @@ func (f *File) EnabledSubmeshIndices() []int {
 }
 
 // SubmeshAt returns the skin submesh at index, or nil when out of range.
-func (f *File) SubmeshAt(index int) *subMeshMeta {
+func (f *File) SubmeshAt(index int) *SubMesh {
 	if index < 0 || index >= len(f.skin.SubMeshes) {
 		return nil
 	}

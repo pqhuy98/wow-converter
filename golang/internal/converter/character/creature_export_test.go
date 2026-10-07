@@ -21,7 +21,7 @@ func (failingModelCacheClient) InitModelCaches(context.Context) error {
 }
 
 func TestExportCreatureModelsPropagatesModelCacheFailure(t *testing.T) {
-	err := ExportCreatureModels(nil, t.TempDir(), config.DefaultConfig(), failingModelCacheClient{}, 1, nil)
+	err := ExportCreatureModels(context.Background(), nil, t.TempDir(), config.DefaultConfig(), failingModelCacheClient{}, 1, nil)
 	if err == nil || !strings.Contains(err.Error(), "cache unavailable") {
 		t.Fatalf("expected model cache error, got %v", err)
 	}
@@ -60,7 +60,7 @@ func TestExportCreatureModelsPropagatesPerCreatureFailure(t *testing.T) {
 		Template: azerothcore.CreatureTemplate{Name: "Broken creature"},
 		Model:    azerothcore.CreatureTemplateModel{CreatureDisplayID: 123},
 	}}
-	err := ExportCreatureModels(
+	err := ExportCreatureModels(context.Background(),
 		creatures,
 		t.TempDir(),
 		config.DefaultConfig(),

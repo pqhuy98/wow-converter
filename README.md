@@ -39,11 +39,7 @@ Download the latest release ZIP here: https://github.com/pqhuy98/wow-converter/r
 ### 2. Start **wow-converter**
 
 1. Run `wow-converter.exe`. A command line window opens and loads WoW data from your local install or Blizzard CDN (configure via `.env` or the web UI `/setup` wizard).
-2. Wait until you see:
-  ```
-  ✅ WoW data ready: ...
-  Serving UI web interface at http://127.0.0.1:3001
-  ```
+2. Open **http://127.0.0.1:3001/** once the server responds. If WoW data is not configured, follow the `/setup` page; wait for loading to finish before exporting.
 
 ### 3. Export your model
 
@@ -71,6 +67,8 @@ bun run dev
 
 The legacy TS server remains available as `bun run dev:ts` for wrapper-library compatibility work.
 
+For module ownership, the conversion flow, and choosing development checks, see [architecture and verification](docs/architecture.md). Read [AGENTS.md](AGENTS.md) before agent-assisted changes.
+
 ### API checks
 
 Start the converter (`bun run dev`, or the unpacked desktop app), then:
@@ -81,13 +79,6 @@ bun run test:api
 
 The suite calls the converter already listening at `WOW_CONVERTER_URL` (default `http://127.0.0.1:3001`). It checks browse, export, maps, sounds, and textures on that process. It does not start a server. `bun run verify` boots the unpacked app and points the same suite at it.
 
-For MDL parity, start the two data servers in one terminal, then run the loop in another:
-
-```bash
-bun tests/_deprecated-tests/mdl-parity/start-parity-servers.ts
-bun tests/_deprecated-tests/mdl-parity/retail-mdl-parity-loop.ts
-```
-
 Map exports use a bundled SQLite copy of AzerothCore world data (`bin/azerothcore-world.sqlite`) — no live MySQL/PostgreSQL is required at runtime. To refresh that file from your AzerothCore world database:
 
 ```
@@ -96,7 +87,7 @@ bun run generate:acore-sqlite   # reads ACORE_SOURCE_DATABASE_URL, writes bin/az
 
 Table list for the export lives in `scripts/acore-sqlite-tables.ts`. After adding tables there, rerun the command above and `bunx prisma generate` if the Prisma schema changed.
 
-The release binary embeds wow-data-server and talks to it over a local unix socket (not exposed on a second port). Only the web UI/API listens on `:3001`.
+The release binary runs wow-data-server in-process through `InProcessClient`. A local unix socket exposes the data-server REST interface to tools and integration tests. Only the web UI/API listens on `:3001`.
 
 
 ---

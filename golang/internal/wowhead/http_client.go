@@ -1,6 +1,7 @@
 package wowhead
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -28,11 +29,20 @@ var defaultBrowserHeaders = map[string]string{
 // HTTPClient wraps net/http with browser-like headers.
 type HTTPClient struct {
 	client *http.Client
+	ctx    context.Context
 }
 
 // NewHTTPClient creates a wowhead HTTP client.
 func NewHTTPClient() *HTTPClient {
-	return &HTTPClient{client: newSafeHTTPClient()}
+	return &HTTPClient{client: newSafeHTTPClient(), ctx: context.Background()}
+}
+
+// WithContext binds requests to an export without mutating the shared client.
+func (c *HTTPClient) WithContext(ctx context.Context) *HTTPClient {
+	if c == nil {
+		c = NewHTTPClient()
+	}
+	return &HTTPClient{client: c.client, ctx: ctx}
 }
 
 func newSafeHTTPClient() *http.Client {
@@ -55,7 +65,11 @@ func (c *HTTPClient) Get(rawURL string) (*http.Response, error) {
 	if _, err := ValidateFetchURL(rawURL); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	ctx := c.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}

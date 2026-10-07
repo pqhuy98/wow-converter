@@ -80,6 +80,7 @@ func itoa(n int) string {
 
 // ExportContext carries per-export state.
 type ExportContext struct {
+	ctx                  context.Context
 	AssetManager         *common.AssetManager
 	Config               config.Config
 	OutputFile           string
@@ -92,12 +93,20 @@ type ExportContext struct {
 	LocalModelSkinID     string
 }
 
+// Context is the cancellation scope of this export.
+func (ctx *ExportContext) Context() context.Context {
+	if ctx.ctx == nil {
+		return context.Background()
+	}
+	return ctx.ctx
+}
+
 // WowheadHTTP returns the wowhead HTTP client for meta fetches.
 func (ctx *ExportContext) WowheadHTTP() *wowhead.HTTPClient {
 	if ctx.HTTP != nil {
-		return ctx.HTTP
+		return ctx.HTTP.WithContext(ctx.Context())
 	}
-	return wowhead.NewHTTPClient()
+	return wowhead.NewHTTPClient().WithContext(ctx.Context())
 }
 
 // IsClassicCASC reports whether the loaded CASC product is a Classic variant.
@@ -119,7 +128,7 @@ func (ctx *ExportContext) ResolveMetaExpansion(urlExpansion wowhead.Expansion) w
 	if ctx.WowClient == nil {
 		return urlExpansion
 	}
-	info, err := ctx.WowClient.GetCASCInfo(context.Background())
+	info, err := ctx.WowClient.GetCASCInfo(ctx.Context())
 	if err != nil || info.BuildName == "" {
 		return urlExpansion
 	}

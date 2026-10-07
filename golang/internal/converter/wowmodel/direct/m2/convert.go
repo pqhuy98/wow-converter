@@ -144,15 +144,7 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 		return ConvertResult{}, err
 	}
 
-	metaObj, err := BuildMetadataObject(ctx, loader, skin, opts.FileDataID, fileName, geosetMask, resolved.ValidTextures, dataTexSet, getName)
-	if err != nil {
-		return ConvertResult{}, err
-	}
-	if norm := NormalizeJSONValues(metaObj); norm != nil {
-		if normMap, ok := norm.(map[string]any); ok {
-			metaObj = normMap
-		}
-	}
+	metaObj := buildMetadata(loader, skin, geosetMask, resolved.ValidTextures, dataTexSet)
 	meta := bundlemeta.NewFile(writers.ReplaceExtension(exportPath, ".json"), cfg, animFile)
 	meta.LoadFromData(metaObj)
 

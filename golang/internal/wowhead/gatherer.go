@@ -12,6 +12,9 @@ var respCache = cache.NewLRU(256)
 
 // FetchWithCache fetches a URL with an in-memory LRU cache.
 func FetchWithCache(client *HTTPClient, url string) (string, error) {
+	if client.ctx != nil && client.ctx.Err() != nil {
+		return "", client.ctx.Err()
+	}
 	if v, ok := respCache.Get(url); ok {
 		return v, nil
 	}

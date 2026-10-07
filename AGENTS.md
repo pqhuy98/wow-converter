@@ -51,14 +51,6 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
   description: Investigate and fix a visual mismatch between a wowhead.com model and the wow-converter export. Use when the user pastes a Wowhead NPC, item, or object URL and says the converter looks different, wrong, or missing a part.
   ```
 
-- [.cursor/skills/parity-diff-debugging/SKILL.md](.cursor/skills/parity-diff-debugging/SKILL.md)
-
-  ```yaml
-  name: parity-diff-debugging
-  description: Last-resort TS vs Go MDL byte parity under tests/_deprecated-tests/mdl-parity. Use when the user asks to trace a TypeScript/Go export artifact mismatch. Visual Wowhead mismatches use debug-wowhead-mismatch and snapshot tests instead. ADR 0001: Go-only features are not parity bugs.
-  disable-model-invocation: true
-  ```
-
 - [.cursor/skills/shot-export-wow-converter/SKILL.md](.cursor/skills/shot-export-wow-converter/SKILL.md)
 
   ```yaml

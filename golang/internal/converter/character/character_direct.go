@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -185,7 +186,7 @@ func ExportCharacterDirectAsModel(ctx *ExportContext, body ExportCharacterParams
 		exclude[id] = struct{}{}
 	}
 
-	return ctx.AssetManager.ParseDirectOptions(context.Background(), common.DirectParseOptions{
+	return ctx.AssetManager.ParseDirectOptions(ctx.Context(), common.DirectParseOptions{
 		FileDataID: meta.FileDataID,
 		GeosetMaskBuilder: func(skin *m2.Skin) []m2export.GeosetMaskEntry {
 			return buildCharacterGeosetMask(skin, choices, body)
@@ -205,24 +206,22 @@ func resolveCharMeta(ctx *ExportContext, body ExportCharacterParams) (wowchar.Me
 		FileDataIDOverride: body.FileDataIDOverride,
 		Customizations:     body.Customizations,
 	}
-	resp, err := ctx.WowClient.GetCharMeta(context.Background(), params)
+	resp, err := ctx.WowClient.GetCharMeta(ctx.Context(), params)
 	if err != nil {
 		return wowchar.MetaResult{}, nil, err
 	}
 	meta := wowchar.MetaResult{
 		FileDataID: resp.FileDataID, FileName: resp.FileName, TextureLayoutID: resp.TextureLayoutID,
+		Choices: make(map[int]wowchar.ChoiceMeta, len(resp.Choices)),
 	}
 	choices := map[int]parsedChoiceMeta{}
-	for key, raw := range resp.Choices {
-		var choiceID int
-		fmt.Sscanf(key, "%d", &choiceID)
-		data, _ := json.Marshal(raw)
-		var parsed wowchar.ChoiceMeta
-		if err := json.Unmarshal(data, &parsed); err != nil {
-			continue
+	for key, parsed := range resp.Choices {
+		choiceID, err := strconv.Atoi(key)
+		if err != nil {
+			return wowchar.MetaResult{}, nil, fmt.Errorf("invalid customization choice ID %q: %w", key, err)
 		}
 		choices[choiceID] = parsedChoiceMeta{Geosets: parsed.Geosets, Materials: parsed.Materials}
-		meta.Choices = map[int]wowchar.ChoiceMeta{choiceID: parsed}
+		meta.Choices[choiceID] = parsed
 	}
 	return meta, choices, nil
 }
@@ -243,6 +242,9 @@ func bakeCharacterMaterials(ctx *ExportContext, choices map[int]parsedChoiceMeta
 	chrMaterials := map[int]*wowchar.MaterialRenderer{}
 	chrMaterialOrder := []int{}
 	for _, choiceID := range customizationChoiceOrder(body) {
+		if err := ctx.Context().Err(); err != nil {
+			return nil, err
+		}
 		choice, ok := choices[choiceID]
 		if !ok {
 			continue
@@ -263,13 +265,16 @@ func bakeCharacterMaterials(ctx *ExportContext, choices map[int]parsedChoiceMeta
 			if mat.Filename != nil {
 				filename = *mat.Filename
 			}
-			if err := renderer.SetTextureTarget(context.Background(), mat.CustMaterial, *mat.Section, mat.Material, mat.TextureLayer, true, filename); err != nil {
+			if err := renderer.SetTextureTarget(ctx.Context(), mat.CustMaterial, *mat.Section, mat.Material, mat.TextureLayer, true, filename); err != nil {
 				return nil, err
 			}
 		}
 	}
 	out := map[int]directm2.DirectDataTexture{}
 	for order, texType := range chrMaterialOrder {
+		if err := ctx.Context().Err(); err != nil {
+			return nil, err
+		}
 		renderer := chrMaterials[texType]
 		var filename *string
 		pngBytes, err := renderer.GetPNG()

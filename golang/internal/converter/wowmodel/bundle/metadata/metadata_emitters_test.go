@@ -94,7 +94,7 @@ func TestExtractMDLRibbonsPreservesBindPointsAndBoneFrame(t *testing.T) {
 		{"mirrored point", imath.Vector3{1, 2, 3}, imath.Vector3{-1, 2, 3}, [3]float32{-1, 2, 3}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := &File{IsLoaded: true, materials: []materialMeta{{BlendingMode: 2}}, ribbonEmitters: []m2.RibbonEmitterEntry{{BoneIndex: 0, Position: tc.position, TextureIndices: []uint16{0}, MaterialIndices: []uint16{0}}}}
+			f := &File{IsLoaded: true, materials: []m2.MaterialEntry{{BlendingMode: 2}}, ribbonEmitters: []m2.RibbonEmitterEntry{{BoneIndex: 0, Position: tc.position, TextureIndices: []uint16{0}, MaterialIndices: []uint16{0}}}}
 			m := mdl.New(mdl.NewMDLOptions{Name: "ribbon bind point"})
 			parent := components.NewBone("wing")
 			parent.PivotPoint = tc.parent

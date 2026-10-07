@@ -23,7 +23,7 @@ type DirectDataTexture struct {
 
 // ResolvedTextures holds texture resolution output.
 type ResolvedTextures struct {
-	ValidTextures map[any]m2export.TextureManifestEntry
+	ValidTextures textureManifest
 	MtlMaterials  []mtlMaterial
 }
 
@@ -32,13 +32,22 @@ type mtlMaterial struct {
 	MapKd string
 }
 
+type textureKey struct {
+	fileDataID uint32
+	fileName   string
+	dataType   int
+	data       bool
+}
+
+type textureManifest map[textureKey]m2export.TextureManifestEntry
+
 func virtualExportPath(exportRoot, file string) string {
 	return filepath.Clean(filepath.Join(exportRoot, strings.ReplaceAll(file, " ", "")))
 }
 
 // ResolveTextures resolves M2 textures and registers texture sources.
 func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []int, replaceableTextures map[int]int, dataTextures map[int]DirectDataTexture, outDir, exportRoot string, getRaw func(context.Context, int) ([]byte, error), getName func(context.Context, int) (string, error)) (ResolvedTextures, error) {
-	valid := map[any]m2export.TextureManifestEntry{}
+	valid := textureManifest{}
 	var mtlMaterials []mtlMaterial
 	addMaterial := func(name, file string) {
 		mtlMaterials = append(mtlMaterials, mtlMaterial{Name: name, MapKd: file})
@@ -97,7 +106,7 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 		}
 		register(texPath, dataTexture.Source)
 		addMaterial(matName, texFile)
-		valid[fmt.Sprintf("data-%d", texType)] = m2export.TextureManifestEntry{
+		valid[textureKey{data: true, dataType: texType}] = m2export.TextureManifestEntry{
 			MatName: matName, MatPathRelative: texFile, MatPath: texPath,
 		}
 	}
@@ -141,7 +150,7 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 				continue
 			}
 			addMaterial(matName, texFile)
-			valid[texFileDataID] = m2export.TextureManifestEntry{
+			valid[textureKey{fileDataID: texFileDataID}] = m2export.TextureManifestEntry{
 				MatName: matName, MatPathRelative: texFile, MatPath: texPath,
 			}
 		} else if texture.FileName != "" {
@@ -151,7 +160,7 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 			matName := "mat_" + strings.TrimSuffix(strings.ToLower(filepath.Base(fileName)), ".png")
 			matName = strings.ReplaceAll(matName, " ", "")
 			addMaterial(matName, texFile)
-			valid[texture.FileName] = m2export.TextureManifestEntry{
+			valid[textureKey{fileName: texture.FileName}] = m2export.TextureManifestEntry{
 				MatName: matName, MatPathRelative: texFile, MatPath: texPath,
 			}
 		}

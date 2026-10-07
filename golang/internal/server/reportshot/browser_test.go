@@ -1,10 +1,53 @@
 package reportshot
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestWaitDevToolsUsesPortFile(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	dir := t.TempDir()
+	go func() {
+		time.Sleep(40 * time.Millisecond)
+		if err := os.WriteFile(filepath.Join(dir, "DevToolsActivePort"), []byte("12345\n/devtools/browser/abc\n"), 0o644); err != nil {
+			t.Error(err)
+		}
+	}()
+	address, err := waitDevTools(ctx, dir, bytes.NewReader(nil))
+	if err != nil || address != "127.0.0.1:12345" {
+		t.Fatalf("got %q %v", address, err)
+	}
+}
+
+func TestWaitDevToolsUsesListeningLine(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	address, err := waitDevTools(ctx, t.TempDir(), strings.NewReader("DevTools listening on ws://127.0.0.1:60926/devtools/browser/abc\n"))
+	if err != nil || address != "127.0.0.1:60926" {
+		t.Fatalf("got %q %v", address, err)
+	}
+}
+
+func TestReadDevToolsAddressIgnoresIncompletePortFile(t *testing.T) {
+	dir := t.TempDir()
+	if got := readDevToolsAddress(dir); got != "" {
+		t.Fatalf("missing file: %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "DevToolsActivePort"), []byte("not-a-port\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readDevToolsAddress(dir); got != "" {
+		t.Fatalf("invalid port: %q", got)
+	}
+}
 
 func TestBrowserAssetRequestsRequireQuietWindow(t *testing.T) {
 	b := &browser{}

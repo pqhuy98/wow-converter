@@ -4,7 +4,6 @@ package metadata
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
@@ -13,31 +12,18 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
-func TestLoadFromDataParticleEmittersRealLoaderJSON(t *testing.T) {
+func TestLoadFromDataParticleEmittersRealLoader(t *testing.T) {
 	ctx := context.Background()
 	rawFile := downloadParticleTestCasc(t, ctx, 165893)
 	loader := m2.NewLoader(buffer.NewBuffer(rawFile), nil)
 	if err := loader.Load(ctx); err != nil {
 		t.Fatal(err)
 	}
-	metaObj := map[string]any{
-		"fileType":         "m2",
-		"particleEmitters": loader.ParticleEmitters,
-		"textures":         []any{},
-	}
-	b, err := json.Marshal(metaObj)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var normalized map[string]any
-	if err := json.Unmarshal(b, &normalized); err != nil {
-		t.Fatalf("normalize unmarshal: %v", err)
-	}
 	f := NewFile("test.json", config.Config{}, nil)
-	f.LoadFromData(normalized)
+	f.LoadFromData(Data{FileType: "m2", ParticleEmitters: loader.ParticleEmitters})
 	t.Logf("loader=%d loaded=%d", len(loader.ParticleEmitters), len(f.particleEmitters))
 	if len(f.particleEmitters) != len(loader.ParticleEmitters) {
-		t.Fatalf("lost particles during json roundtrip")
+		t.Fatalf("lost particles from typed loader")
 	}
 }
 

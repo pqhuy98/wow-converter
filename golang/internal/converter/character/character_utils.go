@@ -40,8 +40,11 @@ type commonModel struct {
 
 // ExportModelFileIDAsMdl exports an M2 by file data id.
 func ExportModelFileIDAsMdl(ctx *ExportContext, modelFileID int, opts ExportModelOptions) (*commonModel, error) {
+	if err := ctx.Context().Err(); err != nil {
+		return nil, err
+	}
 	skinName := pickSkin(ctx, modelFileID, opts.TextureIDs, opts.ExtraGeosets)
-	m, err := ctx.AssetManager.ParseDirectOptions(context.Background(), common.DirectParseOptions{
+	m, err := ctx.AssetManager.ParseDirectOptions(ctx.Context(), common.DirectParseOptions{
 		FileDataID:          modelFileID,
 		SkinName:            skinName,
 		ReplaceableTextures: replaceableTextureTypeMap(opts.ReplaceableTextures),
@@ -151,7 +154,7 @@ func equipmentCollectionGeosetMaskBuilder(ctx *ExportContext, equipmentSlots []E
 	if ctx == nil || ctx.WowClient == nil {
 		return nil
 	}
-	entry, err := ctx.WowClient.GetFileByID(context.Background(), fileDataID)
+	entry, err := ctx.WowClient.GetFileByID(ctx.Context(), fileDataID)
 	if err != nil || !isCollectionModelPath(entry.FileName) {
 		return nil
 	}
@@ -212,7 +215,7 @@ func pickSkin(ctx *ExportContext, modelFileID int, textureIDs, extraGeosets []in
 	if ctx.WowClient == nil {
 		return ""
 	}
-	skins, err := ctx.WowClient.GetModelSkins(context.Background(), modelFileID)
+	skins, err := ctx.WowClient.GetModelSkins(ctx.Context(), modelFileID)
 	if err != nil || len(skins) == 0 {
 		return ""
 	}
@@ -328,14 +331,20 @@ func ExportTexture(ctx *ExportContext, textureID int) (string, error) {
 
 // ExportTexturePNG exports a BLP texture and returns the relative path with PNG bytes.
 func ExportTexturePNG(ctx *ExportContext, textureID int) (string, []byte, error) {
+	if err := ctx.Context().Err(); err != nil {
+		return "", nil, err
+	}
 	if textureID <= 0 {
 		return "", nil, fmt.Errorf("invalid texture fileDataID: %d", textureID)
 	}
 	fileName := fmt.Sprintf("unknown/%d.blp", textureID)
 	if ctx.WowClient != nil {
-		if entry, err := ctx.WowClient.GetFileByID(context.Background(), textureID); err == nil && entry.FileName != "" {
+		if entry, err := ctx.WowClient.GetFileByID(ctx.Context(), textureID); err == nil && entry.FileName != "" {
 			fileName = entry.FileName
 		}
+	}
+	if err := ctx.Context().Err(); err != nil {
+		return "", nil, err
 	}
 	rel := normalizeTexturePath(replaceExt(fileName, ".blp", ".png"))
 	if source, ok := texturesource.Get(rel); ok && source.Kind == texturesource.KindPNG && len(source.PNG) > 0 {
@@ -353,7 +362,7 @@ func ExportTexturePNG(ctx *ExportContext, textureID int) (string, []byte, error)
 	if ctx.WowClient == nil {
 		return "", nil, fmt.Errorf("texture not found: %s", rel)
 	}
-	raw, err := ctx.WowClient.DownloadCascFile(context.Background(), textureID)
+	raw, err := ctx.WowClient.DownloadCascFile(ctx.Context(), textureID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -366,6 +375,9 @@ func ExportTexturePNG(ctx *ExportContext, textureID int) (string, []byte, error)
 		return "", nil, err
 	}
 	png := pngBuf.Raw()
+	if err := ctx.Context().Err(); err != nil {
+		return "", nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return "", nil, err
 	}
@@ -378,6 +390,9 @@ func ExportTexturePNG(ctx *ExportContext, textureID int) (string, []byte, error)
 
 // ResolveTexturePNGBytes loads PNG bytes from the texture-source registry or export cache.
 func ResolveTexturePNGBytes(ctx *ExportContext, relPath string) ([]byte, error) {
+	if err := ctx.Context().Err(); err != nil {
+		return nil, err
+	}
 	rel := filepath.ToSlash(relPath)
 	if source, ok := texturesource.Get(rel); ok {
 		switch source.Kind {
@@ -387,7 +402,7 @@ func ResolveTexturePNGBytes(ctx *ExportContext, relPath string) ([]byte, error) 
 			if ctx.WowClient == nil {
 				return nil, fmt.Errorf("texture not found: %s", relPath)
 			}
-			raw, err := ctx.WowClient.DownloadCascFile(context.Background(), source.FileDataID)
+			raw, err := ctx.WowClient.DownloadCascFile(ctx.Context(), source.FileDataID)
 			if err != nil {
 				return nil, err
 			}
@@ -456,13 +471,16 @@ type LocalModelOptions struct {
 }
 
 // ExportLocalModelAsMdl resolves and converts a listfile local model reference.
-func ExportLocalModelAsMdl(assetManager *common.AssetManager, cfg config.Config, wowClient client.Client, filePath string, opts LocalModelOptions) (*commonModel, *mdl.MDL, error) {
+func ExportLocalModelAsMdl(ctx context.Context, assetManager *common.AssetManager, cfg config.Config, wowClient client.Client, filePath string, opts LocalModelOptions) (*commonModel, *mdl.MDL, error) {
 	fileName := common.NormalizeLocalModelRef(filePath)
-	file, err := searchModelWithSkin(wowClient, fileName)
+	file, err := searchModelWithSkin(ctx, wowClient, fileName)
+	if ctx.Err() != nil {
+		return nil, nil, ctx.Err()
+	}
 	if err != nil || file == nil {
 		return nil, nil, fmt.Errorf("file %s not found in WoW assets", fileName)
 	}
-	skins, err := wowClient.GetModelSkins(context.Background(), file.FileDataID)
+	skins, err := wowClient.GetModelSkins(ctx, file.FileDataID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -471,7 +489,7 @@ func ExportLocalModelAsMdl(assetManager *common.AssetManager, cfg config.Config,
 	if skin != nil {
 		skinName = skin.ID
 	}
-	model, err := assetManager.ParseDirectOptions(context.Background(), common.DirectParseOptions{
+	model, err := assetManager.ParseDirectOptions(ctx, common.DirectParseOptions{
 		FileDataID:         file.FileDataID,
 		SkinName:           skinName,
 		ExportPathOverride: common.CachePathForLocalRef(cfg.ExportAssetDir, filePath, ".m2"),
@@ -481,7 +499,7 @@ func ExportLocalModelAsMdl(assetManager *common.AssetManager, cfg config.Config,
 	}
 	var collision *mdl.MDL
 	if opts.WithCollision && wowClient != nil && !strings.HasSuffix(strings.ToLower(file.FileName), ".wmo") {
-		collisionResult, err := directm2.ConvertM2CollisionToMdl(context.Background(), cfg, CascFileSource{Client: wowClient}, file.FileDataID)
+		collisionResult, err := directm2.ConvertM2CollisionToMdl(ctx, cfg, CascFileSource{Client: wowClient}, file.FileDataID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -490,11 +508,14 @@ func ExportLocalModelAsMdl(assetManager *common.AssetManager, cfg config.Config,
 	return &commonModel{MDL: model.MDL, RelativePath: model.RelativePath}, collision, nil
 }
 
-func searchModelWithSkin(wowClient client.Client, fileWithSkin string) (*listfileEntry, error) {
+func searchModelWithSkin(ctx context.Context, wowClient client.Client, fileWithSkin string) (*listfileEntry, error) {
 	dirName := filepath.Dir(strings.ReplaceAll(fileWithSkin, "\\", "/"))
 	for i := len(fileWithSkin); i > len(dirName); i-- {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		searchPhrase := fileWithSkin[:i]
-		files, err := wowClient.SearchFiles(context.Background(), searchPhrase, false)
+		files, err := wowClient.SearchFiles(ctx, searchPhrase, false)
 		if err != nil {
 			continue
 		}
@@ -553,7 +574,7 @@ func ResolveLocalModelRef(wowClient client.Client, localPath string) (ok bool, s
 		return false, nil, nil
 	}
 	normalized := common.NormalizeLocalModelRef(localPath)
-	file, err := searchModelWithSkin(wowClient, normalized)
+	file, err := searchModelWithSkin(context.Background(), wowClient, normalized)
 	if err != nil || file == nil {
 		return false, nil, err
 	}

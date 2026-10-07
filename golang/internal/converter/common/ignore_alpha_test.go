@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"encoding/binary"
 	"os"
 	"path/filepath"
@@ -38,10 +39,10 @@ func TestExportTextureIgnoreAlphaCompactsWithoutChangingQuantization(t *testing.
 	ignoredManager.textures[ignoredRel] = struct{}{}
 	regularDir := filepath.Join(assetRoot, "regular")
 	ignoredDir := filepath.Join(assetRoot, "ignored")
-	if _, err := regularManager.ExportTextures(regularDir); err != nil {
+	if _, err := regularManager.ExportTextures(context.Background(), regularDir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ignoredManager.ExportTextures(ignoredDir); err != nil {
+	if _, err := ignoredManager.ExportTextures(context.Background(), ignoredDir); err != nil {
 		t.Fatal(err)
 	}
 	regular, err := os.ReadFile(filepath.Join(regularDir, "wow", "alpha", "regular.blp"))

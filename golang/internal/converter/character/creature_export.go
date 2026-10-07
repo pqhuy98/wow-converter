@@ -19,7 +19,10 @@ import (
 )
 
 // ExportCreatureModels exports unique creature display models.
-func ExportCreatureModels(creatures []azerothcore.Creature, outputPath string, cfg config.Config, wowClient client.Client, workers int, onProgress func(completed, total int)) error {
+func ExportCreatureModels(ctx context.Context, creatures []azerothcore.Creature, outputPath string, cfg config.Config, wowClient client.Client, workers int, onProgress func(completed, total int)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	seen := map[int]struct{}{}
 	var unique []azerothcore.Creature
 	for _, c := range creatures {
@@ -43,7 +46,6 @@ func ExportCreatureModels(creatures []azerothcore.Creature, outputPath string, c
 		}
 	}
 
-	ctx := context.Background()
 	if wowClient != nil {
 		if err := wowClient.InitModelCaches(ctx); err != nil {
 			return fmt.Errorf("initialize creature model caches: %w", err)
@@ -62,10 +64,13 @@ func ExportCreatureModels(creatures []azerothcore.Creature, outputPath string, c
 			return nil
 		})
 	}
-	return common.WorkerPool(workers, tasks)
+	return common.WorkerPoolContext(ctx, workers, tasks)
 }
 
 func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.Client, outputPath string, c azerothcore.Creature, index, total int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	displayID := c.Model.CreatureDisplayID
 	fileName := fmt.Sprintf("creature-%d", displayID)
 	ext := ".mdl"
@@ -126,6 +131,9 @@ func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.
 	if _, err := ex.ExportCharacter(ctx, ch, fileName); err != nil {
 		return fmt.Errorf("export creature %s: %w", fileName, err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	ex.OptimizeModelsTextures(DefaultExportOptimization())
 	log.Printf("optimize models and textures took %s", ansi.Yellowf("%.2fs", time.Since(optStart).Seconds()))
 
@@ -134,10 +142,10 @@ func exportOneCreature(ctx context.Context, cfg config.Config, wowClient client.
 	if cfg.MDX {
 		format = "mdx"
 	}
-	if _, err := ex.WriteAllTextures(outputPath); err != nil {
+	if _, err := ex.WriteAllTextures(ctx, outputPath); err != nil {
 		return fmt.Errorf("write creature textures %s: %w", fileName, err)
 	}
-	if _, err := ex.WriteAllModels(outputPath, format); err != nil {
+	if _, err := ex.WriteAllModels(ctx, outputPath, format); err != nil {
 		return fmt.Errorf("write creature models %s: %w", fileName, err)
 	}
 	log.Printf("write models and textures took %s", ansi.Yellowf("%.2fs", time.Since(writeStart).Seconds()))

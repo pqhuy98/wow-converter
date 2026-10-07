@@ -1,6 +1,10 @@
 package casc
 
-import "context"
+import (
+	"context"
+
+	"github.com/pqhuy98/wow-converter/internal/wow/character/meta"
+)
 
 // Build describes a WoW installation build entry.
 type Build struct {
@@ -125,10 +129,10 @@ type CharacterMetaParams struct {
 
 // CharacterMetaResponse is returned by CHAR_META.
 type CharacterMetaResponse struct {
-	FileDataID      int            `json:"fileDataID"`
-	FileName        string         `json:"fileName"`
-	TextureLayoutID int            `json:"textureLayoutID"`
-	Choices         map[string]any `json:"choices"`
+	FileDataID      int                        `json:"fileDataID"`
+	FileName        string                     `json:"fileName"`
+	TextureLayoutID int                        `json:"textureLayoutID"`
+	Choices         map[string]meta.ChoiceMeta `json:"choices"`
 }
 
 // CharacterMeta resolves character metadata.
@@ -302,13 +306,13 @@ type NoopMemoryDiagnostics struct{}
 
 func (NoopMemoryDiagnostics) Collect() MemoryDiagnostics {
 	return MemoryDiagnostics{
-		Summary:  "stub memory diagnostics",
-		Process:  map[string]int64{},
-		Casc:     map[string]any{"loaded": false},
-		Listfile: map[string]any{},
-		Indexes:  map[string]any{},
-		DBCaches: map[string]any{},
+		Summary:      "stub memory diagnostics",
+		Process:      map[string]int64{},
+		Casc:         map[string]any{"loaded": false},
+		Listfile:     map[string]any{},
+		Indexes:      map[string]any{},
+		DBCaches:     map[string]any{},
 		ExportCaches: map[string]any{},
-		Converter: map[string]any{},
+		Converter:    map[string]any{},
 	}
 }

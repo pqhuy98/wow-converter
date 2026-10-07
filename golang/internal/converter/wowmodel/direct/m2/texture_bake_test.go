@@ -90,7 +90,7 @@ func TestSurfaceBudgetPrioritizesBodyAreaAndIgnoresMissingSections(t *testing.T)
 
 func TestNativeBlendRetainsDetailedColorAndAlphaWithSharedUVLoop(t *testing.T) {
 	root := t.TempDir()
-	resolved := ResolvedTextures{ValidTextures: map[any]m2export.TextureManifestEntry{}}
+	resolved := ResolvedTextures{ValidTextures: textureManifest{}}
 	for id, pixel := range map[uint32]color.NRGBA{1: {255, 128, 64, 128}, 2: {200, 80, 40, 128}} {
 		img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
 		for y := range 2 {
@@ -105,7 +105,7 @@ func TestNativeBlendRetainsDetailedColorAndAlphaWithSharedUVLoop(t *testing.T) {
 		rel := fmt.Sprintf("native-blend-test-%d.png", id)
 		texturesource.Register(rel, texturesource.Source{Kind: texturesource.KindPNG, PNG: encoded.Bytes(), PreserveAlpha: true})
 		t.Cleanup(func() { texturesource.Unregister(rel) })
-		resolved.ValidTextures[id] = m2export.TextureManifestEntry{MatPath: filepath.Join(root, rel)}
+		resolved.ValidTextures[textureKey{fileDataID: id}] = m2export.TextureManifestEntry{MatPath: filepath.Join(root, rel)}
 	}
 	gs := components.NewGlobalSequence(0, 33000)
 	ta := components.TextureAnim{Translation: &components.Animation{Interpolation: components.InterpLinear, GlobalSeq: &gs, KeyFrames: map[int]any{0: imath.Vector3{}, 33000: imath.Vector3{0, 1, 0}}}}
@@ -278,7 +278,7 @@ func TestUV2BakeUsesTransparentBlackForUnboundOptionalReplaceable(t *testing.T) 
 		SubMeshes:    []m2.SkinSubMesh{{TriangleCount: 3}},
 		TextureUnits: []m2.SkinTextureUnit{{TextureCount: 1, ShaderID: 0x8022, ColorIndex: 65535}},
 	}
-	if err := bakeM2Materials(context.Background(), config.Config{ExportAssetDir: root}, nil, loader, skin, nil, ResolvedTextures{ValidTextures: map[any]m2export.TextureManifestEntry{}}, nil, &result); err != nil {
+	if err := bakeM2Materials(context.Background(), config.Config{ExportAssetDir: root}, nil, loader, skin, nil, ResolvedTextures{ValidTextures: textureManifest{}}, nil, &result); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

@@ -1,6 +1,7 @@
 package mapexporter
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -111,7 +112,10 @@ func NewMapExporter(cfg config.Config, mapCfg *MapExportConfig, wowClient client
 }
 
 // ParseObjects reads terrains, doodads, and creatures.
-func (e *MapExporter) ParseObjects(filter func(id string, typ common.WowObjectType) bool) error {
+func (e *MapExporter) ParseObjects(ctx context.Context, filter func(id string, typ common.WowObjectType) bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	mc := e.MapExportConfig
 	e.WowObjectManager = common.NewWowObjectManager(e.Config, e.wowClient, e.tileRegistry)
 	e.filterDoodads = func(id string, typ common.WowObjectType) bool {
@@ -132,15 +136,15 @@ func (e *MapExporter) ParseObjects(filter func(id string, typ common.WowObjectTy
 	}
 
 	if len(mc.WMOSet) > 0 {
-		if err := e.WowObjectManager.ReadTerrainsDoodads(mc.WMOSet, e.filterDoodads); err != nil {
+		if err := e.WowObjectManager.ReadTerrainsDoodads(ctx, mc.WMOSet, e.filterDoodads); err != nil {
 			return err
 		}
 	}
 	paths := buildPaths("**/"+mc.WowExportFolder, mc.Min, mc.Max)
-	if err := e.WowObjectManager.ReadTerrainsDoodads(paths, e.filterDoodads); err != nil {
+	if err := e.WowObjectManager.ReadTerrainsDoodads(ctx, paths, e.filterDoodads); err != nil {
 		return err
 	}
-	if err := e.WowObjectManager.ReadCreatures(mc.MapID); err != nil {
+	if err := e.WowObjectManager.ReadCreatures(ctx, mc.MapID); err != nil {
 		return err
 	}
 
@@ -159,7 +163,10 @@ func (e *MapExporter) ParseObjects(filter func(id string, typ common.WowObjectTy
 }
 
 // ExportTerrainsDoodads generates terrain and exports doodad assets.
-func (e *MapExporter) ExportTerrainsDoodads(outputDir string) error {
+func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	wc3 := NewWc3Converter(*e.MapExportConfig)
 	e.MapManager.SetTerrain(wc3.GenerateTerrainWithHeight(e.WowObjectManager))
 
@@ -219,10 +226,10 @@ func (e *MapExporter) ExportTerrainsDoodads(outputDir string) error {
 	}
 	am.PurgeTextures(usedTextures)
 
-	if _, err := am.ExportTextures(outputDir); err != nil {
+	if _, err := am.ExportTextures(ctx, outputDir); err != nil {
 		return err
 	}
-	if err := am.ExportModels(outputDir); err != nil {
+	if err := am.ExportModels(ctx, outputDir); err != nil {
 		return err
 	}
 	am.ReleaseAfterExport()
@@ -230,7 +237,10 @@ func (e *MapExporter) ExportTerrainsDoodads(outputDir string) error {
 }
 
 // ExportCreatures places units and exports creature models.
-func (e *MapExporter) ExportCreatures(outputDir string, onProgress func(completed, total int)) error {
+func (e *MapExporter) ExportCreatures(ctx context.Context, outputDir string, onProgress func(completed, total int)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	mc := e.MapExportConfig
 	if !mc.Creatures.Enable {
 		return nil
@@ -245,7 +255,7 @@ func (e *MapExporter) ExportCreatures(outputDir string, onProgress func(complete
 		creatures = append(creatures, u.Creature)
 	}
 	start := time.Now()
-	if err := character.ExportCreatureModels(creatures, outputDir, e.Config, e.wowClient, MapExportWorkerCount(), onProgress); err != nil {
+	if err := character.ExportCreatureModels(ctx, creatures, outputDir, e.Config, e.wowClient, MapExportWorkerCount(), onProgress); err != nil {
 		return err
 	}
 	log.Printf("Exported all unit assets in %s", ansi.Yellowf("%.2fs", time.Since(start).Seconds()))
@@ -254,28 +264,40 @@ func (e *MapExporter) ExportCreatures(outputDir string, onProgress func(complete
 }
 
 // SaveWar3mapFiles copies template and writes map binaries.
-func (e *MapExporter) SaveWar3mapFiles(outputDir, mapName string) error {
+func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	templateDir, err := workspace.ResolveTemplateEmptyDir()
 	if err != nil {
 		return err
 	}
 	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
-		if err := copyDir(templateDir, outputDir); err != nil {
+		if err := copyDir(ctx, templateDir, outputDir); err != nil {
 			return err
 		}
 	} else {
 		entries, _ := os.ReadDir(templateDir)
 		for _, ent := range entries {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			dst := filepath.Join(outputDir, ent.Name())
 			if _, err := os.Stat(dst); os.IsNotExist(err) {
-				if err := copyFile(filepath.Join(templateDir, ent.Name()), dst); err != nil {
+				if err := copyFile(ctx, filepath.Join(templateDir, ent.Name()), dst); err != nil {
 					return err
 				}
 			}
 		}
 	}
 	e.MapManager.EnsureMapInfo(mapName)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := e.MapManager.Save(outputDir); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	_ = os.Remove(filepath.Join(outputDir, "war3map.shd"))
@@ -292,8 +314,11 @@ func buildPaths(prefix string, min, max math.Vector2) []string {
 	return res
 }
 
-func copyDir(src, dst string) error {
+func copyDir(ctx context.Context, src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil {
 			return err
 		}
@@ -302,13 +327,16 @@ func copyDir(src, dst string) error {
 		if info.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		return copyFile(path, target)
+		return copyFile(ctx, path, target)
 	})
 }
 
-func copyFile(src, dst string) error {
+func copyFile(ctx context.Context, src, dst string) error {
 	data, err := os.ReadFile(src)
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {

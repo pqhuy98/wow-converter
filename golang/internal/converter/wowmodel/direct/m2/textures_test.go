@@ -35,12 +35,12 @@ func TestResolveTexturesUsesTypedOverridesBeforePositionalVariants(t *testing.T)
 		t.Fatalf("typed overrides were not applied by M2 type: %#v", loader.Textures)
 	}
 	for _, id := range []int{100, 903, 904} {
-		if _, ok := resolved.ValidTextures[uint32(id)]; !ok {
+		if _, ok := resolved.ValidTextures[textureKey{fileDataID: uint32(id)}]; !ok {
 			t.Fatalf("resolved texture manifest missing exact replacement FID %d: %#v", id, resolved.ValidTextures)
 		}
 	}
 	for _, id := range []int{701, 702, 703} {
-		if _, ok := resolved.ValidTextures[uint32(id)]; ok {
+		if _, ok := resolved.ValidTextures[textureKey{fileDataID: uint32(id)}]; ok {
 			t.Fatalf("positional variant FID %d overrode explicit component mapping", id)
 		}
 	}
@@ -74,7 +74,7 @@ func TestResolveTexturesPreservesCreatureVariationSlots(t *testing.T) {
 					t.Fatalf("type %d resolved %d, want %d", loader.TextureTypes[i], got, want)
 				}
 				if want > 0 {
-					if _, ok := resolved.ValidTextures[want]; !ok {
+					if _, ok := resolved.ValidTextures[textureKey{fileDataID: want}]; !ok {
 						t.Fatalf("missing resolved FID %d", want)
 					}
 				}

@@ -10,109 +10,10 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
-type m2TrackRaw struct {
-	GlobalSeq     uint16
-	Interpolation uint16
-	Timestamps    [][]*uint32
-	Values        [][][]float64
-}
+type m2TrackRaw = Track
 
 type m2AnimMeta struct {
 	Duration uint32
-}
-
-func parseM2TrackRaw(v any) (m2TrackRaw, bool) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return m2TrackRaw{}, false
-	}
-	out := m2TrackRaw{GlobalSeq: uint16(config.BlizzardNull)}
-	if n, ok := asUint16(firstKey(m, "globalSeq", "GlobalSeq")); ok {
-		out.GlobalSeq = n
-	}
-	if n, ok := asUint16(firstKey(m, "interpolation", "Interpolation")); ok {
-		out.Interpolation = n
-	}
-	out.Timestamps = parseTimestampMatrix(firstKey(m, "timestamps", "Timestamps"))
-	out.Values = parseValueMatrix(firstKey(m, "values", "Values"))
-	return out, true
-}
-
-func parseTimestampMatrix(v any) [][]*uint32 {
-	outer, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([][]*uint32, len(outer))
-	for i, row := range outer {
-		cols, ok := row.([]any)
-		if !ok {
-			continue
-		}
-		out[i] = make([]*uint32, len(cols))
-		for j, x := range cols {
-			if x == nil {
-				continue
-			}
-			switch n := x.(type) {
-			case float64:
-				val := uint32(n)
-				out[i][j] = &val
-			case int:
-				val := uint32(n)
-				out[i][j] = &val
-			}
-		}
-	}
-	return out
-}
-
-func parseValueMatrix(v any) [][][]float64 {
-	outer, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([][][]float64, len(outer))
-	for i, row := range outer {
-		cols, ok := row.([]any)
-		if !ok {
-			continue
-		}
-		out[i] = make([][]float64, len(cols))
-		for j, x := range cols {
-			vals, ok := x.([]any)
-			if !ok {
-				continue
-			}
-			out[i][j] = make([]float64, len(vals))
-			for k, y := range vals {
-				if f, ok := y.(float64); ok {
-					out[i][j][k] = f
-				}
-			}
-		}
-	}
-	return out
-}
-
-func firstKey(m map[string]any, keys ...string) any {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v
-		}
-	}
-	return nil
-}
-
-func asUint16(v any) (uint16, bool) {
-	switch n := v.(type) {
-	case float64:
-		return uint16(n), true
-	case int:
-		return uint16(n), true
-	default:
-		return 0, false
-	}
 }
 
 func (f *File) getGlobalSeq(id int) *components.GlobalSequence {
@@ -215,7 +116,8 @@ func (f *File) buildTextureAnims() []components.TextureAnim {
 	anims := make([]components.TextureAnim, len(f.textureTransforms))
 	for i, transform := range f.textureTransforms {
 		ta := components.TextureAnim{ID: i}
-		if track, ok := parseM2TrackRaw(firstKey(transform, "translation", "Translation")); ok {
+		{
+			track := transform.Translation
 			ta.Translation = f.m2TrackToAnimation(track, components.AnimTypeOthers, func(v []float64) any {
 				if len(v) < 3 {
 					return imath.Vector3{}
@@ -223,7 +125,8 @@ func (f *File) buildTextureAnims() []components.TextureAnim {
 				return imath.Vector3{v[0], v[1], v[2]}
 			})
 		}
-		if track, ok := parseM2TrackRaw(firstKey(transform, "rotation", "Rotation")); ok {
+		{
+			track := transform.Rotation
 			ta.Rotation = f.m2TrackToAnimation(track, components.AnimTypeRotation, func(v []float64) any {
 				if len(v) < 4 {
 					return imath.QuatNoRotation()
@@ -231,7 +134,8 @@ func (f *File) buildTextureAnims() []components.TextureAnim {
 				return imath.QuaternionRotation{v[0], v[1], v[2], v[3]}
 			})
 		}
-		if track, ok := parseM2TrackRaw(firstKey(transform, "scaling", "Scaling")); ok {
+		{
+			track := transform.Scaling
 			ta.Scaling = f.m2TrackToAnimation(track, components.AnimTypeScaling, func(v []float64) any {
 				if len(v) < 3 {
 					return imath.Vector3{1, 1, 1}

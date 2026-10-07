@@ -83,7 +83,7 @@ func TestMapGenerateFailedJobPreservesTileSummary(t *testing.T) {
 	queue := util.NewJobQueue(mapGenerateQueueConfig(), func(
 		job *util.Job[mapGenerateJobRequest, mapGenerateJobResult],
 	) (mapGenerateJobResult, error) {
-		return runMapGenerateJob(context.Background(), deps, job)
+		return runMapGenerateJob(job.Context(), deps, job)
 	})
 	job := testMapGenerateJob("Stormwind City")
 	job.NoTimeout = true

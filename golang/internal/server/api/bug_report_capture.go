@@ -78,9 +78,6 @@ func registerReportCapture(r Router, d *Deps, exports *util.JobQueue[exportChara
 	if d.Config.IsSharedHosting {
 		return
 	}
-	if receiver, err := url.Parse(bugReportServerURL()); err == nil {
-		log.Printf("bug report receiver: %s://%s%s", receiver.Scheme, receiver.Host, receiver.EscapedPath())
-	}
 	captures := util.NewJobQueue(util.QueueConfig[reportCaptureRequest, *preparedReport]{Concurrency: 1, MaxPendingJobs: 5, JobTTL: 30 * time.Minute, JobTimeout: 8 * time.Minute}, func(job *util.Job[reportCaptureRequest, *preparedReport]) (*preparedReport, error) {
 		result := exports.CompletedResult(job.Request.ExportID)
 		if result == nil || result.ReportMetadata == nil {

@@ -117,7 +117,7 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	}
 	LogMapGeneratePhase("Parsing map objects")
 	report("Parsing map data", nil)
-	if err := exporter.ParseObjects(nil); err != nil {
+	if err := exporter.ParseObjects(ctx, nil); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -146,7 +146,7 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 
 	LogMapGeneratePhase("Saving terrain and doodads")
 	report("Saving terrain and doodads", nil)
-	if err := exporter.ExportTerrainsDoodads(outputDir); err != nil {
+	if err := exporter.ExportTerrainsDoodads(ctx, outputDir); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -158,7 +158,7 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	if opts.MapExportConfig != nil && opts.MapExportConfig.Creatures.Enable && creatureExportSteps > 0 {
 		LogMapGeneratePhase("Exporting creature models")
 		report("Exporting creature models", &CreatureProgress{Completed: 0, Total: uniqueCreatureCount})
-		if err := exporter.ExportCreatures(outputDir, func(completed, total int) {
+		if err := exporter.ExportCreatures(ctx, outputDir, func(completed, total int) {
 			convertCompleted = 2 + completed
 			report("Exporting creature models", &CreatureProgress{Completed: completed, Total: total})
 		}); err != nil {
@@ -176,7 +176,7 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	if err := ctx.Err(); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
-	if err := exporter.SaveWar3mapFiles(outputDir, mapSaveName); err != nil {
+	if err := exporter.SaveWar3mapFiles(ctx, outputDir, mapSaveName); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
 	convertCompleted = convertSteps

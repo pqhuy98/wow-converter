@@ -23,9 +23,7 @@ func loadSoundTranscripts() map[int]string {
 		return map[int]string{}
 	}
 	defer r.Close()
-	out := transcriptsFromZip(&r.Reader)
-	log.Printf("sound transcripts: %d from %s", len(out), path)
-	return out
+	return transcriptsFromZip(&r.Reader)
 }
 
 func transcriptsFromZip(r *zip.Reader) map[int]string {
