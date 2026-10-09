@@ -7,6 +7,73 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
 )
 
+func TestBakeChunkModernLayersAndHeight(t *testing.T) {
+	solid := func(r, g, b, a byte) *CPUMipTexture {
+		return &CPUMipTexture{Mips: []MipLevel{{Data: []byte{r, g, b, a}, Width: 1, Height: 1}}}
+	}
+	for _, tc := range []struct {
+		name           string
+		height         bool
+		eighth         bool
+		separateHeight bool
+		zeroHeight     bool
+		want           [3]byte
+	}{
+		{name: "eighth layer replaces base", eighth: true, want: [3]byte{0, 0, 255}},
+		{name: "legacy ignores height", want: [3]byte{127, 0, 128}},
+		{name: "diffuse alpha height fallback", height: true, want: [3]byte{0, 0, 255}},
+		{name: "MHID alpha controls height", height: true, separateHeight: true, want: [3]byte{255, 0, 0}},
+		{name: "zero heights retain alpha blend", height: true, zeroHeight: true, want: [3]byte{127, 0, 128}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			layers := [8]*BakeMaterial{}
+			layers[0] = &BakeMaterial{Scale: 1, DiffuseTex: solid(255, 0, 0, 0), HeightScale: 4, HeightOffset: 1}
+			idx := 1
+			if tc.eighth {
+				idx = 7
+			}
+			layers[idx] = &BakeMaterial{Scale: 1, DiffuseTex: solid(0, 0, 255, 255), HeightScale: 4, HeightOffset: 1}
+			if tc.separateHeight {
+				layers[0].HeightTex = solid(0, 0, 0, 255)
+				layers[idx].HeightTex = solid(0, 0, 0, 0)
+			}
+			if tc.zeroHeight {
+				layers[0].HeightScale = 0
+				layers[0].HeightOffset = 0
+				layers[idx].HeightScale = 0
+				layers[idx].HeightOffset = 0
+			}
+			alpha := make([][]uint8, 8)
+			alpha[idx] = make([]uint8, 4096)
+			for i := range alpha[idx] {
+				alpha[idx][i] = 128
+				if tc.eighth {
+					alpha[idx][i] = 255
+				}
+			}
+			canvas := make([]byte, 4*4*4)
+			BakeChunk(ChunkBakeParams{Canvas: canvas, CanvasSize: 4, Indices: []int{0, 1, 2}, Vertices: []float32{0, 0, 0, 1, 0, 0, 0, 0, 1}, UvsBake: []float32{0, 0, 0, 0, 0, 0}, VertexColors: []float32{.5, .5, .5, 1, .5, .5, .5, 1, .5, .5, .5, 1}, TileSize: 1, Zoom: 1, Layers: layers, AlphaLayers: alpha, HeightTexturing: tc.height})
+			got := [3]byte{canvas[0], canvas[1], canvas[2]}
+			if got != tc.want {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+			if canvas[3] != 255 {
+				t.Fatal("pixel was not rasterized")
+			}
+		})
+	}
+}
+
+func TestHeightBlendRetainsBothSurfaces(t *testing.T) {
+	// Weighted heights are 1/2 and 3/8. Suppression leaves 1/2 and
+	// 21/64, so the normalized red/blue contributions are 32/53, 21/53.
+	weights := [8]float64{.25, .75}
+	heightBlendWeights(&weights, [8]float64{2, .5}, 2)
+	if math.Abs(weights[0]-32.0/53) > 1e-12 || math.Abs(weights[1]-21.0/53) > 1e-12 {
+		t.Fatalf("wrong blended surface weights: %v", weights)
+	}
+}
+
 func TestBakeChunkCoversFullCanvas(t *testing.T) {
 	tileSize := constants.Game.TileSize
 	chunkSize := tileSize / 16
@@ -80,7 +147,7 @@ func TestBakeChunkCoversFullCanvas(t *testing.T) {
 		Canvas: canvas, CanvasSize: chunkSizePx, Indices: indices,
 		Vertices: vertices, UvsBake: uvsBake, VertexColors: vertexColors,
 		Translation: [2]float64{ofsX, ofsY}, TileSize: tileSize, Zoom: 0.0625,
-		Layers: [4]*BakeMaterial{mat, nil, nil, nil},
+		Layers: [8]*BakeMaterial{mat},
 	})
 
 	minY, maxY := chunkSizePx, -1

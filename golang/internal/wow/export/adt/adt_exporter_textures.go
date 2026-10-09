@@ -7,14 +7,14 @@ import (
 	"sync"
 	"sync/atomic"
 
-	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
-	adtfmt "github.com/pqhuy98/wow-converter/internal/wow/formats/adt"
 	"github.com/pqhuy98/wow-converter/internal/buffer"
 	appconfig "github.com/pqhuy98/wow-converter/internal/config"
 	blpfmt "github.com/pqhuy98/wow-converter/internal/formats/blp"
+	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/export"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats"
+	adtfmt "github.com/pqhuy98/wow-converter/internal/wow/formats/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
@@ -355,6 +355,7 @@ func (e *Exporter) exportLargeBake(
 	}
 	materialIDs := texAdt.DiffuseTextureFileDataIDs
 	texParams := texAdt.TexParams
+	heightTexturing := texAdt.WDT != nil && texAdt.WDT.Flags&0x80 != 0
 	materials := make([]*BakeMaterial, len(materialIDs))
 	if progress != nil {
 		progress.SetLabel(fmt.Sprintf("Tile %s, loading textures", e.TileID), 0, len(materialIDs))
@@ -373,10 +374,17 @@ func (e *Exporter) exportLargeBake(
 			continue
 		}
 		mat.DiffuseTex = tex
+		if heightTexturing && i < len(texAdt.HeightTextureFileDataIDs) && texAdt.HeightTextureFileDataIDs[i] != 0 {
+			heightID := texAdt.HeightTextureFileDataIDs[i]
+			mat.HeightTex, err = LoadBakeTexture(ctx, getFile, heightID)
+			if err != nil {
+				return fmt.Errorf("load terrain height texture %d: %w", heightID, err)
+			}
+		}
 		if texParams != nil && i < len(texParams) {
 			params := texParams[i]
 			mat.Scale = mathPow2(float64((params.Flags & 0xF0) >> 4))
-			if params.Height != 0 || params.Offset != 1 {
+			if heightTexturing {
 				mat.HeightScale = float64(params.Height)
 				mat.HeightOffset = float64(params.Offset)
 			}
@@ -421,9 +429,9 @@ func (e *Exporter) exportLargeBake(
 		texChunk := texAdt.TexChunks[job.chunkIndex]
 		fixAlphaMap := rootAdt.Chunks[job.chunkIndex].Flags&(1<<15) == 0
 		alphaLayers := FixChunkAlphaLayers(texChunk.AlphaLayers, fixAlphaMap)
-		var layerMaterials [4]*BakeMaterial
+		var layerMaterials [8]*BakeMaterial
 		for i, layer := range texChunk.Layers {
-			if i >= 4 {
+			if i >= len(layerMaterials) {
 				break
 			}
 			if int(layer.TextureID) < len(materials) {
@@ -440,7 +448,7 @@ func (e *Exporter) exportLargeBake(
 			Canvas: chunkCanvas, CanvasSize: chunkSizePx, Indices: chunkMeshes[job.chunkIndex],
 			Vertices: vertices, UvsBake: uvsBake, VertexColors: vertexColors,
 			Translation: [2]float64{ofsX, ofsY}, TileSize: float64(tileSize), Zoom: 0.0625,
-			Layers: layerMaterials, AlphaLayers: alphaLayers,
+			Layers: layerMaterials, AlphaLayers: alphaLayers, HeightTexturing: heightTexturing,
 		})
 		rotated := Rotate180(chunkCanvas, chunkSizePx)
 		if split {

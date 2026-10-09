@@ -16,8 +16,8 @@ type CPUMipTexture struct {
 
 // MipLevel is one mip level of RGBA data.
 type MipLevel struct {
-	Data           []byte
-	Width, Height  int
+	Data          []byte
+	Width, Height int
 }
 
 // BakeMaterial is a terrain bake layer material.
@@ -116,16 +116,17 @@ func BuildMipChain(data []byte, width, height int) []MipLevel {
 
 // ChunkBakeParams configures baking one terrain chunk.
 type ChunkBakeParams struct {
-	Canvas                      []byte
-	CanvasSize                  int
-	Indices                     []int
-	Vertices                    []float32
-	UvsBake                     []float32
-	VertexColors                []float32
-	Translation                 [2]float64
-	TileSize, Zoom              float64
-	Layers                      [4]*BakeMaterial
-	AlphaLayers                 [][]uint8
+	Canvas          []byte
+	CanvasSize      int
+	Indices         []int
+	Vertices        []float32
+	UvsBake         []float32
+	VertexColors    []float32
+	Translation     [2]float64
+	TileSize, Zoom  float64
+	Layers          [8]*BakeMaterial
+	AlphaLayers     [][]uint8
+	HeightTexturing bool
 }
 
 // BakeChunk rasterizes one map chunk onto its canvas.
@@ -133,14 +134,16 @@ func BakeChunk(params ChunkBakeParams) {
 	canvas := params.Canvas
 	W := params.CanvasSize
 	H := params.CanvasSize
-	scales := [4]float64{1, 1, 1, 1}
-	for i := 0; i < 4; i++ {
+	scales := [8]float64{1, 1, 1, 1, 1, 1, 1, 1}
+	layerCount := 0
+	for i := range params.Layers {
 		if params.Layers[i] != nil {
 			scales[i] = params.Layers[i].Scale
+			layerCount = i + 1
 		}
 	}
-	lods := [4]float64{}
-	for i := 0; i < 4; i++ {
+	lods, heightLods := [8]float64{}, [8]float64{}
+	for i := 0; i < layerCount; i++ {
 		mat := params.Layers[i]
 		if mat == nil || mat.DiffuseTex == nil || len(mat.DiffuseTex.Mips) == 0 {
 			continue
@@ -148,6 +151,10 @@ func BakeChunk(params ChunkBakeParams) {
 		base := mat.DiffuseTex.Mips[0]
 		texelsPerPx := float64(max(base.Width, base.Height)) * (8 / scales[i]) / float64(W)
 		lods[i] = math.Log2(math.Max(texelsPerPx, 1e-9))
+		if mat.HeightTex != nil && len(mat.HeightTex.Mips) > 0 {
+			base := mat.HeightTex.Mips[0]
+			heightLods[i] = math.Log2(math.Max(float64(max(base.Width, base.Height))*(8/scales[i])/float64(W), 1e-9))
+		}
 	}
 	transform := func(vi int) (float64, float64) {
 		x := float64(params.Vertices[vi*3])
@@ -158,7 +165,8 @@ func BakeChunk(params ChunkBakeParams) {
 		ndcY := cy / params.Zoom
 		return ((ndcX + 1) / 2) * float64(W), (1 - (ndcY+1)/2) * float64(H)
 	}
-	t0, t1, t2, t3 := make([]float64, 4), make([]float64, 4), make([]float64, 4), make([]float64, 4)
+	var samples [8][4]float64
+	var heightSample [4]float64
 	for tri := 0; tri < len(params.Indices); tri += 3 {
 		i0, i1, i2 := params.Indices[tri], params.Indices[tri+1], params.Indices[tri+2]
 		p0x, p0y := transform(i0)
@@ -190,45 +198,94 @@ func BakeChunk(params ChunkBakeParams) {
 				vcG := float64(params.VertexColors[i0*4+1])*w0 + float64(params.VertexColors[i1*4+1])*w1 + float64(params.VertexColors[i2*4+1])*w2
 				vcB := float64(params.VertexColors[i0*4+2])*w0 + float64(params.VertexColors[i1*4+2])*w1 + float64(params.VertexColors[i2*4+2])*w2
 				modU, modV := glslMod(vtU, 1), glslMod(vtV, 1)
-				a0, a1, a2 := 0.0, 0.0, 0.0
-				if len(params.AlphaLayers) > 1 && params.AlphaLayers[1] != nil {
-					a0 = sampleAlphaLinearClamp(params.AlphaLayers[1], modU, modV)
+				var weights, heights [8]float64
+				overlaySum := 0.0
+				for i := 1; i < layerCount; i++ {
+					if i < len(params.AlphaLayers) && params.AlphaLayers[i] != nil {
+						weights[i] = sampleAlphaLinearClamp(params.AlphaLayers[i], modU, modV)
+						overlaySum += weights[i]
+					}
 				}
-				if len(params.AlphaLayers) > 2 && params.AlphaLayers[2] != nil {
-					a1 = sampleAlphaLinearClamp(params.AlphaLayers[2], modU, modV)
+				weights[0] = 1 - overlaySum
+				// Keep noggit's four-layer weights for older maps. Modern ADTs
+				// use the WDT height flag and can carry eight layers per chunk.
+				if params.HeightTexturing || layerCount > 4 {
+					weights[0] = math.Max(0, weights[0])
 				}
-				if len(params.AlphaLayers) > 3 && params.AlphaLayers[3] != nil {
-					a2 = sampleAlphaLinearClamp(params.AlphaLayers[3], modU, modV)
+				for i := 0; i < layerCount; i++ {
+					mat := params.Layers[i]
+					if mat == nil || mat.DiffuseTex == nil {
+						fill0(samples[i][:])
+						continue
+					}
+					tu, tv := vtU*(8/scales[i]), vtV*(8/scales[i])
+					sampleDiffuse(mat.DiffuseTex, tu, tv, lods[i], samples[i][:])
+					if params.HeightTexturing {
+						// MHID may omit a layer: WoW uses diffuse alpha then.
+						height := samples[i][3]
+						if mat.HeightTex != nil {
+							sampleDiffuse(mat.HeightTex, tu, tv, heightLods[i], heightSample[:])
+							height = heightSample[3]
+						}
+						heights[i] = height*mat.HeightScale + mat.HeightOffset
+					}
 				}
-				if params.Layers[0] != nil && params.Layers[0].DiffuseTex != nil {
-					sampleDiffuse(params.Layers[0].DiffuseTex, vtU*(8/scales[0]), vtV*(8/scales[0]), lods[0], t0)
-				} else {
-					fill0(t0)
+				if params.HeightTexturing {
+					heightBlendWeights(&weights, heights, layerCount)
+				} else if layerCount > 4 && overlaySum > 1 {
+					for i := 0; i < layerCount; i++ {
+						weights[i] /= overlaySum
+					}
 				}
-				if params.Layers[1] != nil && params.Layers[1].DiffuseTex != nil {
-					sampleDiffuse(params.Layers[1].DiffuseTex, vtU*(8/scales[1]), vtV*(8/scales[1]), lods[1], t1)
-				} else {
-					fill0(t1)
+				var color [3]float64
+				for i := 0; i < layerCount; i++ {
+					for c := range color {
+						color[c] += samples[i][c] * weights[i]
+					}
 				}
-				if params.Layers[2] != nil && params.Layers[2].DiffuseTex != nil {
-					sampleDiffuse(params.Layers[2].DiffuseTex, vtU*(8/scales[2]), vtV*(8/scales[2]), lods[2], t2)
-				} else {
-					fill0(t2)
+				r, g, b := color[0]*vcR*2, color[1]*vcG*2, color[2]*vcB*2
+				if params.HeightTexturing || layerCount > 4 {
+					r = math.Max(0, math.Min(1, r))
+					g = math.Max(0, math.Min(1, g))
+					b = math.Max(0, math.Min(1, b))
 				}
-				if params.Layers[3] != nil && params.Layers[3].DiffuseTex != nil {
-					sampleDiffuse(params.Layers[3].DiffuseTex, vtU*(8/scales[3]), vtV*(8/scales[3]), lods[3], t3)
-				} else {
-					fill0(t3)
-				}
-				baseW := 1 - (a0 + a1 + a2)
-				r := (t0[0]*baseW+t1[0]*a0+t2[0]*a1+t3[0]*a2) * vcR * 2
-				g := (t0[1]*baseW+t1[1]*a0+t2[1]*a1+t3[1]*a2) * vcG * 2
-				b := (t0[2]*baseW+t1[2]*a0+t2[2]*a1+t3[2]*a2) * vcB * 2
 				o := (yPix*W + xPix) * 4
 				canvas[o] = byte(r * 255)
 				canvas[o+1] = byte(g * 255)
 				canvas[o+2] = byte(b * 255)
 				canvas[o+3] = 255
+			}
+		}
+	}
+}
+
+// Matches the height-weighted terrain shader: suppress lower layers relative
+// to the highest weighted height, then normalize. Degenerate heights retain
+// the alpha blend rather than producing NaN/black pixels.
+func heightBlendWeights(weights *[8]float64, heights [8]float64, count int) {
+	var pcts [8]float64
+	maxPct := 0.0
+	for i := 0; i < count; i++ {
+		pcts[i] = weights[i] * heights[i]
+		maxPct = math.Max(maxPct, pcts[i])
+	}
+	sum := 0.0
+	for i := 0; i < count; i++ {
+		pcts[i] *= 1 - math.Max(0, math.Min(1, maxPct-pcts[i]))
+		sum += pcts[i]
+	}
+	if sum > 0 {
+		for i := 0; i < count; i++ {
+			weights[i] = pcts[i] / sum
+		}
+	} else {
+		sum = 0
+		for i := 0; i < count; i++ {
+			sum += weights[i]
+		}
+		if sum > 0 {
+			for i := 0; i < count; i++ {
+				weights[i] /= sum
 			}
 		}
 	}
