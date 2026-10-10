@@ -131,6 +131,10 @@ async function devtoolsPort(proc: ChildProcess): Promise<number> {
       clearTimeout(timer);
       reject(new Error(`browser exited ${code ?? 0} before devtools was ready`));
     });
+    proc.once('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 }
 
@@ -167,33 +171,66 @@ async function waitUntilReady(cdp: Cdp, readyMs: number = READY_MS): Promise<str
   throw new Error('viewer did not become ready');
 }
 
-const browsers: ChildProcess[] = [];
+const browsers = new Map<ChildProcess, string>();
 let browserCleanup = false;
 
-function trackBrowser(proc: ChildProcess): void {
-  browsers.push(proc);
+function trackBrowser(proc: ChildProcess, tempDir: string): void {
+  browsers.set(proc, tempDir);
   if (browserCleanup) return;
   browserCleanup = true;
+  process.once('SIGINT', () => process.exit(130));
+  process.once('SIGTERM', () => process.exit(143));
   process.on('exit', () => {
-    for (const browser of browsers) killBrowser(browser);
+    for (const [browser] of browsers) {
+      killBrowser(browser);
+      try {
+        removeBrowserTemp(browser);
+      } catch (err: unknown) {
+        console.error('Could not remove screenshot browser temp directory:', err);
+      }
+    }
   });
 }
 
+function removeBrowserTemp(proc: ChildProcess): void {
+  const tempDir = browsers.get(proc);
+  if (!tempDir) return;
+  // Bun can ignore rmSync's retry options; exit hooks must wait synchronously for Windows locks.
+  const wait = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+      break;
+    } catch (err: unknown) {
+      if (attempt === 20) throw err;
+      Atomics.wait(wait, 0, 0, 100);
+    }
+  }
+  browsers.delete(proc);
+}
+
 function killBrowser(proc: ChildProcess): void {
-  if (proc.exitCode != null || proc.pid == null) return;
+  if (proc.exitCode != null || proc.signalCode != null || proc.pid == null) return;
   if (process.platform === 'win32') {
-    spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
+    spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
   } else {
     proc.kill();
   }
 }
 
-async function waitBrowserExit(proc: ChildProcess): Promise<void> {
+async function waitBrowserExit(proc: ChildProcess, graceful = false): Promise<void> {
+  if (graceful) {
+    for (let i = 0; i < 15; i++) {
+      if (proc.exitCode != null || proc.signalCode != null) return;
+      await Bun.sleep(200);
+    }
+  }
   killBrowser(proc);
   for (let i = 0; i < 25; i++) {
-    if (proc.exitCode != null) return;
+    if (proc.exitCode != null || proc.signalCode != null || proc.pid == null) return;
     await Bun.sleep(200);
   }
+  throw new Error('Screenshot browser did not exit; its temp directory is still in use');
 }
 
 export interface ShotCaptureRequest {
@@ -213,12 +250,12 @@ export class ShotBrowser {
     private readonly proc: ChildProcess,
     private readonly cdp: Cdp,
     private readonly page: WebSocket,
-    private readonly profile: string,
   ) {}
 
   static async open(width: number, height: number): Promise<ShotBrowser> {
     const browser = findBrowser();
-    const profile = mkdtempSync(path.join(tmpdir(), 'wow-shot-'));
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'wow-shot-'));
+    const profile = path.join(tempDir, 'profile');
     const proc = spawn(browser, [
       '--headless=new',
       '--remote-debugging-port=0',
@@ -226,14 +263,21 @@ export class ShotBrowser {
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-component-update',
+      '--disable-sync',
       '--hide-scrollbars',
       `--window-size=${width},${height}`,
       '--force-device-scale-factor=1',
       '--enable-webgl',
       '--ignore-gpu-blocklist',
       'about:blank',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
-    trackBrowser(proc);
+    ], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      env: { ...process.env, TEMP: tempDir, TMP: tempDir, TMPDIR: tempDir },
+    });
+    trackBrowser(proc, tempDir);
     try {
       const port = await devtoolsPort(proc);
       const page = await openSocket(await pageSocket(port));
@@ -242,10 +286,10 @@ export class ShotBrowser {
       // Exported files are rewritten at the same URLs between captures and product switches.
       await cdp.send('Network.enable');
       await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
-      return new ShotBrowser(proc, cdp, page, profile);
+      return new ShotBrowser(proc, cdp, page);
     } catch (err: unknown) {
       await waitBrowserExit(proc);
-      rmSync(profile, { recursive: true, force: true });
+      removeBrowserTemp(proc);
       throw err;
     }
   }
@@ -295,9 +339,13 @@ export class ShotBrowser {
   }
 
   async close(): Promise<void> {
+    if (!browsers.has(this.proc)) return;
+    if (this.page.readyState === WebSocket.OPEN) {
+      this.page.send(JSON.stringify({ id: 0, method: 'Browser.close' }));
+    }
     this.page.close();
-    await waitBrowserExit(this.proc);
-    rmSync(this.profile, { recursive: true, force: true });
+    await waitBrowserExit(this.proc, true);
+    removeBrowserTemp(this.proc);
   }
 }
 

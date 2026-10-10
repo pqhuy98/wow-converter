@@ -13,6 +13,7 @@ type WarResult struct {
 
 // JsonResult is parsed JSON output from warToJson.
 type JsonResult[T any] struct {
-	JSON   T
-	Errors []TranslationError
+	FormatVersion int
+	JSON          T
+	Errors        []TranslationError
 }

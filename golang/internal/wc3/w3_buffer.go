@@ -43,10 +43,10 @@ func (w *W3Buffer) ReadShort() int16 {
 	return v
 }
 
-// ReadFloat reads a little-endian float32 rounded to 3 decimal places.
+// ReadFloat preserves the original float32 precision.
 func (w *W3Buffer) ReadFloat() float32 {
 	v, _ := w.ReadFloat32()
-	return float32(math.Round(float64(v)*1000) / 1000)
+	return v
 }
 
 // ReadString reads a null-terminated string.

@@ -70,6 +70,8 @@ export class MapTranslator {
 
   public buffTypeSkins: ObjectModificationTable = { original: {}, custom: {} };
 
+  public formatVersions: Partial<Record<FilePath, number>> = {};
+
   public filePaths: Record<FilePath, string>;
 
   constructor() {
@@ -100,6 +102,10 @@ export class MapTranslator {
 
   load(mapDir: string) {
     this.setMapDir(mapDir);
+    this.formatVersions = {};
+    for (const file of ['units', 'doodads', 'cameras', 'regions'] as const) {
+      if (existsSync(this.filePaths[file])) this.formatVersions[file] = readFileSync(this.filePaths[file]).readInt32LE(file === 'units' || file === 'doodads' ? 4 : 0);
+    }
     this.info = InfoTranslator.warToJson(readFileSync(this.filePaths.info)).json;
     this.terrain = TerrainTranslator.warToJson(readFileSync(this.filePaths.terrain)).json;
 
@@ -166,16 +172,16 @@ export class MapTranslator {
         writeFileSync(this.filePaths.terrain, TerrainTranslator.jsonToWar(this.terrain).buffer);
         break;
       case 'units':
-        writeFileSync(this.filePaths.units, UnitsTranslator.jsonToWar(this.units).buffer);
+        writeFileSync(this.filePaths.units, UnitsTranslator.jsonToWar(this.units, this.formatVersions.units).buffer);
         break;
       case 'doodads':
-        writeFileSync(this.filePaths.doodads, DoodadsTranslator.jsonToWar([this.doodads, this.specialDoodads]).buffer);
+        writeFileSync(this.filePaths.doodads, DoodadsTranslator.jsonToWar([this.doodads, this.specialDoodads], this.formatVersions.doodads).buffer);
         break;
       case 'cameras':
-        writeFileSync(this.filePaths.cameras, CamerasTranslator.jsonToWar(this.cameras).buffer);
+        writeFileSync(this.filePaths.cameras, CamerasTranslator.jsonToWar(this.cameras, this.formatVersions.cameras).buffer);
         break;
       case 'regions':
-        writeFileSync(this.filePaths.regions, RegionsTranslator.jsonToWar(this.regions).buffer);
+        writeFileSync(this.filePaths.regions, RegionsTranslator.jsonToWar(this.regions, this.formatVersions.regions).buffer);
         break;
       case 'unitData':
         writeFileSync(this.filePaths.unitData, ObjectsTranslator.jsonToWar(ObjectType.Units, this.unitData).buffer);

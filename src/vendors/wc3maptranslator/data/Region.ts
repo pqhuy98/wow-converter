@@ -1,4 +1,7 @@
 interface Region {
+  cameraBlocker?: number
+  alphaTileMinimapColor?: number // packed BGRA
+  alpha?: number
   position: Rect
   name: string
   id: number

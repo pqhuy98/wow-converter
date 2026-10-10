@@ -18,10 +18,14 @@ const (
 type DoodadsTranslator struct{}
 
 // JSONToWar serializes doodads to binary.
-func (DoodadsTranslator) JSONToWar(composite data.DoodadList) wc3.WarResult {
+func (DoodadsTranslator) JSONToWar(composite data.DoodadList, versions ...int) wc3.WarResult {
 	out := wc3.NewHexBufferWriter()
 	out.AddChars("W3do")
-	out.AddInt(8)
+	version := 8
+	if len(versions) > 0 && versions[0] != 0 {
+		version = versions[0]
+	}
+	out.AddInt(version)
 	out.AddInt(11)
 	out.AddInt(len(composite.Doodads))
 
@@ -31,7 +35,11 @@ func (DoodadsTranslator) JSONToWar(composite data.DoodadList) wc3.WarResult {
 		out.AddFloat(tree.Position[0])
 		out.AddFloat(tree.Position[1])
 		out.AddFloat(tree.Position[2])
-		out.AddFloat(wc3.Deg2Rad(float32(tree.Angle)))
+		angle := wc3.Deg2Rad(float32(tree.Angle))
+		if tree.AngleRadians != nil && wc3.Rad2Deg(*tree.AngleRadians) == float32(tree.Angle) {
+			angle = *tree.AngleRadians
+		}
+		out.AddFloat(angle)
 
 		scale := tree.Scale
 		if scale == [3]float32{} {
@@ -40,7 +48,14 @@ func (DoodadsTranslator) JSONToWar(composite data.DoodadList) wc3.WarResult {
 		out.AddFloat(scale[0])
 		out.AddFloat(scale[1])
 		out.AddFloat(scale[2])
-		out.AddChars(tree.SkinID)
+		skin := tree.SkinID
+		if skin == "" {
+			skin = tree.Type
+		}
+		out.AddChars(skin)
+		if version >= 12 {
+			out.AddInt(int(tree.GroupID))
+		}
 
 		treeFlag := byte(doodadFlagSolid)
 		if tree.Flags.CustomHeight {
@@ -50,10 +65,13 @@ func (DoodadsTranslator) JSONToWar(composite data.DoodadList) wc3.WarResult {
 		} else if tree.Flags.Visible && !tree.Flags.Solid {
 			treeFlag = byte(doodadFlagVisible)
 		}
+		if tree.State != nil {
+			treeFlag = *tree.State
+		}
 		out.AddByte(treeFlag)
 
 		life := byte(tree.Life)
-		if tree.Life == 0 {
+		if tree.Life == 0 && tree.State == nil {
 			life = 100
 		}
 		out.AddByte(life)
@@ -66,7 +84,23 @@ func (DoodadsTranslator) JSONToWar(composite data.DoodadList) wc3.WarResult {
 				out.AddInt(int(item.Chance))
 			}
 		}
+		if version >= 13 {
+			out.AddInt(int(tree.Unknown1))
+		}
 		out.AddInt(tree.ID)
+		if version >= 12 {
+			out.AddFloat(tree.Roll)
+			out.AddFloat(tree.Pitch)
+			out.AddInt(len(tree.Lights))
+			for _, light := range tree.Lights {
+				out.AddInt(int(light.Index))
+				out.AddInt(int(light.ShadowCasting))
+				out.AddInt(int(light.Color))
+				for _, v := range []float32{light.Intensity, light.ShadowCastingStart, light.ShadowCastingEnd, light.QuadraticFalloff, light.LinearFalloff, light.Damping} {
+					out.AddFloat(v)
+				}
+			}
+		}
 	}
 
 	out.AddInt(0)
@@ -86,7 +120,7 @@ func (DoodadsTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.DoodadList
 	buf := wc3.NewW3Buffer(buffer)
 
 	buf.ReadChars(4)
-	buf.ReadInt()
+	version := int(buf.ReadInt())
 	buf.ReadInt()
 	numDoodads := int(buf.ReadInt())
 
@@ -102,11 +136,18 @@ func (DoodadsTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.DoodadList
 		doodad.Type = buf.ReadChars(4)
 		doodad.Variation = int(buf.ReadInt())
 		doodad.Position = [3]float32{buf.ReadFloat(), buf.ReadFloat(), buf.ReadFloat()}
-		doodad.Angle = wc3.Angle(wc3.Rad2Deg(buf.ReadFloat()))
+		angle := buf.ReadFloat()
+		doodad.AngleRadians = &angle
+		doodad.Angle = wc3.Angle(wc3.Rad2Deg(angle))
 		doodad.Scale = [3]float32{buf.ReadFloat(), buf.ReadFloat(), buf.ReadFloat()}
 		doodad.SkinID = buf.ReadChars(4)
+		if version >= 12 {
+			doodad.GroupID = buf.ReadInt()
+		}
 
-		flags := doodadFlag(buf.ReadByte())
+		state := buf.ReadByte()
+		doodad.State = &state
+		flags := doodadFlag(state)
 		doodad.Flags = data.DoodadFlag{
 			Visible:      flags == doodadFlagVisible || flags == doodadFlagSolid || flags == doodadFlagSolidCustomHeight,
 			Solid:        flags == doodadFlagSolid || flags == doodadFlagSolidCustomHeight,
@@ -126,7 +167,20 @@ func (DoodadsTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.DoodadList
 			}
 			doodad.DroppedItemSets = append(doodad.DroppedItemSets, itemSet)
 		}
+		if version >= 13 {
+			doodad.Unknown1 = buf.ReadInt()
+		}
 		doodad.ID = int(buf.ReadInt())
+		if version >= 12 {
+			doodad.Roll = buf.ReadFloat()
+			doodad.Pitch = buf.ReadFloat()
+			count := int(buf.ReadInt())
+			for k := 0; k < count; k++ {
+				doodad.Lights = append(doodad.Lights, data.DoodadLight{
+					Index: buf.ReadInt(), ShadowCasting: buf.ReadInt(), Color: buf.ReadInt(), Intensity: buf.ReadFloat(), ShadowCastingStart: buf.ReadFloat(), ShadowCastingEnd: buf.ReadFloat(), QuadraticFalloff: buf.ReadFloat(), LinearFalloff: buf.ReadFloat(), Damping: buf.ReadFloat(),
+				})
+			}
+		}
 		result = append(result, doodad)
 	}
 
@@ -144,7 +198,7 @@ func (DoodadsTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.DoodadList
 		})
 	}
 
-	return wc3.JsonResult[data.DoodadList]{JSON: data.DoodadList{
+	return wc3.JsonResult[data.DoodadList]{FormatVersion: version, JSON: data.DoodadList{
 		Doodads:        result,
 		SpecialDoodads: special,
 	}}

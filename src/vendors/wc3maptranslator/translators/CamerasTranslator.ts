@@ -16,21 +16,21 @@ export class CamerasTranslator implements Translator<Camera[]> {
     return this.instance;
   }
 
-  public static jsonToWar(cameras: Camera[]): WarResult {
-    return this.getInstance().jsonToWar(cameras);
+  public static jsonToWar(cameras: Camera[], formatVersion = 0): WarResult {
+    return this.getInstance().jsonToWar(cameras, formatVersion);
   }
 
   public static warToJson(buffer: Buffer): JsonResult<Camera[]> {
     return this.getInstance().warToJson(buffer);
   }
 
-  public jsonToWar(cameras: Camera[]): WarResult {
+  public jsonToWar(cameras: Camera[], formatVersion = 0): WarResult {
     const outBufferToWar = new HexBuffer();
 
     /*
          * Header
          */
-    outBufferToWar.addInt(0); // file version
+    outBufferToWar.addInt(formatVersion); // file version
     outBufferToWar.addInt(cameras?.length || 0); // number of cameras
 
     /*
@@ -51,7 +51,13 @@ export class CamerasTranslator implements Translator<Camera[]> {
       outBufferToWar.addFloat(camera.localYaw != null ? camera.localYaw : 0);
       outBufferToWar.addFloat(camera.localRoll != null ? camera.localRoll : 0);
       // Camera name - null-terminated string
+      if (formatVersion >= 3) {
+        outBufferToWar.addFloat(camera.dofDistance ?? 0);
+        outBufferToWar.addFloat(camera.dofScale ?? 0);
+        outBufferToWar.addFloat(camera.posAbsoluteZ ?? 0);
+      }
       outBufferToWar.addString(camera.name ?? '');
+      if (formatVersion >= 3) outBufferToWar.addInt(camera.cameraType ?? 0);
     });
 
     return {
@@ -64,7 +70,7 @@ export class CamerasTranslator implements Translator<Camera[]> {
     const result: Camera[] = [];
     const outBufferToJSON = new W3Buffer(buffer);
 
-    const _fileVersion = outBufferToJSON.readInt(); // File version
+    const formatVersion = outBufferToJSON.readInt(); // File version
     const numCameras = outBufferToJSON.readInt(); // # of cameras
 
     for (let i = 0; i < numCameras; i++) {
@@ -101,7 +107,13 @@ export class CamerasTranslator implements Translator<Camera[]> {
       camera.localYaw = outBufferToJSON.readFloat();
       camera.localRoll = outBufferToJSON.readFloat();
       // Camera name: null-terminated string
+      if (formatVersion >= 3) {
+        camera.dofDistance = outBufferToJSON.readFloat();
+        camera.dofScale = outBufferToJSON.readFloat();
+        camera.posAbsoluteZ = outBufferToJSON.readFloat();
+      }
       camera.name = outBufferToJSON.readString();
+      if (formatVersion >= 3) camera.cameraType = outBufferToJSON.readInt();
 
       result.push(camera);
     }
@@ -109,6 +121,7 @@ export class CamerasTranslator implements Translator<Camera[]> {
     return {
       errors: [],
       json: result,
+      formatVersion,
     };
   }
 }

@@ -10,10 +10,13 @@ type Rect struct {
 
 // Region is a war3map.w3r trigger region.
 type Region struct {
-	Position      Rect
-	Name          string
-	ID            int32
-	WeatherEffect string
-	AmbientSound  string
-	Color         [3]byte
+	CameraBlocker         int32
+	AlphaTileMinimapColor int32
+	Alpha                 *byte
+	Position              Rect
+	Name                  string
+	ID                    int32
+	WeatherEffect         string
+	AmbientSound          string
+	Color                 [3]byte
 }

@@ -16,21 +16,21 @@ export class RegionsTranslator implements Translator<Region[]> {
     return this.instance;
   }
 
-  public static jsonToWar(regions: Region[]): WarResult {
-    return this.getInstance().jsonToWar(regions);
+  public static jsonToWar(regions: Region[], formatVersion = 5): WarResult {
+    return this.getInstance().jsonToWar(regions, formatVersion);
   }
 
   public static warToJson(buffer: Buffer): JsonResult<Region[]> {
     return this.getInstance().warToJson(buffer);
   }
 
-  public jsonToWar(regionsJson: Region[]): WarResult {
+  public jsonToWar(regionsJson: Region[], formatVersion = 5): WarResult {
     const outBufferToWar = new HexBuffer();
 
     /*
          * Header
          */
-    outBufferToWar.addInt(5); // file version
+    outBufferToWar.addInt(formatVersion); // file version
     outBufferToWar.addInt(regionsJson?.length || 0); // number of regions
 
     /*
@@ -69,7 +69,11 @@ export class RegionsTranslator implements Translator<Region[]> {
 
       // End of structure - for some reason the .w3r needs this here;
       // Value is set to 0xff based on observing the .w3r file, but not sure if it could be something else
-      outBufferToWar.addByte(0xff);
+      outBufferToWar.addByte(region.alpha ?? 0xff);
+      if (formatVersion >= 7) {
+        outBufferToWar.addInt(region.cameraBlocker ?? 0);
+        outBufferToWar.addInt(region.alphaTileMinimapColor ?? 0);
+      }
     });
 
     return {
@@ -82,7 +86,7 @@ export class RegionsTranslator implements Translator<Region[]> {
     const result: Region[] = [];
     const outBufferToJSON = new W3Buffer(buffer);
 
-    const _fileVersion = outBufferToJSON.readInt(); // File version
+    const formatVersion = outBufferToJSON.readInt(); // File version
     const numRegions = outBufferToJSON.readInt(); // # of regions
 
     for (let i = 0; i < numRegions; i++) {
@@ -114,7 +118,11 @@ export class RegionsTranslator implements Translator<Region[]> {
         outBufferToJSON.readByte(), // blue
       ];
       region.color.reverse(); // json wants it in RGB, but .w3r file stores it as BB GG RR
-      outBufferToJSON.readByte(); // end of region structure
+      region.alpha = outBufferToJSON.readByte();
+      if (formatVersion >= 7) {
+        region.cameraBlocker = outBufferToJSON.readInt();
+        region.alphaTileMinimapColor = outBufferToJSON.readInt();
+      }
 
       result.push(region);
     }
@@ -122,6 +130,7 @@ export class RegionsTranslator implements Translator<Region[]> {
     return {
       errors: [],
       json: result,
+      formatVersion,
     };
   }
 }

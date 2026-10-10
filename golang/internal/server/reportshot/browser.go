@@ -25,6 +25,7 @@ type browser struct {
 	cmd           *exec.Cmd
 	conn          *websocket.Conn
 	profile       string
+	tempDir       string
 	address       string
 	assetRequests map[string]bool
 	assetActivity time.Time
@@ -36,15 +37,21 @@ func openBrowser(ctx context.Context) (*browser, error) {
 	if err != nil {
 		return nil, err
 	}
-	profile, err := os.MkdirTemp("", "wow-report-shot-")
+	tempDir, err := os.MkdirTemp("", "wow-report-shot-")
 	if err != nil {
 		return nil, err
 	}
-	b := &browser{profile: profile}
-	b.cmd = exec.CommandContext(ctx, executable, "--headless=new", "--remote-debugging-port=0", "--user-data-dir="+profile,
+	b := &browser{tempDir: tempDir, profile: filepath.Join(tempDir, "profile")}
+	b.cmd = exec.CommandContext(ctx, executable, "--headless=new", "--remote-debugging-port=0", "--user-data-dir="+b.profile,
 		"--no-first-run", "--no-default-browser-check", "--disable-extensions", "--hide-scrollbars", "--window-size=1440,900",
+		"--disable-background-networking", "--disable-component-update", "--disable-sync",
 		"--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
 		"--force-device-scale-factor=1", "--enable-webgl", "--ignore-gpu-blocklist", "about:blank")
+	// A profile alone does not contain Edge/Chromium's component downloads and scratch files.
+	b.cmd.Env = append(os.Environ(), "TEMP="+tempDir, "TMP="+tempDir, "TMPDIR="+tempDir)
+	// CommandContext normally kills only the parent, leaving Windows children and locked files.
+	b.cmd.Cancel = b.kill
+	b.cmd.WaitDelay = 5 * time.Second
 	hideWindow(b.cmd)
 	stdout, err := b.cmd.StdoutPipe()
 	if err != nil {
@@ -298,22 +305,55 @@ func (b *browser) evaluate(ctx context.Context, expression string, dst any) erro
 }
 
 func (b *browser) close() {
+	if b.conn != nil && b.cmd != nil && b.cmd.Process != nil {
+		// Give the browser a chance to stop its children and release profile handles.
+		_ = b.conn.SetWriteDeadline(time.Now().Add(time.Second))
+		b.next++
+		_ = b.conn.WriteJSON(map[string]any{"id": b.next, "method": "Browser.close"})
+	}
 	if b.conn != nil {
 		_ = b.conn.Close()
+		b.conn = nil
 	}
 	if b.cmd != nil && b.cmd.Process != nil {
-		if runtime.GOOS == "windows" {
-			kill := exec.Command("taskkill", "/pid", strconv.Itoa(b.cmd.Process.Pid), "/T", "/F")
-			hideWindow(kill)
-			_ = kill.Run()
-		} else {
-			_ = b.cmd.Process.Kill()
+		done := make(chan struct{})
+		go func() {
+			_ = b.cmd.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = b.kill()
+			<-done
 		}
-		_ = b.cmd.Wait()
 	}
-	if b.profile != "" {
-		_ = os.RemoveAll(b.profile)
+	b.cmd = nil
+	if b.tempDir != "" {
+		// Windows can retain handles briefly after process exit. Remove only this launch's root.
+		var err error
+		for attempt := 0; attempt < 20; attempt++ {
+			if err = os.RemoveAll(b.tempDir); err == nil {
+				b.tempDir = ""
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err != nil {
+			log.Printf("report screenshot: could not remove browser temp directory %s: %v", b.tempDir, err)
+		}
 	}
+}
+
+func (b *browser) kill() error {
+	if runtime.GOOS == "windows" {
+		kill := exec.Command("taskkill", "/pid", strconv.Itoa(b.cmd.Process.Pid), "/T", "/F")
+		hideWindow(kill)
+		if err := kill.Run(); err == nil {
+			return nil
+		}
+	}
+	return b.cmd.Process.Kill()
 }
 
 func findBrowser() (string, error) {

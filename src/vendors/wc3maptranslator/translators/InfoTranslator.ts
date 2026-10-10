@@ -62,7 +62,7 @@ export class InfoTranslator implements Translator<Info> {
     /*
          * Flags
          */
-    let flags = 0;
+    let flags = infoJson.unknownFlags ?? 0;
     if (infoJson.map.flags != null) { // can leave out the entire flags object, all flags will default to false
       if (infoJson.map.flags.hideMinimapInPreview) flags |= 0x0001; // hide minimap in preview screens
       if (infoJson.map.flags.modifyAllyPriorities) flags |= 0x0002; // modify ally priorities
@@ -96,6 +96,7 @@ export class InfoTranslator implements Translator<Info> {
 
     // Loading screen
     outBufferToWar.addInt(infoJson.loadingScreen.background);
+    if (infoJson.fileVersion >= 39) outBufferToWar.addInt(infoJson.raceHud ?? 0);
     outBufferToWar.addString(infoJson.loadingScreen.path);
     outBufferToWar.addString(infoJson.loadingScreen.text);
     outBufferToWar.addString(infoJson.loadingScreen.title);
@@ -125,6 +126,10 @@ export class InfoTranslator implements Translator<Info> {
     // if (infoJson.globalWeather == null || infoJson.globalWeather.toLowerCase() === 'none') {
     //   outBufferToWar.addInt(0)
     // } else {
+    if (infoJson.fileVersion >= 39) {
+      for (const value of [infoJson.fog3?.heightStart, infoJson.fog3?.heightEnd, infoJson.fog3?.linearStart, infoJson.fog3?.linearEnd, infoJson.fog3?.maxOpacity]) outBufferToWar.addFloat(value ?? 0);
+      outBufferToWar.addInt(infoJson.fog3?.drawOverSky ?? 0);
+    }
     outBufferToWar.addInt(infoJson.globalWeather);
     // }
     outBufferToWar.addString(infoJson.customSoundEnvironment != null ? infoJson.customSoundEnvironment : '');
@@ -148,12 +153,18 @@ export class InfoTranslator implements Translator<Info> {
       outBufferToWar.addInt(infoJson.minCameraZoom);
     }
 
+    if (infoJson.fileVersion >= 39) {
+      const w = infoJson.water3;
+      for (const value of [w?.minOpacity, w?.maxOpacity, w?.reflectivity, w?.emissivity, w?.edgeSoftness, w?.wavesVertexDisplacement, w?.wavesNormalMapStrength, w?.overrideColor, w?.envmapReflectivity, w?.alphaTileMinimapColor]) outBufferToWar.addInt(value ?? 0);
+    }
+
     // Players
     outBufferToWar.addInt(infoJson.players?.length || 0);
     infoJson.players?.forEach((player) => {
       outBufferToWar.addInt(player.playerNum);
       outBufferToWar.addInt(player.type);
       outBufferToWar.addInt(player.race);
+      if (infoJson.fileVersion >= 39) outBufferToWar.addInt(player.raceHud ?? 0);
       outBufferToWar.addInt(player.startingPos.fixed ? 1 : 0);
       outBufferToWar.addString(player.name);
       outBufferToWar.addFloat(player.startingPos.x);
@@ -357,6 +368,7 @@ export class InfoTranslator implements Translator<Info> {
     };
 
     const flags = outBufferToJSON.readInt();
+    result.unknownFlags = flags & ~0x7fffff;
     result.map.flags = {
       hideMinimapInPreview: !!(flags & 0x0001),
       modifyAllyPriorities: !!(flags & 0x0002),
@@ -386,6 +398,7 @@ export class InfoTranslator implements Translator<Info> {
     result.map.mainTileType = outBufferToJSON.readChars();
 
     result.loadingScreen.background = outBufferToJSON.readInt();
+    if (result.fileVersion >= 39) result.raceHud = outBufferToJSON.readInt();
     result.loadingScreen.path = outBufferToJSON.readString();
     result.loadingScreen.text = outBufferToJSON.readString();
     result.loadingScreen.title = outBufferToJSON.readString();
@@ -408,6 +421,9 @@ export class InfoTranslator implements Translator<Info> {
       color: [outBufferToJSON.readByte(), outBufferToJSON.readByte(), outBufferToJSON.readByte(), outBufferToJSON.readByte()], // R G B A
     };
 
+    if (result.fileVersion >= 39) result.fog3 = {
+      heightStart: outBufferToJSON.readFloat(), heightEnd: outBufferToJSON.readFloat(), linearStart: outBufferToJSON.readFloat(), linearEnd: outBufferToJSON.readFloat(), maxOpacity: outBufferToJSON.readFloat(), drawOverSky: outBufferToJSON.readInt(),
+    };
     result.globalWeather = outBufferToJSON.readInt();
     result.customSoundEnvironment = outBufferToJSON.readString();
     result.customLightEnv = outBufferToJSON.readByte();
@@ -424,6 +440,10 @@ export class InfoTranslator implements Translator<Info> {
     if (result.fileVersion >= 33) {
       result.minCameraZoom = outBufferToJSON.readInt();
     }
+
+    if (result.fileVersion >= 39) result.water3 = {
+      minOpacity: outBufferToJSON.readInt(), maxOpacity: outBufferToJSON.readInt(), reflectivity: outBufferToJSON.readInt(), emissivity: outBufferToJSON.readInt(), edgeSoftness: outBufferToJSON.readInt(), wavesVertexDisplacement: outBufferToJSON.readInt(), wavesNormalMapStrength: outBufferToJSON.readInt(), overrideColor: outBufferToJSON.readInt(), envmapReflectivity: outBufferToJSON.readInt(), alphaTileMinimapColor: outBufferToJSON.readInt(),
+    };
 
     // Struct: players
     const numPlayers = outBufferToJSON.readInt();
@@ -444,6 +464,7 @@ export class InfoTranslator implements Translator<Info> {
       player.type = outBufferToJSON.readInt(); // 1=Human, 2=Computer, 3=Neutral, 4=Rescuable
       player.race = outBufferToJSON.readInt(); // 1=Human, 2=Orc, 3=Undead, 4=Night Elf
 
+      if (result.fileVersion >= 39) player.raceHud = outBufferToJSON.readInt();
       const isPlayerStartPositionFixed: boolean = outBufferToJSON.readInt() === 1; // 00000001 = fixed start position
 
       player.name = outBufferToJSON.readString();

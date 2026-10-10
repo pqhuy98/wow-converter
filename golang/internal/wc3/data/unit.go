@@ -39,26 +39,30 @@ type UnitSetEntry struct {
 
 // Unit is a placed unit instance.
 type Unit struct {
+	GroupID           int32
+	Flags             byte
+	UnknownBytes      [2]byte
+	UnknownTail       [3]int32
 	Type              string
-	Variation        int
-	Position         [3]float32
-	Rotation         float32
-	Scale            [3]float32
-	Skin             string
-	Player           int
-	Hitpoints        int
-	Mana             int
-	RandomItemSetPtr int
-	DroppedItemSets  []ItemSet
-	Gold             int
+	Variation         int
+	Position          [3]float32
+	Rotation          float32
+	Scale             [3]float32
+	Skin              string
+	Player            int
+	Hitpoints         int
+	Mana              int
+	RandomItemSetPtr  int
+	DroppedItemSets   []ItemSet
+	Gold              int
 	TargetAcquisition float32
-	Hero             UnitHero
-	Inventory        []UnitInventory
-	Abilities        []UnitAbility
-	Random           UnitRandom
-	Color            int
-	Waygate          int
-	ID               int
+	Hero              UnitHero
+	Inventory         []UnitInventory
+	Abilities         []UnitAbility
+	Random            UnitRandom
+	Color             int
+	Waygate           int
+	ID                int
 }
 
 // UnitFlags mirrors WC3 unit instance flags.

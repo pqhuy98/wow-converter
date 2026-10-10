@@ -14,10 +14,12 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/workspace"
@@ -45,7 +47,9 @@ func runCLI(source string, args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, 7*time.Minute)
 	defer cancel()
 	var frames [2][][]byte
 	sequence := opts.request.Sequence

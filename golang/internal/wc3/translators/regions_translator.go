@@ -16,8 +16,8 @@ func GetRegionsTranslator() *RegionsTranslator {
 }
 
 // JSONToWar serializes regions to binary.
-func (RegionsTranslator) JSONToWar(regions []data.Region) wc3.WarResult {
-	return regionsTranslatorInstance.jsonToWar(regions)
+func (RegionsTranslator) JSONToWar(regions []data.Region, versions ...int) wc3.WarResult {
+	return regionsTranslatorInstance.jsonToWar(regions, versions...)
 }
 
 // WarToJSON parses war3map.w3r bytes.
@@ -25,9 +25,13 @@ func (RegionsTranslator) WarToJSON(buffer []byte) wc3.JsonResult[[]data.Region] 
 	return regionsTranslatorInstance.warToJSON(buffer)
 }
 
-func (*RegionsTranslator) jsonToWar(regions []data.Region) wc3.WarResult {
+func (*RegionsTranslator) jsonToWar(regions []data.Region, versions ...int) wc3.WarResult {
 	out := wc3.NewHexBufferWriter()
-	out.AddInt(5)
+	version := 5
+	if len(versions) > 0 && versions[0] != 0 {
+		version = versions[0]
+	}
+	out.AddInt(version)
 	out.AddInt(len(regions))
 
 	for _, region := range regions {
@@ -53,7 +57,15 @@ func (*RegionsTranslator) jsonToWar(regions []data.Region) wc3.WarResult {
 		out.AddByte(region.Color[2])
 		out.AddByte(region.Color[1])
 		out.AddByte(region.Color[0])
-		out.AddByte(0xff)
+		alpha := byte(255)
+		if region.Alpha != nil {
+			alpha = *region.Alpha
+		}
+		out.AddByte(alpha)
+		if version >= 7 {
+			out.AddInt(int(region.CameraBlocker))
+			out.AddInt(int(region.AlphaTileMinimapColor))
+		}
 	}
 
 	return wc3.WarResult{Buffer: out.GetBuffer()}
@@ -63,7 +75,7 @@ func (*RegionsTranslator) warToJSON(buffer []byte) wc3.JsonResult[[]data.Region]
 	result := []data.Region{}
 	buf := wc3.NewW3Buffer(buffer)
 
-	buf.ReadInt()
+	version := int(buf.ReadInt())
 	numRegions := int(buf.ReadInt())
 	for i := 0; i < numRegions; i++ {
 		region := data.Region{}
@@ -81,9 +93,14 @@ func (*RegionsTranslator) warToJSON(buffer []byte) wc3.JsonResult[[]data.Region]
 			buf.ReadByte(),
 		}
 		region.Color = [3]byte{region.Color[2], region.Color[1], region.Color[0]}
-		buf.ReadByte()
+		alpha := buf.ReadByte()
+		region.Alpha = &alpha
+		if version >= 7 {
+			region.CameraBlocker = buf.ReadInt()
+			region.AlphaTileMinimapColor = buf.ReadInt()
+		}
 		result = append(result, region)
 	}
 
-	return wc3.JsonResult[[]data.Region]{JSON: result}
+	return wc3.JsonResult[[]data.Region]{FormatVersion: version, JSON: result}
 }

@@ -10,6 +10,10 @@ type CameraTarget struct {
 
 // Camera is a war3map.w3c camera definition.
 type Camera struct {
+	DofDistance  float32
+	DofScale     float32
+	PosAbsoluteZ float32
+	CameraType   int32
 	Target       CameraTarget
 	OffsetZ      float32
 	Rotation     wc3.Angle

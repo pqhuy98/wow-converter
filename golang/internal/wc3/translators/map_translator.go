@@ -1,6 +1,7 @@
 package translators
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ const (
 	FileBuffTypeSkins         FilePath = "buffTypeSkins"
 	FileItemData              FilePath = "itemData"
 	FileDestructibleData      FilePath = "destructibleData"
-	FileDoodadData             FilePath = "doodadData"
+	FileDoodadData            FilePath = "doodadData"
 	FileAbilityData           FilePath = "abilityData"
 	FileBuffData              FilePath = "buffData"
 	FileUpgradeData           FilePath = "upgradeData"
@@ -53,6 +54,7 @@ type MapTranslator struct {
 	DoodadTypeSkins       data.ObjectModificationTable
 	AbilityTypeSkins      data.ObjectModificationTable
 	BuffTypeSkins         data.ObjectModificationTable
+	formatVersions        map[FilePath]int
 	filePaths             map[FilePath]string
 }
 
@@ -93,7 +95,7 @@ func (m *MapTranslator) SetMapDir(mapDir string) {
 		FileUnitTypeSkins:         filepath.Join(mapDir, "war3mapSkin.w3u"),
 		FileDestructibleTypeSkins: filepath.Join(mapDir, "war3mapSkin.w3b"),
 		FileDoodadTypeSkins:       filepath.Join(mapDir, "war3mapSkin.w3d"),
-		FileAbilityTypeSkins:     filepath.Join(mapDir, "war3mapSkin.w3a"),
+		FileAbilityTypeSkins:      filepath.Join(mapDir, "war3mapSkin.w3a"),
 		FileBuffTypeSkins:         filepath.Join(mapDir, "war3mapSkin.w3h"),
 	}
 }
@@ -101,6 +103,7 @@ func (m *MapTranslator) SetMapDir(mapDir string) {
 // Load reads map files from mapDir.
 func (m *MapTranslator) Load(mapDir string) error {
 	m.SetMapDir(mapDir)
+	m.formatVersions = map[FilePath]int{}
 
 	infoBytes, err := os.ReadFile(m.filePaths[FileInfo])
 	if err != nil {
@@ -119,12 +122,14 @@ func (m *MapTranslator) Load(mapDir string) error {
 		return fmt.Errorf("load units: %w", err)
 	}
 	m.Units = UnitsTranslator{}.WarToJSON(unitsBytes).JSON
+	m.formatVersions[FileUnits] = int(binary.LittleEndian.Uint32(unitsBytes[4:]))
 
 	doodadsBytes, err := os.ReadFile(m.filePaths[FileDoodads])
 	if err != nil {
 		return fmt.Errorf("load doodads: %w", err)
 	}
 	allDoodads := DoodadsTranslator{}.WarToJSON(doodadsBytes).JSON
+	m.formatVersions[FileDoodads] = int(binary.LittleEndian.Uint32(doodadsBytes[4:]))
 	m.Doodads = allDoodads.Doodads
 	m.SpecialDoodads = allDoodads.SpecialDoodads
 
@@ -134,6 +139,7 @@ func (m *MapTranslator) Load(mapDir string) error {
 			return fmt.Errorf("load cameras: %w", readErr)
 		}
 		m.Cameras = CamerasTranslator{}.WarToJSON(camerasBytes).JSON
+		m.formatVersions[FileCameras] = int(binary.LittleEndian.Uint32(camerasBytes))
 	}
 
 	if _, err := os.Stat(m.filePaths[FileRegions]); err == nil {
@@ -142,6 +148,7 @@ func (m *MapTranslator) Load(mapDir string) error {
 			return fmt.Errorf("load regions: %w", readErr)
 		}
 		m.Regions = RegionsTranslator{}.WarToJSON(regionsBytes).JSON
+		m.formatVersions[FileRegions] = int(binary.LittleEndian.Uint32(regionsBytes))
 	}
 
 	m.loadObjectFile(FileUnitData, data.ObjectUnits, &m.UnitData)
@@ -188,15 +195,15 @@ func (m *MapTranslator) Save(file FilePath) error {
 	case FileTerrain:
 		out = TerrainTranslator{}.JSONToWar(m.Terrain).Buffer
 	case FileUnits:
-		out = UnitsTranslator{}.JSONToWar(m.Units).Buffer
+		out = UnitsTranslator{}.JSONToWar(m.Units, m.formatVersions[FileUnits]).Buffer
 	case FileDoodads:
 		out = DoodadsTranslator{}.JSONToWar(data.DoodadList{
 			Doodads: m.Doodads, SpecialDoodads: m.SpecialDoodads,
-		}).Buffer
+		}, m.formatVersions[FileDoodads]).Buffer
 	case FileCameras:
-		out = CamerasTranslator{}.JSONToWar(m.Cameras).Buffer
+		out = CamerasTranslator{}.JSONToWar(m.Cameras, m.formatVersions[FileCameras]).Buffer
 	case FileRegions:
-		out = RegionsTranslator{}.JSONToWar(m.Regions).Buffer
+		out = RegionsTranslator{}.JSONToWar(m.Regions, m.formatVersions[FileRegions]).Buffer
 	case FileUnitData:
 		out = JSONToWarObjects(data.ObjectUnits, m.UnitData).Buffer
 	case FileUnitTypeSkins:

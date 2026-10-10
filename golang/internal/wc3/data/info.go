@@ -22,8 +22,8 @@ type Availability int
 
 const (
 	AvailabilityUnavailable Availability = 0
-	AvailabilityAvailable     Availability = 1
-	AvailabilityResearched    Availability = 2
+	AvailabilityAvailable   Availability = 1
+	AvailabilityResearched  Availability = 2
 )
 
 // MapInfo is war3map.w3i map metadata.
@@ -115,23 +115,24 @@ type PlayerStartingPosition struct {
 
 // Player is a map slot player definition.
 type Player struct {
-	PlayerNum            int
-	Type                 int
-	Race                 int
-	Name                 string
-	StartingPos          PlayerStartingPosition
-	AllyLowPriorities    int32
-	AllyHighPriorities   int32
-	EnemyLowPriorities   int32
-	EnemyHighPriorities  int32
+	RaceHud             int32
+	PlayerNum           int
+	Type                int
+	Race                int
+	Name                string
+	StartingPos         PlayerStartingPosition
+	AllyLowPriorities   int32
+	AllyHighPriorities  int32
+	EnemyLowPriorities  int32
+	EnemyHighPriorities int32
 }
 
 // ForceFlags are custom force settings.
 type ForceFlags struct {
-	Allied             bool
-	AlliedVictory      bool
-	ShareVision        bool
-	ShareUnitControl   bool
+	Allied              bool
+	AlliedVictory       bool
+	ShareVision         bool
+	ShareUnitControl    bool
 	ShareAdvUnitControl bool
 }
 
@@ -191,6 +192,10 @@ type RandomItemTable struct {
 
 // Info is war3map.w3i map metadata.
 type Info struct {
+	RaceHud           int32
+	Fog3              Fog3
+	Water3            Water3
+	UnknownFlags      int32
 	FileVersion       int32
 	Saves             int32
 	EditorVersion     int32
@@ -217,4 +222,28 @@ type Info struct {
 	TechBlacklist     []TechUnavailable
 	RandomUnitTables  []RandomUnitTable
 	RandomItemTables  []RandomItemTable
+}
+
+// Fog3 is the additional fog configuration in W3I v39.
+type Fog3 struct {
+	HeightStart float32
+	HeightEnd   float32
+	LinearStart float32
+	LinearEnd   float32
+	MaxOpacity  float32
+	DrawOverSky int32
+}
+
+// Water3 holds the W3I v39 HD water and alpha-tile settings (integer slider values).
+type Water3 struct {
+	MinOpacity              int32
+	MaxOpacity              int32
+	Reflectivity            int32
+	Emissivity              int32
+	EdgeSoftness            int32
+	WavesVertexDisplacement int32
+	WavesNormalMapStrength  int32
+	OverrideColor           int32
+	EnvmapReflectivity      int32
+	AlphaTileMinimapColor   int32
 }

@@ -16,8 +16,8 @@ func GetCamerasTranslator() *CamerasTranslator {
 }
 
 // JSONToWar serializes cameras to binary.
-func (CamerasTranslator) JSONToWar(cameras []data.Camera) wc3.WarResult {
-	return camerasTranslatorInstance.jsonToWar(cameras)
+func (CamerasTranslator) JSONToWar(cameras []data.Camera, versions ...int) wc3.WarResult {
+	return camerasTranslatorInstance.jsonToWar(cameras, versions...)
 }
 
 // WarToJSON parses war3map.w3c bytes.
@@ -25,9 +25,13 @@ func (CamerasTranslator) WarToJSON(buffer []byte) wc3.JsonResult[[]data.Camera] 
 	return camerasTranslatorInstance.warToJSON(buffer)
 }
 
-func (*CamerasTranslator) jsonToWar(cameras []data.Camera) wc3.WarResult {
+func (*CamerasTranslator) jsonToWar(cameras []data.Camera, versions ...int) wc3.WarResult {
 	out := wc3.NewHexBufferWriter()
-	out.AddInt(0)
+	version := 0
+	if len(versions) > 0 && versions[0] != 0 {
+		version = versions[0]
+	}
+	out.AddInt(version)
 	out.AddInt(len(cameras))
 
 	for _, camera := range cameras {
@@ -48,7 +52,15 @@ func (*CamerasTranslator) jsonToWar(cameras []data.Camera) wc3.WarResult {
 		out.AddFloat(camera.LocalPitch)
 		out.AddFloat(camera.LocalYaw)
 		out.AddFloat(camera.LocalRoll)
+		if version >= 3 {
+			out.AddFloat(camera.DofDistance)
+			out.AddFloat(camera.DofScale)
+			out.AddFloat(camera.PosAbsoluteZ)
+		}
 		out.AddString(camera.Name)
+		if version >= 3 {
+			out.AddInt(int(camera.CameraType))
+		}
 	}
 
 	return wc3.WarResult{Buffer: out.GetBuffer()}
@@ -58,7 +70,7 @@ func (*CamerasTranslator) warToJSON(buffer []byte) wc3.JsonResult[[]data.Camera]
 	result := []data.Camera{}
 	buf := wc3.NewW3Buffer(buffer)
 
-	buf.ReadInt()
+	version := int(buf.ReadInt())
 	numCameras := int(buf.ReadInt())
 	for i := 0; i < numCameras; i++ {
 		camera := data.Camera{NearClipping: 16}
@@ -75,9 +87,17 @@ func (*CamerasTranslator) warToJSON(buffer []byte) wc3.JsonResult[[]data.Camera]
 		camera.LocalPitch = buf.ReadFloat()
 		camera.LocalYaw = buf.ReadFloat()
 		camera.LocalRoll = buf.ReadFloat()
+		if version >= 3 {
+			camera.DofDistance = buf.ReadFloat()
+			camera.DofScale = buf.ReadFloat()
+			camera.PosAbsoluteZ = buf.ReadFloat()
+		}
 		camera.Name = buf.ReadString()
+		if version >= 3 {
+			camera.CameraType = buf.ReadInt()
+		}
 		result = append(result, camera)
 	}
 
-	return wc3.JsonResult[[]data.Camera]{JSON: result}
+	return wc3.JsonResult[[]data.Camera]{FormatVersion: version, JSON: result}
 }

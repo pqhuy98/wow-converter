@@ -81,6 +81,10 @@ interface Prologue {
 }
 
 interface Info {
+  raceHud?: number
+  fog3?: { heightStart: number; heightEnd: number; linearStart: number; linearEnd: number; maxOpacity: number; drawOverSky: number }
+  water3?: { minOpacity: number; maxOpacity: number; reflectivity: number; emissivity: number; edgeSoftness: number; wavesVertexDisplacement: number; wavesNormalMapStrength: number; overrideColor: number; envmapReflectivity: number; alphaTileMinimapColor: number }
+  unknownFlags?: number
   fileVersion: number
   saves: number
   gameVersion: GameVersion
@@ -116,6 +120,7 @@ interface PlayerStartingPosition {
 }
 
 interface Player {
+  raceHud?: number
   playerNum: number
   type: number // 1=Human, 2=Computer, 3=Neutral, 4=Rescuable
   race: number // 1=Human, 2=Orc, 3=Undead, 4=Night Elf

@@ -3,6 +3,10 @@ import { ItemSet } from './ItemSet';
 import { UnitSet } from './UnitSet';
 
 interface Unit {
+  groupId?: number
+  flags?: number
+  unknownBytes?: [number, number]
+  unknownTail?: [number, number, number]
   type: string
   variation: number
   position: number[]

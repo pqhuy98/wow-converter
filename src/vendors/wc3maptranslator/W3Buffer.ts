@@ -1,6 +1,5 @@
 /* eslint-disable no-underscore-dangle */
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
-import { roundTo } from 'round-to';
+
 
 export class W3Buffer {
   private _offset = 0;
@@ -27,13 +26,14 @@ export class W3Buffer {
     const float: number = this._buffer.readFloatLE(this._offset);
     this._offset += 4;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
-    return roundTo(float, 3);
+    return float;
   }
 
   public readString(): string {
     const string: number[] = [];
 
     while (this._buffer[this._offset] !== 0x00) {
+      if (this._offset >= this._buffer.length) throw new Error('Unterminated W3 string');
       string.push(this._buffer[this._offset]);
       this._offset += 1;
     }
@@ -58,6 +58,7 @@ export class W3Buffer {
 
   public readByte(): number {
     // TODO what kind of binary? Do we use a BigInt or a node provided type from Buffer?
+    if (this._offset >= this._buffer.length) throw new Error('W3 buffer underflow');
     const byte = this._buffer[this._offset];
     this._offset += 1;
     return byte;

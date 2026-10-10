@@ -53,11 +53,14 @@ func (*InfoTranslator) jsonToWar(infoJson data.Info) wc3.WarResult {
 	out.AddInt(infoJson.Map.PlayableArea.Width)
 	out.AddInt(infoJson.Map.PlayableArea.Height)
 
-	flags := mapFlagsToInt(infoJson.Map.Flags)
+	flags := mapFlagsToInt(infoJson.Map.Flags) | int(infoJson.UnknownFlags)
 	out.AddInt(flags)
 	out.AddChar(infoJson.Map.MainTileType)
 
 	out.AddInt(infoJson.LoadingScreen.Background)
+	if infoJson.FileVersion >= 39 {
+		out.AddInt(int(infoJson.RaceHud))
+	}
 	out.AddString(infoJson.LoadingScreen.Path)
 	out.AddString(infoJson.LoadingScreen.Text)
 	out.AddString(infoJson.LoadingScreen.Title)
@@ -79,6 +82,13 @@ func (*InfoTranslator) jsonToWar(infoJson data.Info) wc3.WarResult {
 	out.AddByte(infoJson.Fog.Color[2])
 	out.AddByte(infoJson.Fog.Color[3])
 
+	if infoJson.FileVersion >= 39 {
+		f := infoJson.Fog3
+		for _, v := range []float32{f.HeightStart, f.HeightEnd, f.LinearStart, f.LinearEnd, f.MaxOpacity} {
+			out.AddFloat(v)
+		}
+		out.AddInt(int(f.DrawOverSky))
+	}
 	out.AddInt(int(infoJson.GlobalWeather))
 	out.AddString(infoJson.CustomSoundEnv)
 	out.AddByte(infoJson.CustomLightEnv)
@@ -100,11 +110,20 @@ func (*InfoTranslator) jsonToWar(infoJson data.Info) wc3.WarResult {
 		out.AddInt(int(infoJson.MinCameraZoom))
 	}
 
+	if infoJson.FileVersion >= 39 {
+		w := infoJson.Water3
+		for _, v := range []int32{w.MinOpacity, w.MaxOpacity, w.Reflectivity, w.Emissivity, w.EdgeSoftness, w.WavesVertexDisplacement, w.WavesNormalMapStrength, w.OverrideColor, w.EnvmapReflectivity, w.AlphaTileMinimapColor} {
+			out.AddInt(int(v))
+		}
+	}
 	out.AddInt(len(infoJson.Players))
 	for _, player := range infoJson.Players {
 		out.AddInt(player.PlayerNum)
 		out.AddInt(player.Type)
 		out.AddInt(player.Race)
+		if infoJson.FileVersion >= 39 {
+			out.AddInt(int(player.RaceHud))
+		}
 		fixed := 0
 		if player.StartingPos.Fixed {
 			fixed = 1
@@ -176,6 +195,8 @@ func (*InfoTranslator) jsonToWar(infoJson data.Info) wc3.WarResult {
 
 func (*InfoTranslator) warToJSON(buffer []byte) wc3.JsonResult[data.Info] {
 	result := defaultInfo()
+	result.Players = nil
+	result.Forces = nil
 	buf := wc3.NewW3Buffer(buffer)
 
 	result.FileVersion = buf.ReadInt()
@@ -208,9 +229,13 @@ func (*InfoTranslator) warToJSON(buffer []byte) wc3.JsonResult[data.Info] {
 
 	flags := buf.ReadInt()
 	result.Map.Flags = intToMapFlags(flags)
+	result.UnknownFlags = flags & ^int32(0x7ffff)
 	result.Map.MainTileType = buf.ReadChars(1)
 
 	result.LoadingScreen.Background = int(buf.ReadInt())
+	if result.FileVersion >= 39 {
+		result.RaceHud = buf.ReadInt()
+	}
 	result.LoadingScreen.Path = buf.ReadString()
 	result.LoadingScreen.Text = buf.ReadString()
 	result.LoadingScreen.Title = buf.ReadString()
@@ -235,6 +260,9 @@ func (*InfoTranslator) warToJSON(buffer []byte) wc3.JsonResult[data.Info] {
 		},
 	}
 
+	if result.FileVersion >= 39 {
+		result.Fog3 = data.Fog3{HeightStart: buf.ReadFloat(), HeightEnd: buf.ReadFloat(), LinearStart: buf.ReadFloat(), LinearEnd: buf.ReadFloat(), MaxOpacity: buf.ReadFloat(), DrawOverSky: buf.ReadInt()}
+	}
 	result.GlobalWeather = buf.ReadInt()
 	result.CustomSoundEnv = buf.ReadString()
 	result.CustomLightEnv = buf.ReadByte()
@@ -254,12 +282,18 @@ func (*InfoTranslator) warToJSON(buffer []byte) wc3.JsonResult[data.Info] {
 		result.MinCameraZoom = buf.ReadInt()
 	}
 
+	if result.FileVersion >= 39 {
+		result.Water3 = data.Water3{MinOpacity: buf.ReadInt(), MaxOpacity: buf.ReadInt(), Reflectivity: buf.ReadInt(), Emissivity: buf.ReadInt(), EdgeSoftness: buf.ReadInt(), WavesVertexDisplacement: buf.ReadInt(), WavesNormalMapStrength: buf.ReadInt(), OverrideColor: buf.ReadInt(), EnvmapReflectivity: buf.ReadInt(), AlphaTileMinimapColor: buf.ReadInt()}
+	}
 	numPlayers := int(buf.ReadInt())
 	for i := 0; i < numPlayers; i++ {
 		player := data.Player{}
 		player.PlayerNum = int(buf.ReadInt())
 		player.Type = int(buf.ReadInt())
 		player.Race = int(buf.ReadInt())
+		if result.FileVersion >= 39 {
+			player.RaceHud = buf.ReadInt()
+		}
 		fixed := buf.ReadInt() == 1
 		player.Name = buf.ReadString()
 		player.StartingPos = data.PlayerStartingPosition{

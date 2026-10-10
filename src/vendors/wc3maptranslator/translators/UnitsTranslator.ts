@@ -16,22 +16,22 @@ export class UnitsTranslator implements Translator<Unit[]> {
     return this.instance;
   }
 
-  public static jsonToWar(units: Unit[]): WarResult {
-    return this.getInstance().jsonToWar(units);
+  public static jsonToWar(units: Unit[], formatVersion = 9): WarResult {
+    return this.getInstance().jsonToWar(units, formatVersion);
   }
 
   public static warToJson(buffer: Buffer): JsonResult<Unit[]> {
     return this.getInstance().warToJson(buffer);
   }
 
-  public jsonToWar(unitsJson: Unit[]): WarResult {
+  public jsonToWar(unitsJson: Unit[], formatVersion = 9): WarResult {
     const outBufferToWar = new HexBuffer();
 
     /*
          * Header
          */
     outBufferToWar.addChars('W3do');
-    outBufferToWar.addInt(9);
+    outBufferToWar.addInt(formatVersion);
     outBufferToWar.addInt(11);
     outBufferToWar.addInt(unitsJson?.length || 0); // number of units
 
@@ -51,14 +51,15 @@ export class UnitsTranslator implements Translator<Unit[]> {
       outBufferToWar.addFloat(unit.scale[1] != null ? unit.scale[1] : 1); // scale y
       outBufferToWar.addFloat(unit.scale[2] != null ? unit.scale[2] : 1); // scale z
 
-      outBufferToWar.addChars(unit.skin);
+      outBufferToWar.addChars(unit.skin || unit.type);
+      if (formatVersion >= 12) outBufferToWar.addInt(unit.groupId ?? 0);
 
       // Unit flags
-      outBufferToWar.addByte(0); // UNSUPPORTED: flags
+      outBufferToWar.addByte(unit.flags ?? 0);
 
       outBufferToWar.addInt(unit.player); // player #
-      outBufferToWar.addByte(0); // (byte unknown - 0)
-      outBufferToWar.addByte(0); // (byte unknown - 0)
+      outBufferToWar.addByte(unit.unknownBytes?.[0] ?? 0);
+      outBufferToWar.addByte(unit.unknownBytes?.[1] ?? 0);
       outBufferToWar.addInt(unit.hitpoints); // hitpoints
       outBufferToWar.addInt(unit.mana != null ? unit.mana : 0); // mana
 
@@ -113,9 +114,9 @@ export class UnitsTranslator implements Translator<Unit[]> {
       outBufferToWar.addInt(unit.random.type);
       switch (unit.random.type) {
         case 0:
-          outBufferToWar.addByte(unit.random.level!);
-          outBufferToWar.addByte(0); // Unknown - apparently it's part of level ^
-          outBufferToWar.addByte(0); // Unknown - apparently it's part of level ^
+          outBufferToWar.addByte((unit.random.level ?? 0) & 255);
+          outBufferToWar.addByte(((unit.random.level ?? 0) >>> 8) & 255);
+          outBufferToWar.addByte(((unit.random.level ?? 0) >>> 16) & 255);
           outBufferToWar.addByte(unit.random.itemClass!);
           break;
         case 1:
@@ -135,6 +136,7 @@ export class UnitsTranslator implements Translator<Unit[]> {
       outBufferToWar.addInt(unit.color != null ? unit.color : unit.player); // custom color, defaults to owning player
       outBufferToWar.addInt(unit.waygate); // waygate
       outBufferToWar.addInt(unit.id); // id
+      if (formatVersion >= 12) for (const value of unit.unknownTail ?? [0, 0, 0]) outBufferToWar.addInt(value);
     });
 
     return {
@@ -148,7 +150,7 @@ export class UnitsTranslator implements Translator<Unit[]> {
     const outBufferToJSON = new W3Buffer(buffer);
 
     outBufferToJSON.readChars(4); // W3do for doodad file
-    const fileVersion = outBufferToJSON.readInt(); // File version = 7
+    const formatVersion = outBufferToJSON.readInt(); // File version = 7
     const subVersion = outBufferToJSON.readInt(); // 0B 00 00 00
     const numUnits = outBufferToJSON.readInt(); // # of units
 
@@ -186,18 +188,18 @@ export class UnitsTranslator implements Translator<Unit[]> {
       unit.rotation = outBufferToJSON.readFloat();
       unit.scale = [outBufferToJSON.readFloat(), outBufferToJSON.readFloat(), outBufferToJSON.readFloat()]; // X Y Z scaling
 
-      if (fileVersion > 7) {
+      if (formatVersion > 7) {
         unit.skin = outBufferToJSON.readChars(4);
       } else { // default unit's skin - Note: Probably fails for items?
         unit.skin = unit.type;
       }
 
       // UNSUPPORTED: flags
-      const _flags = outBufferToJSON.readByte();
+      if (formatVersion >= 12) unit.groupId = outBufferToJSON.readInt();
+      unit.flags = outBufferToJSON.readByte();
       unit.player = outBufferToJSON.readInt(); // (player1 = 0, 16=neutral passive); note: wc3 patch now has 24 max players
 
-      outBufferToJSON.readByte(); // unknown
-      outBufferToJSON.readByte(); // unknown
+      unit.unknownBytes = [outBufferToJSON.readByte(), outBufferToJSON.readByte()];
 
       unit.hitpoints = outBufferToJSON.readInt(); // -1 = use default
       unit.mana = outBufferToJSON.readInt(); // -1 = use default, 0 = unit doesn't have mana
@@ -256,8 +258,8 @@ export class UnitsTranslator implements Translator<Unit[]> {
         //   byte: item class of the random item, 0 = any, 1 = permanent ... (this is 0 for units)
         //   r is also 0 for non random units/items so we have these 4 bytes anyway (even if the id wasnt uDNR or iDNR)
         unit.random.level = outBufferToJSON.readByte();
-        outBufferToJSON.readByte(); // unknown
-        outBufferToJSON.readByte(); // unknown
+        unit.random.level |= outBufferToJSON.readByte() << 8;
+        unit.random.level |= outBufferToJSON.readByte() << 16;
         unit.random.itemClass = outBufferToJSON.readByte();
       } else if (unit.random.type === 1) {
         // 1 = random unit from random group (defined in the w3i), in this case we have
@@ -283,6 +285,7 @@ export class UnitsTranslator implements Translator<Unit[]> {
       unit.color = outBufferToJSON.readInt();
       unit.waygate = outBufferToJSON.readInt(); // waygate (-1 = deactivated, else its the creation number of the target rect as in war3map.w3r)
       unit.id = outBufferToJSON.readInt();
+      if (formatVersion >= 12) unit.unknownTail = [outBufferToJSON.readInt(), outBufferToJSON.readInt(), outBufferToJSON.readInt()];
 
       result.push(unit);
     }
@@ -290,6 +293,7 @@ export class UnitsTranslator implements Translator<Unit[]> {
     return {
       errors: [],
       json: result,
+      formatVersion,
     };
   }
 }

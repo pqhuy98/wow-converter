@@ -27,15 +27,15 @@ export class DoodadsTranslator implements Translator<DoodadList> {
     return this.instance;
   }
 
-  public static jsonToWar(doodads: [Doodad[], SpecialDoodad[]]): WarResult {
-    return this.getInstance().jsonToWar(doodads);
+  public static jsonToWar(doodads: [Doodad[], SpecialDoodad[]], formatVersion = 8): WarResult {
+    return this.getInstance().jsonToWar(doodads, formatVersion);
   }
 
   public static warToJson(buffer: Buffer): JsonResult<[Doodad[], SpecialDoodad[]]> {
     return this.getInstance().warToJson(buffer);
   }
 
-  public jsonToWar(compositeJson: [Doodad[], SpecialDoodad[]]): WarResult {
+  public jsonToWar(compositeJson: [Doodad[], SpecialDoodad[]], formatVersion = 8): WarResult {
     const doodadsJson = compositeJson[0];
     const specialDoodadsJson = compositeJson[1];
     const outBufferToWar = new HexBuffer();
@@ -43,7 +43,7 @@ export class DoodadsTranslator implements Translator<DoodadList> {
     * Header
     */
     outBufferToWar.addChars('W3do'); // file id
-    outBufferToWar.addInt(8); // file version
+    outBufferToWar.addInt(formatVersion); // file version
     outBufferToWar.addInt(11); // subversion 0x0B
     outBufferToWar.addInt(doodadsJson?.length || 0); // num of trees
 
@@ -71,7 +71,8 @@ export class DoodadsTranslator implements Translator<DoodadList> {
       outBufferToWar.addFloat(tree.scale[1] != null ? tree.scale[1] : 1);
       outBufferToWar.addFloat(tree.scale[2] != null ? tree.scale[2] : 1);
 
-      outBufferToWar.addChars(tree.skinId);
+      outBufferToWar.addChars(tree.skinId || tree.type);
+      if (formatVersion >= 12) outBufferToWar.addInt(tree.groupId ?? 0);
 
       // Tree flags
       /* | Visible | Solid | Flag value |
@@ -85,7 +86,7 @@ export class DoodadsTranslator implements Translator<DoodadList> {
       else if (tree.flags.visible && !tree.flags.solid) treeFlag = 1;
       else if (tree.flags.visible && tree.flags.solid) treeFlag = 2;
       // Note: invisible and solid is not an option
-      outBufferToWar.addByte(treeFlag);
+      outBufferToWar.addByte(tree.state ?? treeFlag);
 
       outBufferToWar.addByte(tree.life != null ? tree.life : 100);
       outBufferToWar.addInt(tree.randomItemSetPtr);
@@ -98,7 +99,19 @@ export class DoodadsTranslator implements Translator<DoodadList> {
           outBufferToWar.addInt(item.chance);
         });
       });
+      if (formatVersion >= 13) outBufferToWar.addInt(tree.unknown1 ?? 0);
       outBufferToWar.addInt(tree.id);
+      if (formatVersion >= 12) {
+        outBufferToWar.addFloat(tree.roll ?? 0);
+        outBufferToWar.addFloat(tree.pitch ?? 0);
+        outBufferToWar.addInt(tree.lights?.length ?? 0);
+        for (const light of tree.lights ?? []) {
+          outBufferToWar.addInt(light.index);
+          outBufferToWar.addInt(light.shadowCasting);
+          outBufferToWar.addInt(light.color);
+          for (const value of [light.intensity, light.shadowCastingStart, light.shadowCastingEnd, light.quadraticFalloff, light.linearFalloff, light.damping]) outBufferToWar.addFloat(value);
+        }
+      }
     });
 
     /*
@@ -124,7 +137,7 @@ export class DoodadsTranslator implements Translator<DoodadList> {
     const outBufferToJSON = new W3Buffer(buffer);
 
     outBufferToJSON.readChars(4); // W3do for doodad file
-    outBufferToJSON.readInt(); // File version = 8
+    const formatVersion = outBufferToJSON.readInt(); // File version
     outBufferToJSON.readInt(); // 0B 00 00 00
     const numDoodads = outBufferToJSON.readInt(); // # of doodads
 
@@ -156,8 +169,10 @@ export class DoodadsTranslator implements Translator<DoodadList> {
 
       doodad.scale = [outBufferToJSON.readFloat(), outBufferToJSON.readFloat(), outBufferToJSON.readFloat()]; // X Y Z scaling
       doodad.skinId = outBufferToJSON.readChars(4);
+      if (formatVersion >= 12) doodad.groupId = outBufferToJSON.readInt();
 
       const flags: flag = outBufferToJSON.readByte();
+      doodad.state = flags;
       doodad.flags = {
         visible: flags === flag.visible || flags === flag.solid || flags === flag.solid_custom_height,
         solid: flags === flag.solid || flags === flag.solid_custom_height,
@@ -181,7 +196,19 @@ export class DoodadsTranslator implements Translator<DoodadList> {
         }
       }
 
+      if (formatVersion >= 13) doodad.unknown1 = outBufferToJSON.readInt();
       doodad.id = outBufferToJSON.readInt();
+      if (formatVersion >= 12) {
+        doodad.roll = outBufferToJSON.readFloat();
+        doodad.pitch = outBufferToJSON.readFloat();
+        const lightCount = outBufferToJSON.readInt();
+        doodad.lights = [];
+        for (let k = 0; k < lightCount; k++) doodad.lights.push({
+          index: outBufferToJSON.readInt(), shadowCasting: outBufferToJSON.readInt(), color: outBufferToJSON.readInt(),
+          intensity: outBufferToJSON.readFloat(), shadowCastingStart: outBufferToJSON.readFloat(), shadowCastingEnd: outBufferToJSON.readFloat(),
+          quadraticFalloff: outBufferToJSON.readFloat(), linearFalloff: outBufferToJSON.readFloat(), damping: outBufferToJSON.readFloat(),
+        });
+      }
 
       result.push(doodad);
     }
@@ -201,6 +228,7 @@ export class DoodadsTranslator implements Translator<DoodadList> {
     return {
       errors: [],
       json: [result, resultSpecial],
+      formatVersion,
     };
   }
 }

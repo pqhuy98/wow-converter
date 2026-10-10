@@ -17,6 +17,7 @@ export interface WarResult {
 }
 
 export interface JsonResult<T = object> {
+  formatVersion?: number
   json: T
   errors?: TranslationError[]
 }

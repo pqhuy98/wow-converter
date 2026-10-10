@@ -9,8 +9,8 @@ import (
 type UnitsTranslator struct{}
 
 // JSONToWar serializes units to binary.
-func (UnitsTranslator) JSONToWar(units []data.Unit) wc3.WarResult {
-	return jsonToWarUnits(units)
+func (UnitsTranslator) JSONToWar(units []data.Unit, versions ...int) wc3.WarResult {
+	return jsonToWarUnits(units, versions...)
 }
 
 // WarToJSON parses war3mapUnits.doo bytes.
@@ -18,11 +18,15 @@ func (UnitsTranslator) WarToJSON(buffer []byte) wc3.JsonResult[[]data.Unit] {
 	return warToJSONUnits(buffer)
 }
 
-func jsonToWarUnits(unitsJson []data.Unit) wc3.WarResult {
+func jsonToWarUnits(unitsJson []data.Unit, versions ...int) wc3.WarResult {
 	out := wc3.NewHexBufferWriter()
 
 	out.AddChars("W3do")
-	out.AddInt(9)
+	version := 9
+	if len(versions) > 0 && versions[0] != 0 {
+		version = versions[0]
+	}
+	out.AddInt(version)
 	out.AddInt(11)
 	out.AddInt(len(unitsJson))
 
@@ -44,11 +48,18 @@ func jsonToWarUnits(unitsJson []data.Unit) wc3.WarResult {
 		out.AddFloat(scale[1])
 		out.AddFloat(scale[2])
 
-		out.AddChars(unit.Skin)
-		out.AddByte(0)
+		skin := unit.Skin
+		if skin == "" {
+			skin = unit.Type
+		}
+		out.AddChars(skin)
+		if version >= 12 {
+			out.AddInt(int(unit.GroupID))
+		}
+		out.AddByte(unit.Flags)
 		out.AddInt(unit.Player)
-		out.AddByte(0)
-		out.AddByte(0)
+		out.AddByte(unit.UnknownBytes[0])
+		out.AddByte(unit.UnknownBytes[1])
 		out.AddInt(unit.Hitpoints)
 		out.AddInt(unit.Mana)
 		out.AddInt(unit.RandomItemSetPtr)
@@ -65,9 +76,6 @@ func jsonToWarUnits(unitsJson []data.Unit) wc3.WarResult {
 		out.AddFloat(unit.TargetAcquisition)
 
 		hero := unit.Hero
-		if hero == (data.UnitHero{}) {
-			hero = data.UnitHero{Level: 1, Str: 1, Agi: 1, Int: 1}
-		}
 		out.AddInt(hero.Level)
 		out.AddInt(hero.Str)
 		out.AddInt(hero.Agi)
@@ -94,8 +102,8 @@ func jsonToWarUnits(unitsJson []data.Unit) wc3.WarResult {
 		switch unit.Random.Type {
 		case 0:
 			out.AddByte(byte(unit.Random.Level))
-			out.AddByte(0)
-			out.AddByte(0)
+			out.AddByte(byte(unit.Random.Level >> 8))
+			out.AddByte(byte(unit.Random.Level >> 16))
 			out.AddByte(byte(unit.Random.ItemClass))
 		case 1:
 			out.AddInt(unit.Random.GroupIndex)
@@ -108,13 +116,14 @@ func jsonToWarUnits(unitsJson []data.Unit) wc3.WarResult {
 			}
 		}
 
-		color := unit.Color
-		if color == 0 {
-			color = unit.Player
-		}
-		out.AddInt(color)
+		out.AddInt(unit.Color)
 		out.AddInt(unit.Waygate)
 		out.AddInt(unit.ID)
+		if version >= 12 {
+			for _, v := range unit.UnknownTail {
+				out.AddInt(int(v))
+			}
+		}
 	}
 
 	return wc3.WarResult{Buffer: out.GetBuffer()}
@@ -156,10 +165,12 @@ func warToJSONUnits(buffer []byte) wc3.JsonResult[[]data.Unit] {
 			unit.Skin = unit.Type
 		}
 
-		buf.ReadByte()
+		if fileVersion >= 12 {
+			unit.GroupID = buf.ReadInt()
+		}
+		unit.Flags = buf.ReadByte()
 		unit.Player = int(buf.ReadInt())
-		buf.ReadByte()
-		buf.ReadByte()
+		unit.UnknownBytes = [2]byte{buf.ReadByte(), buf.ReadByte()}
 		unit.Hitpoints = int(buf.ReadInt())
 		unit.Mana = int(buf.ReadInt())
 
@@ -210,8 +221,8 @@ func warToJSONUnits(buffer []byte) wc3.JsonResult[[]data.Unit] {
 		switch unit.Random.Type {
 		case 0:
 			unit.Random.Level = int(buf.ReadByte())
-			buf.ReadByte()
-			buf.ReadByte()
+			unit.Random.Level |= int(buf.ReadByte()) << 8
+			unit.Random.Level |= int(buf.ReadByte()) << 16
 			unit.Random.ItemClass = int(buf.ReadByte())
 		case 1:
 			unit.Random.GroupIndex = int(buf.ReadInt())
@@ -229,8 +240,11 @@ func warToJSONUnits(buffer []byte) wc3.JsonResult[[]data.Unit] {
 		unit.Color = int(buf.ReadInt())
 		unit.Waygate = int(buf.ReadInt())
 		unit.ID = int(buf.ReadInt())
+		if fileVersion >= 12 {
+			unit.UnknownTail = [3]int32{buf.ReadInt(), buf.ReadInt(), buf.ReadInt()}
+		}
 		result = append(result, unit)
 	}
 
-	return wc3.JsonResult[[]data.Unit]{JSON: result}
+	return wc3.JsonResult[[]data.Unit]{FormatVersion: int(fileVersion), JSON: result}
 }

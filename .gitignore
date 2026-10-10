@@ -34,6 +34,8 @@ maps/test-*.w3x/mount/
 golang/tmp/
 golang/build-errors.log
 
+golang/.gocache
+
 # Logs
 logs
 *.log

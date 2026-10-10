@@ -11,6 +11,88 @@ import (
 	"time"
 )
 
+// Opt in with REPORT_SHOT_BROWSER_TEST=1; needs an installed browser, no converter.
+func TestBrowserTempCleanup(t *testing.T) {
+	if os.Getenv("REPORT_SHOT_BROWSER_TEST") != "1" {
+		t.Skip("Set REPORT_SHOT_BROWSER_TEST=1 for the installed-browser cleanup check")
+	}
+	parent := t.TempDir()
+	for _, key := range []string{"TEMP", "TMP", "TMPDIR"} {
+		t.Setenv(key, parent)
+	}
+	sentinel := filepath.Join(parent, "unrelated.txt")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"success", "cancel", "capture-error"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			b, err := openBrowser(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer b.close()
+			// Force browser-owned scratch files as well as its profile into existence.
+			var scratch string
+			for _, env := range b.cmd.Environ() {
+				if strings.HasPrefix(env, "TMP=") {
+					scratch = strings.TrimPrefix(env, "TMP=")
+				}
+			}
+			contained := scratch != parent && filepath.Dir(scratch) == parent
+			if contained {
+				if err := os.MkdirAll(filepath.Join(scratch, "msedge_url_fetcher_test"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			switch mode {
+			case "cancel":
+				cancel()
+			case "capture-error":
+				if err := b.evaluate(ctx, "throw new Error('capture failed')", nil); err == nil {
+					t.Error("expected evaluation failure")
+				}
+			default:
+				var value int
+				if err := b.evaluate(ctx, "6 * 7", &value); err != nil || value != 42 {
+					t.Errorf("browser evaluation: value=%d err=%v", value, err)
+				}
+			}
+			b.close()
+			if !contained {
+				t.Error("browser inherited shared temp instead of a capture-owned directory")
+			}
+			entries, err := os.ReadDir(parent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 1 || entries[0].Name() != "unrelated.txt" {
+				names := make([]string, len(entries))
+				for i, entry := range entries {
+					names[i] = entry.Name()
+				}
+				t.Errorf("browser left temp files: %v", names)
+			}
+		})
+	}
+	t.Run("startup-cancel", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if b, err := openBrowser(ctx); err == nil {
+			b.close()
+			t.Fatal("expected cancelled startup to fail")
+		}
+		entries, err := os.ReadDir(parent)
+		if err != nil || len(entries) != 1 || entries[0].Name() != "unrelated.txt" {
+			t.Fatalf("cancelled startup left temp files: %v %v", entries, err)
+		}
+	})
+	if data, err := os.ReadFile(sentinel); err != nil || string(data) != "keep" {
+		t.Fatalf("unrelated file changed: %q %v", data, err)
+	}
+}
+
 func TestWaitDevToolsUsesPortFile(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

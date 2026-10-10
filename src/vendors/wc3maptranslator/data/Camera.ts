@@ -1,6 +1,10 @@
 import { type angle } from '../CommonInterfaces';
 
 interface Camera {
+  dofDistance?: number
+  dofScale?: number
+  posAbsoluteZ?: number
+  cameraType?: number
   target: CameraTarget
   offsetZ: number
   rotation: angle
