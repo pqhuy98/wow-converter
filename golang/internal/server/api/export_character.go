@@ -41,11 +41,12 @@ type exportCharacterRequest struct {
 		RemoveUnusedMaterialsTextures *bool  `json:"removeUnusedMaterialsTextures"`
 		MaxTextureSize                string `json:"maxTextureSize,omitempty"`
 	} `json:"optimization"`
-	Format        string   `json:"format"`
-	FormatVersion string   `json:"formatVersion,omitempty"`
-	IsBrowse      bool     `json:"isBrowse"`
-	SkinID        string   `json:"skinId"`
-	ModelScale    *float64 `json:"modelScale,omitempty"`
+	Format           string                      `json:"format"`
+	FormatVersion    string                      `json:"formatVersion,omitempty"`
+	IsBrowse         bool                        `json:"isBrowse"`
+	SkinID           string                      `json:"skinId"`
+	ModelScale       *float64                    `json:"modelScale,omitempty"`
+	AnimationRenames []character.AnimationRename `json:"animationRenames,omitempty"`
 }
 
 type exportCharacterResponse struct {
@@ -357,6 +358,9 @@ func runCharacterExport(ctx context.Context, req exportCharacterRequest, jobID s
 		ParticlesDensity:              req.Character.ParticlesDensity,
 	})
 
+	if err := exporter.RenameAnimations(req.OutputFileName, req.AnimationRenames); err != nil {
+		return exportCharacterResponse{}, err
+	}
 	var texturePaths, modelPaths []string
 	var texErr, modelErr error
 	var wg sync.WaitGroup

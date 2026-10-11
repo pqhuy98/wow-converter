@@ -38,6 +38,12 @@ Bundled `InProcessClient` calls local services or handlers directly. Its externa
 
 Queue handlers propagate `job.Context()`. A deadline or cancel request keeps the job processing and capacity occupied until its handler and started workers return. Synchronous native encoding, optimization, and serialization can finish their current call before stopping; late success cannot overwrite cancellation. See `server/util/jobqueue.go` and `converter/common/worker_pool.go` for lifecycle ownership.
 
+## Animation export edits
+
+Character export requests accept `character.sequenceSelection` (source record indices scoped to a model/build) and `animationRenames`: a list of `{wowName, wowVariant, newWc3Name}`. Renames apply to the base output after sorting and generated-animation processing, preserving sequence order. Overridden names serialize exactly, without a numeric suffix; names are limited to 79 UTF-8 bytes and cannot contain quotes, backslashes, line breaks or NUL. Conflicting renames for source records merged into one combined sequence fail explicitly.
+
+Animation-only re-export passes the current output's `modelScale` to preserve scale. Export Character uses the current form settings and offers Keep changes or Discard for non-default animation edits when the base reference and build match the last successful export. Keep changes carries selection and renames, including drafts, without retaining the old scale override.
+
 ## Choose checks by behavior
 
 Commands run from the repository root unless stated otherwise. These are current entry points, not newly introduced verification tiers.

@@ -20,8 +20,11 @@ import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
   allAttachments,
-  AttachItem, Character, defaultTextureBakingForm, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, Optimization, RefSchema,
+  AnimationEdits, AttachItem, Character, defaultTextureBakingForm, ExportRequest, JobStatus, ModelFormat, ModelFormatVersion, Optimization, RefSchema,
   toTextureBakingRequest,
 } from '@/lib/models/export-character.model';
 
@@ -93,7 +96,9 @@ export function CharacterConverter() {
   const [progressInViewer, setProgressInViewer] = useState(false);
   const [completedJob, setCompletedJob] = useState<JobStatus>();
   const [sequenceRequest, setSequenceRequest] = useState<ExportRequest>();
-  const [playbackSelection, setPlaybackSelection] = useState<{ name: string; revision: number }>();
+  const [animationEdits, setAnimationEdits] = useState<AnimationEdits>();
+  const [pendingExport, setPendingExport] = useState<{ request: ExportRequest; edits: AnimationEdits }>();
+  const [playbackSelection, setPlaybackSelection] = useState<{ name: string; index?: number; revision: number }>();
   const sourceKey = JSON.stringify([serverConfig.buildKey, character.base]);
   const previousSource = useRef(sourceKey);
   useEffect(() => {
@@ -101,6 +106,7 @@ export function CharacterConverter() {
       previousSource.current = sourceKey;
       setCharacter((previous) => ({ ...previous, sequenceSelection: undefined }));
       setSequenceRequest(undefined);
+      setAnimationEdits(undefined);
     }
   }, [sourceKey]);
   const [viewerModelPath, setViewerModelPath] = useState<string | undefined>(undefined);
@@ -185,14 +191,14 @@ export function CharacterConverter() {
     formatVersion,
   });
 
-  const handleExport = async (override?: ExportRequest): Promise<boolean> => {
+  const handleExport = async (override?: ExportRequest, animationOnly = false): Promise<boolean> => {
     const error = override ? null : checkExportValid();
     if (error) {
       alert(error);
       return false;
     }
-    setProgressInViewer(!!override);
-    if (!override) setSequenceRequest(undefined);
+    setProgressInViewer(animationOnly);
+    if (!animationOnly) setSequenceRequest(undefined);
     setJobStatus({
       id: '',
       status: 'pending',
@@ -237,6 +243,34 @@ export function CharacterConverter() {
       });
       return false;
     }
+  };
+
+  const requestExport = async () => {
+    const error = checkExportValid();
+    if (error) { alert(error); return; }
+    const previous = completedJob?.result?.reportMetadata;
+    const edits = animationEdits ?? { selection: previous?.request.character.sequenceSelection, renames: previous?.request.animationRenames ?? [] };
+    const request = makeExportRequest();
+    if (previous?.buildKey === serverConfig.buildKey && _.isEqual(previous.request.character.base, character.base) && (edits.selection || edits.renames.length)) {
+      setPendingExport({ request, edits });
+      return;
+    }
+    if (await handleExport(request)) setAnimationEdits(undefined);
+  };
+
+  const confirmExport = async (keep: boolean) => {
+    if (!pendingExport) return;
+    const { request, edits } = pendingExport;
+    setPendingExport(undefined);
+    const next = keep ? { ...request, animationRenames: edits.renames, character: { ...request.character, sequenceSelection: edits.selection } } : request;
+    if (await handleExport(next)) setAnimationEdits(keep ? edits : { renames: [] });
+  };
+
+  const toggleAnimationEditor = () => {
+    if (sequenceRequest) { setSequenceRequest(undefined); return; }
+    const request = completedJob?.result?.reportMetadata?.request;
+    if (!request) return;
+    setSequenceRequest(animationEdits ? { ...request, animationRenames: animationEdits.renames, character: { ...request.character, sequenceSelection: animationEdits.selection } } : request);
   };
 
   // is window focused?
@@ -326,6 +360,19 @@ export function CharacterConverter() {
 
   return (
     <div className="min-h-[calc(100vh-57px)] p-4">
+      <Dialog open={!!pendingExport} onOpenChange={(open) => { if (!open) setPendingExport(undefined); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Keep animation changes?</DialogTitle>
+            <DialogDescription>You have custom animation selections or renames. Exporting with the new settings can discard these edits. Keep changes carries them into the new export.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingExport(undefined)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => void confirmExport(false)}>Discard changes</Button>
+            <Button onClick={() => void confirmExport(true)}>Keep changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="max-w-6xl mx-auto space-y-4">
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -350,7 +397,7 @@ export function CharacterConverter() {
           setFormat={setFormat}
           formatVersion={formatVersion}
           setFormatVersion={setFormatVersion}
-          handleExport={async () => { await handleExport(); }}
+          handleExport={requestExport}
           jobStatus={jobStatus}
           optimization={optimization}
           setOptimization={setOptimization}
@@ -427,17 +474,21 @@ export function CharacterConverter() {
               {viewerModelPath && (
                 <div className="h-[600px] border-border flex-1 min-w-0 relative">
                   <ModelViewerUi modelPath={viewerModelPath} modelRevision={doneCount} onSequenceChange={setReportSequence} playbackSelection={playbackSelection}
-                    animationHeaderAction={completedJob?.result?.reportMetadata && completedJob.result.reportMetadata.buildKey === serverConfig.buildKey && !completedJob.result.reportMetadata.request.character.mount?.path.value && completedJob.result.reportMetadata.models.find((model) => model.path === viewerModelPath)?.sequences.some((sequence) => sequence.sourceIndices?.length) && <SequenceEditButton editing={!!sequenceRequest} busy={jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} onClick={() => setSequenceRequest(sequenceRequest ? undefined : completedJob.result!.reportMetadata!.request)} />}
+                    animationHeaderAction={completedJob?.result?.reportMetadata && completedJob.result.reportMetadata.buildKey === serverConfig.buildKey && !completedJob.result.reportMetadata.request.character.mount?.path.value && completedJob.result.reportMetadata.models.find((model) => model.path === viewerModelPath)?.sequences.some((sequence) => sequence.sourceIndices?.length) && <SequenceEditButton editing={!!sequenceRequest} busy={jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} onClick={toggleAnimationEditor} />}
                     animationList={sequenceRequest && <SequencePanel
                 character={sequenceRequest.character}
                 buildKey={serverConfig.buildKey}
                 skinId={sequenceRequest.skinId}
+                initialRenames={sequenceRequest.animationRenames}
+                onChange={setAnimationEdits}
                 busy={jobStatus?.status === 'pending' || jobStatus?.status === 'processing'}
                 playbackSequences={samePreviewContext(sequenceRequest, completedJob?.result?.reportMetadata?.request) ? completedJob?.result?.reportMetadata?.models.find((model) => model.path === viewerModelPath)?.sequences ?? [] : []}
-                onPreview={(name) => setPlaybackSelection((previous) => ({ name, revision: (previous?.revision ?? 0) + 1 }))}
-                onApply={async (selection) => {
-                  const request = { ...sequenceRequest, modelScale: completedJob?.result?.reportMetadata?.models.find((model) => model.path === viewerModelPath)?.modelScale, character: { ...sequenceRequest.character, sequenceSelection: selection } };
-                  if (!await handleExport(request)) return false;
+                onPreview={(name, index) => setPlaybackSelection((previous) => ({ name, index, revision: (previous?.revision ?? 0) + 1 }))}
+                onApply={async (edits) => {
+                  const request = {
+                    ...sequenceRequest, animationRenames: edits.renames, modelScale: completedJob?.result?.reportMetadata?.models.find((model) => model.path === viewerModelPath)?.modelScale, character: { ...sequenceRequest.character, sequenceSelection: edits.selection },
+                  };
+                  if (!await handleExport(request, true)) return false;
                   previousSource.current = JSON.stringify([serverConfig.buildKey, request.character.base]);
                   setCharacter({ ...request.character, sequenceSelection: undefined });
                   setOutputFileName(request.outputFileName);

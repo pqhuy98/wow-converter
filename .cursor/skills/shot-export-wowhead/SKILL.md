@@ -1,30 +1,22 @@
 ---
 name: shot-export-wowhead
-description: Screenshot the Wowhead model-viewer canvas for a wowhead.com NPC, item, or object page. Use when the user pastes a Wowhead URL, asks how a model looks on Wowhead, or wants that canvas compared with the wow-converter export.
+description: Capture a Wowhead model-viewer canvas when a source screenshot or visual inspection is requested or needed.
 ---
 
-# Shot export (Wowhead)
+# Capture Wowhead
 
-Save the model canvas with the same Go capture code as the report server. The page, toolbar, and cookie banner stay outside the PNG. Use installed Chrome, Edge, or Chromium.
-
-From the repository root:
+Use installed Chrome, Edge, or Chromium. From the repo root:
 
 ```
 go -C golang run ./cmd/shot-wowhead <url> --seq Stand --view front
 ```
 
-Flags: `--seq Stand` (default), `--view front` (omit for all six; comma-separated views also work), `--variant 0`, `--out dir`. A second positional argument also sets the output directory. Relative output directories are relative to the repository root; default is `tmp/shots`. The command adds `#modelviewer` when needed and prints one labeled 1440×900 PNG path per selected view, named `<slug>-<sequence>-<view>.png`. Read the PNGs. Blank shots fail.
+The CLI adds `#modelviewer` when needed and prints labeled 1440×900 PNG paths containing only the canvas. Read them; blank frames fail.
 
-Use WoW animation names such as `Stand`, `Attack1H`, or `Death`. Prefixes select the first match in file order; `--variant` selects a later match. WC3 names differ: use the export's `reportMetadata.models[].sequences[]` (`wowName`/`wowVariant` versus `name`). Runtime table: `golang/internal/converter/wowmodel/animation/` (generated from `src/lib/converter/wow-model/animation/animation-mapper.ts`).
+Flags: `--seq Stand` (default; WoW name, first prefix match), `--variant 0` (later animation match), `--view` (front, left, back, right, top, bottom; comma-separated; omit for all six), `--out dir` (also accepted as second positional argument; default `tmp/shots`, relative to repo root). Files are `<slug>-<sequence>-<view>.png`.
 
-For comparison, follow shot-export-wow-converter to export fresh assets, then capture both sources together (prefer `shot-converter --wowhead` so the converter owns the pair):
+For a comparison with a converter export, use [shot-export-wow-converter](../shot-export-wow-converter/SKILL.md), which owns fresh exports, mapped animation selection, and paired cameras. For standalone camera-map or sheet capture, read [camera options](references/cameras.md).
 
-```
-go -C golang run ./cmd/shot-wowhead <url> --seq Stand --model <asset-path> --converter-seq "Stand 1" --view front --out tmp/compare-shots
-```
+Standalone captures use model-bounds framing, freeze at the animation midpoint, isolate browser profiles, and wait for assets. Background: rgb(38,38,38); FOV: 45 degrees; lighting follows the converter's world-up curve.
 
-The local converter must already be running; `--base` or `WOW_CONVERTER_URL` selects it. Only the requested views are captured. The report server's side refinement and source-to-converter camera transfer are shared, including the fixed Wowhead top/bottom cameras. Paired filenames end in `-wowhead.png` or `-converter.png`. Read both images.
-
-Standalone shots keep the existing model-bounds framing. Pass `--aim-sheet <1920x800 converter sheet>` to aim side cameras at that sheet's silhouettes. `--cameras dest.json` writes the per-view eye/target/up and model transform map the converter reads with the same flag. Pass `--model-scale <reportMetadata.models[].modelScale>` for resized exports; it records exported units per source unit (default 56). Never calibrate this scale from mesh height: equipment changes bounds independently. Otherwise, if the output folder already contains `<slug>-<sequence>-<nn>-<view>-converter.png`, its silhouette aim is reused for that side view. Use an empty output folder to preserve source framing. `--sheet dest.png` writes an unlabeled 1920×800 2×3 sheet. Views are front, left, back, right, top, bottom. The pose is frozen at the animation midpoint; background is rgb(38,38,38), FOV 45 degrees, and lighting follows the converter's world-up curve. Captures wait for model assets and use isolated temporary browser profiles.
-
-`.cursor/skills/shot-export-wowhead/snapshot.ts` is a compatibility wrapper around `go run`; no screenshot executable needs rebuilding.
+`snapshot.ts` beside this file is a compatibility wrapper around `go run`; no screenshot executable needs rebuilding.

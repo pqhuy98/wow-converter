@@ -8,24 +8,46 @@ import (
 )
 
 type SequenceData struct {
-	WC3Name       string
-	WowName       string
-	WowVariant    int
-	SourceIndices []int
-	WowFrequency  float64
-	AttackTag     string
-	Loop          *bool
+	SourceAnimations []SourceAnimation
+	WC3Name          string
+	WowName          string
+	WowVariant       int
+	SourceIndices    []int
+	WowFrequency     float64
+	AttackTag        string
+	Loop             *bool
+}
+
+type SourceAnimation struct {
+	WowName    string
+	WowVariant int
 }
 
 type Sequence struct {
 	Bound
-	Name       string
-	Interval   [2]int
-	NonLooping bool
-	MoveSpeed  float64
-	Data       SequenceData
-	Rarity     *int
-	Keep       bool
+	Name           string
+	Interval       [2]int
+	NonLooping     bool
+	MoveSpeed      float64
+	Data           SequenceData
+	Rarity         *int
+	Keep           bool
+	NameOverridden bool
+}
+
+// SequenceNames is shared by serialization and the viewer's export metadata.
+func SequenceNames(sequences []Sequence) []string {
+	counts := map[string]int{}
+	names := make([]string, len(sequences))
+	for i, sequence := range sequences {
+		if sequence.NameOverridden {
+			names[i] = sequence.Name
+		} else {
+			counts[sequence.Name]++
+			names[i] = sequence.Name + " " + strconv.Itoa(counts[sequence.Name])
+		}
+	}
+	return names
 }
 
 func SequencesToString(sequences []Sequence) string {
@@ -33,12 +55,7 @@ func SequencesToString(sequences []Sequence) string {
 		return ""
 	}
 
-	animNameCount := map[string]int{}
-	seqName := map[int]string{}
-	for i, seq := range sequences {
-		animNameCount[seq.Name]++
-		seqName[i] = seq.Name + " " + FVal(float64(animNameCount[seq.Name]))
-	}
+	seqName := SequenceNames(sequences)
 
 	var b strings.Builder
 	b.WriteString("Sequences ")

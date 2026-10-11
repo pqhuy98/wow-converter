@@ -53,23 +53,32 @@ export const SkinPicker = memo(({
         ? skins.map((skin) => {
           const isActive = selectedSkinId === skin.id;
           return (
-            <button
+            <div
               key={skin.id}
-              type="button"
-              disabled={isBusy}
-              className={`w-full text-left pl-14 pr-2 flex items-center gap-2 text-xs rounded-sm ${
+              role="button"
+              tabIndex={isBusy ? -1 : 0}
+              aria-disabled={isBusy || undefined}
+              aria-pressed={isActive}
+              className={`w-full text-left pl-14 pr-2 flex items-center gap-2 text-xs rounded-sm select-text ${
                 isActive ? 'bg-primary/25 text-foreground' : 'hover:bg-accent text-foreground/80'
               } ${isBusy ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
               style={{ minHeight: SKIN_ROW_HEIGHT }}
               title={skin.localRef}
               onClick={(e) => {
                 e.stopPropagation();
+                if (isBusy || isActive || hasRangeSelection()) return;
+                onSelect(skin);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                e.stopPropagation();
                 if (!isBusy && !isActive) onSelect(skin);
               }}
             >
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
               <span className="truncate">{skin.label}</span>
-            </button>
+            </div>
           );
         })
         : null}
@@ -78,3 +87,8 @@ export const SkinPicker = memo(({
 });
 
 SkinPicker.displayName = 'SkinPicker';
+
+function hasRangeSelection(): boolean {
+  const sel = window.getSelection();
+  return Boolean(sel && sel.type === 'Range' && sel.toString().length > 0);
+}

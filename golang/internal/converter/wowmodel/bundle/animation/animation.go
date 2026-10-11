@@ -251,6 +251,7 @@ func (f *File) ToMdl(globalSequences *[]*components.GlobalSequence) ToMdlResult 
 		}
 		seqData := animmap.GetWarcraftSequenceData(meta)
 		seqData.SourceIndices = []int{animID}
+		seqData.SourceAnimations = []components.SourceAnimation{{WowName: seqData.WowName, WowVariant: seqData.WowVariant}}
 		if _, skip := excluded[animID]; skip {
 			seqAccum += int(anim.Duration) + 1
 			log.Printf("%s", ansi.Redf("Skip unreadable animation %s of %s", seqData.WowName, f.FilePath))

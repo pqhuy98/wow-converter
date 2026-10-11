@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/server/pathsafe"
 )
@@ -71,6 +72,30 @@ func applyExportCharacterDefaults(raw map[string]any) {
 
 func validateExportCharacterShape(raw map[string]any) []string {
 	issues := make([]string, 0)
+	if value, exists := raw["animationRenames"]; exists {
+		renames, valid := value.([]any)
+		if !valid || len(renames) > 65536 {
+			issues = append(issues, "animationRenames must be a list")
+		} else {
+			seen := map[string]bool{}
+			for _, value := range renames {
+				rename, valid := value.(map[string]any)
+				if !valid {
+					issues = append(issues, "animationRenames entries must be objects")
+					break
+				}
+				wowName, nameValid := rename["wowName"].(string)
+				variant, variantValid := rename["wowVariant"].(float64)
+				name, newNameValid := rename["newWc3Name"].(string)
+				key := fmt.Sprintf("%s:%v", wowName, variant)
+				if !nameValid || wowName == "" || !variantValid || variant < 0 || variant > 65535 || variant != float64(int(variant)) || !newNameValid || strings.TrimSpace(name) != name || name == "" || len(name) > 79 || strings.ContainsAny(name, "\"\\\r\n\x00") || seen[key] {
+					issues = append(issues, "animationRenames require unique WoW name/variant pairs and non-empty WC3 names of at most 79 bytes without quotes, backslashes or control characters")
+					break
+				}
+				seen[key] = true
+			}
+		}
+	}
 	if value, exists := raw["modelScale"]; exists {
 		scale, valid := value.(float64)
 		if !valid || scale <= 0 {

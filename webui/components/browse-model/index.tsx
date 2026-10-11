@@ -89,7 +89,7 @@ export default function BrowseModelPage() {
   const [completedResult, setCompletedResult] = useState<JobStatus['result']>();
   const [completedFile, setCompletedFile] = useState<FileEntry>();
   const [sequenceRequest, setSequenceRequest] = useState<ExportRequest>();
-  const [playbackSelection, setPlaybackSelection] = useState<{ name: string; revision: number }>();
+  const [playbackSelection, setPlaybackSelection] = useState<{ name: string; index?: number; revision: number }>();
   /** Tied to the displayed model; only updates when export completes (not on row select). */
   const [viewerSessionKey, setViewerSessionKey] = useState<string | undefined>(undefined);
   const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(null);
@@ -551,8 +551,9 @@ export default function BrowseModelPage() {
                       character={sequenceRequest.character} buildKey={buildKey} skinId={sequenceRequest.skinId}
                   playbackSequences={completedResult?.reportMetadata?.models.find((model) => model.path === modelPath)?.sequences ?? []}
                   busy={isBusy}
-                  onPreview={(name) => setPlaybackSelection((previous) => ({ name, revision: (previous?.revision ?? 0) + 1 }))}
-                  onApply={(selection) => triggerExport(completedFile, sequenceRequest.skinId, { ...sequenceRequest, modelScale: completedResult?.reportMetadata?.models.find((model) => model.path === modelPath)?.modelScale, character: { ...sequenceRequest.character, sequenceSelection: selection } })}
+                  initialRenames={sequenceRequest.animationRenames}
+                  onPreview={(name, index) => setPlaybackSelection((previous) => ({ name, index, revision: (previous?.revision ?? 0) + 1 }))}
+                  onApply={(edits) => triggerExport(completedFile, sequenceRequest.skinId, { ...sequenceRequest, animationRenames: edits.renames, modelScale: completedResult?.reportMetadata?.models.find((model) => model.path === modelPath)?.modelScale, character: { ...sequenceRequest.character, sequenceSelection: edits.selection } })}
                 />}
                   />
                 ) : null}

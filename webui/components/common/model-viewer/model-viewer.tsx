@@ -38,7 +38,7 @@ interface ModelViewerProps {
   animationList?: React.ReactNode
   canvasOverlay?: React.ReactNode
   modelRevision?: number
-  playbackSelection?: { name: string; revision: number }
+  playbackSelection?: { name: string; index?: number; revision: number }
   onSequenceChange?: (index: number) => void
   modelPath?: string
   /** When unchanged across reloads (e.g. skin swap), orbit camera is preserved. */
@@ -1019,7 +1019,8 @@ export default function ModelViewerUi({
   useEffect(() => {
     if (!playbackSelection) return;
     // Resolve against the loaded artifact, whose indices change after filtering.
-    const index = sequences.findIndex((sequence) => sequence.name === playbackSelection.name);
+    const requested = playbackSelection.index;
+    const index = requested !== undefined && sequences[requested]?.name === playbackSelection.name ? requested : sequences.findIndex((sequence) => sequence.name === playbackSelection.name);
     if (index >= 0) handleSelectSequence(index);
   }, [playbackSelection, sequences]);
 
@@ -1129,7 +1130,7 @@ export default function ModelViewerUi({
         {canvasOverlay}
       </div>
       {!shot && <div className="flex lg:flex-row flex-col lg:h-full lg:min-h-0 h-[420px] min-h-[420px] lg:border-l border-t lg:border-t-0 border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))]">
-        <div className={`lg:w-60 w-full lg:h-full lg:min-h-0 ${animationList ? 'h-full min-h-0' : 'h-[200px] min-h-[200px]'} lg:border-r border-b lg:border-b-0 border-[hsl(var(--viewer-divider))] flex flex-col`}>
+        <div className={`${animationList ? 'lg:w-80' : 'lg:w-60'} w-full lg:h-full lg:min-h-0 ${animationList ? 'h-full min-h-0' : 'h-[200px] min-h-[200px]'} lg:border-r border-b lg:border-b-0 border-[hsl(var(--viewer-divider))] flex flex-col`}>
           <div className={`flex-1 min-h-0 lg:flex lg:flex-col lg:overflow-hidden viewer-scroll ${animationList ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
             {!animationList && <>
             <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-0 lg:z-10">

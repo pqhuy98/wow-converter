@@ -115,6 +115,7 @@ export interface Optimization {
 }
 
 export interface ExportRequest {
+  animationRenames?: AnimationRename[]
   modelScale?: number
   character: Character
   outputFileName: string
@@ -124,6 +125,17 @@ export interface ExportRequest {
   formatVersion?: ModelFormatVersion
   isBrowse?: boolean
   skinId?: string
+}
+
+export interface AnimationRename {
+  wowName: string
+  wowVariant: number
+  newWc3Name: string
+}
+
+export interface AnimationEdits {
+  selection?: SequenceSelection
+  renames: AnimationRename[]
 }
 
 export interface ExportCharacterResponse {

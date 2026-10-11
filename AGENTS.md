@@ -31,8 +31,9 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
 - [.cursor/rules/golang.mdc](.cursor/rules/golang.mdc)
 
   ```yaml
-  description: Go pitfalls for wow-converter. Think about these first when encounter bugs
-  alwaysApply: true
+  description: Go ownership, deterministic selection, metadata isolation, and cancellation invariants. Read when editing or debugging Go code.
+  globs: golang/**/*.go
+  alwaysApply: false
   ```
 
 - [.cursor/rules/ponytail.mdc](.cursor/rules/ponytail.mdc)
@@ -48,21 +49,21 @@ in this index an exact match. Do not shorten or paraphrase descriptions.
 
   ```yaml
   name: debug-wowhead-mismatch
-  description: Investigate and fix a visual mismatch between a wowhead.com model and the wow-converter export. Use when the user pastes a Wowhead NPC, item, or object URL and says the converter looks different, wrong, or missing a part.
+  description: Diagnose and fix a reported visual mismatch between a Wowhead model and its wow-converter export.
   ```
 
 - [.cursor/skills/shot-export-wow-converter/SKILL.md](.cursor/skills/shot-export-wow-converter/SKILL.md)
 
   ```yaml
   name: shot-export-wow-converter
-  description: Screenshot an exported Warcraft 3 model from the local wow-converter viewer. Use when checking an export visually, verifying a model fix, when the user asks for a shot of an exported MDX, or when a wowhead.com URL should be compared with the converted model.
+  description: Capture an exported WC3 model, including paired Wowhead comparisons, when visual verification is requested or needed.
   ```
 
 - [.cursor/skills/shot-export-wowhead/SKILL.md](.cursor/skills/shot-export-wowhead/SKILL.md)
 
   ```yaml
   name: shot-export-wowhead
-  description: Screenshot the Wowhead model-viewer canvas for a wowhead.com NPC, item, or object page. Use when the user pastes a Wowhead URL, asks how a model looks on Wowhead, or wants that canvas compared with the wow-converter export.
+  description: Capture a Wowhead model-viewer canvas when a source screenshot or visual inspection is requested or needed.
   ```
 
 ## Directory guidance

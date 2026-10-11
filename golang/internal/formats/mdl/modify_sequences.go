@@ -347,6 +347,7 @@ func (mod *Modify) CloneSequence(sequence *components.Sequence, newWc3Name strin
 	newSequence.Data.WC3Name = newWc3Name
 	newSequence.Interval = [2]int{maxInterval + 1, maxInterval + 1 + (sequence.Interval[1] - sequence.Interval[0])}
 	newSequence.Data.WowName = ""
+	newSequence.Data.SourceAnimations = nil
 	mod.MDL.Sequences = append(mod.MDL.Sequences, newSequence)
 
 	cloneSeqKeyFrame := func(keyFrame map[int]any) {
@@ -410,8 +411,10 @@ func (mod *Modify) ConcatenateSequences(sequences []*components.Sequence, newWc3
 	}
 	newSequence := *sequences[0]
 	newSequence.Data.SourceIndices = nil
+	newSequence.Data.SourceAnimations = nil
 	for _, sequence := range sequences {
 		newSequence.Data.SourceIndices = append(newSequence.Data.SourceIndices, sequence.Data.SourceIndices...)
+		newSequence.Data.SourceAnimations = append(newSequence.Data.SourceAnimations, sequence.Data.SourceAnimations...)
 	}
 	newSequence.Name = newWc3Name
 	newSequence.Data.WC3Name = newWc3Name
