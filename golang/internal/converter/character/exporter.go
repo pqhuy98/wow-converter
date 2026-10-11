@@ -581,11 +581,13 @@ func (e *CharacterExporter) exportItem(ctx *ExportContext, ref Ref, selections .
 func convertWowheadCharacterData(meta wowhead.CharacterData) CharacterData {
 	out := CharacterData{
 		Model: meta.Model, Textures: meta.Textures, Character: meta.Character,
+		Scale: meta.Scale,
 		Equipment: meta.Equipment, TextureFiles: meta.TextureFiles, ItemEffects: meta.ItemEffects,
 		SeparateShoulders: meta.SeparateShoulders,
 	}
 	if meta.Creature != nil {
 		out.Creature = &CreatureMeta{
+			ParticleColor:         meta.Creature.ParticleColor,
 			CreatureGeosetData:     make([]GeosetEntry, len(meta.Creature.CreatureGeosetData)),
 			CreatureCustomizations: meta.Creature.CreatureCustomizations,
 		}

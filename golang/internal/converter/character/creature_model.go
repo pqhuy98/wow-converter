@@ -29,10 +29,15 @@ func ExportCreatureNpcAsMdl(ctx *ExportContext, meta CharacterData) (*mdl.MDL, e
 		}
 	}
 	replaceable := positiveTextureMap(meta.Textures)
-	model, err := ExportModelFileIDAsMdl(ctx, *meta.Model, ExportModelOptions{
+	opts := ExportModelOptions{
+		DisplayScale:      meta.Scale,
 		SequenceSelection: ctx.SequenceSelection,
 		TextureIDs:        textureIDs, ReplaceableTextures: replaceable, ExtraGeosets: extraGeosets,
-	})
+	}
+	if meta.Creature != nil {
+		opts.ParticleColor = meta.Creature.ParticleColor
+	}
+	model, err := ExportModelFileIDAsMdl(ctx, *meta.Model, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -56,9 +61,9 @@ func (c DefaultWowheadClient) FetchNpcMeta(ctx context.Context, url ZamURL) (Cha
 	if err != nil {
 		return CharacterData{}, err
 	}
-	out := CharacterData{Textures: data.Textures, Model: data.Model}
+	out := CharacterData{Textures: data.Textures, Model: data.Model, Scale: data.Scale}
 	if data.Creature != nil {
-		out.Creature = &CreatureMeta{}
+		out.Creature = &CreatureMeta{ParticleColor: data.Creature.ParticleColor}
 		for _, g := range data.Creature.CreatureGeosetData {
 			out.Creature.CreatureGeosetData = append(out.Creature.CreatureGeosetData, GeosetEntry{
 				GeosetIndex: g.GeosetIndex, GeosetValue: g.GeosetValue,

@@ -112,6 +112,15 @@ type RibbonEmitterEntry struct {
 	TextureTransformLookupIndex int8       `json:"textureTransformLookupIndex"`
 }
 
+// ParticleColor is a display's three replacement color curves, packed as ARGB.
+// Each array indexes emitter slots 11..13; alpha remains in the M2 alpha track.
+type ParticleColor struct {
+	ID    int       `json:"Id"`
+	Start [3]uint32 `json:"Start"`
+	Mid   [3]uint32 `json:"Mid"`
+	End   [3]uint32 `json:"End"`
+}
+
 // ParticleEmitterEntry is an M2 particle emitter.
 type ParticleEmitterEntry struct {
 	ParticleID              uint32        `json:"particleId"`

@@ -10,6 +10,7 @@ import (
 	animmap "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/animation"
 	directm2 "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/direct/m2"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 	"github.com/pqhuy98/wow-converter/internal/wowhead"
 )
 
@@ -198,6 +199,7 @@ type ZamURL struct {
 
 // CharacterData is creature/character meta from wowhead.
 type CharacterData struct {
+	Scale             float64
 	Model             *int
 	Textures          map[string]int
 	Character         *wowhead.CharacterMeta
@@ -210,6 +212,7 @@ type CharacterData struct {
 
 // CreatureMeta holds creature geoset data.
 type CreatureMeta struct {
+	ParticleColor          *m2.ParticleColor
 	CreatureGeosetData     []GeosetEntry
 	CreatureCustomizations []wowhead.Customization
 }

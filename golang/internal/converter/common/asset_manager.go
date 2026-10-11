@@ -139,6 +139,8 @@ func (a *AssetManager) ParseDirect(ctx context.Context, fileDataID int, skinName
 
 // DirectParseOptions configures direct M2 conversion.
 type DirectParseOptions struct {
+	DisplayScale        float64
+	ParticleColor       *m2.ParticleColor
 	FileDataID          int
 	SkinName            string
 	ReplaceableTextures map[int]int
@@ -182,6 +184,8 @@ func (a *AssetManager) ParseDirectOptions(ctx context.Context, opts DirectParseO
 			DataTextures:        opts.DataTextures,
 			ExcludeAnimIDs:      opts.ExcludeAnimIDs,
 			SequenceSelection:   opts.SequenceSelection,
+			ParticleColor:       opts.ParticleColor,
+			DisplayScale:        opts.DisplayScale,
 			ExportPathOverride:  opts.ExportPathOverride,
 		})
 	} else {

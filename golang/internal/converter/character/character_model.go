@@ -483,6 +483,9 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	modelTextureFiles := itemModelTextureFiles(itemData, idx)
 	replaceable := itemReplaceableTextures(modelTextureFiles)
 	templateKey := modelTextureTemplateKey(fileDataID, replaceableTextureTypeMap(replaceable))
+	if colors := itemData.OriginalData.Item.ParticleColor; colors != nil {
+		templateKey += fmt.Sprintf(":particle:%v", *colors)
+	}
 
 	if template, ok := templates[templateKey]; ok {
 		enabled := FilterCollectionGeosets(equipmentSlots, slotData, template.MDL)
@@ -497,7 +500,9 @@ func attachItemModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSlots []Equi
 	}
 
 	collectionMaskBuilder := equipmentCollectionGeosetMaskBuilder(ctx, equipmentSlots, fileDataID)
-	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, itemAttachmentModelOptions(modelTextureFiles, collectionMaskBuilder))
+	opts := itemAttachmentModelOptions(modelTextureFiles, collectionMaskBuilder)
+	opts.ParticleColor = itemData.OriginalData.Item.ParticleColor
+	exported, err := ExportModelFileIDAsMdl(ctx, fileDataID, opts)
 	if err != nil {
 		return err
 	}

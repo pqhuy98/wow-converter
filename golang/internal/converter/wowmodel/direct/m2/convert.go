@@ -37,6 +37,8 @@ type ModelSkin struct {
 
 // ConvertOptions configures direct M2 -> MDL conversion.
 type ConvertOptions struct {
+	DisplayScale        float64
+	ParticleColor       *m2.ParticleColor
 	FileDataID          int
 	SkinName            string
 	VariantTextures     []int
@@ -85,6 +87,8 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 	if err := loader.Load(ctx); err != nil {
 		return ConvertResult{}, err
 	}
+	applyParticleColors(loader.ParticleEmitters, opts.ParticleColor)
+	applyParticleDisplayScale(loader.ParticleEmitters, opts.DisplayScale)
 	skin, err := loader.GetSkin(ctx, 0)
 	if err != nil {
 		return ConvertResult{}, err

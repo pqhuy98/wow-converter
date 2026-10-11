@@ -26,6 +26,8 @@ import (
 
 // ExportModelOptions configures skin guessing for model export.
 type ExportModelOptions struct {
+	DisplayScale        float64
+	ParticleColor       *m2.ParticleColor
 	SequenceSelection   *directm2.SequenceSelection
 	TextureIDs          []int
 	ReplaceableTextures map[string]int
@@ -51,6 +53,8 @@ func ExportModelFileIDAsMdl(ctx *ExportContext, modelFileID int, opts ExportMode
 		ReplaceableTextures: replaceableTextureTypeMap(opts.ReplaceableTextures),
 		GeosetMaskBuilder:   opts.GeosetMaskBuilder,
 		SequenceSelection:   opts.SequenceSelection,
+		ParticleColor:       opts.ParticleColor,
+		DisplayScale:        opts.DisplayScale,
 	})
 	if err != nil {
 		return nil, err

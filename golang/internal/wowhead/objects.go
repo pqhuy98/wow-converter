@@ -3,6 +3,8 @@ package wowhead
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
 // FileEntry is a file entry from character meta.
@@ -44,8 +46,9 @@ func FetchCharacterMeta(client *HTTPClient, expansion Expansion, modelID int) (C
 
 // CreatureMeta holds creature customization metadata.
 type CreatureMeta struct {
-	CreatureCustomizations []Customization `json:"CreatureCustomizations"`
-	CreatureGeosetData     []GeosetEntry   `json:"CreatureGeosetData"`
+	ParticleColor          *m2.ParticleColor `json:"ParticleColor"`
+	CreatureCustomizations []Customization   `json:"CreatureCustomizations"`
+	CreatureGeosetData     []GeosetEntry     `json:"CreatureGeosetData"`
 }
 
 // Customization is a creature customization option.
@@ -62,6 +65,7 @@ type GeosetEntry struct {
 
 // CharacterData is wowhead/zam character or creature meta JSON.
 type CharacterData struct {
+	Scale             float64                `json:"Scale"`
 	Model             *int                   `json:"Model"`
 	Textures          map[string]int         `json:"Textures"`
 	Character         *CharacterMeta         `json:"Character"`

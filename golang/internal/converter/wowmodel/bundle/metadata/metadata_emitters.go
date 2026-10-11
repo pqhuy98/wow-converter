@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"math"
 	"sort"
 
@@ -353,7 +354,30 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 		if p.Flags&0x10 != 0 {
 			node.Flags2 = append(node.Flags2, components.PE2ModelSpace)
 		}
-		f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, node)
+		// M2 0x1000 keeps head quads in the model plane instead of billboarding.
+		if p.Flags&0x1000 != 0 {
+			node.Flags2 = append(node.Flags2, components.PE2XYQuad)
+		}
+		cellCount := node.Rows * node.Columns
+		if p.Flags&0x10000 != 0 && len(p.HeadCellTrack.Values) == 0 && headOrTail == components.HeadOrTailHead && cellCount > 1 {
+			// PRE2 has no random atlas-cell flag. Fixed-cell emitters share the
+			// original rate, preserving density instead of drawing cell zero only.
+			for cell := 0; cell < cellCount; cell++ {
+				variant := *node
+				variant.Name += "_cell_" + itoa(cell)
+				variant.HeadIntervals = [3]float64{float64(cell), float64(cell), 1}
+				variant.DecayIntervals = variant.HeadIntervals
+				if node.EmissionRate.Anim != nil {
+					anim := *node.EmissionRate.Anim
+					anim.KeyFrames = maps.Clone(anim.KeyFrames)
+					variant.EmissionRate.Anim = &anim
+				}
+				applyAnimatedOrStaticFloat(&variant.EmissionRate, func(v float64) float64 { return v / float64(cellCount) })
+				f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, &variant)
+			}
+		} else {
+			f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, node)
+		}
 	}
 	if !f.Config.IsBulkExport && len(f.particleEmitters) > 0 {
 		log.Printf("Particle emitters: %d", len(f.particleEmitters))
@@ -392,8 +416,9 @@ func (f *File) particleVisibility(track m2.Track) *components.Animation {
 
 func clampParticleUVIntervals(node *components.ParticleEmitter2) {
 	clamp := func(uv [3]float64) [3]float64 {
-		uv[0] = clampFloat(uv[0], 0, float64(node.Rows-1))
-		uv[1] = clampFloat(uv[1], 0, float64(node.Columns-1))
+		// PRE2 intervals are linear atlas cell indices, not row/column pairs.
+		uv[0] = clampFloat(uv[0], 0, float64(node.Rows*node.Columns-1))
+		uv[1] = clampFloat(uv[1], 0, float64(node.Rows*node.Columns))
 		return uv
 	}
 	node.HeadIntervals = clamp(node.HeadIntervals)
@@ -467,12 +492,29 @@ func partTrackTimes(p m2.PartTrack) []uint16 {
 }
 
 func partValueAt(track m2.PartTrack, time uint16) []float64 {
-	for i, t := range track.Timestamps {
-		if t >= time && i < len(track.Values) {
-			return track.Values[i]
+	count := min(len(track.Timestamps), len(track.Values))
+	if count == 0 {
+		return nil
+	}
+	if time <= track.Timestamps[0] {
+		return track.Values[0]
+	}
+	for i := 1; i < count; i++ {
+		if time <= track.Timestamps[i] {
+			lo, hi := track.Values[i-1], track.Values[i]
+			span := track.Timestamps[i] - track.Timestamps[i-1]
+			if span == 0 || len(lo) != len(hi) {
+				return hi
+			}
+			factor := float64(time-track.Timestamps[i-1]) / float64(span)
+			value := make([]float64, len(lo))
+			for j := range value {
+				value[j] = lo[j] + (hi[j]-lo[j])*factor
+			}
+			return value
 		}
 	}
-	return nil
+	return track.Values[count-1]
 }
 
 func particleTimeMiddle(p m2.ParticleEmitterEntry) float64 {

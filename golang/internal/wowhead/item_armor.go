@@ -3,29 +3,31 @@ package wowhead
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
 // EquipmentSlot identifies wow equipment slots.
 type EquipmentSlot int
 
 const (
-	SlotHead EquipmentSlot = 1
-	SlotShoulder EquipmentSlot = 3
-	SlotShirt EquipmentSlot = 4
-	SlotChest EquipmentSlot = 5
-	SlotWaist EquipmentSlot = 6
-	SlotLegs EquipmentSlot = 7
-	SlotFeet EquipmentSlot = 8
-	SlotWrist EquipmentSlot = 9
-	SlotHands EquipmentSlot = 10
-	SlotMainHand EquipmentSlot = 12
-	SlotOffHand EquipmentSlot = 13
-	SlotShield EquipmentSlot = 14
-	SlotRanged EquipmentSlot = 15
-	SlotCloak EquipmentSlot = 16
-	SlotTabard EquipmentSlot = 19
-	SlotRobe EquipmentSlot = 20
-	SlotHoldable EquipmentSlot = 23
+	SlotHead        EquipmentSlot = 1
+	SlotShoulder    EquipmentSlot = 3
+	SlotShirt       EquipmentSlot = 4
+	SlotChest       EquipmentSlot = 5
+	SlotWaist       EquipmentSlot = 6
+	SlotLegs        EquipmentSlot = 7
+	SlotFeet        EquipmentSlot = 8
+	SlotWrist       EquipmentSlot = 9
+	SlotHands       EquipmentSlot = 10
+	SlotMainHand    EquipmentSlot = 12
+	SlotOffHand     EquipmentSlot = 13
+	SlotShield      EquipmentSlot = 14
+	SlotRanged      EquipmentSlot = 15
+	SlotCloak       EquipmentSlot = 16
+	SlotTabard      EquipmentSlot = 19
+	SlotRobe        EquipmentSlot = 20
+	SlotHoldable    EquipmentSlot = 23
 	SlotRangedRight EquipmentSlot = 26
 )
 
@@ -47,22 +49,23 @@ type ItemFile struct {
 
 // ItemData is zam item meta JSON.
 type ItemData struct {
-	Textures         map[string]int            `json:"Textures"`
-	Textures2        map[string]int            `json:"Textures2"`
-	ModelFiles       map[string][]ItemFile     `json:"ModelFiles"`
-	TextureFiles     map[string][]ItemFile     `json:"TextureFiles"`
-	ComponentModels  map[string]int            `json:"ComponentModels"`
-	ComponentTextures map[string]int           `json:"ComponentTextures"`
-	Item             ItemInfo                    `json:"Item"`
+	Textures          map[string]int        `json:"Textures"`
+	Textures2         map[string]int        `json:"Textures2"`
+	ModelFiles        map[string][]ItemFile `json:"ModelFiles"`
+	TextureFiles      map[string][]ItemFile `json:"TextureFiles"`
+	ComponentModels   map[string]int        `json:"ComponentModels"`
+	ComponentTextures map[string]int        `json:"ComponentTextures"`
+	Item              ItemInfo              `json:"Item"`
 }
 
 // ItemInfo holds item metadata fields.
 type ItemInfo struct {
-	Flags            int `json:"Flags"`
-	InventoryType    int `json:"InventoryType"`
-	ItemClass        int `json:"ItemClass"`
-	ItemSubClass     int `json:"ItemSubClass"`
-	GeosetGroup      []int `json:"GeosetGroup"`
+	ParticleColor    *m2.ParticleColor `json:"ParticleColor"`
+	Flags            int               `json:"Flags"`
+	InventoryType    int               `json:"InventoryType"`
+	ItemClass        int               `json:"ItemClass"`
+	ItemSubClass     int               `json:"ItemSubClass"`
+	GeosetGroup      []int             `json:"GeosetGroup"`
 	HideGeosetMale   []HideGeosetEntry `json:"HideGeosetMale"`
 	HideGeosetFemale []HideGeosetEntry `json:"HideGeosetFemale"`
 }

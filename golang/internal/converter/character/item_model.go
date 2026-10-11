@@ -473,6 +473,7 @@ func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targ
 	replaceable := itemReplaceableTextures(modelTextureFiles)
 	model, err := ExportModelFileIDAsMdl(ctx, modelID, ExportModelOptions{
 		SequenceSelection:   selection,
+		ParticleColor:       result.OriginalData.Item.ParticleColor,
 		TextureIDs:          itemModelTextureIDs(modelTextureFiles),
 		ReplaceableTextures: replaceable,
 	})

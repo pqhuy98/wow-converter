@@ -10,6 +10,43 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
+func TestParticleAgeCurvesInterpolateAndClamp(t *testing.T) {
+	p := m2.ParticleEmitterEntry{
+		AlphaTrack: m2.PartTrack{Timestamps: []uint16{0, 9830, 32767}, Values: [][]float64{{0}, {32767}, {0}}},
+		ScaleTrack: m2.PartTrack{Timestamps: []uint16{0, 32767}, Values: [][]float64{{1, 1}, {2, 2}}},
+	}
+	p.TwinkleScale.Min, p.TwinkleScale.Max = 1, 1
+	want := 1 + float64(9830)/32767
+	if got := particleSegmentScaling(p); got != [3]float64{1, want, 2} {
+		t.Fatalf("size jumped to end key at alpha peak: %v", got)
+	}
+	if got := partValueAt(m2.PartTrack{Timestamps: []uint16{0}, Values: [][]float64{{3}}}, 32767); len(got) != 1 || got[0] != 3 {
+		t.Fatal("single key should stay constant")
+	}
+	node := &components.ParticleEmitter2{Rows: 2, Columns: 2, HeadIntervals: [3]float64{2, 4, 1}}
+	clampParticleUVIntervals(node)
+	if node.HeadIntervals != [3]float64{2, 4, 1} {
+		t.Fatal("linear atlas indices were clamped to row/column counts")
+	}
+}
+
+func TestParticlePlanarAndBillboardFlags(t *testing.T) {
+	for _, flags := range []uint32{0x31411, 0x30031} {
+		f := &File{IsLoaded: true, particleEmitters: []m2.ParticleEmitterEntry{{Flags: flags}}}
+		model := mdl.New(mdl.NewMDLOptions{Name: "particle orientation"})
+		model.Bones = []*components.Bone{components.NewBone("root")}
+		f.BindMdl(model)
+		f.ExtractMDLParticlesEmitters([]components.Texture{{Image: "test.blp"}})
+		planar := false
+		for _, flag := range model.ParticleEmitter2s[0].Flags2 {
+			planar = planar || flag == components.PE2XYQuad
+		}
+		if planar != (flags&0x1000 != 0) {
+			t.Fatalf("flags %x: planar=%v", flags, planar)
+		}
+	}
+}
+
 func TestParticleVisibilitySparseAnimations(t *testing.T) {
 	f := &File{m2Animations: []m2AnimMeta{{Duration: 67}, {Duration: 9334}, {Duration: 60000}, {Duration: 9334}, {Duration: 33}}}
 	track := m2.Track{GlobalSeq: config.BlizzardNull,
