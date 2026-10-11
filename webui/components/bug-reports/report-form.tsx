@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
+import { Bug, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -93,7 +93,7 @@ export function ReportForm({
   };
 
   return <>
-    <Button variant="outline" onClick={() => { setSequence(currentSequence); setCapture(null); setError(''); setOpen(true); }}>Doesn&apos;t match Wowhead?</Button>
+    <Button variant="destructive" onClick={() => { setSequence(currentSequence); setCapture(null); setError(''); setOpen(true); }}><Bug />Doesn&apos;t match Wowhead?</Button>
     <Dialog open={open} onOpenChange={(value) => { if (!busy && !capturing) setOpen(value); }}>
       <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>

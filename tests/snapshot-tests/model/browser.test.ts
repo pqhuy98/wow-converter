@@ -17,11 +17,21 @@ test.skipIf(process.env.REPORT_SHOT_BROWSER_TEST !== '1')('snapshot browser clea
     writeFileSync(sentinel, 'keep');
     for (const mode of ['success', 'capture-error']) {
       const browser = await ShotBrowser.open(640, 400);
+      let bitsJob = '';
       try {
         const roots = readdirSync(parent).filter((name) => name.startsWith('wow-shot-'));
         expect(roots.length).toBe(1);
         expect(readdirSync(path.join(parent, roots[0]))).toContain('profile');
         mkdirSync(path.join(parent, roots[0], 'msedge_url_fetcher_test'));
+        if (process.platform === 'win32') {
+          // A real service-owned job must be cancelled even if its directory is removable already.
+          const created = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; Import-Module BitsTransfer; (Start-BitsTransfer -Source 'http://127.0.0.1:1/component.crx' -Destination $env:SHOT_TEST_DEST -DisplayName 'wow-converter snapshot cleanup regression' -Asynchronous -Suspended).JobId.ToString()"], {
+            env: { ...process.env, SHOT_TEST_DEST: path.join(parent, roots[0], 'component.crx') },
+            encoding: 'utf8', windowsHide: true, timeout: 15_000,
+          });
+          if (created.error || created.status !== 0) throw new Error(`BITS test job failed: ${created.error?.message ?? created.stderr}`);
+          bitsJob = created.stdout.trim();
+        }
         if (mode === 'capture-error') {
           const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('<html data-viewer-error="capture failed"></html>', { headers: { 'Content-Type': 'text/html' } }) });
           try {
@@ -40,7 +50,23 @@ test.skipIf(process.env.REPORT_SHOT_BROWSER_TEST !== '1')('snapshot browser clea
           }
         }
       } finally {
-        await browser.close();
+        try {
+          await browser.close();
+          if (bitsJob) {
+            const remaining = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; Import-Module BitsTransfer; @(Get-BitsTransfer | Where-Object { $_.JobId.ToString() -eq $env:SHOT_TEST_ID }).Count"], {
+              env: { ...process.env, SHOT_TEST_ID: bitsJob }, encoding: 'utf8', windowsHide: true, timeout: 15_000,
+            });
+            expect(remaining.status).toBe(0);
+            expect(remaining.stdout.trim()).toBe('0');
+          }
+        } finally {
+          if (bitsJob) {
+            // Test teardown also scopes cancellation to the one new job created above.
+            spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Import-Module BitsTransfer; Get-BitsTransfer | Where-Object { $_.JobId.ToString() -eq $env:SHOT_TEST_ID } | Remove-BitsTransfer -Confirm:$false'], {
+              env: { ...process.env, SHOT_TEST_ID: bitsJob }, windowsHide: true, timeout: 15_000,
+            });
+          }
+        }
       }
       await browser.close(); // Closing twice must not target another browser or temp directory.
       expect(readdirSync(parent)).toEqual(['unrelated.txt']);

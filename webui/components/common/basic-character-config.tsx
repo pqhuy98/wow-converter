@@ -62,6 +62,7 @@ export function BasicCharacterConfig({
           </div>
           <Select
             value={character.attackTag || 'all'}
+            disabled={!!character.sequenceSelection}
             onValueChange={(value: AttackTag | 'all') => setCharacter((prev) => ({
               ...prev,
               attackTag: value === 'all' ? undefined : (value as AttackTag),
@@ -154,12 +155,14 @@ export function BasicCharacterConfig({
           <div className="flex items-center space-x-2">
             <Checkbox
               id="keepCinematic"
+              disabled={!!character.sequenceSelection}
               checked={character.keepCinematic || false}
               onCheckedChange={(checked) => setCharacter((prev) => ({ ...prev, keepCinematic: checked as boolean }))}
             />
             <Label htmlFor="keepCinematic" className="flex items-center gap-2 text-sm">
               Keep Cinematic Animations
               <TooltipHelp tooltips={tooltips.keepCinematic}/>
+              {character.sequenceSelection && <span className="text-xs text-muted-foreground">Managed by custom sequences</span>}
             </Label>
           </div>
         </div>

@@ -193,6 +193,7 @@ func ExportCharacterDirectAsModel(ctx *ExportContext, body ExportCharacterParams
 		},
 		DataTextures:       dataTextures,
 		ExcludeAnimIDs:     exclude,
+		SequenceSelection:  ctx.SequenceSelection,
 		ExportPathOverride: exportPath,
 	})
 }

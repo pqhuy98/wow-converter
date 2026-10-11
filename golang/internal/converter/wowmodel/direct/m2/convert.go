@@ -45,6 +45,7 @@ type ConvertOptions struct {
 	GeosetMaskBuilder   func(*m2.Skin) []m2export.GeosetMaskEntry
 	DataTextures        map[int]DirectDataTexture
 	ExcludeAnimIDs      map[int]struct{}
+	SequenceSelection   *SequenceSelection
 	ExportPathOverride  string
 }
 
@@ -142,6 +143,11 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 	animFile, err := BuildBonesData(ctx, loader, opts.ExcludeAnimIDs, opts.FileDataID, buildKeyFromSource(ctx, src))
 	if err != nil {
 		return ConvertResult{}, err
+	}
+	if opts.SequenceSelection != nil {
+		if err := applySequenceSelection(animFile, opts.SequenceSelection, opts.FileDataID, buildKeyFromSource(ctx, src)); err != nil {
+			return ConvertResult{}, err
+		}
 	}
 
 	metaObj := buildMetadata(loader, skin, geosetMask, resolved.ValidTextures, dataTexSet)

@@ -65,15 +65,16 @@ type AttachmentData struct {
 
 // File holds parsed bones/animation data.
 type File struct {
-	FilePath    string
-	Config      config.Config
-	Bones       []BoneData
-	Animations  []AnimationData
-	BoneWeights []float64
-	BoneIndices []float64
-	Attachments []AttachmentData
-	GlobalLoops []uint32
-	IsLoaded    bool
+	FilePath        string
+	Config          config.Config
+	Bones           []BoneData
+	Animations      []AnimationData
+	BoneWeights     []float64
+	BoneIndices     []float64
+	Attachments     []AttachmentData
+	GlobalLoops     []uint32
+	ExcludedIndices map[int]struct{}
+	IsLoaded        bool
 }
 
 // NewFile creates an animation file placeholder.
@@ -115,6 +116,9 @@ func (f *File) ToMdl(globalSequences *[]*components.GlobalSequence) ToMdlResult 
 		panic("animation file is not loaded")
 	}
 	excluded := map[int]struct{}{}
+	for index := range f.ExcludedIndices {
+		excluded[index] = struct{}{}
+	}
 	gsMap := map[int]*components.GlobalSequence{}
 	for _, gs := range *globalSequences {
 		if gs == nil {
@@ -246,6 +250,7 @@ func (f *File) ToMdl(globalSequences *[]*components.GlobalSequence) ToMdlResult 
 			BoxRadius: anim.BoxRadius,
 		}
 		seqData := animmap.GetWarcraftSequenceData(meta)
+		seqData.SourceIndices = []int{animID}
 		if _, skip := excluded[animID]; skip {
 			seqAccum += int(anim.Duration) + 1
 			log.Printf("%s", ansi.Redf("Skip unreadable animation %s of %s", seqData.WowName, f.FilePath))

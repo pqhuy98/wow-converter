@@ -26,7 +26,7 @@ func StartupDemoRequests() []exportCharacterRequest {
 			RemoveUnusedVertices          *bool  `json:"removeUnusedVertices"`
 			RemoveUnusedNodes             *bool  `json:"removeUnusedNodes"`
 			RemoveUnusedMaterialsTextures *bool  `json:"removeUnusedMaterialsTextures"`
-			MaxTextureSize                string `json:"maxTextureSize"`
+			MaxTextureSize                string `json:"maxTextureSize,omitempty"`
 		}{
 			SortSequences:                 boolPtr(true),
 			AllMaterialsUnshaded:          boolPtr(false),

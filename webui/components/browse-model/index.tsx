@@ -11,6 +11,7 @@ import React, {
 
 import { SettingsDialogButton } from '@/components/browse-model/settings-dialog';
 import { ModelSkinOption, skinPanelHeight, SkinPicker } from '@/components/browse-model/skin-picker';
+import { SequenceEditButton, SequencePanel } from '@/components/character-converter/sequence-panel';
 import { FileRow, VirtualListBox } from '@/components/common/listbox';
 import ModelViewerUi from '@/components/common/model-viewer/model-viewer';
 import { Terminal } from '@/components/common/terminal';
@@ -26,6 +27,7 @@ import { useSearchSelectUrlSync } from '@/lib/hooks/use-search-select-url-sync';
 import {
   Character,
   defaultTextureBakingForm,
+  ExportRequest,
   JobStatus,
   ModelFormat,
   ModelFormatVersion,
@@ -84,6 +86,10 @@ export default function BrowseModelPage() {
   const [skinsError, setSkinsError] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | undefined>(undefined);
   const [modelPath, setModelPath] = useState<string | undefined>(undefined);
+  const [completedResult, setCompletedResult] = useState<JobStatus['result']>();
+  const [completedFile, setCompletedFile] = useState<FileEntry>();
+  const [sequenceRequest, setSequenceRequest] = useState<ExportRequest>();
+  const [playbackSelection, setPlaybackSelection] = useState<{ name: string; revision: number }>();
   /** Tied to the displayed model; only updates when export completes (not on row select). */
   const [viewerSessionKey, setViewerSessionKey] = useState<string | undefined>(undefined);
   const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(null);
@@ -145,6 +151,9 @@ export default function BrowseModelPage() {
       setSelectedSkinId(null);
       setJob(undefined);
       setModelPath(undefined);
+      setCompletedResult(undefined);
+      setCompletedFile(undefined);
+      setSequenceRequest(undefined);
       setViewerSessionKey(undefined);
       setPendingScrollToPath(null);
     },
@@ -245,8 +254,11 @@ export default function BrowseModelPage() {
     const path = result?.exportedModels?.[0]?.path;
     if (!path) return;
     setModelPath(path);
+    setCompletedResult(result);
+    setPlaybackSelection(undefined);
     const file = exportTargetRef.current;
     if (file) {
+      setCompletedFile(file);
       setViewerSessionKey(`${file.fileDataID}:${file.fileName}`);
     }
   }, []);
@@ -258,22 +270,29 @@ export default function BrowseModelPage() {
       applyCompletedExport(job.result);
       return undefined;
     }
+    if (job.status === 'failed') return undefined;
+    let cancelled = false;
+    let fetching = false;
     const fetchJob = async () => {
-      const r = await fetch(`/api/export/character/status/${job.id}`);
-      if (!r.ok) return;
-      const js = (await r.json()) as JobStatus;
-      setJob(js);
-      if (js.status === 'done' && js.result) {
-        applyCompletedExport(js.result);
+      if (fetching) return;
+      fetching = true;
+      try {
+        const r = await fetch(`/api/export/character/status/${job.id}`);
+        if (!r.ok) throw new Error(await r.text());
+        const js: JobStatus = await r.json();
+        if (cancelled) return;
+        setJob(js);
+        if (js.status === 'done' && js.result) applyCompletedExport(js.result);
+        if (js.status === 'done' || js.status === 'failed') clearInterval(interval);
+      } catch (failure) {
+        if (cancelled) return;
+        setJob({ ...job, status: 'failed', error: failure instanceof Error ? failure.message : 'Could not read export status' });
         clearInterval(interval);
-      }
-      if (js.status === 'failed') {
-        clearInterval(interval);
-      }
+      } finally { fetching = false; }
     };
-    void fetchJob();
     const interval = setInterval(() => void fetchJob(), 500);
-    return () => clearInterval(interval);
+    void fetchJob();
+    return () => { cancelled = true; clearInterval(interval); };
   }, [job?.id, applyCompletedExport]);
 
   const [isExporting, setIsExporting] = useState(false);
@@ -291,11 +310,12 @@ export default function BrowseModelPage() {
   const [textureBaking, setTextureBaking] = useState(defaultTextureBakingForm);
   const isBusy = isExporting || job?.status === 'pending' || job?.status === 'processing';
 
-  const triggerExport = useCallback(async (file: FileEntry, skinId?: string | null) => {
-    if (isExporting) {
+  const triggerExport = useCallback(async (file: FileEntry, skinId?: string | null, override?: ExportRequest): Promise<boolean> => {
+    if (isBusy) {
       console.log('Please wait for the current export to finish.');
-      return;
+      return false;
     }
+    if (!override) setSequenceRequest(undefined);
     setSelected(file);
     exportTargetRef.current = file;
     if (skinId !== undefined) {
@@ -311,10 +331,11 @@ export default function BrowseModelPage() {
       ...character,
       base: localBase,
       attackTag: character.attackTag === undefined ? '' : character.attackTag,
+      sequenceSelection: character.sequenceSelection?.fileDataID === file.fileDataID && character.sequenceSelection.buildKey === buildKey ? character.sequenceSelection : undefined,
     };
     const isSameFile = selected?.fileDataID === file.fileDataID && selected?.fileName === file.fileName;
     const effectiveSkinId = skinId !== undefined ? skinId : (isSameFile ? selectedSkinId : undefined);
-    const request = {
+    const request: ExportRequest = override ?? {
       character: exportCharacter,
       outputFileName: guessedName,
       optimization,
@@ -326,15 +347,28 @@ export default function BrowseModelPage() {
     };
 
     setIsExporting(true);
-    const res = await fetch('/api/export/character', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-    });
-    setIsExporting(false);
-    const js = (await res.json()) as JobStatus;
-    setJob(js);
-  }, [isExporting, character, optimization, textureBaking, format, formatVersion, selectedSkinId]);
+    try {
+      const res = await fetch('/api/export/character', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+      if (!res.ok) {
+        const failure = await res.json();
+        throw new Error(failure.error ?? 'Export was not accepted');
+      }
+      const js = (await res.json()) as JobStatus;
+      if (js.status === 'failed') throw new Error(js.error ?? 'Export failed');
+      setJob(js);
+      setCharacter(request.character);
+      return true;
+    } catch (failure) {
+      setJob({
+        id: '', status: 'failed', submittedAt: Date.now(), logs: [], error: failure instanceof Error ? failure.message : 'Export failed',
+      });
+      return false;
+    } finally { setIsExporting(false); }
+  }, [isBusy, character, optimization, textureBaking, format, formatVersion, selectedSkinId, selected, buildKey]);
 
   const getRowHeight = useCallback((file: FileEntry) => {
     if (selected?.fileDataID !== file.fileDataID || selected?.fileName !== file.fileName) {
@@ -399,6 +433,24 @@ export default function BrowseModelPage() {
 
   const isExportInProgress = isExporting || job?.status === 'pending' || job?.status === 'processing';
   const hasViewerModel = Boolean(modelPath);
+  const canvasOverlay = isExportInProgress ? (
+    <div className="absolute inset-0 z-20 flex items-center justify-center px-3 pointer-events-none">
+      <div className="pointer-events-auto mx-auto w-full max-w-xl rounded-lg border border-border bg-background/95 p-4 shadow-lg backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+          <p className="text-sm font-medium">{isExporting && !job?.id ? 'Starting export…' : job?.status === 'processing' ? 'Exporting…' : `Queue position: ${job?.position ?? '…'}`}</p>
+        </div>
+        {(job?.logs?.length ?? 0) > 0 && <Terminal logs={job?.logs ?? []} className="mt-3 max-h-48 w-full" />}
+      </div>
+    </div>
+  ) : job?.status === 'failed' ? (
+    <div className="absolute inset-0 z-20 flex items-center justify-center px-3 pointer-events-none">
+      <div className="pointer-events-auto mx-auto w-full max-w-xl rounded-lg border border-destructive/50 bg-background/95 p-4 shadow-lg backdrop-blur-sm">
+        <p className="text-sm font-medium text-destructive">Export failed</p>
+        {job.error && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-border bg-card p-2 text-left text-xs text-destructive">{job.error}</pre>}
+      </div>
+    </div>
+  ) : undefined;
 
   return (
     <div className="h-full p-4 flex flex-col overflow-x-hidden">
@@ -485,94 +537,33 @@ export default function BrowseModelPage() {
 
           {/* Right: viewer */}
           <div className="lg:w-2/3 w-full h-full overflow-hidden min-w-0">
-            <div className="p-0 h-full relative overflow-hidden min-w-0">
-              {modelPath ? (
-                <ModelViewerUi
-                  modelPath={modelPath}
-                  cameraSessionKey={viewerSessionKey}
-                  source="browse"
-                />
-              ) : null}
+            <div className="p-0 h-full relative overflow-auto min-w-0 flex flex-col lg:flex-row gap-2">
+              <div className="flex-1 min-w-0 min-h-[500px] relative">
+                {modelPath ? (
+                  <ModelViewerUi
+                    modelPath={modelPath}
+                    cameraSessionKey={viewerSessionKey}
+                    source="browse"
+                    canvasOverlay={canvasOverlay}
+                    playbackSelection={playbackSelection}
+                    animationHeaderAction={completedResult?.reportMetadata && completedResult.reportMetadata.buildKey === buildKey && completedResult.reportMetadata.models.find((model) => model.path === modelPath)?.sequences.some((sequence) => sequence.sourceIndices?.length) && <SequenceEditButton editing={!!sequenceRequest} busy={isBusy} onClick={() => setSequenceRequest(sequenceRequest ? undefined : completedResult.reportMetadata!.request)} />}
+                    animationList={sequenceRequest && completedFile && <SequencePanel
+                      character={sequenceRequest.character} buildKey={buildKey} skinId={sequenceRequest.skinId}
+                  playbackSequences={completedResult?.reportMetadata?.models.find((model) => model.path === modelPath)?.sequences ?? []}
+                  busy={isBusy}
+                  onPreview={(name) => setPlaybackSelection((previous) => ({ name, revision: (previous?.revision ?? 0) + 1 }))}
+                  onApply={(selection) => triggerExport(completedFile, sequenceRequest.skinId, { ...sequenceRequest, modelScale: completedResult?.reportMetadata?.models.find((model) => model.path === modelPath)?.modelScale, character: { ...sequenceRequest.character, sequenceSelection: selection } })}
+                />}
+                  />
+                ) : null}
+              </div>
 
-              {isExportInProgress ? (
-                hasViewerModel ? (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center px-3 pointer-events-none">
-                    <div className="pointer-events-auto mx-auto w-full max-w-xl rounded-lg border border-border bg-background/95 p-4 shadow-lg backdrop-blur-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
-                        <p className="text-sm font-medium">
-                          {isExporting && !job?.id
-                            ? 'Starting export…'
-                            : job?.status === 'processing'
-                              ? 'Exporting…'
-                              : `Queue position: ${job?.position ?? '…'}`}
-                        </p>
-                      </div>
-                      {(job?.logs?.length ?? 0) > 0 ? (
-                        <Terminal logs={job?.logs ?? []} className="mt-3 max-h-48 w-full" />
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
-                    <div className="w-full px-4 text-center text-muted-foreground">
-                      <div className="mx-auto flex max-w-xl items-center justify-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
-                        <p className="text-lg">
-                          {isExporting && !job?.id
-                            ? 'Starting export…'
-                            : job?.status === 'processing'
-                              ? 'Exporting…'
-                              : `Queue position: ${job?.position ?? '…'}`}
-                        </p>
-                      </div>
-                      {(job?.logs?.length ?? 0) > 0 ? (
-                        <div className="mx-auto mt-4 w-full max-w-xl">
-                          <Terminal logs={job?.logs ?? []} className="w-full" />
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              ) : null}
-
-              {!hasViewerModel && !isExportInProgress && job?.status !== 'failed' ? (
+              {!hasViewerModel && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
-                  <p className="text-lg text-muted-foreground">Select a file to export and preview</p>
+                  {isExportInProgress || job?.status === 'failed' ? canvasOverlay : <p className="text-lg text-muted-foreground">{job?.status === 'done' ? 'Export finished but no model was produced' : 'Select a file to export and preview'}</p>}
                 </div>
-              ) : null}
+              )}
 
-              {job?.status === 'failed' ? (
-                hasViewerModel ? (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center px-3 pointer-events-none">
-                    <div className="pointer-events-auto mx-auto w-full max-w-xl rounded-lg border border-destructive/50 bg-background/95 p-4 shadow-lg backdrop-blur-sm">
-                      <p className="text-sm font-medium text-destructive">Export failed</p>
-                      {job.error ? (
-                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-border bg-card p-2 text-left text-xs text-destructive">
-                          {job.error}
-                        </pre>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
-                    <div className="px-4 text-center text-muted-foreground">
-                      <p className="mb-2 text-lg text-destructive">Export failed</p>
-                      {job.error ? (
-                        <pre className="mx-auto max-w-xl overflow-x-auto whitespace-pre-wrap rounded border border-border bg-card p-2 text-left text-sm text-destructive">
-                          {job.error}
-                        </pre>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              ) : null}
-
-              {job?.status === 'done' && !modelPath ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-secondary">
-                  <p className="text-lg text-destructive">Export finished but no model was produced</p>
-                </div>
-              ) : null}
             </div>
           </div>
         </div>

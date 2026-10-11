@@ -30,7 +30,8 @@ func ExportCreatureNpcAsMdl(ctx *ExportContext, meta CharacterData) (*mdl.MDL, e
 	}
 	replaceable := positiveTextureMap(meta.Textures)
 	model, err := ExportModelFileIDAsMdl(ctx, *meta.Model, ExportModelOptions{
-		TextureIDs: textureIDs, ReplaceableTextures: replaceable, ExtraGeosets: extraGeosets,
+		SequenceSelection: ctx.SequenceSelection,
+		TextureIDs:        textureIDs, ReplaceableTextures: replaceable, ExtraGeosets: extraGeosets,
 	})
 	if err != nil {
 		return nil, err

@@ -47,6 +47,7 @@ func NewServer(d *Deps) *Server {
 	registerWowConfig(apiRouter, d)
 	registerMaps(apiRouter, d)
 	registerExportCharacter(apiRouter, d)
+	registerModelMetadata(apiRouter, d)
 	registerExportTexture(apiRouter, d)
 	if cfg.IsDev {
 		registerDebugMemory(apiRouter)

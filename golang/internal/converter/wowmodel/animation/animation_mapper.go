@@ -96,3 +96,11 @@ func IsLoopAnimation(wowAnimation string) bool {
 	_, ok := cinematicLoopWowAnimNames[wowAnimation]
 	return ok
 }
+
+// IncludeByDefault is the source-level cinematic/weapon policy, before automatic
+// weapon resolution in the character exporter.
+func IncludeByDefault(wowName string, keepCinematic bool, attackTag AttackTag) bool {
+	info := GetWc3AnimInfo(wowName)
+	return (keepCinematic || !strings.Contains(info.WC3Name, "Cinematic")) &&
+		(attackTag == "" || attackTag == AttackTagAuto || info.AttackTag == "" || info.AttackTag == string(attackTag))
+}

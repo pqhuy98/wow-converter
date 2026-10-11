@@ -26,6 +26,7 @@ import (
 
 // ExportModelOptions configures skin guessing for model export.
 type ExportModelOptions struct {
+	SequenceSelection   *directm2.SequenceSelection
 	TextureIDs          []int
 	ReplaceableTextures map[string]int
 	ExtraGeosets        []int
@@ -49,6 +50,7 @@ func ExportModelFileIDAsMdl(ctx *ExportContext, modelFileID int, opts ExportMode
 		SkinName:            skinName,
 		ReplaceableTextures: replaceableTextureTypeMap(opts.ReplaceableTextures),
 		GeosetMaskBuilder:   opts.GeosetMaskBuilder,
+		SequenceSelection:   opts.SequenceSelection,
 	})
 	if err != nil {
 		return nil, err
@@ -464,10 +466,11 @@ func replaceExt(path, from, to string) string {
 
 // LocalModelOptions configures local model export.
 type LocalModelOptions struct {
-	WithCollision  bool
-	SkinIDOverride string
-	KeepCinematic  bool
-	AttackTag      animmap.AttackTag
+	SequenceSelection *directm2.SequenceSelection
+	WithCollision     bool
+	SkinIDOverride    string
+	KeepCinematic     bool
+	AttackTag         animmap.AttackTag
 }
 
 // ExportLocalModelAsMdl resolves and converts a listfile local model reference.
@@ -492,6 +495,7 @@ func ExportLocalModelAsMdl(ctx context.Context, assetManager *common.AssetManage
 	model, err := assetManager.ParseDirectOptions(ctx, common.DirectParseOptions{
 		FileDataID:         file.FileDataID,
 		SkinName:           skinName,
+		SequenceSelection:  opts.SequenceSelection,
 		ExportPathOverride: common.CachePathForLocalRef(cfg.ExportAssetDir, filePath, ".m2"),
 	})
 	if err != nil {

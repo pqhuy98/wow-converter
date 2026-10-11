@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/pqhuy98/wow-converter/internal/server/pathsafe"
 )
@@ -27,6 +28,9 @@ func parseExportCharacterRequest(raw map[string]any) (exportCharacterRequest, []
 	var body exportCharacterRequest
 	if err := json.Unmarshal(data, &body); err != nil {
 		return exportCharacterRequest{}, append(issues, err.Error())
+	}
+	if body.Character.SequenceSelection != nil {
+		slices.Sort(body.Character.SequenceSelection.Indices)
 	}
 	return body, issues
 }
@@ -67,6 +71,12 @@ func applyExportCharacterDefaults(raw map[string]any) {
 
 func validateExportCharacterShape(raw map[string]any) []string {
 	issues := make([]string, 0)
+	if value, exists := raw["modelScale"]; exists {
+		scale, valid := value.(float64)
+		if !valid || scale <= 0 {
+			issues = append(issues, "modelScale must be a positive number")
+		}
+	}
 	for _, field := range []string{"character", "outputFileName", "optimization", "format"} {
 		if _, ok := raw[field]; !ok {
 			issues = append(issues, fmt.Sprintf("%s is required", field))
@@ -141,7 +151,8 @@ func validateExportOptimization(value any, issues *[]string) {
 	}
 	if value, exists := optimization["maxTextureSize"]; exists {
 		size, valid := value.(string)
-		if !valid || (size != "256" && size != "512" && size != "1024") {
+		// Older saved export requests serialize the original-size default as an empty string.
+		if !valid || (size != "" && size != "256" && size != "512" && size != "1024") {
 			*issues = append(*issues, `optimization.maxTextureSize must be "256", "512", or "1024"`)
 		}
 	}
@@ -162,6 +173,35 @@ func validateCharacterObject(value any, field string, issues *[]string) {
 		validateOptionalBoolWithPrefix(character, name, field, issues)
 	}
 	validateOptionalStringWithPrefix(character, "portraitCameraSequenceName", field, issues)
+	if value, exists := character["sequenceSelection"]; exists {
+		selection, ok := value.(map[string]any)
+		if !ok {
+			*issues = append(*issues, field+".sequenceSelection must be an object")
+		} else {
+			id, valid := selection["fileDataID"].(float64)
+			if !valid || id <= 0 || id != float64(int(id)) {
+				*issues = append(*issues, "sequenceSelection.fileDataID must be a positive integer")
+			}
+			key, valid := selection["buildKey"].(string)
+			if !valid || key == "" {
+				*issues = append(*issues, "sequenceSelection.buildKey is required")
+			}
+			indices, valid := selection["indices"].([]any)
+			if !valid || len(indices) == 0 || len(indices) > 65536 {
+				*issues = append(*issues, "sequenceSelection.indices must be a non-empty animation list")
+			} else {
+				seen := map[int]bool{}
+				for _, value := range indices {
+					index, valid := value.(float64)
+					if !valid || index < 0 || index > 65535 || index != float64(int(index)) || seen[int(index)] {
+						*issues = append(*issues, "sequenceSelection.indices must contain distinct non-negative integers")
+						break
+					}
+					seen[int(index)] = true
+				}
+			}
+		}
+	}
 
 	if value, exists := character["size"]; exists {
 		size, valid := value.(string)

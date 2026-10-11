@@ -330,6 +330,9 @@ func (b *browser) close() {
 	}
 	b.cmd = nil
 	if b.tempDir != "" {
+		if err := cancelBrowserDownloads(b.tempDir); err != nil {
+			log.Printf("report screenshot: %v", err)
+		}
 		// Windows can retain handles briefly after process exit. Remove only this launch's root.
 		var err error
 		for attempt := 0; attempt < 20; attempt++ {

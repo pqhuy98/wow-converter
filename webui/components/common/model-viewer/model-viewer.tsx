@@ -34,6 +34,11 @@ declare global {
 }
 
 interface ModelViewerProps {
+  animationHeaderAction?: React.ReactNode
+  animationList?: React.ReactNode
+  canvasOverlay?: React.ReactNode
+  modelRevision?: number
+  playbackSelection?: { name: string; revision: number }
   onSequenceChange?: (index: number) => void
   modelPath?: string
   /** When unchanged across reloads (e.g. skin swap), orbit camera is preserved. */
@@ -62,13 +67,14 @@ const MAX_DISTANCE = 2000000;
 const FAR_CLIP_PLANE = 100_000_000;
 
 export default function ModelViewerUi({
-  modelPath, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence, onSequenceChange,
+  modelPath, modelRevision, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence, onSequenceChange, animationHeaderAction, animationList, canvasOverlay, playbackSelection,
 }: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [currentSeq, setCurrentSeq] = useState<number>(0);
+
   const instanceRef = useRef<MdxModelInstance | null>(null);
   const modelRef = useRef<MdxModel | null>(null);
   const sceneRef = useRef<Scene | null>(null);
@@ -273,6 +279,7 @@ export default function ModelViewerUi({
     // references for cleanup
     const canvas = canvasRef.current;
     const requestId = ++loadRequestIdRef.current;
+    setSequences([]);
     loadedFilesRef.current = new Map();
     shotPoseRef.current = null;
     if (shot) delete document.documentElement.dataset.viewerReady;
@@ -330,7 +337,7 @@ export default function ModelViewerUi({
         const url = `${base}/${rel}`;
         let pending = inflight.get(url);
         if (!pending) {
-          pending = fetch(url).then(async (res) => {
+          pending = fetch(url, rel === normalizePath(modelPath) ? { cache: 'no-store' } : undefined).then(async (res) => {
             if (!res.ok) throw new Error(`${res.status} ${url}`);
             const buf = await res.arrayBuffer();
             if (!cancelled && loadRequestIdRef.current === requestId) {
@@ -395,11 +402,11 @@ export default function ModelViewerUi({
         const prefix = model.sequences.findIndex((seq) => seq.name.toLowerCase().startsWith(want));
         nextSeq = exact >= 0 ? exact : prefix >= 0 ? prefix : 0;
       } else if (preserveAnim) {
-        if (anim.sequenceIndex < model.sequences.length) {
-          nextSeq = anim.sequenceIndex;
-        } else if (anim.sequenceName) {
+        if (anim.sequenceName) {
           const byName = model.sequences.findIndex((seq) => seq.name === anim.sequenceName);
           if (byName >= 0) nextSeq = byName;
+        } else if (anim.sequenceIndex < model.sequences.length) {
+          nextSeq = anim.sequenceIndex;
         }
       } else {
         anim.sessionKey = cameraSessionKey ?? modelPath ?? '';
@@ -706,7 +713,7 @@ export default function ModelViewerUi({
         setCurrentCamera(null);
       }
     };
-  }, [modelPath, cameraSessionKey, canvasRef.current, viewer, shot, shotSequence]);
+  }, [modelPath, modelRevision, cameraSessionKey, canvasRef.current, viewer, shot, shotSequence]);
 
   const [progress, setProgress] = useState(0);
 
@@ -1009,6 +1016,13 @@ export default function ModelViewerUi({
     }
   };
 
+  useEffect(() => {
+    if (!playbackSelection) return;
+    // Resolve against the loaded artifact, whose indices change after filtering.
+    const index = sequences.findIndex((sequence) => sequence.name === playbackSelection.name);
+    if (index >= 0) handleSelectSequence(index);
+  }, [playbackSelection, sequences]);
+
   return (
     <div className={`flex flex-col lg:flex-row w-full h-full ${alwaysFullscreen ? 'fixed inset-0 z-50' : isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
       <div ref={canvasContainerRef} className={`relative flex-1 min-h-0 ${alwaysFullscreen || isFullscreen ? 'h-full' : 'h-full'}`}>
@@ -1112,14 +1126,16 @@ export default function ModelViewerUi({
             }
           }}
         />
+        {canvasOverlay}
       </div>
-      {!shot && <div className="flex lg:flex-row flex-col lg:h-full h-[420px] min-h-[420px] lg:border-l border-t lg:border-t-0 border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))]">
-        <div className={'lg:w-60 w-full lg:h-full h-[200px] min-h-[200px] lg:border-r border-b lg:border-b-0 border-[hsl(var(--viewer-divider))] flex flex-col'}>
-          <div className="flex-1 lg:flex lg:flex-col lg:overflow-hidden overflow-y-auto viewer-scroll">
+      {!shot && <div className="flex lg:flex-row flex-col lg:h-full lg:min-h-0 h-[420px] min-h-[420px] lg:border-l border-t lg:border-t-0 border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))]">
+        <div className={`lg:w-60 w-full lg:h-full lg:min-h-0 ${animationList ? 'h-full min-h-0' : 'h-[200px] min-h-[200px]'} lg:border-r border-b lg:border-b-0 border-[hsl(var(--viewer-divider))] flex flex-col`}>
+          <div className={`flex-1 min-h-0 lg:flex lg:flex-col lg:overflow-hidden viewer-scroll ${animationList ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
+            {!animationList && <>
             <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-0 lg:z-10">
               Cameras ({cameras.length})
             </div>
-            <div className="lg:max-h-48 lg:overflow-y-auto lg:border-b border-b border-[hsl(var(--viewer-divider))]">
+            <div className={`${animationList ? 'max-h-48 overflow-y-auto shrink-0' : 'lg:max-h-48 lg:overflow-y-auto'} lg:border-b border-b border-[hsl(var(--viewer-divider))]`}>
               <ul className="divide-y divide-[hsl(var(--viewer-divider))]">
                 {cameras.length === 0 ? (
                   <div className="p-3 text-muted-foreground">No cameras</div>
@@ -1140,10 +1156,13 @@ export default function ModelViewerUi({
               </ul>
             </div>
             <div className="h-6" />
-            <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-[60px] lg:z-10">
-              Animations ({sequences.length})
+            </>}
+            <div className={`pl-3 pr-2 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky ${animationList ? 'lg:top-0' : 'lg:top-[60px]'} lg:z-10 flex items-center justify-between gap-2 shrink-0`}>
+              Animations{!animationList && ` (${sequences.length})`}
+              {animationHeaderAction}
             </div>
-            <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <div className={`lg:flex-1 lg:min-h-0 lg:overflow-y-auto flex flex-col ${animationList ? 'flex-1 min-h-0 overflow-hidden' : ''}`}>
+              {animationList ?? (
               <ul className="divide-y divide-[hsl(var(--viewer-divider))]">
                 {sequences.length === 0 ? (
                   <div className="p-3 text-muted-foreground">Loading animations...</div>
@@ -1167,8 +1186,9 @@ export default function ModelViewerUi({
                   ))
                 )}
               </ul>
+              )}
             </div>
-            <div className="h-6" />
+            {!animationList && <div className="h-6" />}
           </div>
         </div>
 

@@ -36,6 +36,9 @@ func ExportCharacterAsMdl(ctx *ExportContext, metaData CharacterData, expansion 
 
 	rpcBody := prep.RPCParams
 	rpcBody.ExcludeAnimationIDs = getExcludedAnimIDs(keepCinematic, attackTag)
+	if ctx.SequenceSelection != nil {
+		rpcBody.ExcludeAnimationIDs = nil
+	}
 
 	charModel, err := ExportCharacterDirectAsModel(ctx, rpcBody)
 	if err != nil {
@@ -378,16 +381,6 @@ func attachEquipmentsWithModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSl
 		wowhead.SlotRangedRight: {animmap.WoWAttachmentHandLeft},
 	}
 
-	isWeapon := func(slot EquipmentSlotData) bool {
-		switch slot.Data.InventoryType {
-		case InventoryWeapon, InventoryShield, InventoryRanged, InventoryRangedRight,
-			InventoryTwoHanded, InventoryWeaponMainHand, InventoryWeaponOffHand,
-			InventoryHoldable, InventoryThrown, InventoryRelic:
-			return true
-		default:
-			return false
-		}
-	}
 	backSheath := ctx.ForceSheathed
 	if backSheath {
 		for _, s := range equipmentSlots {
@@ -405,7 +398,7 @@ func attachEquipmentsWithModel(ctx *ExportContext, charMdl *mdl.MDL, equipmentSl
 		if !ok {
 			continue
 		}
-		if isWeapon(*slot) {
+		if isWeaponEquipmentSlot(*slot) {
 			inv := slot.Data.InventoryType
 			if slotID == wowhead.SlotMainHand && ctx.WeaponInventoryTypes[0] == nil {
 				ctx.WeaponInventoryTypes[0] = &inv

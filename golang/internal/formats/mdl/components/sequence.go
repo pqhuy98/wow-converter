@@ -8,12 +8,13 @@ import (
 )
 
 type SequenceData struct {
-	WC3Name      string
-	WowName      string
-	WowVariant   int
-	WowFrequency float64
-	AttackTag    string
-	Loop         *bool
+	WC3Name       string
+	WowName       string
+	WowVariant    int
+	SourceIndices []int
+	WowFrequency  float64
+	AttackTag     string
+	Loop          *bool
 }
 
 type Sequence struct {

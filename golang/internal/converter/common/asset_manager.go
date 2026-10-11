@@ -146,6 +146,7 @@ type DirectParseOptions struct {
 	GeosetMaskBuilder   func(*m2.Skin) []m2export.GeosetMaskEntry
 	DataTextures        map[int]directm2.DirectDataTexture
 	ExcludeAnimIDs      map[int]struct{}
+	SequenceSelection   *directm2.SequenceSelection
 	ExportPathOverride  string
 }
 
@@ -180,9 +181,13 @@ func (a *AssetManager) ParseDirectOptions(ctx context.Context, opts DirectParseO
 			GeosetMaskBuilder:   opts.GeosetMaskBuilder,
 			DataTextures:        opts.DataTextures,
 			ExcludeAnimIDs:      opts.ExcludeAnimIDs,
+			SequenceSelection:   opts.SequenceSelection,
 			ExportPathOverride:  opts.ExportPathOverride,
 		})
 	} else {
+		if opts.SequenceSelection != nil {
+			return nil, fmt.Errorf("sequence selection is available for M2 models")
+		}
 		result, err = directwmo.ConvertWmoToMdl(ctx, a.config, src, directwmo.ConvertOptions{
 			FileDataID:         opts.FileDataID,
 			FileName:           fileName,

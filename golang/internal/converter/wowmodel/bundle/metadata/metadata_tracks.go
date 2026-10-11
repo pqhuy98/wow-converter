@@ -77,6 +77,12 @@ func (f *File) m2TrackToAnimation(track m2TrackRaw, animType components.Animatio
 		if !ok {
 			continue
 		}
+		if f.Animation != nil {
+			if _, excluded := f.Animation.ExcludedIndices[animID]; excluded {
+				accum += duration + 1
+				continue
+			}
+		}
 		if timestamps == nil {
 			accum += duration + 1
 			continue

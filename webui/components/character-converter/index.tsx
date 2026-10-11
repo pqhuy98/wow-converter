@@ -3,13 +3,16 @@
 import { downloadAssetsZip } from '@api/download';
 import _ from 'lodash';
 import { Download } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback, useEffect, useRef, useState,
+} from 'react';
 
 import { ReportForm } from '@/components/bug-reports/report-form';
 import { AttachItems } from '@/components/character-converter/attach-items';
 import { CharacterConfig } from '@/components/character-converter/character-config';
 import { ExportSection } from '@/components/character-converter/export-section';
 import { isLocalRef, validateRef } from '@/components/character-converter/ref-input';
+import { SequenceEditButton, SequencePanel } from '@/components/character-converter/sequence-panel';
 import ModelViewerUi from '@/components/common/model-viewer/model-viewer';
 import { Terminal } from '@/components/common/terminal';
 import { Button } from '@/components/ui/button';
@@ -87,6 +90,19 @@ export function CharacterConverter() {
 
   // Job/queue tracking
   const [jobStatus, setJobStatus] = useState<JobStatus | undefined>(undefined);
+  const [progressInViewer, setProgressInViewer] = useState(false);
+  const [completedJob, setCompletedJob] = useState<JobStatus>();
+  const [sequenceRequest, setSequenceRequest] = useState<ExportRequest>();
+  const [playbackSelection, setPlaybackSelection] = useState<{ name: string; revision: number }>();
+  const sourceKey = JSON.stringify([serverConfig.buildKey, character.base]);
+  const previousSource = useRef(sourceKey);
+  useEffect(() => {
+    if (previousSource.current !== sourceKey) {
+      previousSource.current = sourceKey;
+      setCharacter((previous) => ({ ...previous, sequenceSelection: undefined }));
+      setSequenceRequest(undefined);
+    }
+  }, [sourceKey]);
   const [viewerModelPath, setViewerModelPath] = useState<string | undefined>(undefined);
   const [reportSequence, setReportSequence] = useState(0);
 
@@ -160,12 +176,23 @@ export function CharacterConverter() {
     return null;
   }, [character, outputFileName]);
 
-  const handleExport = async () => {
-    const error = checkExportValid();
+  const makeExportRequest = (): ExportRequest => ({
+    character: { ...character, attackTag: character.attackTag ?? '', sequenceSelection: undefined },
+    outputFileName,
+    optimization,
+    textureBaking: toTextureBakingRequest(textureBaking),
+    format,
+    formatVersion,
+  });
+
+  const handleExport = async (override?: ExportRequest): Promise<boolean> => {
+    const error = override ? null : checkExportValid();
     if (error) {
       alert(error);
-      return;
+      return false;
     }
+    setProgressInViewer(!!override);
+    if (!override) setSequenceRequest(undefined);
     setJobStatus({
       id: '',
       status: 'pending',
@@ -175,19 +202,7 @@ export function CharacterConverter() {
 
     try {
       // Prepare request
-      const exportCharacter = {
-        ...character,
-        attackTag: character.attackTag === undefined ? '' : character.attackTag,
-      };
-
-      const request: ExportRequest = {
-        character: exportCharacter,
-        outputFileName,
-        optimization,
-        textureBaking: toTextureBakingRequest(textureBaking),
-        format,
-        formatVersion,
-      };
+      const request = override ?? makeExportRequest();
 
       const response = await fetch('/api/export/character', {
         method: 'POST',
@@ -201,8 +216,16 @@ export function CharacterConverter() {
         throw new Error(await response.text());
       }
 
-      const result = await response.json();
+      const result: JobStatus = await response.json();
+      if (result.status === 'failed') throw new Error(result.error ?? 'Export failed');
       setJobStatus(result);
+      if (result.status === 'done' && result.result) {
+        setCompletedJob(result);
+        setPlaybackSelection(undefined);
+        setViewerModelPath(result.result.exportedModels?.[0]?.path);
+        setDoneCount((previous) => previous + 1);
+      }
+      return true;
     } catch (error: unknown) {
       console.error('Export error:', error);
       setJobStatus({
@@ -212,6 +235,7 @@ export function CharacterConverter() {
         submittedAt: Date.now(),
         logs: [],
       });
+      return false;
     }
   };
 
@@ -222,6 +246,10 @@ export function CharacterConverter() {
     const handleBlur = () => setIsWindowFocused(false);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
   }, []);
 
   const [doneCount, setDoneCount] = useState(0);
@@ -230,16 +258,18 @@ export function CharacterConverter() {
   useEffect(() => {
     if (!jobStatus || jobStatus.status === 'done' || jobStatus.status === 'failed' || !jobStatus.id) return undefined;
 
-    let pendingFetches = 0;
+    let cancelled = false;
+    let fetching = false;
     const fetchJobStatus = async () => {
+      if (fetching) return;
+      fetching = true;
       try {
-        pendingFetches++;
-        if (pendingFetches > 1) return;
         const res = await fetch(`/api/export/character/status/${jobStatus.id}`);
         if (!res.ok) {
           throw new Error(await res.text());
         }
         const data = (await res.json()) as JobStatus;
+        if (cancelled) return;
         setJobStatus(data);
 
         if (data.status === 'pending') {
@@ -247,13 +277,16 @@ export function CharacterConverter() {
         } else if (data.status === 'processing') {
           // do nothing
         } else if (data.status === 'done' && data.result) {
-          setDoneCount(doneCount + 1);
+          setCompletedJob(data);
+          setPlaybackSelection(undefined);
+          setDoneCount((previous) => previous + 1);
           setViewerModelPath(data.result.exportedModels?.[0]?.path);
           clearInterval(interval);
         } else if (data.status === 'failed') {
           clearInterval(interval);
         }
       } catch (e: unknown) {
+        if (cancelled) return;
         console.error('Polling error:', e);
         setJobStatus({
           id: '',
@@ -264,7 +297,7 @@ export function CharacterConverter() {
         });
         clearInterval(interval);
       } finally {
-        pendingFetches--;
+        fetching = false;
       }
     };
 
@@ -272,6 +305,7 @@ export function CharacterConverter() {
     void fetchJobStatus();
 
     return () => {
+      cancelled = true;
       clearInterval(interval);
     };
   }, [jobStatus?.id, isWindowFocused]);
@@ -280,11 +314,11 @@ export function CharacterConverter() {
    * Download the exported assets as a ZIP by calling the new POST /download API.
    */
   const handleDownloadZip = async () => {
-    if (!jobStatus?.result) return;
+    if (!completedJob?.result) return;
 
     const files = [
-      ...(jobStatus.result.exportedModels || []),
-      ...(jobStatus.result.exportedTextures || []),
+      ...(completedJob.result.exportedModels || []),
+      ...(completedJob.result.exportedTextures || []),
     ];
 
     await downloadAssetsZip({ files: files.map(({ path }) => path), source: 'export' });
@@ -316,7 +350,7 @@ export function CharacterConverter() {
           setFormat={setFormat}
           formatVersion={formatVersion}
           setFormatVersion={setFormatVersion}
-          handleExport={handleExport}
+          handleExport={async () => { await handleExport(); }}
           jobStatus={jobStatus}
           optimization={optimization}
           setOptimization={setOptimization}
@@ -325,7 +359,7 @@ export function CharacterConverter() {
         />
 
         <Card className="pt-6">
-          {jobStatus && jobStatus.status !== 'done' && (
+          {(!progressInViewer || !viewerModelPath) && jobStatus && jobStatus.status !== 'done' && (
             <CardContent className="mb-2">
               {(jobStatus.status === 'processing' || jobStatus.status === 'pending') && (
                 <>
@@ -341,10 +375,10 @@ export function CharacterConverter() {
               )}
             </CardContent>
           )}
-          {jobStatus?.result && (
+          {completedJob?.result && (
             <CardHeader className="pb-4 pt-0">
               <CardTitle className="flex items-center gap-2 text-lg">
-                {jobStatus.error ? (
+                {completedJob.error ? (
                   <>
                     <div className="h-5 w-5 rounded-full bg-red-500" />
                     Export Failed
@@ -353,9 +387,9 @@ export function CharacterConverter() {
                   <>
                     <div className="h-5 w-5 rounded-full bg-green-500" />
                     Export Successful
-                    {jobStatus.finishedAt && jobStatus.startedAt && (
+                    {completedJob.finishedAt && completedJob.startedAt && (
                       <span className="text-muted-foreground ml-1">
-                        ({((jobStatus.finishedAt - jobStatus.startedAt) / 1000).toFixed(2)}s)
+                        ({((completedJob.finishedAt - completedJob.startedAt) / 1000).toFixed(2)}s)
                       </span>
                     )}
                   </>
@@ -365,13 +399,13 @@ export function CharacterConverter() {
           )}
           <CardContent>
             <div className="space-y-4">
-              {jobStatus?.result && <div className="flex-col items-center gap-10">
-                {jobStatus.result.outputDirectory && <div className="flex items-center gap-2 w-full">
+              {completedJob?.result && <div className="flex-col items-center gap-10">
+                {completedJob.result.outputDirectory && <div className="flex items-center gap-2 w-full">
                   <Button
                     variant="outline"
                     size="icon"
                     onClick={() => {
-                      void navigator.clipboard.writeText(jobStatus.result!.outputDirectory!);
+                      void navigator.clipboard.writeText(completedJob.result!.outputDirectory!);
                     }}
                     title="Copy output directory"
                   >
@@ -380,46 +414,85 @@ export function CharacterConverter() {
                       <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" />
                     </svg>
                   </Button>
-                  <span className="text-lg font-mono select-all">{jobStatus.result!.outputDirectory}</span>
+                  <span className="text-lg font-mono select-all">{completedJob.result!.outputDirectory}</span>
                 </div>}
                 <div className="flex items-center gap-2 w-full pt-2">
                   <Button variant="default" size="icon" onClick={() => void handleDownloadZip()}>
                     <Download className="h-4 w-4" />
                   </Button>
-                  <span className="text-lg">Download: {outputFileName}.zip</span>
+                  <span className="text-lg">Download: {completedJob.result.reportMetadata?.request.outputFileName ?? outputFileName}.zip</span>
                 </div>
               </div>}
+              <div className="flex flex-col lg:flex-row gap-3">
               {viewerModelPath && (
-                <div className="h-[600px] border-border">
-                  <ModelViewerUi key={`${viewerModelPath}:${doneCount}`} modelPath={viewerModelPath} onSequenceChange={setReportSequence} />
+                <div className="h-[600px] border-border flex-1 min-w-0 relative">
+                  <ModelViewerUi modelPath={viewerModelPath} modelRevision={doneCount} onSequenceChange={setReportSequence} playbackSelection={playbackSelection}
+                    animationHeaderAction={completedJob?.result?.reportMetadata && completedJob.result.reportMetadata.buildKey === serverConfig.buildKey && !completedJob.result.reportMetadata.request.character.mount?.path.value && completedJob.result.reportMetadata.models.find((model) => model.path === viewerModelPath)?.sequences.some((sequence) => sequence.sourceIndices?.length) && <SequenceEditButton editing={!!sequenceRequest} busy={jobStatus?.status === 'pending' || jobStatus?.status === 'processing'} onClick={() => setSequenceRequest(sequenceRequest ? undefined : completedJob.result!.reportMetadata!.request)} />}
+                    animationList={sequenceRequest && <SequencePanel
+                character={sequenceRequest.character}
+                buildKey={serverConfig.buildKey}
+                skinId={sequenceRequest.skinId}
+                busy={jobStatus?.status === 'pending' || jobStatus?.status === 'processing'}
+                playbackSequences={samePreviewContext(sequenceRequest, completedJob?.result?.reportMetadata?.request) ? completedJob?.result?.reportMetadata?.models.find((model) => model.path === viewerModelPath)?.sequences ?? [] : []}
+                onPreview={(name) => setPlaybackSelection((previous) => ({ name, revision: (previous?.revision ?? 0) + 1 }))}
+                onApply={async (selection) => {
+                  const request = { ...sequenceRequest, modelScale: completedJob?.result?.reportMetadata?.models.find((model) => model.path === viewerModelPath)?.modelScale, character: { ...sequenceRequest.character, sequenceSelection: selection } };
+                  if (!await handleExport(request)) return false;
+                  previousSource.current = JSON.stringify([serverConfig.buildKey, request.character.base]);
+                  setCharacter({ ...request.character, sequenceSelection: undefined });
+                  setOutputFileName(request.outputFileName);
+                  setOptimization(request.optimization);
+                  setFormat(request.format ?? 'mdx');
+                  setFormatVersion(request.formatVersion ?? '1000');
+                  setTextureBaking({ ...defaultTextureBakingForm, ...request.textureBaking, enabled: request.textureBaking?.enabled ?? false });
+                  return true;
+                }}
+              />}
+                    canvasOverlay={progressInViewer && jobStatus && jobStatus.status !== 'done' && <div className="absolute inset-0 z-20 flex items-center justify-center px-3 pointer-events-none">
+                    <div className={`pointer-events-auto mx-auto w-full max-w-xl rounded-lg border bg-background/95 p-4 shadow-lg backdrop-blur-sm ${jobStatus.status === 'failed' ? 'border-destructive/50' : 'border-border'}`}>
+                      {jobStatus.status === 'failed' ? <>
+                        <p className="text-sm font-medium text-destructive">Export failed</p>
+                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-border bg-card p-2 text-xs text-destructive">{jobStatus.error || 'Job failed'}</pre>
+                      </> : <>
+                        <div className="flex items-center gap-2">
+                          <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+                          <p className="text-sm font-medium">{!jobStatus.id ? 'Starting export…' : jobStatus.status === 'processing' ? 'Exporting…' : `Queue position: ${jobStatus.position ?? '…'}`}</p>
+                        </div>
+                        {(jobStatus.logs?.length ?? 0) > 0 && <Terminal logs={jobStatus.logs ?? []} className="mt-3 max-h-48 w-full" />}
+                      </>}
+                    </div>
+                  </div>}
+                  />
+
                 </div>
               )}
-              {jobStatus?.result && <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {!serverConfig.isSharedHosting && jobStatus.status === 'done' && viewerModelPath && jobStatus.result.reportMetadata?.request.character.base.type === 'wowhead' && <div className="md:col-span-2">
-                  <ReportForm key={jobStatus.id} exportId={jobStatus.id} metadata={jobStatus.result.reportMetadata} modelPath={viewerModelPath} currentSequence={reportSequence} />
+              </div>
+              {completedJob?.result && <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {!serverConfig.isSharedHosting && completedJob.status === 'done' && viewerModelPath && completedJob.result.reportMetadata?.request.character.base.type === 'wowhead' && <div className="md:col-span-2">
+                  <ReportForm key={completedJob.id} exportId={completedJob.id} metadata={completedJob.result.reportMetadata} modelPath={viewerModelPath} currentSequence={reportSequence} />
                 </div>}
                 <div>
                   <h4 className="font-semibold mb-2">Model Stats:</h4>
                   {[
-                    { label: 'Format Version', value: jobStatus.result!.modelStats.formatVersion },
-                    { label: 'Global Sequences', value: jobStatus.result!.modelStats.globalSequences },
-                    { label: 'Sequences', value: jobStatus.result!.modelStats.sequences },
-                    { label: 'Bones', value: jobStatus.result!.modelStats.bones },
-                    { label: 'Geosets', value: jobStatus.result!.modelStats.geosets },
-                    { label: 'Geoset Anims', value: jobStatus.result!.modelStats.geosetAnims },
-                    { label: 'Vertices', value: jobStatus.result!.modelStats.vertices },
-                    { label: 'Faces', value: jobStatus.result!.modelStats.faces },
-                    { label: 'Textures', value: jobStatus.result!.modelStats.textures },
-                    { label: 'Texture Anims', value: jobStatus.result!.modelStats.textureAnims },
-                    { label: 'Materials', value: jobStatus.result!.modelStats.materials },
-                    { label: 'Lights', value: jobStatus.result!.modelStats.lights },
-                    { label: 'Ribbon Emitters', value: jobStatus.result!.modelStats.ribbonEmitters },
-                    { label: 'Particle Emitters', value: jobStatus.result!.modelStats.particles },
-                    { label: 'Attachments', value: jobStatus.result!.modelStats.attachments },
-                    { label: 'Event Objects', value: jobStatus.result!.modelStats.eventObjects },
-                    { label: 'Helpers', value: jobStatus.result!.modelStats.helpers },
-                    { label: 'Collision Shapes', value: jobStatus.result!.modelStats.collisionShapes },
-                    { label: 'Cameras', value: jobStatus.result!.modelStats.cameras },
+                    { label: 'Format Version', value: completedJob.result!.modelStats.formatVersion },
+                    { label: 'Global Sequences', value: completedJob.result!.modelStats.globalSequences },
+                    { label: 'Sequences', value: completedJob.result!.modelStats.sequences },
+                    { label: 'Bones', value: completedJob.result!.modelStats.bones },
+                    { label: 'Geosets', value: completedJob.result!.modelStats.geosets },
+                    { label: 'Geoset Anims', value: completedJob.result!.modelStats.geosetAnims },
+                    { label: 'Vertices', value: completedJob.result!.modelStats.vertices },
+                    { label: 'Faces', value: completedJob.result!.modelStats.faces },
+                    { label: 'Textures', value: completedJob.result!.modelStats.textures },
+                    { label: 'Texture Anims', value: completedJob.result!.modelStats.textureAnims },
+                    { label: 'Materials', value: completedJob.result!.modelStats.materials },
+                    { label: 'Lights', value: completedJob.result!.modelStats.lights },
+                    { label: 'Ribbon Emitters', value: completedJob.result!.modelStats.ribbonEmitters },
+                    { label: 'Particle Emitters', value: completedJob.result!.modelStats.particles },
+                    { label: 'Attachments', value: completedJob.result!.modelStats.attachments },
+                    { label: 'Event Objects', value: completedJob.result!.modelStats.eventObjects },
+                    { label: 'Helpers', value: completedJob.result!.modelStats.helpers },
+                    { label: 'Collision Shapes', value: completedJob.result!.modelStats.collisionShapes },
+                    { label: 'Cameras', value: completedJob.result!.modelStats.cameras },
                   ].map(({ label, value }) => (
                     <div key={label} className="text-sm break-all">
                       {label}: {value}
@@ -431,8 +504,8 @@ export function CharacterConverter() {
                   Exported files:
                   <span className="text-muted-foreground font-normal ml-4">{
                     (() => {
-                      const modelsSize = jobStatus.result.exportedModels?.reduce((acc, { size }) => acc + size, 0) || 0;
-                      const texturesSize = jobStatus.result.exportedTextures?.reduce((acc, { size }) => acc + size, 0) || 0;
+                      const modelsSize = completedJob.result.exportedModels?.reduce((acc, { size }) => acc + size, 0) || 0;
+                      const texturesSize = completedJob.result.exportedTextures?.reduce((acc, { size }) => acc + size, 0) || 0;
                       const totalSize = modelsSize + texturesSize;
                       return formatFileSize(totalSize);
                     })()
@@ -440,15 +513,15 @@ export function CharacterConverter() {
                   </span>
                   </h4>
                   <ul className="list-disc list-outside pl-6 space-y-1">
-                    {jobStatus.result.exportedModels?.map(({ path, size }, index: number) => (
+                    {completedJob.result.exportedModels?.map(({ path, size }, index: number) => (
                       <li key={index} className="text-sm break-all">
                         <b><span>
-                          {jobStatus.result!.versionId ? path.replace(`__${jobStatus.result!.versionId}`, '') : path}
+                          {completedJob.result!.versionId ? path.replace(`__${completedJob.result!.versionId}`, '') : path}
                         </span></b>
                         <span className="select-none ml-4"></span>
                         <span className="text-muted-foreground">{formatFileSize(size)}</span>                      </li>
                     ))}
-                    {jobStatus.result.exportedTextures?.map(({ path, size }, index: number) => (
+                    {completedJob.result.exportedTextures?.map(({ path, size }, index: number) => (
                       <li key={index} className="text-sm break-all">
                         <span> {path}</span>
                         <span className="select-none ml-4"></span>
@@ -484,6 +557,13 @@ function guessOutputFile(ref: RefSchema) {
     return guessOutputFileDisplayId(Number(ref.value));
   }
   return undefined;
+}
+
+function samePreviewContext(request: ExportRequest, completed?: ExportRequest): boolean {
+  if (!completed) return false;
+  const { sequenceSelection: _selection, ...character } = request.character;
+  const { sequenceSelection: _completedSelection, ...completedCharacter } = completed.character;
+  return _.isEqual(character, completedCharacter) && (request.skinId ?? '') === (completed.skinId ?? '');
 }
 
 function guessOutputFileWowhead(url: string) {

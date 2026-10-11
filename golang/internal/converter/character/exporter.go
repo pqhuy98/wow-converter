@@ -14,6 +14,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	animmap "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/animation"
+	directm2 "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/direct/m2"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	imath "github.com/pqhuy98/wow-converter/internal/math"
@@ -51,6 +52,8 @@ func NewCharacterExporter(cfg config.Config, wowClient client.Client) *Character
 // ExportOptions configures optional export behavior.
 type ExportOptions struct {
 	LocalModelSkinID string
+	// ModelScale preserves the final WoW-to-WC3 scale during animation-only exports.
+	ModelScale *float64
 }
 
 // ExportCharacter exports a character or creature to MDL.
@@ -84,6 +87,9 @@ func (e *CharacterExporter) ExportCharacter(ctx context.Context, char Character,
 	}
 
 	exportCtx := e.newExportContext(outputFile, char, skinID)
+	if len(opts) > 0 {
+		exportCtx.ModelScale = opts[0].ModelScale
+	}
 	exportCtx.ctx = ctx
 	model, err := e.exportBaseMdl(ctx, &exportCtx, char)
 	if err != nil {
@@ -104,20 +110,21 @@ func (e *CharacterExporter) ExportCharacter(ctx context.Context, char Character,
 
 func (e *CharacterExporter) newExportContext(outputFile string, char Character, localModelSkinID string) ExportContext {
 	return ExportContext{
-		AssetManager:     e.AssetManager,
-		Config:           e.Config,
-		OutputFile:       outputFile,
-		WowClient:        e.WowClient,
-		Wowhead:          e.Wowhead,
-		HTTP:             e.HTTP,
-		ForceSheathed:    char.ForceSheathed,
-		WithCollision:    char.WithCollision,
-		LocalModelSkinID: localModelSkinID,
+		AssetManager:      e.AssetManager,
+		Config:            e.Config,
+		OutputFile:        outputFile,
+		WowClient:         e.WowClient,
+		Wowhead:           e.Wowhead,
+		HTTP:              e.HTTP,
+		ForceSheathed:     char.ForceSheathed,
+		WithCollision:     char.WithCollision,
+		LocalModelSkinID:  localModelSkinID,
+		SequenceSelection: char.SequenceSelection,
 	}
 }
 
 func (e *CharacterExporter) postProcessModel(model *mdl.MDL, char Character, exportCtx *ExportContext) *mdl.MDL {
-	if !char.KeepCinematic {
+	if !char.KeepCinematic && char.SequenceSelection == nil {
 		filtered := model.Sequences[:0]
 		for _, seq := range model.Sequences {
 			if !strings.Contains(seq.Name, "Cinematic") || seq.Keep {
@@ -177,7 +184,7 @@ func (e *CharacterExporter) postProcessModel(model *mdl.MDL, char Character, exp
 		}
 	}
 
-	if char.AttackTag != "" {
+	if char.AttackTag != "" && char.SequenceSelection == nil {
 		tag := char.AttackTag
 		if tag == animmap.AttackTagAuto {
 			r, l := 0, 0
@@ -199,7 +206,9 @@ func (e *CharacterExporter) postProcessModel(model *mdl.MDL, char Character, exp
 		model.Sequences = filtered
 	}
 
-	if char.Size != "" {
+	if exportCtx.ModelScale != nil {
+		model.Modify.Scale(*exportCtx.ModelScale / e.Config.RawModelScaleUp)
+	} else if char.Size != "" {
 		if wantedZ, ok := wantedZPerSize[char.Size]; ok {
 			standIdx := -1
 			for i, seq := range model.Sequences {
@@ -479,6 +488,7 @@ func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *Export
 		model, collision, err := ExportLocalModelAsMdl(ctx, e.AssetManager, e.Config, e.WowClient, char.Base.Value, LocalModelOptions{
 			WithCollision: exportCtx.WithCollision, SkinIDOverride: exportCtx.LocalModelSkinID,
 			KeepCinematic: char.KeepCinematic, AttackTag: char.AttackTag,
+			SequenceSelection: char.SequenceSelection,
 		})
 		if err != nil {
 			return nil, err
@@ -508,41 +518,17 @@ func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *Export
 			log.Printf("baseZam: type=%s display=%d", zam.Type, zam.DisplayID)
 		}
 
-		var npcMeta wowhead.CharacterData
 		metaExpansion := exportCtx.ResolveMetaExpansion(zam.Expansion)
-		if !e.Config.IsBulkExport && metaExpansion != zam.Expansion {
-			log.Printf("Using wowhead meta expansion %s (URL had %s)", metaExpansion, zam.Expansion)
-		}
-		switch zam.Type {
-		case wowhead.ZamTypeItem:
-			if zam.SlotID != nil && *zam.SlotID > 0 {
-				log.Printf("Exporting base model as equipment item: %s", GetEquipmentSlotName(*zam.SlotID))
-				item, _, err := e.exportItem(exportCtx, char.Base)
-				if err != nil {
-					return nil, err
-				}
-				return item.MDL, nil
+		if zam.Type == wowhead.ZamTypeItem && zam.SlotID != nil && *zam.SlotID > 0 {
+			item, _, err := e.exportItem(exportCtx, char.Base, char.SequenceSelection)
+			if err != nil {
+				return nil, err
 			}
-			log.Printf("Exporting base model as creature NPC because slotId=0")
-			npcMeta, err = wowhead.FetchNpcMeta(e.HTTP, wowhead.ExpansionLatestAvailable, zam.DisplayID)
-		case wowhead.ZamTypeNPC:
-			npcMeta, err = wowhead.FetchNpcMeta(e.HTTP, metaExpansion, zam.DisplayID)
-		case wowhead.ZamTypeObject:
-			npcMeta, err = wowhead.FetchObjectMeta(e.HTTP, metaExpansion, zam.DisplayID)
-		case wowhead.ZamTypeDressingRoom:
-			npcMeta, err = wowhead.DecodeDressingRoom(e.HTTP, metaExpansion, zam.Hash)
-		default:
-			return nil, fmt.Errorf("unallowed base zam type: %s", zam.Type)
+			return item.MDL, nil
 		}
+		charMeta, err := e.resolveBaseMetadata(exportCtx, zam)
 		if err != nil {
 			return nil, err
-		}
-		charMeta := convertWowheadCharacterData(npcMeta)
-		preferClassicDB := exportCtx.IsClassicCASC(ctx)
-		if zam.Type == wowhead.ZamTypeNPC {
-			if dbMeta, ok := resolveNpcMetaFromDB(ctx, exportCtx, zam.DisplayID); ok {
-				charMeta = mergeNpcMeta(charMeta, dbMeta, preferClassicDB)
-			}
 		}
 		if hasResolvedModel(charMeta.Model) && charMeta.Character == nil {
 			return ExportCreatureNpcAsMdl(exportCtx, charMeta)
@@ -556,10 +542,14 @@ func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *Export
 	}
 }
 
-func (e *CharacterExporter) exportItem(ctx *ExportContext, ref Ref) (*commonModel, *int, error) {
+func (e *CharacterExporter) exportItem(ctx *ExportContext, ref Ref, selections ...*directm2.SequenceSelection) (*commonModel, *int, error) {
+	var selection *directm2.SequenceSelection
+	if len(selections) > 0 {
+		selection = selections[0]
+	}
 	switch ref.Type {
 	case "local":
-		model, _, err := ExportLocalModelAsMdl(ctx.Context(), e.AssetManager, e.Config, e.WowClient, ref.Value, LocalModelOptions{})
+		model, _, err := ExportLocalModelAsMdl(ctx.Context(), e.AssetManager, e.Config, e.WowClient, ref.Value, LocalModelOptions{SequenceSelection: selection})
 		return model, nil, err
 	case "wowhead", "displayID":
 		var zam wowhead.ZamURL
@@ -577,7 +567,7 @@ func (e *CharacterExporter) exportItem(ctx *ExportContext, ref Ref) (*commonMode
 		if zam.Type != wowhead.ZamTypeItem {
 			return nil, nil, fmt.Errorf("expected item zam url")
 		}
-		model, itemData, err := ExportZamItemAsMdl(ctx, zam, 0, 2, 0)
+		model, itemData, err := ExportZamItemAsMdl(ctx, zam, 0, 2, 0, selection)
 		if err != nil {
 			return nil, nil, err
 		}

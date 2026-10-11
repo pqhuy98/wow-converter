@@ -35,19 +35,20 @@ type Mount struct {
 
 // Character holds export configuration for a WoW character or creature.
 type Character struct {
-	Base                       Ref                   `json:"base"`
-	AttackTag                  animmap.AttackTag     `json:"attackTag,omitempty"`
-	KeepCinematic              bool                  `json:"keepCinematic,omitempty"`
-	InGameMovespeed            float64               `json:"inGameMovespeed"`
-	Size                       string                `json:"size,omitempty"`
-	Scale                      float64               `json:"scale,omitempty"`
-	AttachItems                map[string]AttachItem `json:"attachItems,omitempty"`
-	NoDecay                    bool                  `json:"noDecay,omitempty"`
-	ParticlesDensity           *float64              `json:"particlesDensity,omitempty"`
-	PortraitCameraSequenceName string                `json:"portraitCameraSequenceName,omitempty"`
-	Mount                      *Mount                `json:"mount,omitempty"`
-	ForceSheathed              bool                  `json:"forceSheathed,omitempty"`
-	WithCollision              bool                  `json:"withCollision,omitempty"`
+	Base                       Ref                         `json:"base"`
+	AttackTag                  animmap.AttackTag           `json:"attackTag,omitempty"`
+	KeepCinematic              bool                        `json:"keepCinematic,omitempty"`
+	SequenceSelection          *directm2.SequenceSelection `json:"sequenceSelection,omitempty"`
+	InGameMovespeed            float64                     `json:"inGameMovespeed"`
+	Size                       string                      `json:"size,omitempty"`
+	Scale                      float64                     `json:"scale,omitempty"`
+	AttachItems                map[string]AttachItem       `json:"attachItems,omitempty"`
+	NoDecay                    bool                        `json:"noDecay,omitempty"`
+	ParticlesDensity           *float64                    `json:"particlesDensity,omitempty"`
+	PortraitCameraSequenceName string                      `json:"portraitCameraSequenceName,omitempty"`
+	Mount                      *Mount                      `json:"mount,omitempty"`
+	ForceSheathed              bool                        `json:"forceSheathed,omitempty"`
+	WithCollision              bool                        `json:"withCollision,omitempty"`
 }
 
 // LocalRef creates a local file ref.
@@ -91,6 +92,8 @@ type ExportContext struct {
 	ForceSheathed        bool
 	WithCollision        bool
 	LocalModelSkinID     string
+	SequenceSelection    *directm2.SequenceSelection
+	ModelScale           *float64
 }
 
 // Context is the cancellation scope of this export.

@@ -9,10 +9,11 @@ import (
 
 // SequenceSource preserves the source identity after filtering and sequence sorting.
 type SequenceSource struct {
-	Index      int    `json:"index"`
-	Name       string `json:"name"`
-	WowName    string `json:"wowName"`
-	WowVariant int    `json:"wowVariant"`
+	Index         int    `json:"index"`
+	Name          string `json:"name"`
+	WowName       string `json:"wowName"`
+	WowVariant    int    `json:"wowVariant"`
+	SourceIndices []int  `json:"sourceIndices,omitempty"`
 }
 
 type ModelSequenceSources struct {
@@ -29,7 +30,7 @@ func (e *CharacterExporter) SequenceSources(format string) []ModelSequenceSource
 		counts := map[string]int{}
 		for i, seq := range model.Sequences {
 			counts[seq.Name]++
-			source.Sequences = append(source.Sequences, SequenceSource{Index: i, Name: fmt.Sprintf("%s %d", seq.Name, counts[seq.Name]), WowName: seq.Data.WowName, WowVariant: seq.Data.WowVariant})
+			source.Sequences = append(source.Sequences, SequenceSource{Index: i, Name: fmt.Sprintf("%s %d", seq.Name, counts[seq.Name]), WowName: seq.Data.WowName, WowVariant: seq.Data.WowVariant, SourceIndices: append([]int(nil), seq.Data.SourceIndices...)})
 		}
 		models = append(models, source)
 	}

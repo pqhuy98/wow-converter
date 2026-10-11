@@ -20,7 +20,8 @@ func getPrefixIndex(str string) int {
 	return len(animPrefixOrder)
 }
 
-func animNameAsc(a, b components.Sequence) int {
+// CompareSequences is the canonical export ordering, including rarity within a name.
+func CompareSequences(a, b components.Sequence) int {
 	if a.Name == b.Name {
 		ar, br := 0, 0
 		if a.Rarity != nil {
@@ -41,7 +42,7 @@ func animNameAsc(a, b components.Sequence) int {
 
 func (mod *Modify) SortSequences() *Modify {
 	sort.SliceStable(mod.MDL.Sequences, func(i, j int) bool {
-		return animNameAsc(mod.MDL.Sequences[i], mod.MDL.Sequences[j]) < 0
+		return CompareSequences(mod.MDL.Sequences[i], mod.MDL.Sequences[j]) < 0
 	})
 	return mod
 }
@@ -408,6 +409,10 @@ func (mod *Modify) ConcatenateSequences(sequences []*components.Sequence, newWc3
 		}
 	}
 	newSequence := *sequences[0]
+	newSequence.Data.SourceIndices = nil
+	for _, sequence := range sequences {
+		newSequence.Data.SourceIndices = append(newSequence.Data.SourceIndices, sequence.Data.SourceIndices...)
+	}
 	newSequence.Name = newWc3Name
 	newSequence.Data.WC3Name = newWc3Name
 	newSequence.Interval = [2]int{maxInterval + 1, maxInterval + 1 + totalDuration}

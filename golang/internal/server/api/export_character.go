@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,12 +39,13 @@ type exportCharacterRequest struct {
 		RemoveUnusedVertices          *bool  `json:"removeUnusedVertices"`
 		RemoveUnusedNodes             *bool  `json:"removeUnusedNodes"`
 		RemoveUnusedMaterialsTextures *bool  `json:"removeUnusedMaterialsTextures"`
-		MaxTextureSize                string `json:"maxTextureSize"`
+		MaxTextureSize                string `json:"maxTextureSize,omitempty"`
 	} `json:"optimization"`
-	Format        string `json:"format"`
-	FormatVersion string `json:"formatVersion"`
-	IsBrowse      bool   `json:"isBrowse"`
-	SkinID        string `json:"skinId"`
+	Format        string   `json:"format"`
+	FormatVersion string   `json:"formatVersion,omitempty"`
+	IsBrowse      bool     `json:"isBrowse"`
+	SkinID        string   `json:"skinId"`
+	ModelScale    *float64 `json:"modelScale,omitempty"`
 }
 
 type exportCharacterResponse struct {
@@ -337,6 +339,7 @@ func runCharacterExport(ctx context.Context, req exportCharacterRequest, jobID s
 
 	_, err := exporter.ExportCharacter(ctx, req.Character, req.OutputFileName, character.ExportOptions{
 		LocalModelSkinID: req.SkinID,
+		ModelScale:       req.ModelScale,
 	})
 	if err != nil {
 		return exportCharacterResponse{}, err
@@ -399,8 +402,14 @@ func runCharacterExport(ctx context.Context, req exportCharacterRequest, jobID s
 		resp.ExportedTextures = append(resp.ExportedTextures, exportAssetInfo{Path: filepath.ToSlash(rel), Size: info.Size()})
 	}
 	stringsort.SortBy(resp.ExportedTextures, func(info exportAssetInfo) string { return info.Path })
+	metadata := &exportReportMetadata{Request: req, BuildKey: d.BuildKey(ctx), ExportedAt: time.Now().UnixMilli(), Models: exporter.SequenceSources(req.Format)}
+	if d.Config.IsSharedHosting || req.IsBrowse {
+		metadata.Request.OutputFileName = strings.TrimSuffix(req.OutputFileName, "__"+jobID)
+	}
+	resp.ReportMetadata = metadata
 	if !d.Config.IsSharedHosting && req.Character.Base.Type == "wowhead" {
-		metadata := &exportReportMetadata{Request: req, GitSHA: currentGitSHA(), BuildKey: d.BuildKey(ctx), ExportedAt: time.Now().UnixMilli(), Models: exporter.SequenceSources(req.Format), AssetHashes: map[string]string{}}
+		metadata.GitSHA = currentGitSHA()
+		metadata.AssetHashes = map[string]string{}
 		if info, err := d.Client.GetCASCInfo(ctx); err == nil {
 			metadata.Product = info.Build.Product
 		}
@@ -410,7 +419,6 @@ func runCharacterExport(ctx context.Context, req exportCharacterRequest, jobID s
 				metadata.AssetHashes[asset.Path] = hash
 			}
 		}
-		resp.ReportMetadata = metadata
 	}
 	if !d.Config.IsSharedHosting {
 		resp.OutputDirectory = outDir

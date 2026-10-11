@@ -22,6 +22,7 @@ export interface Character {
   base: RefSchema
   attackTag?: AttackTag
   keepCinematic?: boolean
+  sequenceSelection?: SequenceSelection
   inGameMovespeed: number
   size?: ModelSize
   scale?: number
@@ -35,6 +36,31 @@ export interface Character {
     seatOffset?: [number, number, number]
     animation?: string
   }
+}
+
+export interface SequenceSelection {
+  fileDataID: number
+  buildKey: string
+  indices: number[]
+}
+
+export interface ModelSequence {
+  index: number
+  animationID: number
+  wowVariant: number
+  wowName: string
+  wc3Name: string
+  duration: number
+  looping: boolean
+  defaultIncluded: boolean
+}
+
+export interface ModelMetadata {
+  fileDataID: number
+  buildKey: string
+  sequences: ModelSequence[]
+  bakingRecommended: boolean | null
+  bakingReason?: string
 }
 
 export type ModelFormatVersion = '800' | '1000'
@@ -89,6 +115,7 @@ export interface Optimization {
 }
 
 export interface ExportRequest {
+  modelScale?: number
   character: Character
   outputFileName: string
   optimization: Optimization
@@ -133,6 +160,7 @@ export interface ReportSequence {
   name: string
   wowName: string
   wowVariant: number
+  sourceIndices?: number[]
 }
 
 export interface ExportReportMetadata {

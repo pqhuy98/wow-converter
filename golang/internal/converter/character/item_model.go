@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 
+	directm2 "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/direct/m2"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	"github.com/pqhuy98/wow-converter/internal/wowhead"
@@ -97,6 +98,17 @@ type EquipmentSlotData struct {
 	SlotID       wowhead.EquipmentSlot
 	Data         ItemMetadata
 	ShoulderSide *int // Attachment components: 0 is left, 1 is right.
+}
+
+func isWeaponEquipmentSlot(slot EquipmentSlotData) bool {
+	switch slot.Data.InventoryType {
+	case InventoryWeapon, InventoryShield, InventoryRanged, InventoryRangedRight,
+		InventoryTwoHanded, InventoryWeaponMainHand, InventoryWeaponOffHand,
+		InventoryHoldable, InventoryThrown, InventoryRelic:
+		return true
+	default:
+		return false
+	}
 }
 
 // GetGeosetIdsFromEquipments derives geoset ids from equipped items.
@@ -444,7 +456,11 @@ func ProcessItemData(http *wowhead.HTTPClient, expansion wowhead.Expansion, zam 
 }
 
 // ExportZamItemAsMdl exports a zam item as MDL.
-func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targetGender, targetClass int) (*commonModel, ItemMetadata, error) {
+func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targetGender, targetClass int, selections ...*directm2.SequenceSelection) (*commonModel, ItemMetadata, error) {
+	var selection *directm2.SequenceSelection
+	if len(selections) > 0 {
+		selection = selections[0]
+	}
 	result, err := ProcessItemData(ctx.WowheadHTTP(), zam.Expansion, zam, targetRace, targetGender, targetClass)
 	if err != nil {
 		return nil, ItemMetadata{}, err
@@ -456,6 +472,7 @@ func ExportZamItemAsMdl(ctx *ExportContext, zam wowhead.ZamURL, targetRace, targ
 	modelTextureFiles := itemModelTextureFiles(result, 0)
 	replaceable := itemReplaceableTextures(modelTextureFiles)
 	model, err := ExportModelFileIDAsMdl(ctx, modelID, ExportModelOptions{
+		SequenceSelection:   selection,
 		TextureIDs:          itemModelTextureIDs(modelTextureFiles),
 		ReplaceableTextures: replaceable,
 	})

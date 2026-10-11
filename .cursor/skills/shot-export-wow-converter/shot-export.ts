@@ -1,7 +1,7 @@
 /* eslint-disable max-classes-per-file */
 /** Capture a PNG of an exported MDX from the local viewer. Uses the system browser. */
 import { type ChildProcess, spawn, spawnSync } from 'child_process';
-import { existsSync, mkdtempSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -195,6 +195,17 @@ function trackBrowser(proc: ChildProcess, tempDir: string): void {
 function removeBrowserTemp(proc: ChildProcess): void {
   const tempDir = browsers.get(proc);
   if (!tempDir) return;
+  if (process.platform === 'win32') {
+    // Share the Go launcher's ownership filter; BITS holds files outside the browser process tree.
+    const script = readFileSync(new URL('../../../golang/internal/server/reportshot/cancel-browser-downloads.ps1', import.meta.url), 'utf8');
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      env: { ...process.env, WOW_REPORT_SHOT_TEMP: tempDir },
+      encoding: 'utf8', windowsHide: true, timeout: 15_000,
+    });
+    if (result.error || result.status !== 0) {
+      console.error(`Could not cancel screenshot browser BITS downloads: ${result.error?.message ?? result.stderr}`);
+    }
+  }
   // Bun can ignore rmSync's retry options; exit hooks must wait synchronously for Windows locks.
   const wait = new Int32Array(new SharedArrayBuffer(4));
   for (let attempt = 0; ; attempt++) {
