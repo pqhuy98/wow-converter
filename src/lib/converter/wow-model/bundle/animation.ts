@@ -366,6 +366,14 @@ export class AnimationFile implements AnimationData {
       return sequence;
     }).filter((seq) => !!seq);
 
+    // Prefer destruction as the normal Death when a door also has Open.
+    if (sequences.some((seq) => seq.data.wowName === 'Destroy')) {
+      sequences.filter((seq) => seq.data.wowName === 'Open').forEach((seq) => {
+        seq.name = 'Death Alternate';
+        seq.data.wc3Name = 'Death Alternate';
+      });
+    }
+
     // Find secondary Stand animations and set their rarity
 
     const animNames = ['Stand', 'Stand Alternate', 'Walk', 'Walk Alternate'];

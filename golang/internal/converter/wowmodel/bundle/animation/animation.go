@@ -270,6 +270,24 @@ func (f *File) ToMdl(globalSequences *[]*components.GlobalSequence) ToMdlResult 
 
 	wowAttachments := extractWowAttachments(f, bones)
 
+	// Door models may have both Open and Destroy. Reserve the normal Death
+	// animation for destruction so KillDestructable cannot pick the simple opening.
+	hasDestroy := false
+	for _, seq := range sequences {
+		if seq.Data.WowName == "Destroy" {
+			hasDestroy = true
+			break
+		}
+	}
+	if hasDestroy {
+		for i := range sequences {
+			if sequences[i].Data.WowName == "Open" {
+				sequences[i].Name = "Death Alternate"
+				sequences[i].Data.WC3Name = "Death Alternate"
+			}
+		}
+	}
+
 	standLikeNames := []string{"Stand", "Stand Alternate", "Walk", "Walk Alternate"}
 	for _, baseName := range standLikeNames {
 		var matches []*components.Sequence

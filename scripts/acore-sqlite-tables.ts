@@ -3,6 +3,7 @@ export const ACORE_SQLITE_OUTPUT = 'bin/azerothcore-world.sqlite';
 /** MySQL UNSIGNED INT columns stored as signed INT32 in SQLite (Prisma Int limit). */
 export const ACORE_UNSIGNED_INT32_COLUMNS: Record<string, readonly string[]> = {
   creature: ['phaseMask'],
+  gameobject: ['phaseMask'],
 };
 
 export function normalizeSqliteColumnValue(table: string, column: string, value: unknown): unknown {
@@ -28,6 +29,33 @@ export interface AcoreTableSpec {
  * `bun run generate:acore-sqlite`.
  */
 export const ACORE_SQLITE_TABLES: readonly AcoreTableSpec[] = [
+  {
+    name: 'gameobject_addon',
+    columns: ['guid', 'invisibilityType', 'invisibilityValue'],
+    createSql: `CREATE TABLE gameobject_addon (
+      guid INTEGER PRIMARY KEY, invisibilityType INTEGER NOT NULL, invisibilityValue INTEGER NOT NULL
+    )`,
+  },
+  {
+    name: 'gameobject',
+    columns: ['guid', 'id', 'map', 'spawnMask', 'phaseMask', 'position_x', 'position_y', 'position_z', 'orientation', 'rotation0', 'rotation1', 'rotation2', 'rotation3', 'state', 'animprogress'],
+    createSql: `CREATE TABLE gameobject (
+      guid INTEGER PRIMARY KEY, id INTEGER NOT NULL, map INTEGER NOT NULL,
+      spawnMask INTEGER NOT NULL, phaseMask INTEGER NOT NULL,
+      position_x REAL NOT NULL, position_y REAL NOT NULL, position_z REAL NOT NULL,
+      orientation REAL NOT NULL, rotation0 REAL NOT NULL, rotation1 REAL NOT NULL,
+      rotation2 REAL NOT NULL, rotation3 REAL NOT NULL, state INTEGER NOT NULL, animprogress INTEGER NOT NULL
+    )`,
+    indexes: ['CREATE INDEX idx_gameobject_map_position ON gameobject(map, position_x, position_y)'],
+  },
+  {
+    name: 'gameobject_template',
+    columns: ['entry', 'type', 'displayId', 'name', 'size'],
+    createSql: `CREATE TABLE gameobject_template (
+      entry INTEGER PRIMARY KEY, type INTEGER NOT NULL, displayId INTEGER NOT NULL,
+      name TEXT NOT NULL, size REAL NOT NULL
+    )`,
+  },
   {
     name: 'creature',
     columns: [

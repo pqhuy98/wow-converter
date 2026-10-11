@@ -30,7 +30,18 @@ type PlacedUnit struct {
 
 // Wc3Converter converts WoW objects to WC3 map data.
 type Wc3Converter struct {
-	config MapExportConfig
+	config      MapExportConfig
+	gameObjects []gameObjectPlacement
+}
+
+type gameObjectPlacement struct {
+	ID       string                  `json:"id"`
+	Source   *azerothcore.GameObject `json:"source,omitempty"`
+	TypeCode string                  `json:"typeCode"`
+	Model    string                  `json:"model"`
+	Position [3]float32              `json:"position"`
+	Angle    wc3.Angle               `json:"angleDegrees"`
+	Scale    [3]float32              `json:"scale"`
 }
 
 // NewWc3Converter creates a converter.
@@ -103,7 +114,7 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 		doodadsPlaced++
 		wc3Roll := modNegPi(((-abs.Rotation[0]) - math.Floor((-abs.Rotation[0])/(2*math.Pi))*(2*math.Pi)) - 2*math.Pi)
 		wc3Pitch := modNegPi(((-abs.Rotation[1]) - math.Floor((-abs.Rotation[1])/(2*math.Pi))*(2*math.Pi)) - 2*math.Pi)
-		hasRollPitch := math.Abs(wc3Roll) > w.config.Doodads.PitchRollThresholdRadians &&
+		hasRollPitch := math.Abs(wc3Roll) > w.config.Doodads.PitchRollThresholdRadians ||
 			math.Abs(wc3Pitch) > w.config.Doodads.PitchRollThresholdRadians
 
 		if obj.Model == nil {
@@ -111,9 +122,21 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 			panic("Doodad has no model")
 		}
 		fileName := obj.Model.RelativePath
-		hashKey := fileName
+		isDestructible := obj.Type == common.WowObjectGobj
+		if isDestructible {
+			// Map generation writes MDX files. Give World Editor the actual
+			// imported filename, rather than an extensionless model stem.
+			if filepath.Ext(fileName) == "" {
+				fileName += ".mdx"
+			}
+			fileName = strings.ReplaceAll(fileName, "/", "\\")
+		}
+		hashKey := fmt.Sprintf("%t;%s", isDestructible, fileName)
+		if obj.GameObject != nil {
+			hashKey = fmt.Sprintf("%s;entry=%d", hashKey, obj.GameObject.Entry)
+		}
 		if hasRollPitch {
-			hashKey = fmt.Sprintf("%s;%.2f;%.2f", fileName, abs.Rotation[0], abs.Rotation[1])
+			hashKey = fmt.Sprintf("%s;%.6f;%.6f", hashKey, abs.Rotation[0], abs.Rotation[1])
 		}
 
 		percent := imath.Vector3{
@@ -132,20 +155,42 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 		}
 
 		if _, ok := modelPathToDoodadType[hashKey]; !ok {
-			dt := mm.AddDoodadType(nil, false)
+			dt := mm.AddDoodadType(nil, isDestructible)
 			doodadName := fmt.Sprintf("~D %s -- %s -- %s", filepath.Base(obj.Model.RelativePath), obj.Type, dt.Code)
+			if obj.GameObject != nil {
+				doodadName = fmt.Sprintf("~G %s (%d)", obj.GameObject.Name, obj.GameObject.Entry)
+			}
+			prefix := "d"
+			if isDestructible {
+				prefix = "b"
+			}
 			dt.Data = append(dt.Data,
-				data.Modification{ID: "dfil", Type: data.ModificationString, Level: 0, Column: 0, Value: fileName},
-				data.Modification{ID: "dnam", Type: data.ModificationString, Level: 0, Column: 0, Value: doodadName},
-				data.Modification{ID: "dmas", Type: data.ModificationUnreal, Value: float32(abs.ScaleFactor * maxFloat(rootScale[0], rootScale[1], rootScale[2]) * 1.5)},
-				data.Modification{ID: "dmis", Type: data.ModificationUnreal, Value: float32(abs.ScaleFactor * minFloat(rootScale[0], rootScale[1], rootScale[2]) / 1.5)},
-				data.Modification{ID: "danf", Type: data.ModificationInt, Level: 0, Column: 0, Value: 1},
-				data.Modification{ID: "dshf", Type: data.ModificationInt, Level: 0, Column: 0, Value: 1},
+				data.Modification{ID: prefix + "fil", Type: data.ModificationString, Level: 0, Column: 0, Value: fileName},
+				data.Modification{ID: prefix + "nam", Type: data.ModificationString, Level: 0, Column: 0, Value: doodadName},
+				data.Modification{ID: prefix + "mas", Type: data.ModificationUnreal, Value: float32(abs.ScaleFactor * maxFloat(rootScale[0], rootScale[1], rootScale[2]) * 1.5)},
+				data.Modification{ID: prefix + "mis", Type: data.ModificationUnreal, Value: float32(abs.ScaleFactor * minFloat(rootScale[0], rootScale[1], rootScale[2]) / 1.5)},
 			)
+			if isDestructible {
+				dt.Data = append(dt.Data,
+					data.Modification{ID: "bvar", Type: data.ModificationInt, Value: 1},
+					data.Modification{ID: "bhps", Type: data.ModificationUnreal, Value: float32(100)},
+					data.Modification{ID: "bptx", Type: data.ModificationString, Value: ""},
+					data.Modification{ID: "bptd", Type: data.ModificationString, Value: ""},
+					data.Modification{ID: "btxf", Type: data.ModificationString, Value: ""},
+					data.Modification{ID: "btxi", Type: data.ModificationInt, Value: 0},
+					data.Modification{ID: "bfxr", Type: data.ModificationUnreal, Value: float32(-1)},
+					data.Modification{ID: "btar", Type: data.ModificationString, Value: "ground"},
+				)
+			} else {
+				dt.Data = append(dt.Data,
+					data.Modification{ID: "danf", Type: data.ModificationInt, Value: 1},
+					data.Modification{ID: "dshf", Type: data.ModificationInt, Value: 1},
+				)
+			}
 			if hasRollPitch {
 				dt.Data = append(dt.Data,
-					data.Modification{ID: "dmar", Type: data.ModificationUnreal, Level: 0, Column: 0, Value: float32(wc3Roll)},
-					data.Modification{ID: "dmap", Type: data.ModificationUnreal, Level: 0, Column: 0, Value: float32(wc3Pitch)},
+					data.Modification{ID: prefix + "mar", Type: data.ModificationUnreal, Level: 0, Column: 0, Value: float32(wc3Roll)},
+					data.Modification{ID: prefix + "map", Type: data.ModificationUnreal, Level: 0, Column: 0, Value: float32(wc3Pitch)},
 				)
 				doodadTypesWithPitchRoll++
 			}
@@ -156,16 +201,22 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 		if len(id4) > 4 {
 			id4 = id4[:4]
 		}
-		mm.AddDoodad(dt, data.Doodad{
-			Variation: 0,
-			Position:  [3]float32{float32(inGameX), float32(inGameY), float32(inGameZ)},
-			Angle:     wc3.Angle(imath.Degrees(abs.Rotation[2])),
-			Scale:     [3]float32{float32(abs.ScaleFactor * rootScale[0]), float32(abs.ScaleFactor * rootScale[1]), float32(abs.ScaleFactor * rootScale[2])},
-			SkinID:    id4,
-			Flags:     data.DoodadFlag{Visible: true, Solid: true, CustomHeight: true},
-			Life:      100,
+		placement := data.Doodad{
+			Variation:        0,
+			Position:         [3]float32{float32(inGameX), float32(inGameY), float32(inGameZ)},
+			Angle:            wc3.Angle(imath.Degrees(abs.Rotation[2])),
+			Scale:            [3]float32{float32(abs.ScaleFactor * rootScale[0]), float32(abs.ScaleFactor * rootScale[1]), float32(abs.ScaleFactor * rootScale[2])},
+			SkinID:           id4,
+			Flags:            data.DoodadFlag{Visible: true, Solid: true, CustomHeight: true},
+			Life:             100,
 			RandomItemSetPtr: -1,
-		})
+		}
+		mm.AddDoodad(dt, placement)
+		if isDestructible {
+			w.gameObjects = append(w.gameObjects, gameObjectPlacement{
+				ID: obj.ID, Source: obj.GameObject, TypeCode: dt.Code, Model: fileName, Position: placement.Position, Angle: placement.Angle, Scale: placement.Scale,
+			})
+		}
 	})
 
 	if doodadsOutOfBounds > 0 {
@@ -245,13 +296,13 @@ func (w *Wc3Converter) PlaceUnits(mm *extra.MapManager, m *common.WowObjectManag
 			}
 			dt := templateIdToDoodadType[c.Template.Entry]
 			mm.AddDoodad(dt, data.Doodad{
-				Variation: 0,
-				Position:  position,
-				Angle:     wc3.Angle(imath.Degrees(abs.Rotation[2])),
-				Scale:     [3]float32{float32(creatureScale), float32(creatureScale), float32(creatureScale)},
-				SkinID:    dt.Code,
-				Flags:     data.DoodadFlag{Visible: true, Solid: true, CustomHeight: true},
-				Life:      100,
+				Variation:        0,
+				Position:         position,
+				Angle:            wc3.Angle(imath.Degrees(abs.Rotation[2])),
+				Scale:            [3]float32{float32(creatureScale), float32(creatureScale), float32(creatureScale)},
+				SkinID:           dt.Code,
+				Flags:            data.DoodadFlag{Visible: true, Solid: true, CustomHeight: true},
+				Life:             100,
 				RandomItemSetPtr: -1,
 			})
 			return
@@ -273,19 +324,19 @@ func (w *Wc3Converter) PlaceUnits(mm *extra.MapManager, m *common.WowObjectManag
 		}
 		ut := templateIdToUnitType[c.Template.Entry]
 		mm.AddUnit(ut, data.Unit{
-			Variation: 0,
-			Position:  position,
-			Rotation:  float32(abs.Rotation[2]),
-			Scale:     [3]float32{1, 1, 1},
-			Skin:      ut.Code,
-			Player:    0,
-			Hitpoints: 100,
-			Mana:      0,
+			Variation:        0,
+			Position:         position,
+			Rotation:         float32(abs.Rotation[2]),
+			Scale:            [3]float32{1, 1, 1},
+			Skin:             ut.Code,
+			Player:           0,
+			Hitpoints:        100,
+			Mana:             0,
 			RandomItemSetPtr: -1,
-			Hero:      data.UnitHero{Level: c.Template.MaxLevel, Str: 0, Agi: 0, Int: 0},
-			Random:    data.UnitRandom{Type: 0},
-			Color:     23,
-			Waygate:   -1,
+			Hero:             data.UnitHero{Level: c.Template.MaxLevel, Str: 0, Agi: 0, Int: 0},
+			Random:           data.UnitRandom{Type: 0},
+			Color:            23,
+			Waygate:          -1,
 		})
 	})
 	return units

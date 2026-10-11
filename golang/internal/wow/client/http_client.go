@@ -370,8 +370,19 @@ func (c *HTTPClient) ResolveNpcDisplayMeta(ctx context.Context, displayID int) (
 }
 
 func (c *HTTPClient) DownloadCascFile(ctx context.Context, fileDataID int) ([]byte, error) {
+	return c.downloadCascFile(ctx, fileDataID, false)
+}
+
+func (c *HTTPClient) DownloadCascTable(ctx context.Context, fileDataID int) ([]byte, error) {
+	return c.downloadCascFile(ctx, fileDataID, true)
+}
+
+func (c *HTTPClient) downloadCascFile(ctx context.Context, fileDataID int, partial bool) ([]byte, error) {
 	params := url.Values{}
 	params.Set("fileDataID", strconv.Itoa(fileDataID))
+	if partial {
+		params.Set("partial", "true")
+	}
 	req, err := c.newRequest(ctx, http.MethodGet, "/rest/cascFile", params, nil)
 	if err != nil {
 		return nil, err

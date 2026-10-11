@@ -53,7 +53,8 @@ type WowObject struct {
 	Children    []*WowObject
 	TileX       int
 	TileY       int
-	Creature    any // *azerothcore.Creature when Type is unit
+	Creature    any                     // *azerothcore.Creature when Type is unit
+	GameObject  *azerothcore.GameObject // nil for client-only placements
 }
 
 // ObjectCreature returns the creature payload when type is unit.

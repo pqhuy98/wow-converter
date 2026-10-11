@@ -65,3 +65,9 @@ type DirectListfileClient interface {
 	CollectBrowseFileIndex(ctx context.Context) (models, textures []casc.ListfileEntry, err error)
 	CollectMapTileFileIndex(ctx context.Context) ([]casc.ListfileEntry, error)
 }
+
+// DBTableClient permits unavailable encrypted DB2 sections to be zero-filled.
+// WDC readers can then read public rows without losing the entire table.
+type DBTableClient interface {
+	DownloadCascTable(ctx context.Context, fileDataID int) ([]byte, error)
+}

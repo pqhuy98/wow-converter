@@ -3,11 +3,69 @@ package metadata
 import (
 	"testing"
 
+	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	imath "github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
+
+func TestParticleVisibilitySparseAnimations(t *testing.T) {
+	f := &File{m2Animations: []m2AnimMeta{{Duration: 67}, {Duration: 9334}, {Duration: 60000}, {Duration: 9334}, {Duration: 33}}}
+	track := m2.Track{GlobalSeq: config.BlizzardNull,
+		Timestamps: [][]uint32{{0}, {}, {}, {}, {0}},
+		Values:     [][][]float64{{{0}}, {}, {}, {}, {{0}}},
+	}
+	anim := f.particleVisibility(track)
+	for frame, want := range map[int]float64{0: 0, 67: 0, 68: 1, 9402: 1, 9403: 1, 69403: 1, 69404: 1, 78738: 1, 78739: 0} {
+		if got := anim.KeyFrames[frame]; got != want {
+			t.Errorf("frame %d: got %v, want %v", frame, got, want)
+		}
+	}
+	if len(track.Values[1]) != 0 {
+		t.Fatal("source visibility mutated")
+	}
+	global := m2.Track{GlobalSeq: 0, Timestamps: [][]uint32{{0}}, Values: [][][]float64{{{0}}}}
+	if got := f.particleVisibility(global); got.GlobalSeq == nil || len(got.KeyFrames) != 1 || got.KeyFrames[0] != float64(0) {
+		t.Fatal("global visibility changed")
+	}
+}
+
+func TestParticleEmissionCoveragePreservesDisabledAndHeadOnlyEmitters(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		flags   uint32
+		rate    float64
+		boosted bool
+	}{
+		{"banner circle disabled", 133672, 0, false},
+		{"banner ring disabled", 135208, 0, false},
+		{"disabled tail", 0x40400, 0, false},
+		{"head sprite", 0x20400, 1, false},
+		{"active tail", 0x40400, 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := m2.ParticleEmitterEntry{Flags: tc.flags, TailLength: 0.1,
+				Lifespan:     m2.Track{Values: [][][]float64{{{1.5}}}},
+				EmissionRate: m2.Track{Values: [][][]float64{{{tc.rate}}}},
+				AlphaTrack:   m2.PartTrack{Values: [][]float64{{0}, {12850}, {0}}},
+			}
+			_, _, rate := correctParticleEmission(p, components.AnimatedOrStatic[float64]{Static: true, Value: tc.rate})
+			if tc.boosted {
+				if rate.Value <= tc.rate {
+					t.Fatal("active tail coverage was not corrected")
+				}
+			} else if rate.Value != tc.rate {
+				t.Fatalf("emission changed from %v to %v", tc.rate, rate.Value)
+			}
+			anim := &components.Animation{KeyFrames: map[int]any{0: float64(0), 100: tc.rate}}
+			_, _, animated := correctParticleEmission(p, components.AnimatedOrStatic[float64]{Anim: anim})
+			if animated.Anim.KeyFrames[0] != float64(0) {
+				t.Fatal("disabled emission key was boosted")
+			}
+		})
+	}
+}
 
 func TestExtractMDLParticlesEmittersBasic(t *testing.T) {
 	f := &File{

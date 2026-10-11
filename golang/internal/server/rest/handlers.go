@@ -320,7 +320,12 @@ func (h *Handler) CascFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := cascSource.GetFile(r.Context(), fileDataID)
+	var data []byte
+	if r.URL.Query().Get("partial") == "true" {
+		data, err = cascSource.GetFilePartial(r.Context(), fileDataID)
+	} else {
+		data, err = cascSource.GetFile(r.Context(), fileDataID)
+	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return

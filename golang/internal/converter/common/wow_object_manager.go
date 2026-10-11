@@ -279,6 +279,9 @@ func (m *WowObjectManager) parseRecursive(ctx context.Context, objectPath string
 	}
 	for _, row := range rows {
 		id := fmt.Sprintf("%s:%s:%s:%s:%s", row.FileDataID, row.ModelFile, row.PositionX, row.PositionY, row.PositionZ)
+		if row.Type == string(WowObjectGobj) {
+			id = "client-gameobject:" + row.ModelId + ":" + id
+		}
 		fileName := StripModelReferenceExt(row.ModelFile)
 		fileDataID, _ := strconv.Atoi(row.FileDataID)
 		if row.Type == "" {
@@ -304,14 +307,22 @@ func (m *WowObjectManager) parseRecursive(ctx context.Context, objectPath string
 			ScaleFactor: parseFloat(row.ScaleFactor),
 			Children:    nil,
 		}
-		for i := range child.Position {
-			child.Position[i] *= m.config.RawModelScaleUp
-		}
-		if current.Type == WowObjectADT {
-			wmoParentFixedRotation := [3]float64{0, 0, math.Radians(-90)}
-			childAbsPos := math.V3Rotate(child.Position, wmoParentFixedRotation)
-			delta := math.V3Sub(childAbsPos, current.Position)
-			child.Position = math.V3Rotate(delta, math.V3Negative(wmoParentFixedRotation))
+		if child.Type == WowObjectGobj && current.Type == WowObjectADT {
+			child.Position, child.Rotation = gameObjectTransform(azerothcore.GameObject{
+				UseQuaternion: true, // Client DB2 rotations are authoritative.
+				Position:      [3]float64{parseFloat(row.PositionX), parseFloat(row.PositionY), parseFloat(row.PositionZ)},
+				Rotation:      [4]float64{parseFloat(row.RotationX), parseFloat(row.RotationY), parseFloat(row.RotationZ), parseFloat(row.RotationW)},
+			}, current, m.config.RawModelScaleUp)
+		} else {
+			for i := range child.Position {
+				child.Position[i] *= m.config.RawModelScaleUp
+			}
+			if current.Type == WowObjectADT {
+				wmoParentFixedRotation := [3]float64{0, 0, math.Radians(-90)}
+				childAbsPos := math.V3Rotate(child.Position, wmoParentFixedRotation)
+				delta := math.V3Sub(childAbsPos, current.Position)
+				child.Position = math.V3Rotate(delta, math.V3Negative(wmoParentFixedRotation))
+			}
 		}
 		current.Children = append(current.Children, child)
 		childObjectPath := filepath.ToSlash(filepath.Join(filepath.Dir(objectPath), fileName))

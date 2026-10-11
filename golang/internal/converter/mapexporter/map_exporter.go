@@ -2,6 +2,7 @@ package mapexporter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -147,6 +148,11 @@ func (e *MapExporter) ParseObjects(ctx context.Context, filter func(id string, t
 	if err := e.WowObjectManager.ReadCreatures(ctx, mc.MapID); err != nil {
 		return err
 	}
+	if mc.Doodads.Enable.Gobj {
+		if err := e.WowObjectManager.ReadGameObjects(ctx, mc.MapID); err != nil {
+			return err
+		}
+	}
 
 	log.Printf("Total objects: %d", len(e.WowObjectManager.Objects))
 	typeCount := map[string]int{}
@@ -192,11 +198,18 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 
 	am := e.WowObjectManager.AssetManager
 	usedModelPaths := map[string]struct{}{}
+	modelStem := func(path string) string {
+		path = strings.ReplaceAll(path, "\\", "/")
+		if ext := strings.ToLower(filepath.Ext(path)); ext == ".mdx" || ext == ".mdl" {
+			path = path[:len(path)-len(ext)]
+		}
+		return path
+	}
 	collectModelPath := func(mods []data.Modification) {
 		for _, m := range mods {
 			if (m.ID == "dfil" || m.ID == "bfil") && m.Type == data.ModificationString {
 				if s, ok := m.Value.(string); ok {
-					usedModelPaths[strings.ReplaceAll(s, "\\", "/")] = struct{}{}
+					usedModelPaths[modelStem(s)] = struct{}{}
 				}
 			}
 		}
@@ -208,7 +221,7 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		collectModelPath(t.Data)
 	}
 	for k, model := range am.Models() {
-		rel := strings.ReplaceAll(model.MDL.Model.Name, "\\", "/")
+		rel := modelStem(model.MDL.Model.Name)
 		if _, ok := usedModelPaths[rel]; !ok {
 			delete(am.Models(), k)
 		}
@@ -230,6 +243,13 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		return err
 	}
 	if err := am.ExportModels(ctx, outputDir); err != nil {
+		return err
+	}
+	manifest, err := json.MarshalIndent(wc3.gameObjects, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "gameobjects.json"), manifest, 0o644); err != nil {
 		return err
 	}
 	am.ReleaseAfterExport()

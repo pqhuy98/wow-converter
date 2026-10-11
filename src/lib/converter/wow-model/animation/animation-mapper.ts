@@ -1910,6 +1910,7 @@ export const getWc3AnimName = (wowAnimName: string): Pick<SequenceData, 'wc3Name
     case 'Close': return { wc3Name: 'Birth', attackTag: '' };
     case 'Closed': return { wc3Name: 'Stand', attackTag: '', loop: true };
     case 'Open': return { wc3Name: 'Death', attackTag: '' };
+    case 'Destroy': return { wc3Name: 'Death', attackTag: '', loop: false };
     case 'Opened': return { wc3Name: 'Decay Flesh', attackTag: '' };
 
     // Flying

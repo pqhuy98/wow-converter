@@ -22,6 +22,10 @@ All Go paths below are under `golang/internal/`.
 
 `golang/cmd/wow-converter/main.go` wires the bundled runtime and API. `webui/` owns UI behavior, `scripts/` owns build/dev orchestration, and `tests/` owns API/snapshot/map acceptance checks.
 
+Map gameobjects combine client placements with AzerothCore `gameobject` / `gameobject_template` spawns from the bundled SQLite. Their display IDs resolve through the loaded client's `GameObjectDisplayInfo`; server placements follow `GameObject::Create` (orientation by default, quaternion for its explicit exceptions and `gameobject_addon` overrides). Gameobjects become WC3 destructibles (`war3map.w3b`) with explicit imported model filenames and retain individual placements in `war3map.doo`. `gameobjects.json` records exported source identities and WC3 type codes. Missing display rows, model-less displays, and unavailable model assets are logged and skipped; table/database failures and cancellation still stop generation. Instance encounter scripts and initial animation states are not translated into WC3 triggers.
+
+Regenerate all bundled tables with `bun run generate:acore-sqlite`. To update selected tables from AzerothCore's base SQL dumps while retaining other data, use `bun scripts/generate-azerothcore-sqlite.ts --sql-dir=<db_world-directory> --tables=gameobject,gameobject_template,gameobject_addon`.
+
 ## Trace a change before editing
 
 Character exports enter `server/api/export_character.go`, run through the queue into `converter/character/`, convert M2/WMO data into an MDL graph, then write model/texture assets and return export metadata. Equipment and mounts reuse this pipeline. Map generation enters `server/api/maps_generate.go` and `converter/mapexporter/`; it also reuses model conversion. Search callers of any changed contract across both paths.

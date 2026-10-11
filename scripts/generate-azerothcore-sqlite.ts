@@ -1,9 +1,10 @@
-import { Database } from 'bun:sqlite';
+import { Database, type SQLQueryBindings } from 'bun:sqlite';
 import { mkdirSync, unlinkSync } from 'fs';
 import mysql from 'mysql2/promise';
 import { dirname, resolve } from 'path';
 import pg from 'pg';
 
+import { readAcoreSqlDump } from './acore-sql-dump';
 import {
   ACORE_SQLITE_OUTPUT,
   ACORE_SQLITE_TABLES,
@@ -15,7 +16,7 @@ const BATCH_SIZE = 2000;
 const DEFAULT_SOURCE_URL = 'mysql://acore:acore@127.0.0.1:3306/acore_world';
 
 interface SourceDb {
-  kind: 'mysql' | 'postgres';
+  kind: 'mysql' | 'postgres' | 'sql-dump';
   label: string;
   queryRows: (table: AcoreTableSpec) => AsyncGenerator<unknown[]>;
   close: () => Promise<void>;
@@ -70,8 +71,12 @@ function resolveSourceUrl(): string {
   return url;
 }
 
-function normalizeRow(table: AcoreTableSpec, row: unknown[]): unknown[] {
-  return table.columns.map((column, index) => normalizeSqliteColumnValue(table.name, column, row[index]));
+function normalizeRow(table: AcoreTableSpec, row: unknown[]): SQLQueryBindings[] {
+  return table.columns.map((column, index) => {
+    const value = normalizeSqliteColumnValue(table.name, column, row[index]);
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') return value;
+    throw new Error(`Unsupported SQLite value in ${table.name}.${column}`);
+  });
 }
 
 function insertRows(db: Database, table: AcoreTableSpec, rows: unknown[][]) {
@@ -82,12 +87,13 @@ function insertRows(db: Database, table: AcoreTableSpec, rows: unknown[][]) {
     `INSERT INTO ${table.name} (${table.columns.join(', ')}) VALUES (${placeholders})`,
   );
 
-  db.run('BEGIN');
+  const ownsTransaction = !db.inTransaction;
+  if (ownsTransaction) db.run('BEGIN');
   try {
     for (const row of rows) insert.run(...normalizeRow(table, row));
-    db.run('COMMIT');
+    if (ownsTransaction) db.run('COMMIT');
   } catch (error) {
-    db.run('ROLLBACK');
+    if (ownsTransaction) db.run('ROLLBACK');
     throw error;
   }
 }
@@ -140,26 +146,43 @@ async function importTableFromSource(
 }
 
 async function main() {
-  const sourceUrl = resolveSourceUrl();
-  const source = await createSource(sourceUrl);
+  const args = process.argv.slice(2);
+  const dumpDirectory = args.find((arg) => arg.startsWith('--sql-dir='))?.slice('--sql-dir='.length);
+  const selectedNames = args.find((arg) => arg.startsWith('--tables='))?.slice('--tables='.length).split(',');
+  const tables = selectedNames ? ACORE_SQLITE_TABLES.filter((table) => selectedNames.includes(table.name)) : ACORE_SQLITE_TABLES;
+  if (selectedNames?.some((name) => !tables.some((table) => table.name === name))) throw new Error('Unknown table in --tables');
+  const source: SourceDb = dumpDirectory ? {
+    kind: 'sql-dump',
+    label: dumpDirectory,
+    queryRows: (table) => readAcoreSqlDump(dumpDirectory, table),
+    close: async () => {},
+  } : await createSource(resolveSourceUrl());
   const outputPath = resolve(import.meta.dir, '..', ACORE_SQLITE_OUTPUT);
-  const db = createSqlite(outputPath);
+  // Selected tables update atomically while preserving all other bundled data.
+  const db = selectedNames ? new Database(outputPath) : createSqlite(outputPath);
+  if (selectedNames) db.run('BEGIN');
 
   console.log(`Writing ${outputPath}`);
-  console.log(`Tables: ${ACORE_SQLITE_TABLES.map((t) => t.name).join(', ')}`);
-  console.log(`Source: live ${source.kind} (${source.label})`);
+  console.log(`Tables: ${tables.map((t) => t.name).join(', ')}`);
+  console.log(`Source: ${source.kind} (${source.label})`);
 
   try {
-    for (const table of ACORE_SQLITE_TABLES) {
+    for (const table of tables) {
       initTable(db, table);
       const count = await importTableFromSource(db, table, source);
       console.log(`  ${table.name}: ${count.toLocaleString()} rows`);
     }
+  } catch (error) {
+    if (db.inTransaction) db.run('ROLLBACK');
+    db.close();
+    throw error;
   } finally {
     await source.close();
   }
 
   db.run('ANALYZE');
+  if (db.inTransaction) db.run('COMMIT');
+  db.run('PRAGMA wal_checkpoint(TRUNCATE)');
   db.close();
   console.log('Done.');
   process.exit(0);

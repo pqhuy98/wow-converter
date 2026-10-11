@@ -185,6 +185,8 @@ func getWc3AnimName(wowAnimName string) wc3AnimInfo {
 		return wc3AnimInfo{wc3Name: "Stand", loop: &loopTrue}
 	case "Open":
 		return wc3AnimInfo{wc3Name: "Death"}
+	case "Destroy":
+		return wc3AnimInfo{wc3Name: "Death"}
 	case "Opened":
 		return wc3AnimInfo{wc3Name: "Decay Flesh"}
 	case "FlyStand":

@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/pqhuy98/wow-converter/internal/ansi"
+	"github.com/pqhuy98/wow-converter/internal/config"
 	bundleutils "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/bundle/utils"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
@@ -324,7 +325,7 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 			Variation:          f.m2trackToAnimationOrStaticFloat(p.SpeedVariation, components.AnimTypeOthers, scalarIdentity),
 			EmissionRate:       emissionRate,
 			Latitude:           f.m2trackToAnimationOrStaticFloat(p.VerticalRange, components.AnimTypeOthers, degrees),
-			Visibility:         f.m2trackToAnimation(p.EnabledIn, components.AnimTypeOthers, scalarIdentity),
+			Visibility:         f.particleVisibility(p.EnabledIn),
 			Texture:            storeMdlTexture(f.mdl, &textures[textureID]),
 			TailLength:         tailLength,
 			Columns:            maxInt(1, int(p.TextureCols)),
@@ -357,6 +358,36 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 	if !f.Config.IsBulkExport && len(f.particleEmitters) > 0 {
 		log.Printf("Particle emitters: %d", len(f.particleEmitters))
 	}
+}
+
+func (f *File) particleVisibility(track m2.Track) *components.Animation {
+	if int(track.GlobalSeq) != config.BlizzardNull {
+		return f.m2trackToAnimation(track, components.AnimTypeOthers, scalarIdentity)
+	}
+	// Missing per-animation enable keys mean enabled, not the previous
+	// animation's last value. Emit explicit defaults so WC3 and optimization
+	// cannot carry a closed-state zero into an opened-state sequence.
+	raw := trackRawFromM2(track)
+	count := len(f.m2Animations)
+	if f.Animation != nil {
+		count = len(f.Animation.Animations)
+	}
+	raw.Timestamps = append([][]*uint32(nil), raw.Timestamps...)
+	raw.Values = append([][][]float64(nil), raw.Values...)
+	for len(raw.Timestamps) < count {
+		raw.Timestamps = append(raw.Timestamps, nil)
+	}
+	for len(raw.Values) < count {
+		raw.Values = append(raw.Values, nil)
+	}
+	for i := 0; i < count; i++ {
+		if len(raw.Timestamps[i]) == 0 || len(raw.Values[i]) == 0 {
+			zero := uint32(0)
+			raw.Timestamps[i] = []*uint32{&zero}
+			raw.Values[i] = [][]float64{{1}}
+		}
+	}
+	return f.m2TrackToAnimation(raw, components.AnimTypeOthers, scalarIdentity)
 }
 
 func clampParticleUVIntervals(node *components.ParticleEmitter2) {
@@ -637,7 +668,7 @@ func correctParticleEmission(p m2.ParticleEmitterEntry, baseEmissionRate compone
 		coverageMinRate = 1.0 / tailLength
 	}
 	shortenedTail := tailLength+1e-6 < float64(p.TailLength)
-	needsRateFloor := (wowClampsTailToAge || shortenedTail) && emissionRateMax+1e-6 < coverageMinRate
+	needsRateFloor := p.Flags&0x40000 != 0 && emissionRateMax > 0 && (wowClampsTailToAge || shortenedTail) && emissionRateMax+1e-6 < coverageMinRate
 	alphaEmissionBoost := 1.0
 	if needsRateFloor && alphaWeightFactor < 0.7 {
 		alphaEmissionBoost = 1.0 / math.Max(0.5, alphaWeightFactor)
@@ -645,6 +676,11 @@ func correctParticleEmission(p m2.ParticleEmitterEntry, baseEmissionRate compone
 	emissionRate = baseEmissionRate
 	if needsRateFloor {
 		applyAnimatedOrStaticFloat(&emissionRate, func(v float64) float64 {
+			// Zero keys intentionally disable emission; a trail coverage
+			// correction must not spawn particles in those intervals.
+			if v <= 0 {
+				return v
+			}
 			return math.Max(v, coverageMinRate) * alphaEmissionBoost
 		})
 	}

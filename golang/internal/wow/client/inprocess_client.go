@@ -293,7 +293,18 @@ func (c *InProcessClient) ResolveNpcDisplayMeta(ctx context.Context, displayID i
 }
 
 func (c *InProcessClient) DownloadCascFile(ctx context.Context, fileDataID int) ([]byte, error) {
+	return c.downloadCascFile(ctx, fileDataID, false)
+}
+
+func (c *InProcessClient) DownloadCascTable(ctx context.Context, fileDataID int) ([]byte, error) {
+	return c.downloadCascFile(ctx, fileDataID, true)
+}
+
+func (c *InProcessClient) downloadCascFile(ctx context.Context, fileDataID int, partial bool) ([]byte, error) {
 	params := url.Values{"fileDataID": {strconv.Itoa(fileDataID)}}
+	if partial {
+		params.Set("partial", "true")
+	}
 	req := httptest.NewRequest(http.MethodGet, "/rest/cascFile?"+params.Encode(), nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
 	c.handler.CascFile(rec, req)

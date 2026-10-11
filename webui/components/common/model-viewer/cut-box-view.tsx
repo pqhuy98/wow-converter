@@ -43,6 +43,7 @@ export function CutBoxOrthoView(props: Readonly<{
   const [zoom, setZoom] = useState<number>(1);
   const [viewSpan, setViewSpan] = useState<number | null>(null);
   const [viewCenter, setViewCenter] = useState<Readonly<{ x: number; y: number }> | null>(null);
+  const viewTouchedRef = useRef(false);
   const movingBoxRef = useRef<{
     startX: number
     startY: number
@@ -66,35 +67,33 @@ export function CutBoxOrthoView(props: Readonly<{
     return () => ro.disconnect();
   }, []);
 
-  // Initialize view span once (no auto-fit as the box grows/shrinks).
+  // Fit the initial box and model bounds. Bounds can arrive after this view mounts.
   useEffect(() => {
-    if (!enabled) return;
-    if (viewSpan != null) return;
-    const dx = Math.max(0.001, box.maxX - box.minX);
-    const dy = plane === 'xy'
-      ? Math.max(0.001, box.maxY - box.minY)
-      : Math.max(0.001, box.maxZ - box.minZ);
+    if (!enabled || viewTouchedRef.current) return;
+    const fit = modelBounds ?? box;
+    const minX = modelBounds ? Math.min(box.minX, fit.minX) : box.minX;
+    const maxX = modelBounds ? Math.max(box.maxX, fit.maxX) : box.maxX;
+    const minY = plane === 'xy'
+      ? (modelBounds ? Math.min(box.minY, fit.minY) : box.minY)
+      : (modelBounds ? Math.min(box.minZ, fit.minZ) : box.minZ);
+    const maxY = plane === 'xy'
+      ? (modelBounds ? Math.max(box.maxY, fit.maxY) : box.maxY)
+      : (modelBounds ? Math.max(box.maxZ, fit.maxZ) : box.maxZ);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const span = Math.max(0.001, maxX - minX, maxY - minY);
     // Pad a bit so the initial view isn't too tight.
-    setViewSpan(Math.max(dx, dy) * 1.3);
-    setZoom(1);
-  }, [enabled, box, plane, viewSpan]);
-
-  // Initialize view center once (do not auto-recenter as the box moves).
-  useEffect(() => {
-    if (!enabled) return;
-    if (viewCenter != null) return;
-    const cx = (box.minX + box.maxX) / 2;
-    const cy = plane === 'xy'
-      ? (box.minY + box.maxY) / 2
-      : (box.minZ + box.maxZ) / 2;
+    setViewSpan(span * 1.3);
     setViewCenter({ x: cx, y: cy });
-  }, [enabled, box, plane, viewCenter]);
+    setZoom(1);
+  }, [enabled, box, modelBounds, plane]);
 
   // If disabled, allow re-init next time it is enabled.
   useEffect(() => {
     if (enabled) return;
     setViewSpan(null);
     setViewCenter(null);
+    viewTouchedRef.current = false;
     panningRef.current = null;
     draggingRef.current = null;
     setHoveredSide(null);
@@ -353,6 +352,7 @@ export function CutBoxOrthoView(props: Readonly<{
       const delta = e.deltaY;
       const factor = delta > 0 ? 0.9 : 1.1;
       // No max zoom limit; keep only a tiny minimum to avoid division by zero.
+      viewTouchedRef.current = true;
       setZoom((z) => Math.max(1e-9, z * factor));
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -440,6 +440,7 @@ export function CutBoxOrthoView(props: Readonly<{
 
       // Middle mouse drag = pan the ortho view.
       if (e.button === 1) {
+        viewTouchedRef.current = true;
         const c = viewCenter ?? { x: 0, y: 0 };
         panningRef.current = {
           startX: sx,
@@ -460,6 +461,7 @@ export function CutBoxOrthoView(props: Readonly<{
       if (!side) {
         // If clicking inside the rectangle (but not on edges), drag moves the whole box.
         if (e.button === 0 && isInsideRect(sx, sy)) {
+          viewTouchedRef.current = true;
           movingBoxRef.current = { startX: sx, startY: sy, startBox: box };
           setHoveredSide(null);
           try {
@@ -470,6 +472,7 @@ export function CutBoxOrthoView(props: Readonly<{
         }
         return;
       }
+      viewTouchedRef.current = true;
       draggingRef.current = { side };
       setHoveredSide(side);
       try {
