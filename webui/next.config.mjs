@@ -26,6 +26,10 @@ const nextConfig = {
     if (!isDev) return [];
     return [
       {
+        source: '/wow-source/:path*',
+        destination: `http://127.0.0.1:${apiPort}/wow-source/:path*`,
+      },
+      {
         source: '/api/:path*',
         destination: `http://127.0.0.1:${apiPort}/api/:path*`,
       },

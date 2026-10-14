@@ -7,7 +7,7 @@ export function freezeShotPose(inst: MdxModelInstance): void {
 }
 
 /** Replay the entire attachment tree at 60Hz, then freeze every particle clock. */
-export function settleShotPose(scene: Scene, inst: MdxModelInstance, targetFrame: number): void {
+export function settleShotPose(scene: Scene, inst: MdxModelInstance, targetFrame: number, elapsedSeconds?: number): void {
   const instances = shotInstances(inst);
   for (const instance of instances) {
     instance.clearEmittedObjects();
@@ -21,17 +21,20 @@ export function settleShotPose(scene: Scene, inst: MdxModelInstance, targetFrame
   Math.random = seededRandom(1);
   try {
     let guard = 0;
-    while (inst.frame + 1e-3 < targetFrame && guard < 20000) {
-      const dt = Math.min(1 / 60, (targetFrame - inst.frame) / 1000);
+    let elapsed = 0;
+    while ((elapsedSeconds === undefined ? inst.frame + 1e-3 < targetFrame : elapsed < elapsedSeconds) && guard < 20000) {
+      const remaining = elapsedSeconds === undefined ? (targetFrame - inst.frame) / 1000 : elapsedSeconds - elapsed;
+      const dt = Math.min(1 / 60, remaining);
       if (dt <= 0) break;
       // updateAnimations traverses attachment nodes; their update() applies timeScale.
       for (const instance of instances) instance.timeScale = 1;
       inst.updateAnimations(dt);
       scene.emittedObjectUpdater.update(dt);
       for (const instance of instances) instance.timeScale = 0;
+      elapsed += dt;
       guard += 1;
     }
-    inst.frame = targetFrame;
+    if (elapsedSeconds === undefined) inst.frame = targetFrame;
     inst.forced = true;
     inst.updateAnimations(0);
   } finally {

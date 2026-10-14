@@ -66,6 +66,7 @@ func NewServer(d *Deps) *Server {
 	}
 
 	root.Mount("/api", apiRouter)
+	registerWowSource(apiRouter, root, d)
 	registerBugReports(apiRouter, root, d)
 	registerDocs(root)
 

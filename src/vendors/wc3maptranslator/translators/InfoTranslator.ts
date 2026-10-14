@@ -421,9 +421,11 @@ export class InfoTranslator implements Translator<Info> {
       color: [outBufferToJSON.readByte(), outBufferToJSON.readByte(), outBufferToJSON.readByte(), outBufferToJSON.readByte()], // R G B A
     };
 
-    if (result.fileVersion >= 39) result.fog3 = {
-      heightStart: outBufferToJSON.readFloat(), heightEnd: outBufferToJSON.readFloat(), linearStart: outBufferToJSON.readFloat(), linearEnd: outBufferToJSON.readFloat(), maxOpacity: outBufferToJSON.readFloat(), drawOverSky: outBufferToJSON.readInt(),
-    };
+    if (result.fileVersion >= 39) {
+      result.fog3 = {
+        heightStart: outBufferToJSON.readFloat(), heightEnd: outBufferToJSON.readFloat(), linearStart: outBufferToJSON.readFloat(), linearEnd: outBufferToJSON.readFloat(), maxOpacity: outBufferToJSON.readFloat(), drawOverSky: outBufferToJSON.readInt(),
+      };
+    }
     result.globalWeather = outBufferToJSON.readInt();
     result.customSoundEnvironment = outBufferToJSON.readString();
     result.customLightEnv = outBufferToJSON.readByte();
@@ -441,9 +443,11 @@ export class InfoTranslator implements Translator<Info> {
       result.minCameraZoom = outBufferToJSON.readInt();
     }
 
-    if (result.fileVersion >= 39) result.water3 = {
-      minOpacity: outBufferToJSON.readInt(), maxOpacity: outBufferToJSON.readInt(), reflectivity: outBufferToJSON.readInt(), emissivity: outBufferToJSON.readInt(), edgeSoftness: outBufferToJSON.readInt(), wavesVertexDisplacement: outBufferToJSON.readInt(), wavesNormalMapStrength: outBufferToJSON.readInt(), overrideColor: outBufferToJSON.readInt(), envmapReflectivity: outBufferToJSON.readInt(), alphaTileMinimapColor: outBufferToJSON.readInt(),
-    };
+    if (result.fileVersion >= 39) {
+      result.water3 = {
+        minOpacity: outBufferToJSON.readInt(), maxOpacity: outBufferToJSON.readInt(), reflectivity: outBufferToJSON.readInt(), emissivity: outBufferToJSON.readInt(), edgeSoftness: outBufferToJSON.readInt(), wavesVertexDisplacement: outBufferToJSON.readInt(), wavesNormalMapStrength: outBufferToJSON.readInt(), overrideColor: outBufferToJSON.readInt(), envmapReflectivity: outBufferToJSON.readInt(), alphaTileMinimapColor: outBufferToJSON.readInt(),
+      };
+    }
 
     // Struct: players
     const numPlayers = outBufferToJSON.readInt();

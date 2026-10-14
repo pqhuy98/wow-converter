@@ -173,3 +173,21 @@ func TestExportCharacterResponseUsesJobIDAsVersionID(t *testing.T) {
 		t.Fatalf("versionId = %q, want job ID", response.VersionID)
 	}
 }
+
+func TestExportAssetPrefixValidation(t *testing.T) {
+	for _, prefix := range []string{"retails/wow", "classic/wow"} {
+		raw := validExportCharacterBody()
+		raw["assetPrefix"] = prefix
+		body, issues := parseExportCharacterRequest(raw)
+		if len(issues) > 0 || body.AssetPrefix != prefix {
+			t.Fatalf("prefix lost: %+v %v", body, issues)
+		}
+	}
+	for _, prefix := range []any{"", "../escape", "/absolute", 42.0} {
+		raw := validExportCharacterBody()
+		raw["assetPrefix"] = prefix
+		if _, issues := parseExportCharacterRequest(raw); len(issues) == 0 {
+			t.Fatalf("invalid asset prefix accepted: %v", prefix)
+		}
+	}
+}

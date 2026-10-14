@@ -30,6 +30,7 @@ import (
 )
 
 type exportCharacterRequest struct {
+	AssetPrefix    string                      `json:"assetPrefix,omitempty"`
 	TextureBaking  config.TextureBakingOptions `json:"textureBaking,omitempty"`
 	Character      character.Character         `json:"character"`
 	OutputFileName string                      `json:"outputFileName"`
@@ -310,6 +311,9 @@ func runCharacterExport(ctx context.Context, req exportCharacterRequest, jobID s
 
 	cfg := config.DefaultConfig()
 	cfg.TextureBaking = req.TextureBaking
+	if req.AssetPrefix != "" {
+		cfg.AssetPrefix = req.AssetPrefix
+	}
 	cfg.MDX = req.Format == "mdx"
 	if req.Optimization.MaxTextureSize != "" {
 		switch req.Optimization.MaxTextureSize {

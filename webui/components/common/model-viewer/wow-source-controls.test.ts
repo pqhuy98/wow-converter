@@ -1,0 +1,70 @@
+import { readFileSync } from 'node:fs';
+import { createContext, runInContext } from 'node:vm';
+
+import { expect, test } from 'bun:test';
+
+test('WoW viewer matches orbit, ground move, pan, zoom and touch controls', async () => {
+  const context = createContext({ URL, URLSearchParams, performance });
+  runInContext(`
+    const query = new URLSearchParams();
+    const canvasEvents = {}, windowEvents = {};
+    const removedNativeEvents=[];
+    const GLFW={active:{id:1},setInputMode:(...args)=>removedNativeEvents.push(args)};
+    for(const name of ['onMousemove','onMouseButtonDown','onMouseButtonUp','onMouseWheel','onMouseenter','onMouseleave','onClickRequestPointerLock','onKeydown','onKeyPress','onKeyup']) GLFW[name]=()=>{};
+    const elements = [];
+    const canvas = {width:1000,height:600,style:{visibility:'hidden'},addEventListener:(name,fn)=>canvasEvents[name]=fn,removeEventListener:(name,fn,capture)=>removedNativeEvents.push([name,!!fn,capture])};
+    const window = {addEventListener:(name,fn)=>windowEvents[name]=fn,removeEventListener:(name,fn,capture)=>removedNativeEvents.push([name,!!fn,capture])};
+    window.location={href:'http://localhost/wow-source/?model=effect.m2'};
+    window.history={replaceState:(_state,_title,url)=>window.location.href=url.href};
+    const skinReplacements=[];
+    const setTextureReplacements=ids=>skinReplacements.push(ids);
+    const document = {title:'',head:{append(){}},body:{append(){}},documentElement:{dataset:{}},
+      getElementById:id=>elements.find(e=>e.id===id),
+      createElement:tag=>{const element={tag,append(){},insertBefore(){},setAttribute(name,value){this[name]=value;},click(){this.onclick();}};elements.push(element);return element;}};
+    const runtimeReady=true, runtimeAborted=false, failure='', failedAssets=[];
+    const info={name:'effect.m2',skinId:'blue',skins:[{id:'blue',label:'Blue',textureReplacements:[101]},{id:'grey',label:'Grey',textureReplacements:[102]}],bounds:{Min:[-100,-100,-100],Max:[100,100,100]},viewerBounds:{Min:[-1,-1,0],Max:[1,1,2]},metadata:{sequences:[{index:0,animationID:0,wowName:'Stand',wowVariant:0}]}};
+    let selected=info.metadata.sequences[0], camera;
+    const ticks=[];
+    const Module={_setAnimationId(){},_gameloop(dt){ticks.push(dt);},_setSceneSize(){}};
+    const settleAssets=async()=>{};
+    let scheduledFrame;
+    const requestAnimationFrame=fn=>{scheduledFrame=fn;};
+    const flushFrame=()=>scheduledFrame(performance.now());
+    const cameraAdvances=[];
+    const setCamera=(value,advance)=>{camera=value;cameraAdvances.push(advance);};
+    const event=(extra={})=>({preventDefault(){},clientX:0,clientY:0,...extra});
+    const distance=()=>Math.hypot(...camera.eye.map((v,i)=>v-camera.target[i]));
+  `, context);
+  const host = readFileSync(new URL('../../../../golang/internal/server/wowsource/assets/interactive.js', import.meta.url), 'utf8');
+  runInContext(host, context);
+  await runInContext('startViewer()', context);
+  runInContext('flushFrame()', context);
+  const simulate = (code: string) => runInContext(`${code};flushFrame()`, context);
+  expect(runInContext('document.documentElement.dataset.viewerReady', context)).toBe('true');
+  expect(runInContext('removedNativeEvents.length', context)).toBe(16);
+  expect(runInContext('removedNativeEvents.slice(0,15).every(row=>row[1] && row[2])', context)).toBe(true);
+  expect(runInContext('JSON.stringify(removedNativeEvents[15])', context)).toBe('[1,208897,212993]');
+  const initialDistance: number = runInContext('distance()', context);
+  expect(initialDistance).toBeCloseTo(5, 8);
+  expect(runInContext('canvas.style.visibility', context)).toBe('visible');
+  runInContext('const skinPicker=elements.find(e=>e["aria-label"]==="Skin");skinPicker.value="grey";skinPicker.onchange()', context);
+  expect(runInContext('JSON.stringify(skinReplacements)', context)).toBe('[[102]]');
+  expect(runInContext('info.skinId', context)).toBe('grey');
+  expect(runInContext('distance()', context)).toBe(initialDistance);
+  simulate('canvasEvents.wheel(event({deltaY:100}))');
+  expect(runInContext('distance()', context)).toBeCloseTo(initialDistance * 1.1, 8);
+  simulate('canvasEvents.mousedown(event({buttons:1}));windowEvents.mousemove(event({clientX:90,clientY:0}));windowEvents.mouseup(event({buttons:0}))');
+  expect(runInContext('Math.atan2(camera.eye[1]-camera.target[1],camera.eye[0]-camera.target[0])', context)).toBeCloseTo(-Math.PI / 4, 8);
+  simulate('canvasEvents.mousedown(event({buttons:2}));windowEvents.mousemove(event({clientX:20,clientY:20}));windowEvents.mouseup(event({buttons:0}))');
+  expect(runInContext('camera.target[2]', context)).toBe(0);
+  expect(runInContext('Math.hypot(camera.target[0],camera.target[1])>0', context)).toBe(true);
+  simulate('canvasEvents.mousedown(event({buttons:4}));windowEvents.mousemove(event({clientX:0,clientY:20}));windowEvents.mouseup(event({buttons:0}))');
+  expect(runInContext('camera.target[2]>0', context)).toBe(true);
+  simulate('elements.find(e=>e.textContent==="Reset camera").click();canvasEvents.touchstart(event({touches:[{clientX:0,clientY:0},{clientX:100,clientY:0}]}));canvasEvents.touchmove(event({touches:[{clientX:0,clientY:0},{clientX:110,clientY:0}]}))');
+  expect(runInContext('distance()', context)).toBeCloseTo(initialDistance * 0.9, 8);
+  runInContext('elements.find(e=>e.textContent==="Pause").onclick();ticks.length=0;cameraAdvances.length=0;canvasEvents.wheel(event({deltaY:100}));canvasEvents.wheel(event({deltaY:100}))', context);
+  expect(runInContext('ticks.length+cameraAdvances.length', context)).toBe(0);
+  runInContext('flushFrame()', context);
+  expect(runInContext('JSON.stringify(cameraAdvances)', context)).toBe('[false]');
+  expect(runInContext('JSON.stringify(ticks)', context)).toBe('[0.0002]');
+});

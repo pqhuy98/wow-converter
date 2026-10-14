@@ -57,7 +57,9 @@ export function SettingsDialogButton({
   onChanged?: () => void
   }) {
   const snapshotRef = useRef('');
-  const settingsSnapshot = JSON.stringify({ character, format, formatVersion, textureBaking });
+  const settingsSnapshot = JSON.stringify({
+    character, format, formatVersion, textureBaking,
+  });
 
   return (
     <Dialog

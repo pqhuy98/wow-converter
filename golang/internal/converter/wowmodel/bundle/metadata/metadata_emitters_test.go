@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"math"
 	"testing"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
@@ -9,6 +10,57 @@ import (
 	imath "github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
+
+func TestParticleGravityDecodesStaticAndAnimatedTracks(t *testing.T) {
+	for _, vector := range []bool{false, true} {
+		flags := uint32(0x20000)
+		bits, want := math.Float32bits(2.5), 2.5
+		if vector {
+			flags |= 0x00800000
+			bits, want = uint32(uint16(65536-200))<<16, 200*0.04238648
+		}
+		for _, animated := range []bool{false, true} {
+			track := m2.Track{GlobalSeq: config.BlizzardNull, Timestamps: [][]uint32{{0}}, Values: [][][]float64{{{float64(bits)}}}}
+			if animated {
+				track.Timestamps = append(track.Timestamps, []uint32{0})
+				track.Values = append(track.Values, [][]float64{{float64(bits)}})
+			}
+			f := &File{IsLoaded: true, m2Animations: []m2AnimMeta{{Duration: 500}, {Duration: 500}}, particleEmitters: []m2.ParticleEmitterEntry{{Flags: flags, Gravity: track}}}
+			model := mdl.New(mdl.NewMDLOptions{Name: "gravity"})
+			model.Bones = []*components.Bone{components.NewBone("root")}
+			f.BindMdl(model)
+			f.ExtractMDLParticlesEmitters([]components.Texture{{Image: "test.blp"}})
+			gravity := model.ParticleEmitter2s[0].Gravity
+			if !animated {
+				if !gravity.Static || math.Abs(gravity.Value-want) > 1e-6 {
+					t.Fatalf("static vector=%v: %v", vector, gravity)
+				}
+			} else {
+				for _, value := range gravity.Anim.KeyFrames {
+					if math.Abs(value.(float64)-want) > 1e-6 {
+						t.Fatalf("animated vector=%v: %v want %v", vector, value, want)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestParticleTailDurationFollowsSourceFlags(t *testing.T) {
+	for _, test := range []struct {
+		tail  float32
+		flags uint32
+		want  float64
+	}{
+		{0, 0x40000, 0}, {3, 0x40000, 3}, {3, 0x40400, 1}, {1, 0x40400, 0.75},
+	} {
+		p := m2.ParticleEmitterEntry{Flags: test.flags, TailLength: test.tail, Lifespan: m2.Track{Values: [][][]float64{{{2}}}}}
+		_, got, _ := correctParticleEmission(p, components.AnimatedOrStatic[float64]{Static: true, Value: 70})
+		if math.Abs(got-test.want) > 1e-6 {
+			t.Fatalf("tail=%v flags=%x: got %v want %v", test.tail, test.flags, got, test.want)
+		}
+	}
+}
 
 func TestParticleAgeCurvesInterpolateAndClamp(t *testing.T) {
 	p := m2.ParticleEmitterEntry{
@@ -68,18 +120,17 @@ func TestParticleVisibilitySparseAnimations(t *testing.T) {
 	}
 }
 
-func TestParticleEmissionCoveragePreservesDisabledAndHeadOnlyEmitters(t *testing.T) {
+func TestParticleEmissionPreservesSourceRatesAndDisabledKeys(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		flags   uint32
-		rate    float64
-		boosted bool
+		name  string
+		flags uint32
+		rate  float64
 	}{
-		{"banner circle disabled", 133672, 0, false},
-		{"banner ring disabled", 135208, 0, false},
-		{"disabled tail", 0x40400, 0, false},
-		{"head sprite", 0x20400, 1, false},
-		{"active tail", 0x40400, 1, true},
+		{"banner circle disabled", 133672, 0},
+		{"banner ring disabled", 135208, 0},
+		{"disabled tail", 0x40400, 0},
+		{"head sprite", 0x20400, 1},
+		{"active tail", 0x40400, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := m2.ParticleEmitterEntry{Flags: tc.flags, TailLength: 0.1,
@@ -88,11 +139,7 @@ func TestParticleEmissionCoveragePreservesDisabledAndHeadOnlyEmitters(t *testing
 				AlphaTrack:   m2.PartTrack{Values: [][]float64{{0}, {12850}, {0}}},
 			}
 			_, _, rate := correctParticleEmission(p, components.AnimatedOrStatic[float64]{Static: true, Value: tc.rate})
-			if tc.boosted {
-				if rate.Value <= tc.rate {
-					t.Fatal("active tail coverage was not corrected")
-				}
-			} else if rate.Value != tc.rate {
+			if rate.Value != tc.rate {
 				t.Fatalf("emission changed from %v to %v", tc.rate, rate.Value)
 			}
 			anim := &components.Animation{KeyFrames: map[int]any{0: float64(0), 100: tc.rate}}
@@ -243,5 +290,49 @@ func TestExtractMDLLightsTypeMapping(t *testing.T) {
 				t.Fatalf("expected %s, got %s", tt.want, got)
 			}
 		})
+	}
+}
+
+func TestParticleNegativeDragPreservesAcceleration(t *testing.T) {
+	for _, initial := range []float64{-10, 10} {
+		speed := components.AnimatedOrStatic[float64]{Static: true, Value: initial}
+		applyParticleDrag(&speed, 1.5, -1)
+		if math.Abs(speed.Value) <= math.Abs(initial) || speed.Value*initial <= 0 {
+			t.Fatalf("negative drag did not accelerate %v: %v", initial, speed.Value)
+		}
+		if got := calculateEquivalentVelocityNoDrag(initial, 1.5, 0); got != initial {
+			t.Fatalf("zero drag changed velocity: %v", got)
+		}
+	}
+}
+
+func TestM2MotionBurstFlagDoesNotBecomeWC3Squirt(t *testing.T) {
+	track := func(value float64) m2.Track {
+		return m2.Track{GlobalSeq: config.BlizzardNull, Timestamps: [][]uint32{{0}}, Values: [][][]float64{{{value}}}}
+	}
+	f := &File{IsLoaded: true, m2Animations: []m2AnimMeta{{Duration: 2000}}, particleEmitters: []m2.ParticleEmitterEntry{{Flags: 0x20040, EmissionRate: track(25), Lifespan: track(2)}}}
+	model := mdl.New(mdl.NewMDLOptions{Name: "motion burst"})
+	model.Bones = []*components.Bone{components.NewBone("root")}
+	f.BindMdl(model)
+	f.ExtractMDLParticlesEmitters([]components.Texture{{Image: "smoke.blp"}})
+	if len(model.ParticleEmitter2s) != 1 || model.ParticleEmitter2s[0].Squirt || model.ParticleEmitter2s[0].EmissionRate.Value != 25 {
+		t.Fatal("M2 particles/second became WC3 emission-per-key")
+	}
+}
+
+func TestParticleDragMatchesVisibleAge(t *testing.T) {
+	p := m2.ParticleEmitterEntry{Drag: 2, AlphaTrack: m2.PartTrack{Timestamps: []uint16{0, 2171, 16384, 32767}, Values: [][]float64{{0}, {0}, {32767}, {0}}}}
+	age := particleDragSampleAge(p, 2)
+	if age < 1 || age > 1.1 {
+		t.Fatalf("visible age %g, want near the one-second opacity peak", age)
+	}
+	visible := calculateEquivalentVelocityNoDrag(1, age, 2)
+	endpoint := calculateEquivalentVelocityNoDrag(1, 2, 2)
+	if visible < 1.5*endpoint {
+		t.Fatal("visible cloud remains collapsed to its death-time travel speed")
+	}
+	p.Drag = -1
+	if particleDragSampleAge(p, 2) != 2 {
+		t.Fatal("negative-drag acceleration approximation changed")
 	}
 }

@@ -13,8 +13,8 @@ export function duplicateMapSouthRotated(map: MapTranslator): void {
 
   // W3E rows start at the southwest. The shared seam belongs to the original.
   const extendVertices = <T>(rows: T[][]): T[][] => {
-    assert(rows.length === height + 1 && rows.every(row => row.length === width + 1), 'Invalid terrain grid');
-    return [...rows.slice(1).reverse().map(row => [...row].reverse()), ...rows.map(row => [...row])];
+    assert(rows.length === height + 1 && rows.every((row) => row.length === width + 1), 'Invalid terrain grid');
+    return [...rows.slice(1).reverse().map((row) => [...row].reverse()), ...rows.map((row) => [...row])];
   };
   terrain.groundHeight = extendVertices(terrain.groundHeight);
   terrain.waterHeight = extendVertices(terrain.waterHeight);
@@ -27,9 +27,9 @@ export function duplicateMapSouthRotated(map: MapTranslator): void {
   terrain.layerHeight = extendVertices(terrain.layerHeight);
 
   const regionIds = new Map<number, number>();
-  let nextRegionId = Math.max(-1, ...map.regions.map(region => region.id)) + 1;
-  const regionNames = new Set(map.regions.map(region => region.name));
-  const regions = map.regions.map(region => {
+  let nextRegionId = Math.max(-1, ...map.regions.map((region) => region.id)) + 1;
+  const regionNames = new Set(map.regions.map((region) => region.name));
+  const regions = map.regions.map((region) => {
     const copy = structuredClone(region);
     copy.id = nextRegionId++;
     regionIds.set(region.id, copy.id);
@@ -37,15 +37,17 @@ export function duplicateMapSouthRotated(map: MapTranslator): void {
     while (regionNames.has(copy.name)) copy.name += ' Copy';
     regionNames.add(copy.name);
     copy.position = {
-      left: reflectX(region.position.right), right: reflectX(region.position.left),
-      bottom: reflectY(region.position.top), top: reflectY(region.position.bottom),
+      left: reflectX(region.position.right),
+      right: reflectX(region.position.left),
+      bottom: reflectY(region.position.top),
+      top: reflectY(region.position.bottom),
     };
     return copy;
   });
   map.regions.push(...regions);
 
-  let nextDoodadId = Math.max(-1, ...map.doodads.map(doodad => doodad.id)) + 1;
-  map.doodads.push(...map.doodads.map(doodad => {
+  let nextDoodadId = Math.max(-1, ...map.doodads.map((doodad) => doodad.id)) + 1;
+  map.doodads.push(...map.doodads.map((doodad) => {
     const copy = structuredClone(doodad);
     copy.id = nextDoodadId++;
     copy.position = [reflectX(doodad.position[0]), reflectY(doodad.position[1]), doodad.position[2]];
@@ -53,15 +55,15 @@ export function duplicateMapSouthRotated(map: MapTranslator): void {
     return copy;
   }));
   // Special terrain doodads store [variation, tileX, tileY], not world coordinates.
-  const originalSpecial = map.specialDoodads.map(doodad => structuredClone(doodad));
-  map.specialDoodads.forEach(doodad => { doodad.position[2] += height; });
-  map.specialDoodads.push(...originalSpecial.map(doodad => ({
+  const originalSpecial = map.specialDoodads.map((doodad) => structuredClone(doodad));
+  map.specialDoodads.forEach((doodad) => { doodad.position[2] += height; });
+  map.specialDoodads.push(...originalSpecial.map((doodad) => ({
     ...doodad,
     position: [doodad.position[0], width - 1 - doodad.position[1], height - 1 - doodad.position[2]] as [number, number, number],
   })));
 
-  let nextUnitId = Math.max(-1, ...map.units.map(unit => unit.id)) + 1;
-  map.units.push(...map.units.map(unit => {
+  let nextUnitId = Math.max(-1, ...map.units.map((unit) => unit.id)) + 1;
+  map.units.push(...map.units.map((unit) => {
     const copy = structuredClone(unit);
     copy.id = nextUnitId++;
     copy.position = [reflectX(unit.position[0]), reflectY(unit.position[1]), unit.position[2]];
@@ -70,8 +72,8 @@ export function duplicateMapSouthRotated(map: MapTranslator): void {
     if (copy.waygate >= 0) copy.waygate = regionIds.get(copy.waygate) ?? copy.waygate;
     return copy;
   }));
-  const cameraNames = new Set(map.cameras.map(camera => camera.name));
-  map.cameras.push(...map.cameras.map(camera => {
+  const cameraNames = new Set(map.cameras.map((camera) => camera.name));
+  map.cameras.push(...map.cameras.map((camera) => {
     const copy = structuredClone(camera);
     copy.target = { x: reflectX(camera.target.x), y: reflectY(camera.target.y) };
     copy.rotation = rotateDegrees(camera.rotation);

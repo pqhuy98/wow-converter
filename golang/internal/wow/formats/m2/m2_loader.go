@@ -16,6 +16,7 @@ const (
 	chunkSKID = 0x44494B53
 	chunkBFID = 0x44494642
 	chunkAFID = 0x44494641
+	chunkEXP2 = 0x32505845
 )
 
 // AnimFileIDEntry maps animation IDs to file data IDs.
@@ -92,6 +93,7 @@ func (l *Loader) Load(ctx context.Context) error {
 	if l.IsLoaded {
 		return nil
 	}
+	var sourceOverrides []float32
 	for l.Data.RemainingBytes() > 0 {
 		chunkID := readU32(l.Data)
 		chunkSize := int(readU32(l.Data))
@@ -111,8 +113,23 @@ func (l *Loader) Load(ctx context.Context) error {
 			l.BoneFileIDs = readU32Slice(l.Data, chunkSize/4)
 		case chunkAFID:
 			l.parseChunkAFID(chunkSize)
+		case chunkEXP2:
+			var err error
+			sourceOverrides, err = l.parseChunkEXP2(chunkSize)
+			if err != nil {
+				return err
+			}
 		}
 		l.Data.Seek(nextChunkPos)
+	}
+	if sourceOverrides != nil {
+		if len(sourceOverrides) != len(l.ParticleEmitters) {
+			return fmt.Errorf("EXP2 particle count does not match MD21")
+		}
+		for i, z := range sourceOverrides {
+			// EXP2 replaces the old zSource track with a per-emitter constant.
+			l.ParticleEmitters[i].ZSource = Track{GlobalSeq: 65535, Timestamps: [][]uint32{{0}}, Values: [][][]float64{{{float64(z)}}}}
+		}
 	}
 	for _, skin := range l.Skins {
 		skin.getFile = l.getFile
@@ -123,6 +140,26 @@ func (l *Loader) Load(ctx context.Context) error {
 	l.IsLoaded = true
 	_ = ctx
 	return nil
+}
+
+func (l *Loader) parseChunkEXP2(size int) ([]float32, error) {
+	base := l.Data.Offset()
+	if size < 8 || size > l.Data.RemainingBytes() {
+		return nil, fmt.Errorf("invalid EXP2 chunk size")
+	}
+	count, offset := int(readU32(l.Data)), int(readU32(l.Data))
+	if count == 0 {
+		return []float32{}, nil
+	}
+	if offset < 8 || offset > size || count > (size-offset)/28 {
+		return nil, fmt.Errorf("invalid EXP2 particle table")
+	}
+	values := make([]float32, count)
+	for i := range values {
+		l.Data.Seek(base + offset + i*28)
+		values[i] = l.Data.ReadFloatLE().(float32)
+	}
+	return values, nil
 }
 
 // GetSkin loads and returns skin geometry by index.
@@ -741,7 +778,7 @@ func (l *Loader) parseMD21ParticleEmitters(ofs int) {
 		entry.EmissionSpeed = ReadM2Track(l.Data, ofs, TrackFloat, nil)
 		entry.SpeedVariation = ReadM2Track(l.Data, ofs, TrackFloat, nil)
 		entry.VerticalRange = ReadM2Track(l.Data, ofs, TrackFloat, nil)
-		_ = ReadM2Track(l.Data, ofs, TrackFloat, nil) // horizontalRange
+		entry.HorizontalRange = ReadM2Track(l.Data, ofs, TrackFloat, nil)
 		entry.Gravity = ReadM2Track(l.Data, ofs, TrackUint32, nil)
 		entry.Lifespan = ReadM2Track(l.Data, ofs, TrackFloat, nil)
 		entry.LifespanVary = l.Data.ReadFloatLE().(float32)
@@ -749,7 +786,7 @@ func (l *Loader) parseMD21ParticleEmitters(ofs int) {
 		_ = l.Data.ReadFloatLE().(float32) // emissionRateVary
 		entry.EmissionAreaLength = ReadM2Track(l.Data, ofs, TrackFloat, nil)
 		entry.EmissionAreaWidth = ReadM2Track(l.Data, ofs, TrackFloat, nil)
-		_ = ReadM2Track(l.Data, ofs, TrackFloat, nil) // zSource
+		entry.ZSource = ReadM2Track(l.Data, ofs, TrackFloat, nil)
 		entry.ColorTrack = ReadM2PartTrack(l.Data, ofs, TrackFloat3)
 		entry.AlphaTrack = ReadM2PartTrack(l.Data, ofs, TrackInt16)
 		entry.ScaleTrack = ReadM2PartTrack(l.Data, ofs, TrackFloat2)
@@ -764,10 +801,10 @@ func (l *Loader) parseMD21ParticleEmitters(ofs int) {
 		entry.TwinkleScale.Max = l.Data.ReadFloatLE().(float32)
 		_ = l.Data.ReadFloatLE().(float32) // burstMultiplier
 		entry.Drag = l.Data.ReadFloatLE().(float32)
-		_ = l.Data.ReadFloatLE().(float32) // baseSpin
-		_ = l.Data.ReadFloatLE().(float32) // baseSpinVary
-		_ = l.Data.ReadFloatLE().(float32) // spin
-		_ = l.Data.ReadFloatLE().(float32) // spinVary
+		entry.BaseSpin = l.Data.ReadFloatLE().(float32)
+		entry.BaseSpinVary = l.Data.ReadFloatLE().(float32)
+		entry.Spin = l.Data.ReadFloatLE().(float32)
+		entry.SpinVary = l.Data.ReadFloatLE().(float32)
 		_ = readFloat3(l.Data)
 		_ = readFloat3(l.Data)             // tumble min/max box
 		_ = readFloat3(l.Data)             // windVector

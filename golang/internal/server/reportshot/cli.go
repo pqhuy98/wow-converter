@@ -274,8 +274,8 @@ func loadShotCameras(opts *shotOptions) error {
 	return nil
 }
 
-func writeSheet(dest string, frames [][]byte) error {
-	data, err := composeSheet(frames, false)
+func writeSheet(dest string, frames [][]byte, contrast ...bool) error {
+	data, err := composeSheet(frames, false, contrast...)
 	if err != nil {
 		return err
 	}

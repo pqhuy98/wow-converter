@@ -155,12 +155,19 @@ async function getDisplayIdFromUrl(url: string): Promise<{ displayId: number, sl
 const respCache = new LRUCache<string, string>({ max: 200 });
 export async function fetchWithCache(url: string): Promise<string> {
   const cached = respCache.get(url);
-  if (cached) return cached;
+  if (cached && !isVerificationPage(cached)) return cached;
   const res = await customFetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch wowhead url: ${url} ${res.status} ${res.statusText} ${await res.text()}`);
   }
   const text = await res.text();
+  if (isVerificationPage(text)) {
+    throw new Error(`Wowhead requires JavaScript verification for ${url}; retry when the page is available`);
+  }
   respCache.set(url, text);
   return text;
+}
+
+function isVerificationPage(text: string): boolean {
+  return text.includes("verify that you're not a robot") && text.includes('JavaScript');
 }

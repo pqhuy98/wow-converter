@@ -11,7 +11,7 @@ import Sequence from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/handlers/mdx/sequen
 import Scene from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/scene';
 import ModelViewer from '@pqhuy98/mdx-m3-viewer/dist/cjs/viewer/viewer';
 import { vec3 } from 'gl-matrix';
-import { Download, Mouse } from 'lucide-react';
+import { Download, ExternalLink, Mouse } from 'lucide-react';
 import {
   useEffect, useMemo, useRef, useState,
 } from 'react';
@@ -30,6 +30,7 @@ import { freezeShotPose, settleShotPose } from './shot-pose';
 declare global {
   interface Window {
     __shotView?: (name: string, reference?: ShotCameraReference) => string
+    __shotWarmup?: (seconds: number) => void
   }
 }
 
@@ -41,6 +42,8 @@ interface ModelViewerProps {
   playbackSelection?: { name: string; index?: number; revision: number }
   onSequenceChange?: (index: number) => void
   modelPath?: string
+  wowModelPath?: string
+  wowSkinId?: string
   /** When unchanged across reloads (e.g. skin swap), orbit camera is preserved. */
   cameraSessionKey?: string
   alwaysFullscreen?: boolean
@@ -67,7 +70,7 @@ const MAX_DISTANCE = 2000000;
 const FAR_CLIP_PLANE = 100_000_000;
 
 export default function ModelViewerUi({
-  modelPath, modelRevision, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence, onSequenceChange, animationHeaderAction, animationList, canvasOverlay, playbackSelection,
+  modelPath, wowModelPath, wowSkinId, modelRevision, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence, onSequenceChange, animationHeaderAction, animationList, canvasOverlay, playbackSelection,
 }: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -728,6 +731,12 @@ export default function ModelViewerUi({
     const pose = shotPoseRef.current;
     const settled = Boolean(shot && inst && pose?.inst === inst && pose.seq === currentSeq);
     const bindShotView = (): void => {
+      window.__shotWarmup = (seconds: number): void => {
+        const liveScene = sceneRef.current;
+        const liveInst = instanceRef.current;
+        if (!liveScene || !liveInst || !Number.isFinite(seconds) || seconds < 0 || seconds > 120) throw new Error('Invalid particle capture time');
+        settleShotPose(liveScene, liveInst, 0, seconds);
+      };
       window.__shotView = (name: string, reference?: ShotCameraReference) => {
         const liveScene = sceneRef.current;
         const liveInst = instanceRef.current;
@@ -1102,6 +1111,11 @@ export default function ModelViewerUi({
               tooltips={cutBoxEnabled ? 'Disable Cut Box' : 'Enable Cut Box'} asChild
             />
           </Button>}
+          {wowModelPath && !serverConfig.isSharedHosting && <Button
+            variant="secondary" size="sm" asChild aria-label="Open WoW renderer in a new tab"
+            title="Open WoW renderer in a new tab"
+            className="w-10 h-10 bg-[hsl(var(--viewer-control-bg))] text-[hsl(var(--viewer-sidebar-fg))] border border-[hsl(var(--viewer-divider))] hover:bg-[hsl(var(--viewer-item-hover))]"
+          ><a href={`/wow-viewer?model=${encodeURIComponent(wowModelPath)}${wowSkinId ? `&skin=${encodeURIComponent(wowSkinId)}` : ''}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-5 w-5" /></a></Button>}
         </div>}
         {!shot && <div className="absolute bottom-2 left-2 z-10 flex items-end gap-3">
           <TooltipHelp

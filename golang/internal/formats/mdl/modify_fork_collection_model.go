@@ -239,22 +239,29 @@ func cloneLights(source []*components.Light) []*components.Light {
 func cloneParticleEmitters(source []*components.ParticleEmitter2) []*components.ParticleEmitter2 {
 	out := make([]*components.ParticleEmitter2, len(source))
 	for i, value := range source {
-		if value == nil {
-			continue
-		}
-		cloned := *value
-		cloneNodeBaseAnimations(&cloned.NodeBase)
-		cloned.Visibility = cloneAnimation(cloned.Visibility)
-		cloned.Width.Anim = cloneAnimation(cloned.Width.Anim)
-		cloned.Length.Anim = cloneAnimation(cloned.Length.Anim)
-		cloned.EmissionRate.Anim = cloneAnimation(cloned.EmissionRate.Anim)
-		cloned.Latitude.Anim = cloneAnimation(cloned.Latitude.Anim)
-		cloned.Speed.Anim = cloneAnimation(cloned.Speed.Anim)
-		cloned.Variation.Anim = cloneAnimation(cloned.Variation.Anim)
-		cloned.Gravity.Anim = cloneAnimation(cloned.Gravity.Anim)
-		out[i] = &cloned
+		out[i] = CloneParticleEmitter2(value)
 	}
 	return out
+}
+
+// CloneParticleEmitter2 detaches mutable tracks while retaining parent, texture
+// and global-sequence references owned by the same model.
+func CloneParticleEmitter2(value *components.ParticleEmitter2) *components.ParticleEmitter2 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloneNodeBaseAnimations(&cloned.NodeBase)
+	cloned.Visibility = cloneAnimation(cloned.Visibility)
+	cloned.Width.Anim = cloneAnimation(cloned.Width.Anim)
+	cloned.Length.Anim = cloneAnimation(cloned.Length.Anim)
+	cloned.EmissionRate.Anim = cloneAnimation(cloned.EmissionRate.Anim)
+	cloned.Latitude.Anim = cloneAnimation(cloned.Latitude.Anim)
+	cloned.Speed.Anim = cloneAnimation(cloned.Speed.Anim)
+	cloned.Variation.Anim = cloneAnimation(cloned.Variation.Anim)
+	cloned.Gravity.Anim = cloneAnimation(cloned.Gravity.Anim)
+	cloned.Flags2 = append([]components.ParticleEmitter2Flag(nil), value.Flags2...)
+	return &cloned
 }
 
 func cloneHelpers(source []*components.Helper) []*components.Helper {

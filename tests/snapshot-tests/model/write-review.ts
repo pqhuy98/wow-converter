@@ -8,9 +8,14 @@
  * Open tests/snapshot-tests/model/review.html (or serve that folder).
  * The snapshot test prints a blue file:// link after each run.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import {
+  existsSync, readdirSync, readFileSync, writeFileSync,
+} from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
+
+import { converterUrl } from '../../helpers';
+import { snapshotExportPath } from './catalog';
 
 const root = import.meta.dir;
 const sidecar = path.join(root, 'review-failures.json');
@@ -28,6 +33,8 @@ interface ReviewCard {
   readonly name: string;
   readonly actualSrc: string;
   readonly expectedSrc: string;
+  readonly converterUrl: string;
+  readonly wowViewerUrl?: string;
   readonly ok: boolean;
   readonly wowheadSrc?: string;
   readonly base?: string;
@@ -51,13 +58,26 @@ function buildCase(suite: string, slug: string, detail: string | undefined, ok: 
   const expectedSrc = `${suite}/${slug}/${slug}.expected.png`;
   const wowheadSrc = `${suite}/${slug}/${slug}.wowhead.png`;
   if (!existsSync(path.join(root, actualSrc)) || !existsSync(path.join(root, expectedSrc))) return undefined;
-  const base = readCaseBase(suite, slug);
+  if (suite !== 'retail' && suite !== 'classic' && suite !== 'mount') return undefined;
+  const reference = readCaseReference(suite, slug);
+  const base = reference.base;
+  const modelPath = `${snapshotExportPath(suite, slug) + (reference.mounted ? '_mount' : '')}.mdx`;
+  const server = converterUrl();
+  const converter = new URL('/viewer', server);
+  converter.searchParams.set('model', modelPath);
+  const source = new URL('/wow-viewer', server);
+  let sourceModel = base.startsWith('local::') ? base.slice(7).replace(/\\/g, '/') : base;
+  if (base.startsWith('local::') && !/\.(m2|wmo)$/i.test(sourceModel) && !/^\d+$/.test(sourceModel)) sourceModel += '.m2';
+  source.searchParams.set('model', sourceModel);
+  source.searchParams.set('product', suite === 'classic' ? 'wow_classic' : 'wow');
   return {
     suite,
     slug,
     name: `${suite}/${slug}`,
     actualSrc,
     expectedSrc,
+    converterUrl: converter.href,
+    ...(base ? { wowViewerUrl: source.href } : {}),
     ok,
     ...(existsSync(path.join(root, wowheadSrc)) ? { wowheadSrc } : {}),
     ...(base ? { base } : {}),
@@ -85,16 +105,15 @@ function collectCases(listed: readonly ReviewInput[]): ReviewCard[] {
   return [...byId.values()];
 }
 
-function readCaseBase(suite: string, slug: string): string {
-  const manifestPath = path.join(root, suite, slug, `${slug}.manifest.json`);
-  if (!existsSync(manifestPath)) return '';
+function readCaseReference(suite: string, slug: string): {base: string;mounted: boolean} {
+  const file = path.join(root, suite, slug, `${slug}.manifest.json`);
+  const empty = { base: '', mounted: false };
+  if (!existsSync(file)) return empty;
   try {
-    const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    if (!isRecord(parsed) || !isRecord(parsed.case) || typeof parsed.case.base !== 'string') return '';
-    return parsed.case.base;
-  } catch {
-    return '';
-  }
+    const manifest: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    if (!isRecord(manifest) || !isRecord(manifest.case) || typeof manifest.case.base !== 'string') return empty;
+    return { base: manifest.case.base, mounted: typeof manifest.case.mount === 'string' && manifest.case.mount !== '' };
+  } catch { return empty; }
 }
 
 function parseId(id: string): ReviewInput {
@@ -189,7 +208,10 @@ header button, .filters button, .vote-filters button { background: #1c1d20; colo
 .lb-name { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .lb-count { flex: none; margin-left: auto; color: #8a8a90; font-size: 13px; }
 .lb-base { margin-top: 4px; font-size: 12px; color: #8a8a90; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-base a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5b8def; text-decoration: none; }
+.model-links { display:flex; flex-wrap:wrap; gap:12px; padding:6px 12px; }
+.model-links a, .lb-base a { color:#5b8def; }
+.lb-base { display:flex; flex-wrap:wrap; gap:12px; }
+.lb-base a { display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5b8def; text-decoration: none; }
 .lb-base a:hover { text-decoration: underline; }
 .lb-votes { gap: 24px; margin-top: 16px; }
 .lb-votes button { width: 88px; height: 88px; font-size: 44px; border-radius: 18px; border-width: 2px; }
@@ -243,7 +265,7 @@ dialog button[value="ok"] { background: #4a1e1e; border-color: #c45c5c; color: #
 </dialog>
 <script>
 const CASES = ${JSON.stringify(cases)};
-const VOTE_KEY = "snapshot-review-votes";
+try { localStorage.removeItem("snapshot-review-votes"); } catch {}
 const filtersEl = document.getElementById("filters");
 const voteFiltersEl = document.getElementById("vote-filters");
 const statusEl = document.getElementById("status");
@@ -263,20 +285,7 @@ let voteFilter = "all";
 let outcome = "failed";
 let index = 0;
 let pendingBad = "";
-const votes = loadVotes();
-
-function loadVotes() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(VOTE_KEY) || "{}");
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveVotes() {
-  localStorage.setItem(VOTE_KEY, JSON.stringify(votes));
-}
+const votes = {};
 
 function voteOf(name) {
   return votes[name] || null;
@@ -451,6 +460,10 @@ function render() {
     if (item.wowheadSrc) pair.append(column(item, "wowhead", item.wowheadSrc, list));
     pair.append(column(item, "expected", item.expectedSrc, list), column(item, "actual", item.actualSrc, list));
     card.append(title);
+    const links = document.createElement("div");
+    links.className = "model-links";
+    fillLinks(links,item);
+    card.append(links);
     if (vote?.vote === "bad" && vote.comment) {
       const note = document.createElement("p");
       note.className = "comment";
@@ -466,7 +479,6 @@ function render() {
 function markGood(name) {
   if (voteOf(name)?.vote === "good") delete votes[name];
   else votes[name] = { vote: "good" };
-  saveVotes();
   render();
 }
 
@@ -487,7 +499,6 @@ dialog.addEventListener("close", () => {
   const comment = commentInput.value.trim();
   if (comment === "") return;
   votes[name] = { vote: "bad", comment };
-  saveVotes();
   render();
 });
 
@@ -523,7 +534,7 @@ function syncLightbox() {
   lbKind.textContent = item.kind;
   lbName.textContent = item.name;
   count.textContent = (same.findIndex((slide) => slide.kind === item.kind) + 1) + " / " + same.length;
-  fillBase(CASES.find((c) => c.name === item.name)?.base || "");
+  fillLinks(lbBase,CASES.find((c) => c.name === item.name));
   lbVotes.replaceChildren(...voteButtons(item.name).children);
   if (img.complete) fitLightboxHead();
   else img.addEventListener("load", fitLightboxHead, { once: true });
@@ -559,21 +570,15 @@ function shiftCase(delta) {
   openAt(i);
 }
 
-function fillBase(base) {
-  lbBase.replaceChildren();
-  if (!base) { lbBase.hidden = true; return; }
-  lbBase.hidden = false;
-  lbBase.title = base;
-  if (/^https?:\\/\\//i.test(base)) {
-    const a = document.createElement("a");
-    a.href = base;
-    a.target = "_blank";
-    a.rel = "noreferrer";
-    a.textContent = base;
-    lbBase.append(a);
-  } else {
-    lbBase.textContent = base;
-  }
+function fillLinks(container,item) {
+ container.replaceChildren();
+ container.hidden = !item;
+ if(!item)return;
+ const links = [];
+ if(item.base && /^https?:\\/\\//i.test(item.base)) links.push(["Wowhead",item.base]);
+ links.push(["WoW-converter viewer",item.converterUrl]);
+ if(item.wowViewerUrl)links.push(["WoW viewer (base model)",item.wowViewerUrl]);
+ for(const [label,url] of links){const a=document.createElement("a");a.href=url;a.target="_blank";a.rel="noreferrer";a.textContent=label;container.append(a);}
 }
 
 function openAt(i) {

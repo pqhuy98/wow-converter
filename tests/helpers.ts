@@ -224,8 +224,9 @@ export async function exportCharacterWithMetadata(
   base: string,
   outputFileName: string,
   testCase: ModelCase,
+  assetPrefix?: string,
 ): Promise<ExportedCharacter> {
-  return runCharacterExport(base, outputFileName, testCase, true);
+  return runCharacterExport(base, outputFileName, testCase, true, assetPrefix);
 }
 
 async function runCharacterExport(
@@ -233,6 +234,7 @@ async function runCharacterExport(
   outputFileName: string,
   testCase: ModelCase,
   includeMetadata: boolean,
+  assetPrefix?: string,
 ): Promise<ExportedCharacter> {
   const character: {
     base: { type: string; value: string };
@@ -274,6 +276,7 @@ async function runCharacterExport(
       character,
       ...(testCase.textureBaking !== undefined ? { textureBaking: testCase.textureBaking } : {}),
       outputFileName,
+      ...(assetPrefix !== undefined ? { assetPrefix } : {}),
       optimization: {},
       format: 'mdx',
       formatVersion: '1000',

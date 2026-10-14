@@ -146,6 +146,7 @@ type ParticleEmitterEntry struct {
 	EmissionRate            Track         `json:"emissionRate"`
 	EmissionAreaLength      Track         `json:"emissionAreaLength"`
 	EmissionAreaWidth       Track         `json:"emissionAreaWidth"`
+	ZSource                 Track         `json:"zSource"`
 	ColorTrack              PartTrack     `json:"colorTrack"`
 	AlphaTrack              PartTrack     `json:"alphaTrack"`
 	ScaleTrack              PartTrack     `json:"scaleTrack"`
@@ -157,8 +158,12 @@ type ParticleEmitterEntry struct {
 		Min float32 `json:"min"`
 		Max float32 `json:"max"`
 	} `json:"twinkleScale"`
-	Drag      float32 `json:"drag"`
-	EnabledIn Track   `json:"enabledIn"`
+	Drag         float32 `json:"drag"`
+	BaseSpin     float32 `json:"baseSpin"`
+	BaseSpinVary float32 `json:"baseSpinVary"`
+	Spin         float32 `json:"spin"`
+	SpinVary     float32 `json:"spinVary"`
+	EnabledIn    Track   `json:"enabledIn"`
 }
 
 // TextureTransformEntry is an M2 UV transform.

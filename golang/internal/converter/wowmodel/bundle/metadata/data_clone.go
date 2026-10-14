@@ -135,6 +135,7 @@ func cloneParticles(src []m2.ParticleEmitterEntry) []m2.ParticleEmitterEntry {
 		v.EmissionRate = cloneTrack(v.EmissionRate)
 		v.EmissionAreaLength = cloneTrack(v.EmissionAreaLength)
 		v.EmissionAreaWidth = cloneTrack(v.EmissionAreaWidth)
+		v.ZSource = cloneTrack(v.ZSource)
 		v.ColorTrack = clonePartTrack(v.ColorTrack)
 		v.AlphaTrack = clonePartTrack(v.AlphaTrack)
 		v.ScaleTrack = clonePartTrack(v.ScaleTrack)

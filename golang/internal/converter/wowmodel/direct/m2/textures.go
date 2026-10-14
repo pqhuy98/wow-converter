@@ -127,15 +127,7 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 			loader.Textures[textureIndex].FileDataID = uint32(target)
 		} else if texType > 0 {
 			var target int
-			if texType >= 11 && texType < 14 && texType-11 < len(variantTextures) {
-				target = variantTextures[texType-11]
-			} else if texType == 5 && len(variantTextures) > 3 {
-				// CreatureDisplayInfo's fourth TextureVariation is M2 type 5.
-				// It is a supplied skin texture, not a stock environment map.
-				target = variantTextures[3]
-			} else if texType > 1 && texType < 5 && texType-2 < len(variantTextures) {
-				target = variantTextures[texType-2]
-			}
+			target = VariantTextureForType(variantTextures, texType)
 			if target > 0 {
 				texFileDataID = uint32(target)
 				texture.FileDataID = uint32(target)
@@ -167,6 +159,23 @@ func ResolveTextures(ctx context.Context, loader *m2.Loader, variantTextures []i
 	}
 
 	return ResolvedTextures{ValidTextures: valid, MtlMaterials: mtlMaterials}, nil
+}
+
+// VariantTextureForType maps creature skin slots to modern and legacy M2 types.
+func VariantTextureForType(textures []int, textureType int) int {
+	index := -1
+	switch {
+	case textureType >= 11 && textureType <= 13:
+		index = textureType - 11
+	case textureType >= 2 && textureType <= 4:
+		index = textureType - 2
+	case textureType == 5:
+		index = 3
+	}
+	if index >= 0 && index < len(textures) {
+		return textures[index]
+	}
+	return 0
 }
 
 func relPath(outDir, absPath string) string {

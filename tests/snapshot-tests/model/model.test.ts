@@ -23,11 +23,11 @@ import path from 'path';
 
 import { ShotBrowser } from '../../../.cursor/skills/shot-export-wow-converter/shot-export';
 import {
-  clearExportedAssets, ensureWowProduct, exportCharacterWithMetadata,
+  ensureWowProduct, exportCharacterWithMetadata,
   type ExportedCharacter, exportWorkers, readWowProduct, repoRoot, runWorkers,
 } from '../../helpers';
 import {
-  type ModelCase, readSnapshotCases, type SnapshotSuite, wantsWowheadShot,
+  type ModelCase, readSnapshotCases, snapshotExportPath, type SnapshotSuite, wantsWowheadShot,
 } from './catalog';
 import {
   assertPngRoundTrip, decodePng, diffSheet, encodePng, type RgbaImage,
@@ -118,7 +118,6 @@ async function runAll(): Promise<void> {
   let original = '';
   try {
     await assertServer(opts.base);
-    await clearExportedAssets(opts.base);
     original = (await readWowProduct(opts.base)).product;
     viewer = { browser: await ShotBrowser.open(TILE[0], TILE[1]) };
     const wow = jobs.filter((job) => job.suite !== 'classic');
@@ -129,8 +128,6 @@ async function runAll(): Promise<void> {
     }
     if (classic.length > 0) {
       await ensureWowProduct(opts.base, 'wow_classic');
-      // The same texture path can contain different bytes in Retail and Classic.
-      if (wow.length > 0) await clearExportedAssets(opts.base);
       await runPhase(classic, viewer);
     }
   } catch (err: unknown) {
@@ -182,7 +179,7 @@ async function runPhase(phase: readonly CaseJob[], viewer: { browser: ShotBrowse
   const exportJob = async (job: CaseJob) => {
     console.log(`export ${caseId(job)}`);
     try {
-      const exported = await exportCharacterWithMetadata(opts.base, `${job.suite}/${job.slug}`, job.testCase);
+      const exported = await exportCharacterWithMetadata(opts.base, snapshotExportPath(job.suite, job.slug), job.testCase, job.suite === 'classic' ? 'classic/wow' : 'retails/wow');
       shots.push({ ...job, ...exported });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

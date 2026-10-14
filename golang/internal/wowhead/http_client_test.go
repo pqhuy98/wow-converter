@@ -18,4 +18,8 @@ func TestWowheadFetchUsesBrowserHeaders(t *testing.T) {
 	if !strings.Contains(text, `data-mv-display-id="`) {
 		t.Fatalf("expected modelviewer display id in HTML, got %d bytes", len(text))
 	}
+	zam, err := wowhead.GetZamURLFromWowheadURL(client, url)
+	if err != nil || zam.DisplayID != 30721 || zam.Expansion != wowhead.ExpansionWrath {
+		t.Fatalf("Lich King resolution: %+v, %v", zam, err)
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"image"
 	"log"
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
@@ -44,150 +46,206 @@ func particleBakeRGBIndependent(mode components.ParticleFilterMode) bool {
 // A few deterministic phase variants approximate WoW's random per-particle UV
 // seeds without synchronizing every particle to one pattern.
 func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResult, loader *m2.Loader, loadTexture func(int) (*image.NRGBA, error)) error {
-	byName := map[string]*components.ParticleEmitter2{}
+	byIndex := map[int][]*components.ParticleEmitter2{}
 	for _, node := range result.MDL.ParticleEmitter2s {
-		byName[node.Name] = node
+		suffix := strings.TrimPrefix(node.Name, "ParticleEmitter_")
+		indexText, _, _ := strings.Cut(suffix, "_")
+		if index, err := strconv.Atoi(indexText); err == nil {
+			byIndex[index] = append(byIndex[index], node)
+		}
 	}
 	for index, p := range loader.ParticleEmitters {
-		node := byName[fmt.Sprintf("ParticleEmitter_%d", index)]
-		if node == nil {
-			continue
-		}
-		original := *node
-		multi := p.Flags&0x10000000 != 0
-		maxScale := 0.0
-		anisotropic := false
-		for _, v := range p.ScaleTrack.Values {
-			if len(v) >= 2 {
-				maxScale = max(maxScale, v[0], v[1])
-				anisotropic = anisotropic || math.Abs(v[0]-v[1]) > max(v[0], v[1])*.05
-			}
-		}
-		if !multi && !anisotropic {
-			continue
-		}
-		count, variants := 1, 1
-		if multi {
-			count, variants = 3, 2
-		}
-		var images [3]*image.NRGBA
-		var flags [3]uint32
-		for k := range count {
-			texIndex := int(p.TexturePacked)
-			if multi {
-				texIndex = int(p.TexturePacked >> (5 * k) & 31)
-			}
-			img, err := loadTexture(texIndex)
-			if err != nil {
-				return fmt.Errorf("particle %d texture %d: %w", index, texIndex, err)
-			}
-			images[k] = img
-			flags[k] = loader.Textures[texIndex].Flags
-		}
-		if maxScale <= 0 {
-			maxScale = 1
-		}
-		factor := float64(p.TwinkleScale.Min+p.TwinkleScale.Max) / 2
-		if factor <= 0 {
-			factor = 1
-		}
-		frames := bakeFrameCount(int(node.LifeSpan * 1000))
-		referenceFrames := frames
-		if !cfg.TextureBaking.Flipbook() {
-			frames = 1
-		} else if cfg.TextureBaking.FPS > 0 || cfg.TextureBaking.WindowMS > 0 {
-			fps := bakeFPS
-			if cfg.TextureBaking.FPS > 0 {
-				fps = cfg.TextureBaking.FPS
-			}
-			// PRE2 advances its atlas over the full particle lifetime. Cropping
-			// that lifetime would lower the requested FPS or age particles early.
-			frames = max(2, int(math.Ceil(node.LifeSpan*float64(fps))))
-		}
-		cols := bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(frames)))))
-		rows := bakePowerOfTwo((frames + cols - 1) / cols)
-		tile := 64
-		budget := bakeParticlePixels / max(1, len(loader.ParticleEmitters))
-		referenceCols := bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(referenceFrames)))))
-		referenceRows := (referenceFrames + referenceCols - 1) / referenceCols
-		for tile > 16 && tile*tile*referenceCols*referenceRows*variants > budget {
-			tile /= 2
-		}
-		for variant := range variants {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			atlas := image.NewNRGBA(image.Rect(0, 0, tile*cols, tile*rows))
-			for frame := range frames {
-				age := 0.0
-				if frames > 1 {
-					age = float64(frame) / float64(frames-1)
+		textures := map[string]*components.Texture{}
+		for _, node := range byIndex[index] {
+			original := *node
+			multi := p.Flags&0x10000000 != 0
+			// Tail quads follow velocity; spinning the atlas applies to billboard heads.
+			spin := original.HeadOrTail == components.HeadOrTailHead && p.Flags&0x1004 == 0 && (p.Spin != 0 || p.SpinVary != 0)
+			maxScale := 0.0
+			anisotropic := false
+			for _, v := range p.ScaleTrack.Values {
+				if len(v) >= 2 {
+					if spin {
+						maxScale = max(maxScale, math.Hypot(v[0], v[1]))
+					} else {
+						maxScale = max(maxScale, v[0], v[1])
+					}
+					anisotropic = anisotropic || math.Abs(v[0]-v[1]) > max(v[0], v[1])*.05
 				}
-				life := age * node.LifeSpan
-				scale := particleTrackAt(p.ScaleTrack, age, []float64{1, 1})
-				sx, sy := scale[0]/maxScale, scale[1]/maxScale
-				cell := int(math.Floor(particleTrackAt(p.HeadCellTrack, age, []float64{0})[0]))
-				for y := range tile {
-					for x := range tile {
-						uv := imath.Vector2{(float64(x) + .5) / float64(tile), (float64(y) + .5) / float64(tile)}
-						if sx <= 1e-9 || sy <= 1e-9 {
-							continue
+			}
+			bakeAlpha := cfg.TextureBaking.Flipbook() && (len(p.AlphaTrack.Values) > 3 || p.LifespanVary > 0)
+			if !multi && !anisotropic && !bakeAlpha && !spin {
+				continue
+			}
+			count, variants := 1, 1
+			if multi {
+				count, variants = 3, 2
+			}
+			if spin && (p.BaseSpinVary != 0 || p.SpinVary != 0 || p.Flags&0x200 != 0) {
+				variants = max(variants, 4)
+			}
+			var images [3]*image.NRGBA
+			var flags [3]uint32
+			for k := range count {
+				texIndex := int(p.TexturePacked)
+				if multi {
+					texIndex = int(p.TexturePacked >> (5 * k) & 31)
+				}
+				img, err := loadTexture(texIndex)
+				if err != nil {
+					return fmt.Errorf("particle %d texture %d: %w", index, texIndex, err)
+				}
+				images[k] = img
+				flags[k] = loader.Textures[texIndex].Flags
+			}
+			if maxScale <= 0 {
+				maxScale = 1
+			}
+			factor := float64(p.TwinkleScale.Min+p.TwinkleScale.Max) / 2
+			if factor <= 0 {
+				factor = 1
+			}
+			frames := bakeFrameCount(int(node.LifeSpan * 1000))
+			if bakeAlpha {
+				frames = max(frames, 16)
+			}
+			referenceFrames := frames
+			if !cfg.TextureBaking.Flipbook() {
+				frames = 1
+			} else if cfg.TextureBaking.FPS > 0 || cfg.TextureBaking.WindowMS > 0 {
+				fps := bakeFPS
+				if cfg.TextureBaking.FPS > 0 {
+					fps = cfg.TextureBaking.FPS
+				}
+				// PRE2 advances its atlas over the full particle lifetime. Cropping
+				// that lifetime would lower the requested FPS or age particles early.
+				frames = max(2, int(math.Ceil(node.LifeSpan*float64(fps))))
+			}
+			cols := bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(frames)))))
+			rows := bakePowerOfTwo((frames + cols - 1) / cols)
+			tile := 64
+			budget := bakeParticlePixels / max(1, len(loader.ParticleEmitters))
+			referenceCols := bakePowerOfTwo(int(math.Ceil(math.Sqrt(float64(referenceFrames)))))
+			referenceRows := (referenceFrames + referenceCols - 1) / referenceCols
+			for tile > 16 && tile*tile*referenceCols*referenceRows*variants > budget {
+				tile /= 2
+			}
+			for variant := range variants {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				key := fmt.Sprintf("%g/%d", original.HeadIntervals[0], variant)
+				tex := textures[key]
+				if tex == nil {
+					atlas := image.NewNRGBA(image.Rect(0, 0, tile*cols, tile*rows))
+					for frame := range frames {
+						age := 0.0
+						if frames > 1 {
+							age = float64(frame) / float64(frames-1)
 						}
-						corner := imath.Vector2{(uv[0]-.5)/sx + .5, (uv[1]-.5)/sy + .5}
-						if corner[0] < 0 || corner[0] > 1 || corner[1] < 0 || corner[1] > 1 {
-							continue
-						}
-						base := imath.Vector2{(float64(cell%max(1, int(p.TextureCols))) + corner[0]) / float64(max(1, int(p.TextureCols))), (float64(cell/max(1, int(p.TextureCols))) + corner[1]) / float64(max(1, int(p.TextureRows)))}
-						samples := [3][4]float64{sampleBakeTexture(images[0], base, flags[0])}
-						for k := 1; k < count; k++ {
-							layer := k - 1
-							coord := imath.Vector2{}
-							for axis := range 2 {
-								seed := math.Mod(float64((variant+1)*(layer+2)*(axis+3))*.61803398875, 1)
-								rate := float64(p.MultiTextureScrollMid[layer][axis]) + (.5-float64(variant)/float64(max(1, variants-1)))*float64(p.MultiTextureScrollRange[layer][axis])
-								coord[axis] = seed + corner[axis]*float64(p.MultiTextureScale[layer]) + life*rate
+						life := age * node.LifeSpan
+						// WoW normalizes age curves by the maximum randomized lifetime.
+						// PRE2 retains the mean lifetime, so its endpoint may precede the last M2 key.
+						sourceAge := life / (node.LifeSpan + math.Max(0, float64(p.LifespanVary)))
+						scale := particleTrackAt(p.ScaleTrack, sourceAge, []float64{1, 1})
+						sx, sy := scale[0]/maxScale, scale[1]/maxScale
+						cell := int(math.Floor(particleTrackAt(p.HeadCellTrack, sourceAge, []float64{original.HeadIntervals[0]})[0]))
+						rgb := particleTrackAt(p.ColorTrack, sourceAge, []float64{255, 255, 255})
+						alpha := clampM2(particleTrackAt(p.AlphaTrack, sourceAge, []float64{32767})[0] / 32767)
+						sine, cosine := 0.0, 1.0
+						if spin {
+							seed := -1 + 2*(float64(variant)+.5)/float64(variants)
+							theta := float64(p.BaseSpin) + seed*float64(p.BaseSpinVary) + life*(float64(p.Spin)+seed*float64(p.SpinVary))
+							if p.Flags&0x200 != 0 && variant%2 != 0 {
+								theta = -theta
 							}
-							samples[k] = sampleBakeTexture(images[k], coord, flags[k]|3)
+							sine, cosine = math.Sincos(theta)
 						}
-						color := samples[0]
-						if multi {
-							color = combineParticleSamples(samples, p.Flags)
-						}
-						at := ((frame/cols)*tile+y)*atlas.Stride + ((frame%cols)*tile+x)*4
-						for channel := range 4 {
-							atlas.Pix[at+channel] = uint8(math.Round(clampM2(color[channel]) * 255))
+						for y := range tile {
+							for x := range tile {
+								uv := imath.Vector2{(float64(x) + .5) / float64(tile), (float64(y) + .5) / float64(tile)}
+								if sx <= 1e-9 || sy <= 1e-9 {
+									continue
+								}
+								dx, dy := uv[0]-.5, uv[1]-.5
+								if spin {
+									dx, dy = cosine*dx+sine*dy, -sine*dx+cosine*dy
+								}
+								corner := imath.Vector2{dx/sx + .5, dy/sy + .5}
+								if corner[0] < 0 || corner[0] > 1 || corner[1] < 0 || corner[1] > 1 {
+									continue
+								}
+								base := imath.Vector2{(float64(cell%max(1, int(p.TextureCols))) + corner[0]) / float64(max(1, int(p.TextureCols))), (float64(cell/max(1, int(p.TextureCols))) + corner[1]) / float64(max(1, int(p.TextureRows)))}
+								samples := [3][4]float64{sampleBakeTexture(images[0], base, flags[0])}
+								for k := 1; k < count; k++ {
+									layer := k - 1
+									coord := imath.Vector2{}
+									for axis := range 2 {
+										seed := math.Mod(float64((variant+1)*(layer+2)*(axis+3))*.61803398875, 1)
+										rate := float64(p.MultiTextureScrollMid[layer][axis]) + (.5-float64(variant)/float64(max(1, variants-1)))*float64(p.MultiTextureScrollRange[layer][axis])
+										coord[axis] = seed + corner[axis]*float64(p.MultiTextureScale[layer]) + life*rate
+									}
+									samples[k] = sampleBakeTexture(images[k], coord, flags[k]|3)
+								}
+								color := samples[0]
+								if multi {
+									color = combineParticleSamples(samples, p.Flags)
+								}
+								if cfg.TextureBaking.Flipbook() {
+									if len(rgb) >= 3 {
+										for channel := range 3 {
+											color[channel] *= clampM2(rgb[channel] / 255)
+										}
+									}
+								}
+								if bakeAlpha {
+									color[3] *= alpha
+								}
+								at := ((frame/cols)*tile+y)*atlas.Stride + ((frame%cols)*tile+x)*4
+								for channel := range 4 {
+									atlas.Pix[at+channel] = uint8(math.Round(clampM2(color[channel]) * 255))
+								}
+							}
 						}
 					}
+					var err error
+					tex, err = registerBakeTexture(cfg, result, atlas, bakeTextureOptions{independentRGB: particleBakeRGBIndependent(original.FilterMode)})
+					if err != nil {
+						return err
+					}
+					textures[key] = tex
+				}
+				baked := original
+				baked.Texture = tex
+				if cfg.TextureBaking.Flipbook() {
+					baked.SegmentColors = [3]imath.Vector3{{1, 1, 1}, {1, 1, 1}, {1, 1, 1}}
+				}
+				if bakeAlpha {
+					baked.SegmentAlphas = [3]float64{255, 255, 255}
+				}
+				baked.Columns, baked.Rows = cols, rows
+				// Assembly already converted the native emitters into WC3 units.
+				// ScaleTrack is still in M2 units; use the same unit conversion when
+				// replacing their size, otherwise the baked gas becomes 56x smaller.
+				size := maxScale * factor * cfg.RawModelScaleUp
+				baked.SegmentScaling = [3]float64{size, size, size}
+				middle := math.Round(clampM2(node.TimeMiddle) * float64(frames-1))
+				baked.HeadIntervals = [3]float64{0, middle, 1}
+				baked.DecayIntervals = [3]float64{middle, float64(frames - 1), 1}
+				baked.TailIntervals, baked.TailDecayIntervals = baked.HeadIntervals, baked.DecayIntervals
+				baked.EmissionRate = scaleBakeRate(original.EmissionRate, 1/float64(variants))
+				if multi {
+					baked.Flags2 = append(append([]components.ParticleEmitter2Flag(nil), node.Flags2...), components.PE2Unshaded)
+				}
+				if variant == 0 {
+					*node = baked
+				} else {
+					baked.Name = fmt.Sprintf("%s_Phase%d", node.Name, variant)
+					result.MDL.ParticleEmitter2s = append(result.MDL.ParticleEmitter2s, &baked)
 				}
 			}
-			tex, err := registerBakeTexture(cfg, result, atlas, bakeTextureOptions{independentRGB: particleBakeRGBIndependent(original.FilterMode)})
-			if err != nil {
-				return err
-			}
-			baked := original
-			baked.Texture = tex
-			baked.Columns, baked.Rows = cols, rows
-			// Assembly already converted the native emitters into WC3 units.
-			// ScaleTrack is still in M2 units; use the same unit conversion when
-			// replacing their size, otherwise the baked gas becomes 56x smaller.
-			size := maxScale * factor * cfg.RawModelScaleUp
-			baked.SegmentScaling = [3]float64{size, size, size}
-			middle := math.Round(clampM2(node.TimeMiddle) * float64(frames-1))
-			baked.HeadIntervals = [3]float64{0, middle, 1}
-			baked.DecayIntervals = [3]float64{middle, float64(frames - 1), 1}
-			baked.TailIntervals, baked.TailDecayIntervals = baked.HeadIntervals, baked.DecayIntervals
-			baked.EmissionRate = scaleBakeRate(original.EmissionRate, 1/float64(variants))
-			if multi {
-				baked.Flags2 = append(append([]components.ParticleEmitter2Flag(nil), node.Flags2...), components.PE2Unshaded)
-			}
-			if variant == 0 {
-				*node = baked
-			} else {
-				baked.Name = fmt.Sprintf("%s_Phase%d", node.Name, variant)
-				result.MDL.ParticleEmitter2s = append(result.MDL.ParticleEmitter2s, &baked)
-			}
+			log.Printf("M2 particle bake %d: %d textures, %d age frames, %d phase variants", index, count, frames, variants)
 		}
-		log.Printf("M2 particle bake %d: %d textures, %d age frames, %d phase variants", index, count, frames, variants)
 	}
 	return nil
 }

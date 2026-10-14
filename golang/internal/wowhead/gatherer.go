@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/cache"
 )
@@ -15,7 +16,7 @@ func FetchWithCache(client *HTTPClient, url string) (string, error) {
 	if client.ctx != nil && client.ctx.Err() != nil {
 		return "", client.ctx.Err()
 	}
-	if v, ok := respCache.Get(url); ok {
+	if v, ok := respCache.Get(url); ok && !isVerificationPage(v) {
 		return v, nil
 	}
 	res, err := client.Get(url)
@@ -32,8 +33,15 @@ func FetchWithCache(client *HTTPClient, url string) (string, error) {
 		return "", err
 	}
 	text := string(body)
+	if isVerificationPage(text) {
+		return "", fmt.Errorf("Wowhead requires JavaScript verification for %s; retry when the page is available", url)
+	}
 	respCache.Set(url, text)
 	return text, nil
+}
+
+func isVerificationPage(text string) bool {
+	return strings.Contains(text, "verify that you're not a robot") && strings.Contains(text, "JavaScript")
 }
 
 var gathererRe = regexp.MustCompile(`WH\.Gatherer\.addData\([^,]+,[^,]+,\s*(\{[\s\S]*?\})\);?`)

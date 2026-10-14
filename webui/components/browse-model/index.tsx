@@ -88,6 +88,7 @@ export default function BrowseModelPage() {
   const [modelPath, setModelPath] = useState<string | undefined>(undefined);
   const [completedResult, setCompletedResult] = useState<JobStatus['result']>();
   const [completedFile, setCompletedFile] = useState<FileEntry>();
+  const [completedSkinId, setCompletedSkinId] = useState<string>();
   const [sequenceRequest, setSequenceRequest] = useState<ExportRequest>();
   const [playbackSelection, setPlaybackSelection] = useState<{ name: string; index?: number; revision: number }>();
   /** Tied to the displayed model; only updates when export completes (not on row select). */
@@ -97,6 +98,7 @@ export default function BrowseModelPage() {
   const copyBtnRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const exportTargetRef = useRef<FileEntry | null>(null);
+  const exportSkinRef = useRef<string>();
 
   const OVERSCAN = 8;
 
@@ -153,6 +155,7 @@ export default function BrowseModelPage() {
       setModelPath(undefined);
       setCompletedResult(undefined);
       setCompletedFile(undefined);
+      setCompletedSkinId(undefined);
       setSequenceRequest(undefined);
       setViewerSessionKey(undefined);
       setPendingScrollToPath(null);
@@ -255,6 +258,7 @@ export default function BrowseModelPage() {
     if (!path) return;
     setModelPath(path);
     setCompletedResult(result);
+    setCompletedSkinId(exportSkinRef.current);
     setPlaybackSelection(undefined);
     const file = exportTargetRef.current;
     if (file) {
@@ -345,6 +349,7 @@ export default function BrowseModelPage() {
       isBrowse: true,
       skinId: effectiveSkinId || undefined,
     };
+    exportSkinRef.current = request.skinId;
 
     setIsExporting(true);
     try {
@@ -542,6 +547,8 @@ export default function BrowseModelPage() {
                 {modelPath ? (
                   <ModelViewerUi
                     modelPath={modelPath}
+                    wowModelPath={completedFile?.fileName}
+                    wowSkinId={completedSkinId}
                     cameraSessionKey={viewerSessionKey}
                     source="browse"
                     canvasOverlay={canvasOverlay}
@@ -553,7 +560,12 @@ export default function BrowseModelPage() {
                   busy={isBusy}
                   initialRenames={sequenceRequest.animationRenames}
                   onPreview={(name, index) => setPlaybackSelection((previous) => ({ name, index, revision: (previous?.revision ?? 0) + 1 }))}
-                  onApply={(edits) => triggerExport(completedFile, sequenceRequest.skinId, { ...sequenceRequest, animationRenames: edits.renames, modelScale: completedResult?.reportMetadata?.models.find((model) => model.path === modelPath)?.modelScale, character: { ...sequenceRequest.character, sequenceSelection: edits.selection } })}
+                  onApply={(edits) => triggerExport(completedFile, sequenceRequest.skinId, {
+                    ...sequenceRequest,
+                    animationRenames: edits.renames,
+                    modelScale: completedResult?.reportMetadata?.models.find((model) => model.path === modelPath)?.modelScale,
+                    character: { ...sequenceRequest.character, sequenceSelection: edits.selection },
+                  })}
                 />}
                   />
                 ) : null}

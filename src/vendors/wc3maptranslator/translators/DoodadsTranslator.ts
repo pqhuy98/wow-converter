@@ -203,11 +203,19 @@ export class DoodadsTranslator implements Translator<DoodadList> {
         doodad.pitch = outBufferToJSON.readFloat();
         const lightCount = outBufferToJSON.readInt();
         doodad.lights = [];
-        for (let k = 0; k < lightCount; k++) doodad.lights.push({
-          index: outBufferToJSON.readInt(), shadowCasting: outBufferToJSON.readInt(), color: outBufferToJSON.readInt(),
-          intensity: outBufferToJSON.readFloat(), shadowCastingStart: outBufferToJSON.readFloat(), shadowCastingEnd: outBufferToJSON.readFloat(),
-          quadraticFalloff: outBufferToJSON.readFloat(), linearFalloff: outBufferToJSON.readFloat(), damping: outBufferToJSON.readFloat(),
-        });
+        for (let k = 0; k < lightCount; k++) {
+          doodad.lights.push({
+            index: outBufferToJSON.readInt(),
+            shadowCasting: outBufferToJSON.readInt(),
+            color: outBufferToJSON.readInt(),
+            intensity: outBufferToJSON.readFloat(),
+            shadowCastingStart: outBufferToJSON.readFloat(),
+            shadowCastingEnd: outBufferToJSON.readFloat(),
+            quadraticFalloff: outBufferToJSON.readFloat(),
+            linearFalloff: outBufferToJSON.readFloat(),
+            damping: outBufferToJSON.readFloat(),
+          });
+        }
       }
 
       result.push(doodad);

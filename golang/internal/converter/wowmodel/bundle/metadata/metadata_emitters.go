@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"math"
 	"sort"
 
@@ -319,23 +318,25 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 				// by the loader as (x, z, -y). Undo that basis; do not add the parent pivot.
 				PivotPoint: imath.Vector3{float64(p.Position[0]), float64(-p.Position[2]), float64(p.Position[1])},
 			},
-			FilterMode:         mapParticleBlend(p.BlendingType),
-			Width:              f.m2trackToAnimationOrStaticFloat(p.EmissionAreaWidth, components.AnimTypeOthers, scalarIdentity),
-			Length:             f.m2trackToAnimationOrStaticFloat(p.EmissionAreaLength, components.AnimTypeOthers, scalarIdentity),
-			Speed:              speed,
-			Variation:          f.m2trackToAnimationOrStaticFloat(p.SpeedVariation, components.AnimTypeOthers, scalarIdentity),
-			EmissionRate:       emissionRate,
-			Latitude:           f.m2trackToAnimationOrStaticFloat(p.VerticalRange, components.AnimTypeOthers, degrees),
-			Visibility:         f.particleVisibility(p.EnabledIn),
-			Texture:            storeMdlTexture(f.mdl, &textures[textureID]),
-			TailLength:         tailLength,
-			Columns:            maxInt(1, int(p.TextureCols)),
-			Rows:               maxInt(1, int(p.TextureRows)),
-			HeadOrTail:         headOrTail,
-			Gravity:            f.m2trackToAnimationOrStaticFloat(p.Gravity, components.AnimTypeOthers, decompressGravity),
-			LifeSpan:           lifeSpan,
-			TimeMiddle:         particleTimeMiddle(p),
-			Squirt:             p.Flags&0x40 != 0,
+			FilterMode:   mapParticleBlend(p.BlendingType),
+			Width:        f.m2trackToAnimationOrStaticFloat(p.EmissionAreaWidth, components.AnimTypeOthers, scalarIdentity),
+			Length:       f.m2trackToAnimationOrStaticFloat(p.EmissionAreaLength, components.AnimTypeOthers, scalarIdentity),
+			Speed:        speed,
+			Variation:    f.m2trackToAnimationOrStaticFloat(p.SpeedVariation, components.AnimTypeOthers, scalarIdentity),
+			EmissionRate: emissionRate,
+			Latitude:     f.m2trackToAnimationOrStaticFloat(p.VerticalRange, components.AnimTypeOthers, degrees),
+			Visibility:   f.particleVisibility(p.EnabledIn),
+			Texture:      storeMdlTexture(f.mdl, &textures[textureID]),
+			TailLength:   tailLength,
+			Columns:      maxInt(1, int(p.TextureCols)),
+			Rows:         maxInt(1, int(p.TextureRows)),
+			HeadOrTail:   headOrTail,
+			Gravity:      f.m2trackToAnimationOrStaticFloat(p.Gravity, components.AnimTypeOthers, func(v []float64) any { return decompressGravity(v, p.Flags&0x00800000 != 0) }),
+			LifeSpan:     lifeSpan,
+			TimeMiddle:   particleTimeMiddle(p),
+			// M2 0x40 adds motion to velocity; emission remains particles/second.
+			// PRE2 Squirt emits on rate keys and would suppress a constant-rate emitter.
+			Squirt:             false,
 			SegmentColors:      particleSegmentColors(p),
 			SegmentAlphas:      particleSegmentAlphas(p),
 			SegmentScaling:     particleSegmentScaling(p),
@@ -344,8 +345,8 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 			TailIntervals:      particleTailIntervals(p),
 			TailDecayIntervals: particleTailDecayIntervals(p),
 		}
-		if p.Drag > 0 {
-			applyParticleDrag(&node.Speed, node.LifeSpan, float64(p.Drag))
+		if p.Drag != 0 {
+			applyParticleDrag(&node.Speed, particleDragSampleAge(p, node.LifeSpan), float64(p.Drag))
 		}
 		clampParticleUVIntervals(node)
 		if p.Flags&0x1 != 0 {
@@ -358,25 +359,23 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 		if p.Flags&0x1000 != 0 {
 			node.Flags2 = append(node.Flags2, components.PE2XYQuad)
 		}
-		cellCount := node.Rows * node.Columns
-		if p.Flags&0x10000 != 0 && len(p.HeadCellTrack.Values) == 0 && headOrTail == components.HeadOrTailHead && cellCount > 1 {
-			// PRE2 has no random atlas-cell flag. Fixed-cell emitters share the
-			// original rate, preserving density instead of drawing cell zero only.
-			for cell := 0; cell < cellCount; cell++ {
-				variant := *node
-				variant.Name += "_cell_" + itoa(cell)
-				variant.HeadIntervals = [3]float64{float64(cell), float64(cell), 1}
-				variant.DecayIntervals = variant.HeadIntervals
-				if node.EmissionRate.Anim != nil {
-					anim := *node.EmissionRate.Anim
-					anim.KeyFrames = maps.Clone(anim.KeyFrames)
-					variant.EmissionRate.Anim = &anim
+		directions := f.particleDirectionVariants(node, p)
+		for _, node := range directions {
+			cellCount := node.Rows * node.Columns
+			if p.Flags&0x10000 != 0 && len(p.HeadCellTrack.Values) == 0 && headOrTail == components.HeadOrTailHead && cellCount > 1 {
+				// PRE2 has no random atlas-cell flag. Fixed-cell emitters share the
+				// original rate, preserving density instead of drawing cell zero only.
+				for cell := 0; cell < cellCount; cell++ {
+					variant := mdl.CloneParticleEmitter2(node)
+					variant.Name += "_cell_" + itoa(cell)
+					variant.HeadIntervals = [3]float64{float64(cell), float64(cell), 1}
+					variant.DecayIntervals = variant.HeadIntervals
+					applyAnimatedOrStaticFloat(&variant.EmissionRate, func(v float64) float64 { return v / float64(cellCount) })
+					f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, variant)
 				}
-				applyAnimatedOrStaticFloat(&variant.EmissionRate, func(v float64) float64 { return v / float64(cellCount) })
-				f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, &variant)
+			} else {
+				f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, node)
 			}
-		} else {
-			f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, node)
 		}
 	}
 	if !f.Config.IsBulkExport && len(f.particleEmitters) > 0 {
@@ -446,14 +445,19 @@ func mapParticleBlend(b uint8) components.ParticleFilterMode {
 	}
 }
 
-func decompressGravity(v []float64) any {
+func decompressGravity(v []float64, vector bool) any {
 	if len(v) == 0 {
 		return float64(0)
 	}
 	u := uint32(v[0])
 	f := math.Float32frombits(u)
-	if !math.IsInf(float64(f), 0) && !math.IsNaN(float64(f)) && math.Abs(float64(f)) < 1e4 {
-		return 0.5 * float64(f)
+	if !vector {
+		if math.IsInf(float64(f), 0) || math.IsNaN(float64(f)) {
+			return float64(0)
+		}
+		// Both clients integrate acceleration into velocity, then position.
+		// Halving g halves the trajectory's drop; it is not a timestep correction.
+		return float64(f)
 	}
 	bx := int(u & 0xFF)
 	by := int((u >> 8) & 0xFF)
@@ -475,7 +479,7 @@ func decompressGravity(v []float64) any {
 		z = -z
 		mag = -mag
 	}
-	return -0.5 * z * mag
+	return -z * mag
 }
 
 func partTrackTimes(p m2.PartTrack) []uint16 {
@@ -687,65 +691,14 @@ func correctParticleEmission(p m2.ParticleEmitterEntry, baseEmissionRate compone
 	if lifeSpan <= 0 {
 		lifeSpan = 1
 	}
-	tailLengthWowMax := math.Min(float64(p.TailLength), lifeSpan)
-	wowClampsTailToAge := p.Flags&0x400 != 0
-	tailLengthExpected := tailLengthWowMax
-	if wowClampsTailToAge {
-		if tailLengthWowMax < lifeSpan {
-			tailLengthExpected = tailLengthWowMax - (tailLengthWowMax*tailLengthWowMax)/(2*lifeSpan)
-		} else {
-			tailLengthExpected = lifeSpan * 0.5
-		}
+	tailLength = math.Max(0, float64(p.TailLength))
+	if p.Flags&0x400 != 0 {
+		// PRE2 has a fixed trail duration; approximate WoW's min(age, duration)
+		// by its mean over the lifetime. Opacity does not change geometry.
+		clamped := math.Min(tailLength, lifeSpan)
+		tailLength = clamped - clamped*clamped/(2*lifeSpan)
 	}
-	alphaWeightFactor := particleAlphaWeightFactor(p)
-	tailLengthVisible := tailLengthExpected * alphaWeightFactor
-	emissionRateMax := maxTrackFloat(p.EmissionRate)
-	coverageMinTime := 0.0
-	if emissionRateMax > 0 {
-		coverageMinTime = 1.0 / emissionRateMax
-	}
-	tailLength = math.Min(tailLengthWowMax, math.Max(tailLengthVisible, coverageMinTime))
-	coverageMinRate := 0.0
-	if tailLength > 0 {
-		coverageMinRate = 1.0 / tailLength
-	}
-	shortenedTail := tailLength+1e-6 < float64(p.TailLength)
-	needsRateFloor := p.Flags&0x40000 != 0 && emissionRateMax > 0 && (wowClampsTailToAge || shortenedTail) && emissionRateMax+1e-6 < coverageMinRate
-	alphaEmissionBoost := 1.0
-	if needsRateFloor && alphaWeightFactor < 0.7 {
-		alphaEmissionBoost = 1.0 / math.Max(0.5, alphaWeightFactor)
-	}
-	emissionRate = baseEmissionRate
-	if needsRateFloor {
-		applyAnimatedOrStaticFloat(&emissionRate, func(v float64) float64 {
-			// Zero keys intentionally disable emission; a trail coverage
-			// correction must not spawn particles in those intervals.
-			if v <= 0 {
-				return v
-			}
-			return math.Max(v, coverageMinRate) * alphaEmissionBoost
-		})
-	}
-	return lifeSpan, tailLength, emissionRate
-}
-
-func particleAlphaWeightFactor(p m2.ParticleEmitterEntry) float64 {
-	if len(p.AlphaTrack.Values) == 0 {
-		return 1
-	}
-	sum := 0.0
-	count := 0
-	for _, values := range p.AlphaTrack.Values {
-		if len(values) == 0 {
-			continue
-		}
-		sum += math.Max(0, math.Min(1, values[0]/32767))
-		count++
-	}
-	if count == 0 {
-		return 1
-	}
-	return sum / float64(count)
+	return lifeSpan, tailLength, baseEmissionRate
 }
 
 func applyParticleDrag(speed *components.AnimatedOrStatic[float64], lifeSpan, drag float64) {
@@ -822,4 +775,29 @@ func storeMdlTexture(m *mdl.MDL, tex *components.Texture) *components.Texture {
 	cloned := *tex
 	m.Textures = append(m.Textures, &cloned)
 	return m.Textures[len(m.Textures)-1]
+}
+
+// PRE2 has no per-particle drag. For deceleration, match travel at the opacity-
+// weighted visible age rather than the invisible endpoint; negative drag keeps
+// its endpoint acceleration approximation.
+func particleDragSampleAge(p m2.ParticleEmitterEntry, lifespan float64) float64 {
+	if p.Drag <= 0 || lifespan <= 0 || len(p.AlphaTrack.Values) == 0 {
+		return lifespan
+	}
+	const steps = 32
+	weighted, weight := 0.0, 0.0
+	maxLife := lifespan + math.Max(0, float64(p.LifespanVary))
+	for i := 0; i < steps; i++ {
+		age := lifespan * (float64(i) + .5) / steps
+		alpha := partValueAt(p.AlphaTrack, uint16(math.Min(32767, age/maxLife*32767)))
+		if len(alpha) > 0 {
+			a := math.Max(0, alpha[0])
+			weighted += age * a
+			weight += a
+		}
+	}
+	if weight <= 0 {
+		return lifespan
+	}
+	return weighted / weight
 }

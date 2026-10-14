@@ -103,77 +103,7 @@ func bakeM2Materials(ctx context.Context, cfg config.Config, src FileSource, loa
 			remaining++
 		}
 	}
-	decoded := map[int]*image.NRGBA{}
-	loadTexture := func(index int) (*image.NRGBA, error) {
-		if img := decoded[index]; img != nil {
-			return img, nil
-		}
-		if index < 0 || index >= len(loader.Textures) {
-			return nil, fmt.Errorf("texture index %d out of range", index)
-		}
-		tex := loader.Textures[index]
-		entry, found := resolved.ValidTextures[textureKey{fileDataID: tex.FileDataID}]
-		if !found && tex.FileName != "" {
-			entry, found = resolved.ValidTextures[textureKey{fileName: tex.FileName}]
-		}
-		if !found && index < len(loader.TextureTypes) {
-			entry, found = resolved.ValidTextures[textureKey{data: true, dataType: int(loader.TextureTypes[index])}]
-		}
-		if unboundOptionalReplaceableTexture(loader, index, resolved) {
-			// WCpp binds an unbound replaceable sampler to a transparent black
-			// texture. Keep that behavior for optional shader slots. Type 1 is the
-			// deferred character skin and must remain unsupported until baking has
-			// access to the selected skin image.
-			img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
-			decoded[index] = img
-			return img, nil
-		}
-		var img *image.NRGBA
-		if found {
-			rel, _ := filepath.Rel(cfg.ExportAssetDir, entry.MatPath)
-			if source, ok := texturesource.Get(rel); ok && source.Kind == texturesource.KindPNG {
-				decodedPNG, err := png.Decode(bytes.NewReader(source.PNG))
-				if err != nil {
-					return nil, err
-				}
-				img = image.NewNRGBA(decodedPNG.Bounds())
-				draw.Draw(img, img.Bounds(), decodedPNG, decodedPNG.Bounds().Min, draw.Src)
-			}
-		}
-		if img == nil && tex.FileDataID > 0 {
-			raw, err := src.GetRawFile(ctx, int(tex.FileDataID))
-			if err != nil {
-				return nil, err
-			}
-			blpImage, err := blp.NewBLPImage(buffer.From(raw))
-			if err != nil {
-				return nil, err
-			}
-			pixels, err := blpImage.ToUInt8Array(0, 15)
-			if err != nil {
-				return nil, err
-			}
-			img = image.NewNRGBA(image.Rect(0, 0, int(blpImage.Width), int(blpImage.Height)))
-			copy(img.Pix, pixels)
-		}
-		if img == nil && found {
-			raw, err := os.ReadFile(entry.MatPath)
-			if err != nil {
-				return nil, err
-			}
-			decodedPNG, err := png.Decode(bytes.NewReader(raw))
-			if err != nil {
-				return nil, err
-			}
-			img = image.NewNRGBA(decodedPNG.Bounds())
-			draw.Draw(img, img.Bounds(), decodedPNG, decodedPNG.Bounds().Min, draw.Src)
-		}
-		if img == nil {
-			return nil, fmt.Errorf("%w: deferred or unresolved M2 texture %d", errUV2BakeUnsupported, index)
-		}
-		decoded[index] = img
-		return img, nil
-	}
+	loadTexture := m2BakeTextureLoader(ctx, cfg, src, loader, resolved)
 units:
 	for unitIndex, unit := range skin.TextureUnits {
 		original := geosets[int(unit.SkinSectionIndex)]
@@ -1982,4 +1912,78 @@ func bakePowerOfTwo(n int) int {
 }
 func finiteBakeUV(v imath.Vector2) bool {
 	return !math.IsInf(v[0], 0) && !math.IsInf(v[1], 0) && !math.IsNaN(v[0]) && !math.IsNaN(v[1])
+}
+
+func m2BakeTextureLoader(ctx context.Context, cfg config.Config, src FileSource, loader *m2.Loader, resolved ResolvedTextures) func(int) (*image.NRGBA, error) {
+	decoded := map[int]*image.NRGBA{}
+	return func(index int) (*image.NRGBA, error) {
+		if img := decoded[index]; img != nil {
+			return img, nil
+		}
+		if index < 0 || index >= len(loader.Textures) {
+			return nil, fmt.Errorf("texture index %d out of range", index)
+		}
+		tex := loader.Textures[index]
+		entry, found := resolved.ValidTextures[textureKey{fileDataID: tex.FileDataID}]
+		if !found && tex.FileName != "" {
+			entry, found = resolved.ValidTextures[textureKey{fileName: tex.FileName}]
+		}
+		if !found && index < len(loader.TextureTypes) {
+			entry, found = resolved.ValidTextures[textureKey{data: true, dataType: int(loader.TextureTypes[index])}]
+		}
+		if unboundOptionalReplaceableTexture(loader, index, resolved) {
+			// WCpp binds an unbound replaceable sampler to a transparent black
+			// texture. Keep that behavior for optional shader slots. Type 1 is the
+			// deferred character skin and must remain unsupported until baking has
+			// access to the selected skin image.
+			img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+			decoded[index] = img
+			return img, nil
+		}
+		var img *image.NRGBA
+		if found {
+			rel, _ := filepath.Rel(cfg.ExportAssetDir, entry.MatPath)
+			if source, ok := texturesource.Get(rel); ok && source.Kind == texturesource.KindPNG {
+				decodedPNG, err := png.Decode(bytes.NewReader(source.PNG))
+				if err != nil {
+					return nil, err
+				}
+				img = image.NewNRGBA(decodedPNG.Bounds())
+				draw.Draw(img, img.Bounds(), decodedPNG, decodedPNG.Bounds().Min, draw.Src)
+			}
+		}
+		if img == nil && tex.FileDataID > 0 {
+			raw, err := src.GetRawFile(ctx, int(tex.FileDataID))
+			if err != nil {
+				return nil, err
+			}
+			blpImage, err := blp.NewBLPImage(buffer.From(raw))
+			if err != nil {
+				return nil, err
+			}
+			pixels, err := blpImage.ToUInt8Array(0, 15)
+			if err != nil {
+				return nil, err
+			}
+			img = image.NewNRGBA(image.Rect(0, 0, int(blpImage.Width), int(blpImage.Height)))
+			copy(img.Pix, pixels)
+		}
+		if img == nil && found {
+			raw, err := os.ReadFile(entry.MatPath)
+			if err != nil {
+				return nil, err
+			}
+			decodedPNG, err := png.Decode(bytes.NewReader(raw))
+			if err != nil {
+				return nil, err
+			}
+			img = image.NewNRGBA(decodedPNG.Bounds())
+			draw.Draw(img, img.Bounds(), decodedPNG, decodedPNG.Bounds().Min, draw.Src)
+		}
+		if img == nil {
+			return nil, fmt.Errorf("%w: deferred or unresolved M2 texture %d", errUV2BakeUnsupported, index)
+		}
+		decoded[index] = img
+		return img, nil
+	}
 }

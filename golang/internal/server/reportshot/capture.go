@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"image/png"
 	"log"
+	"math"
 	"net/url"
 	"strings"
 	"sync"
@@ -595,7 +596,7 @@ func makeSheet(frames [][]byte) ([]byte, error) {
 	return composeSheet(frames, true)
 }
 
-func composeSheet(frames [][]byte, captions bool) ([]byte, error) {
+func composeSheet(frames [][]byte, captions bool, contrast ...bool) ([]byte, error) {
 	if len(frames) != len(views) {
 		return nil, errors.New("All six views are required.")
 	}
@@ -605,7 +606,7 @@ func composeSheet(frames [][]byte, captions bool) ([]byte, error) {
 		if captions {
 			caption = views[i]
 		}
-		img, err := renderFrame(frame, 640, 400, caption)
+		img, err := renderFrame(frame, 640, 400, caption, contrast...)
 		if err != nil {
 			return nil, err
 		}
@@ -616,7 +617,7 @@ func composeSheet(frames [][]byte, captions bool) ([]byte, error) {
 }
 
 // Both individual skill shots and report tiles use the same validation and caption.
-func renderFrame(frame []byte, width, height int, view string) (image.Image, error) {
+func renderFrame(frame []byte, width, height int, view string, contrast ...bool) (image.Image, error) {
 	cfg, err := png.DecodeConfig(bytes.NewReader(frame))
 	if err != nil || cfg.Width != 1440 || cfg.Height != 900 {
 		return nil, errors.New("The browser produced an invalid screenshot.")
@@ -632,10 +633,17 @@ func renderFrame(frame []byte, width, height int, view string) (image.Image, err
 		return nil, err
 	}
 	colored := 0
+	backgroundR, backgroundG, backgroundB, _ := img.At(0, 0).RGBA()
 	for y := 0; y < height; y += 4 {
 		for x := 0; x < width; x += 4 {
 			r, g, b, _ := img.At(x, y).RGBA()
-			if max(r, g, b)-min(r, g, b) > 6*257 || r > 65*257 {
+			visible := max(r, g, b)-min(r, g, b) > 6*257 || r > 65*257
+			if len(contrast) > 0 && contrast[0] {
+				// Native spell effects include dark neutral smoke. Test contrast with
+				// the corner background instead of requiring bright or colored pixels.
+				visible = math.Abs(float64(r)-float64(backgroundR)) > 6*257 || math.Abs(float64(g)-float64(backgroundG)) > 6*257 || math.Abs(float64(b)-float64(backgroundB)) > 6*257
+			}
+			if visible {
 				colored++
 			}
 		}

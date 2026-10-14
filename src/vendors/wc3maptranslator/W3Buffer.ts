@@ -1,6 +1,5 @@
 /* eslint-disable no-underscore-dangle */
 
-
 export class W3Buffer {
   private _offset = 0;
 

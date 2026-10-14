@@ -402,3 +402,33 @@ func TestConverterSilhouetteAimMatchesSkillMeasurement(t *testing.T) {
 		t.Fatalf("aim %+v: %v", aim, err)
 	}
 }
+
+func TestSourceCaptureAcceptsDarkSmokeAndRejectsEmptyBackground(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1440, 900))
+	draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{36, 36, 36, 255}), image.Point{}, draw.Src)
+	blank, err := encodePNG(img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderFrame(blank, 1440, 900, "", true); err == nil {
+		t.Fatal("empty native frame accepted")
+	}
+	draw.Draw(img, image.Rect(400, 300, 1000, 600), image.NewUniform(color.RGBA{15, 15, 15, 255}), image.Point{}, draw.Src)
+	smoke, err := encodePNG(img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderFrame(smoke, 1440, 900, "", true); err != nil {
+		t.Fatalf("dark neutral smoke rejected: %v", err)
+	}
+	if _, err := renderFrame(smoke, 1440, 900, ""); err == nil {
+		t.Fatal("existing screenshot validation changed")
+	}
+	frames := make([][]byte, 6)
+	for i := range frames {
+		frames[i] = smoke
+	}
+	if _, err := composeSheet(frames, false, true); err != nil {
+		t.Fatal("dark six-view source sheet rejected")
+	}
+}

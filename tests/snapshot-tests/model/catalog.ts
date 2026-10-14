@@ -133,3 +133,8 @@ function readSeat(value: unknown, where: string): readonly [number, number, numb
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
+
+/** Retain model files under the same product-isolated root as their textures. */
+export function snapshotExportPath(suite: SnapshotSuite, slug: string): string {
+  return suite === 'classic' ? `classic/${slug}` : `retails/${suite === 'mount' ? 'mount/' : ''}${slug}`;
+}

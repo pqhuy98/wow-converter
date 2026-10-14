@@ -72,6 +72,12 @@ func applyExportCharacterDefaults(raw map[string]any) {
 
 func validateExportCharacterShape(raw map[string]any) []string {
 	issues := make([]string, 0)
+	if value, exists := raw["assetPrefix"]; exists {
+		prefix, valid := value.(string)
+		if !valid || prefix == "" || pathsafe.ValidateRelativeRef(prefix) != nil {
+			issues = append(issues, "assetPrefix must be a safe relative path")
+		}
+	}
 	if value, exists := raw["animationRenames"]; exists {
 		renames, valid := value.([]any)
 		if !valid || len(renames) > 65536 {

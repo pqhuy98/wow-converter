@@ -54,6 +54,7 @@ Commands run from the repository root unless stated otherwise. These are current
 | Queue concurrency/lifecycle | `go -C golang test -race ./internal/server/util`; test affected API callers too |
 | WoW-reader/conversion integration | Running converter/data server, then `bun run test:golang-integration`; narrow tagged Go tests with `-run` while iterating |
 | Export appearance | Running converter, then selected snapshot cases and paired shots; broaden to `bun run test:snapshot` for shared visual behavior |
+| M2 effects without Wowhead support | Embedded original renderer and warmed export pairs: [WoW source shots](wow-source-shots.md) |
 | API contract | Running converter, then `bun run test:api` |
 | Map export | Running converter, then `bun run test:regression-maps` for asset-import/file-presence smoke coverage; verify terrain and gameplay in WC3 separately |
 | Release package | `bun run verify`: Go units → UI/desktop build → boot bundled app → Go integration → API → full snapshots |

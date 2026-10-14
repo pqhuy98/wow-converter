@@ -30,6 +30,22 @@ test('nested particle clocks stay frozen and replay resets global time', () => {
   }
 });
 
+test('explicit elapsed replay warms particles across looping sequence boundaries', () => {
+  const root = instance();
+  const advance = root.updateAnimations;
+  root.updateAnimations = function (dt: number): void {
+    advance.call(this, dt);
+    this.frame %= 1000;
+  };
+  const model = root as unknown as MdxModelInstance;
+  const scene = { emittedObjectUpdater: { update(dt: number) { root.particleAge += dt * root.timeScale; } } } as unknown as Scene;
+  settleShotPose(scene, model, 0, 2.5);
+  expect(root.counter).toBeCloseTo(2500, 6);
+  expect(root.frame).toBeCloseTo(500, 6);
+  expect(root.particleAge).toBeCloseTo(2.5, 6);
+  expect(root.timeScale).toBe(0);
+});
+
 function instance(children: {
   timeScale: number;
   setSequence(sequence: number): void;
