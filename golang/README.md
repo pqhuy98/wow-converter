@@ -36,7 +36,7 @@ WOW_CONVERTER_BUNDLED=1 go run ./cmd/wow-converter
 go run ./cmd/wow-converter -bundled
 ```
 
-Bundled mode sets `WOW_DATA_TRANSPORT=socket` and listens on `.cache/wow-data-server.sock` (override with `WOW_DATA_SERVER_SOCKET`).
+Bundled mode sets `WOW_DATA_TRANSPORT=socket` and listens on `.cache/wow-data-server.sock` (override with `WOW_DATA_SERVER_SOCKET`). If that path is longer than 107 bytes (`sockaddr_un.sun_path`), the socket is created under the temp directory instead — a long Desktop extract path would otherwise crash Windows with `bind: invalid argument`.
 
 **Production build** (from repo root):
 
@@ -132,7 +132,7 @@ All converter API routes are wired to the Go implementation (character export, t
 | `WOW_DATA_SERVER_PORT` | `17753` | wow-data-server TCP port |
 | `WOW_DATA_SERVER_URL` | `http://127.0.0.1:<port>` | HTTP client base URL (dev mode) |
 | `WOW_DATA_TRANSPORT` | (unset) | Set to `socket` for unix socket transport |
-| `WOW_DATA_SERVER_SOCKET` | `.cache/wow-data-server.sock` | Unix socket path when using socket transport |
+| `WOW_DATA_SERVER_SOCKET` | `.cache/wow-data-server.sock` | Unix socket path when using socket transport (temp-dir fallback if longer than 107 bytes) |
 | `WOW_EXPORT_DIR` | `.cache/wow-export` | Export directory |
 | `CASC_LOCAL_WOW` | (unset) | Auto-load local CASC on wow-data-server start |
 | `CASC_LOCAL_PRODUCT` | `wow` | Product for local install |

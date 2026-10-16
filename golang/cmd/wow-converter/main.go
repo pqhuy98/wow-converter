@@ -15,11 +15,11 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/ansi"
 	"github.com/pqhuy98/wow-converter/internal/server/api"
 	"github.com/pqhuy98/wow-converter/internal/server/rest"
+	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/bootstrap"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/transport"
-	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
 func main() {
@@ -51,7 +51,7 @@ func main() {
 		dataServer = rest.NewServerWithOptions(handler, listenOpts)
 		go func() {
 			if err := dataServer.ListenAndServe(); err != nil {
-				log.Printf("wow-data-server: %v", err)
+				log.Printf("wow-data-server socket: %v (UI still runs)", err)
 			}
 		}()
 	} else {

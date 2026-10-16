@@ -21,6 +21,7 @@ type Server struct {
 	httpServer *http.Server
 	handler    *Handler
 	listener   net.Listener
+	listenErr  error
 }
 
 // NewServer builds a chi router with all REST routes from rest-server.ts.
@@ -102,11 +103,13 @@ func newServer(handler *Handler, opts ServerListenOptions) *Server {
 	}
 	if opts.SocketPath != "" {
 		if err := transport.PrepareSocketPath(opts.SocketPath); err != nil {
-			panic(fmt.Sprintf("prepare socket path: %v", err))
+			srv.listenErr = fmt.Errorf("prepare socket path: %w", err)
+			return srv
 		}
 		ln, err := net.Listen("unix", opts.SocketPath)
 		if err != nil {
-			panic(fmt.Sprintf("listen unix socket: %v", err))
+			srv.listenErr = fmt.Errorf("listen unix socket: %w", err)
+			return srv
 		}
 		srv.listener = ln
 		srv.httpServer.Addr = opts.SocketPath
@@ -116,6 +119,9 @@ func newServer(handler *Handler, opts ServerListenOptions) *Server {
 
 // ListenAndServe starts the HTTP server.
 func (s *Server) ListenAndServe() error {
+	if s.listenErr != nil {
+		return s.listenErr
+	}
 	if s.listener != nil {
 		if !transport.UsesSocketTransport() {
 			wowlog.Write("wow-data-server listening on unix socket %s", s.httpServer.Addr)

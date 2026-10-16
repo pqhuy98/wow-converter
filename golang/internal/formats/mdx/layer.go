@@ -4,27 +4,27 @@ package mdx
 type LayerFilterMode uint32
 
 const (
-	LayerFilterNone       LayerFilterMode = 0
+	LayerFilterNone        LayerFilterMode = 0
 	LayerFilterTransparent LayerFilterMode = 1
-	LayerFilterBlend      LayerFilterMode = 2
-	LayerFilterAdditive   LayerFilterMode = 3
-	LayerFilterAddAlpha   LayerFilterMode = 4
-	LayerFilterModulate   LayerFilterMode = 5
-	LayerFilterModulate2x LayerFilterMode = 6
+	LayerFilterBlend       LayerFilterMode = 2
+	LayerFilterAdditive    LayerFilterMode = 3
+	LayerFilterAddAlpha    LayerFilterMode = 4
+	LayerFilterModulate    LayerFilterMode = 5
+	LayerFilterModulate2x  LayerFilterMode = 6
 )
 
 // LayerFlags for layer flags.
 type LayerFlags uint32
 
 const (
-	LayerFlagNone        LayerFlags = 0x0
-	LayerFlagUnshaded    LayerFlags = 0x1
+	LayerFlagNone         LayerFlags = 0x0
+	LayerFlagUnshaded     LayerFlags = 0x1
 	LayerFlagSphereEnvMap LayerFlags = 0x2
-	LayerFlagTwoSided    LayerFlags = 0x10
-	LayerFlagUnfogged    LayerFlags = 0x20
-	LayerFlagNoDepthTest LayerFlags = 0x40
-	LayerFlagNoDepthSet  LayerFlags = 0x80
-	LayerFlagUnlit       LayerFlags = 0x100
+	LayerFlagTwoSided     LayerFlags = 0x10
+	LayerFlagUnfogged     LayerFlags = 0x20
+	LayerFlagNoDepthTest  LayerFlags = 0x40
+	LayerFlagNoDepthSet   LayerFlags = 0x80
+	LayerFlagUnlit        LayerFlags = 0x100
 )
 
 func stringToFilterMode(s string) LayerFilterMode {
@@ -199,7 +199,15 @@ func (l *Layer) ReadMdl(stream *TokenStream) error {
 			}
 			l.TextureID = int32(v)
 		case "TextureID":
-			return l.ReadAnimation(stream, "KMTF")
+			if err := l.ReadAnimation(stream, "KMTF"); err != nil {
+				return err
+			}
+			// WC3 reads the static texture before evaluating KMTF on model creation.
+			// Leaving its MDL-only default (-1) in MDX crashes animated baked pages.
+			animation := l.Animations[len(l.Animations)-1]
+			if len(animation.Values) > 0 {
+				l.TextureID = int32(animation.Values[0].([]uint32)[0])
+			}
 		case "TVertexAnimId":
 			v, err := stream.ReadInt()
 			if err != nil {
