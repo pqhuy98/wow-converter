@@ -51,7 +51,7 @@ export class W3Buffer {
       this._offset += 1;
     }
 
-    // if (ch === 0x0) return '0' //Curse spell has a "Crs" field, whose 4th byte is probably a 0x0, and not a "0", causing the editor to just ignore this change when converting back...
+    // Trailing NUL in 3-char field IDs (e.g. Curse `Crs`) is stripped by ObjectsTranslator.
     return string.map((ch) => String.fromCharCode(ch)).join('');
   }
 

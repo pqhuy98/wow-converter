@@ -80,23 +80,12 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         obj?.forEach((mod: Modification) => {
-          let modType: number;
+          // Modification id (e.g. unam = name; reference MetaData lookups).
+          // AbilityMetaData IDs can be 3 chars (Curse `Crs`); the file stores 4 bytes with a trailing NUL.
+          outBufferToWar.addChars(fieldIdToWar(mod.id));
 
-          // Modification id (e.g. unam = name; reference MetaData lookups)
-          outBufferToWar.addChars(mod.id);
-
-          // Determine what type of field the mod is (int, real, unreal, string)
-          if (mod.type != null) { // if a type is specified, use it
-            modType = ObjectsTranslator.varTypes[mod.type];
-          } else { // otherwise we try to infer between int/string (note there is no way to detect unreal or float this way, so user must specify those explicitly)
-            if (typeof mod.value === 'number') {
-              modType = ObjectsTranslator.varTypes.int;
-            } else if (typeof mod.value === 'string') {
-              modType = ObjectsTranslator.varTypes.string;
-            } else {
-              throw new Error('No type specified and cannot infer type!');
-            }
-          }
+          // YAML/SLK aliases (buffList, unitRace, …) are not war types; map those to int/string.
+          const modType = warModificationType(mod.type, mod.value);
 
           outBufferToWar.addInt(modType);
 
@@ -183,7 +172,7 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
               value: {},
             };
 
-            modification.id = outBufferToJSON.readChars(4);
+            modification.id = fieldIdFromWar(outBufferToJSON.readChars(4));
             modification.type = ObjectsTranslator.varTypes[outBufferToJSON.readInt()] as unknown as ModificationType; // 'int' | 'real' | 'unreal' | 'string',
 
             if (this.type === ObjectType.Doodads || this.type === ObjectType.Abilities || this.type === ObjectType.Upgrades) {
@@ -225,4 +214,31 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
       json: result,
     };
   }
+}
+
+const RAWCODE_LENGTH = 4;
+
+function fieldIdToWar(id: string): string {
+  const stripped = id.replace(/\0+$/g, '');
+  if (stripped.length === 0 || stripped.length > RAWCODE_LENGTH) {
+    throw new Error(`Invalid object-data field id ${JSON.stringify(id)}`);
+  }
+  return stripped.padEnd(RAWCODE_LENGTH, '\0');
+}
+
+function fieldIdFromWar(id: string): string {
+  return id.replace(/\0+$/g, '');
+}
+
+function warModificationType(type: string | undefined, value: unknown): number {
+  if (type === 'int' || type === 'real' || type === 'unreal' || type === 'string') {
+    return ObjectsTranslator.varTypes[type];
+  }
+  if (typeof value === 'number') {
+    return ObjectsTranslator.varTypes.int;
+  }
+  if (typeof value === 'string') {
+    return ObjectsTranslator.varTypes.string;
+  }
+  throw new Error(`No type specified and cannot infer type for value ${JSON.stringify(value)}`);
 }
