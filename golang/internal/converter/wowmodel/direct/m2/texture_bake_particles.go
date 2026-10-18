@@ -56,8 +56,12 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 	}
 	for index, p := range loader.ParticleEmitters {
 		textures := map[string]*components.Texture{}
-		for _, node := range byIndex[index] {
+		for nodeIndex, node := range byIndex[index] {
 			original := *node
+			// WoW BlendAdd uses ONE, ONE_MINUS_SRC_ALPHA. PRE2 Additive uses
+			// SRC_ALPHA, ONE: preserve its radiance instead of multiplying by
+			// opacity again. PRE2 cannot also reproduce destination attenuation.
+			blendAdd := p.BlendingType == 7
 			multi := p.Flags&0x10000000 != 0
 			// Tail quads follow velocity; spinning the atlas applies to billboard heads.
 			spin := original.HeadOrTail == components.HeadOrTailHead && p.Flags&0x1004 == 0 && (p.Spin != 0 || p.SpinVary != 0)
@@ -130,7 +134,13 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 			for tile > 16 && tile*tile*referenceCols*referenceRows*variants > budget {
 				tile /= 2
 			}
-			for variant := range variants {
+			phaseStart, phaseCount := 0, variants
+			if p.EmitterType == 3 && len(p.SplinePoints) >= 4 {
+				// Spatial samples already provide independent random phases.
+				phaseStart, phaseCount = nodeIndex%variants, 1
+			}
+			for phase := range phaseCount {
+				variant := (phaseStart + phase) % variants
 				if err := ctx.Err(); err != nil {
 					return err
 				}
@@ -201,6 +211,9 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 								if bakeAlpha {
 									color[3] *= alpha
 								}
+								if blendAdd {
+									color[3] = 1
+								}
 								at := ((frame/cols)*tile+y)*atlas.Stride + ((frame%cols)*tile+x)*4
 								for channel := range 4 {
 									atlas.Pix[at+channel] = uint8(math.Round(clampM2(color[channel]) * 255))
@@ -220,7 +233,7 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 				if cfg.TextureBaking.Flipbook() {
 					baked.SegmentColors = [3]imath.Vector3{{1, 1, 1}, {1, 1, 1}, {1, 1, 1}}
 				}
-				if bakeAlpha {
+				if bakeAlpha || blendAdd {
 					baked.SegmentAlphas = [3]float64{255, 255, 255}
 				}
 				baked.Columns, baked.Rows = cols, rows
@@ -233,11 +246,11 @@ func bakeM2Particles(ctx context.Context, cfg config.Config, result *ConvertResu
 				baked.HeadIntervals = [3]float64{0, middle, 1}
 				baked.DecayIntervals = [3]float64{middle, float64(frames - 1), 1}
 				baked.TailIntervals, baked.TailDecayIntervals = baked.HeadIntervals, baked.DecayIntervals
-				baked.EmissionRate = scaleBakeRate(original.EmissionRate, 1/float64(variants))
+				baked.EmissionRate = scaleBakeRate(original.EmissionRate, 1/float64(phaseCount))
 				if multi {
 					baked.Flags2 = append(append([]components.ParticleEmitter2Flag(nil), node.Flags2...), components.PE2Unshaded)
 				}
-				if variant == 0 {
+				if phase == 0 {
 					*node = baked
 				} else {
 					baked.Name = fmt.Sprintf("%s_Phase%d", node.Name, variant)

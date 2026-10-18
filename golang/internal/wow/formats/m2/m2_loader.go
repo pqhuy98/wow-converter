@@ -813,8 +813,17 @@ func (l *Loader) parseMD21ParticleEmitters(ofs int) {
 		_ = l.Data.ReadFloatLE().(float32) // followScale1
 		_ = l.Data.ReadFloatLE().(float32) // followSpeed2
 		_ = l.Data.ReadFloatLE().(float32) // followScale2
-		_ = readU32(l.Data)                // splinePointsCount
-		_ = readU32(l.Data)                // splinePointsOfs
+		splineCount := int(readU32(l.Data))
+		splineOffset := int(readU32(l.Data)) + ofs
+		if splineCount > 0 && splineOffset >= 0 && splineOffset <= l.Data.ByteLength() && splineCount <= (l.Data.ByteLength()-splineOffset)/12 {
+			resume := l.Data.Offset()
+			l.Data.Seek(splineOffset)
+			entry.SplinePoints = make([][3]float32, splineCount)
+			for j := range entry.SplinePoints {
+				entry.SplinePoints[j] = readFloat3(l.Data)
+			}
+			l.Data.Seek(resume)
+		}
 		entry.EnabledIn = ReadM2Track(l.Data, ofs, TrackUint8, nil)
 		readParticleMultiTextureParams(l.Data, &entry)
 		l.ParticleEmitters[i] = entry

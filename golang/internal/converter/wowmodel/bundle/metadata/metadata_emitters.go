@@ -359,18 +359,28 @@ func (f *File) ExtractMDLParticlesEmitters(textures []components.Texture) {
 		if p.Flags&0x1000 != 0 {
 			node.Flags2 = append(node.Flags2, components.PE2XYQuad)
 		}
-		directions := f.particleDirectionVariants(node, p)
-		for _, node := range directions {
+		directions := f.particleSplineVariants(node, p)
+		for direction, node := range directions {
 			cellCount := node.Rows * node.Columns
 			if p.Flags&0x10000 != 0 && len(p.HeadCellTrack.Values) == 0 && headOrTail == components.HeadOrTailHead && cellCount > 1 {
 				// PRE2 has no random atlas-cell flag. Fixed-cell emitters share the
 				// original rate, preserving density instead of drawing cell zero only.
-				for cell := 0; cell < cellCount; cell++ {
+				cells := cellCount
+				if p.EmitterType == 3 && len(directions) > 1 {
+					// Distribute random cells across spatial samples instead of
+					// multiplying every low-rate spline emitter by every cell.
+					cells = 1
+				}
+				for sample := 0; sample < cells; sample++ {
+					cell := sample
+					if cells == 1 {
+						cell = direction % cellCount
+					}
 					variant := mdl.CloneParticleEmitter2(node)
 					variant.Name += "_cell_" + itoa(cell)
 					variant.HeadIntervals = [3]float64{float64(cell), float64(cell), 1}
 					variant.DecayIntervals = variant.HeadIntervals
-					applyAnimatedOrStaticFloat(&variant.EmissionRate, func(v float64) float64 { return v / float64(cellCount) })
+					applyAnimatedOrStaticFloat(&variant.EmissionRate, func(v float64) float64 { return v / float64(cells) })
 					f.mdl.ParticleEmitter2s = append(f.mdl.ParticleEmitter2s, variant)
 				}
 			} else {

@@ -55,6 +55,13 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 	}
 	horizontal := math.Min(math.Pi, particleTrackMax(p.HorizontalRange))
 	vertical := particleTrackMax(p.VerticalRange)
+	elevationCircle := !plane && horizontal < 1e-6 && vertical > 1e-6
+	angularRange, angularTrack := horizontal, p.HorizontalRange
+	if elevationCircle {
+		// Zero azimuth sweeps a vertical circle. Its spawn radius must follow
+		// elevation too; a rectangular PRE2 birth area fills the portal's hole.
+		angularRange, angularTrack = math.Min(math.Pi, vertical), p.VerticalRange
+	}
 	if plane && horizontal < 1e-6 {
 		node.Flags2 = append(node.Flags2, components.PE2LineEmitter)
 		return []*components.ParticleEmitter2{node}
@@ -78,10 +85,14 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 	if plane && (!node.Width.Static || !node.Length.Static || math.Max(node.Width.Value, node.Length.Value) > 0.2) {
 		return []*components.ParticleEmitter2{node}
 	}
-	if horizontal < 1e-6 || (!plane && !unequal && radius < 0.1) {
+	if angularRange < 1e-6 || (!plane && !unequal && radius < 0.1) {
 		return []*components.ParticleEmitter2{node}
 	}
-	count := int(math.Ceil(2 * horizontal / (math.Pi / 16)))
+	count := int(math.Ceil(2 * angularRange / (math.Pi / 16)))
+	if elevationCircle {
+		// Tangential birth jitter keeps vertical rings round with 16 sectors.
+		count = min(16, count)
+	}
 	count = max(1, min(32, count))
 	// Sparse effects must not be split into clocks that cannot spawn a single
 	// particle during its lifetime; that makes warmed impact captures disappear.
@@ -110,7 +121,7 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 	}
 	for i := 0; i < count; i++ {
 		fraction := -1 + 2*(float64(i)+0.5)/float64(count)
-		phi := horizontal * fraction
+		phi := angularRange * fraction
 		variant := mdl.CloneParticleEmitter2(node)
 		variant.Name += "_direction_" + itoa(i)
 		variant.Flags2 = append([]components.ParticleEmitter2Flag(nil), node.Flags2...)
@@ -122,9 +133,9 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 			variant.Flags2 = append(variant.Flags2, components.PE2LineEmitter)
 		}
 		variant.Latitude = f.m2trackToAnimationOrStaticFloat(p.VerticalRange, components.AnimTypeOthers, degrees)
-		circle := !plane && particleTrackZero(p.VerticalRange)
+		circle := !plane && (particleTrackZero(p.VerticalRange) || elevationCircle)
 		if circle {
-			variant.Latitude = f.m2trackToAnimationOrStaticFloat(p.HorizontalRange, components.AnimTypeOthers, func(v []float64) any {
+			variant.Latitude = f.m2trackToAnimationOrStaticFloat(angularTrack, components.AnimTypeOthers, func(v []float64) any {
 				if len(v) == 0 {
 					return float64(0)
 				}
@@ -140,15 +151,18 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 			if plane {
 				roll = 0
 			}
+			if elevationCircle {
+				return imath.EulerToQuaternion(imath.EulerRotation{-math.Pi/2 - angle, 0, 0})
+			}
 			if circle {
 				return imath.EulerToQuaternion(imath.EulerRotation{0, math.Pi / 2, angle + math.Pi/2})
 			}
 			return imath.EulerToQuaternion(imath.EulerRotation{roll, 0, angle})
 		}
-		if trackIsStatic(p.HorizontalRange) {
-			variant.Rotation = f.constantParticleRotation(rotation(p.HorizontalRange.Values[0][0]).(imath.QuaternionRotation))
+		if trackIsStatic(angularTrack) {
+			variant.Rotation = f.constantParticleRotation(rotation(angularTrack.Values[0][0]).(imath.QuaternionRotation))
 		} else {
-			variant.Rotation = f.m2trackToAnimation(p.HorizontalRange, components.AnimTypeRotation, rotation)
+			variant.Rotation = f.m2trackToAnimation(angularTrack, components.AnimTypeRotation, rotation)
 		}
 		if variant.Rotation == nil {
 			variant.Rotation = f.constantParticleRotation(rotation(nil).(imath.QuaternionRotation))
@@ -157,7 +171,12 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 			variant.Width = components.AnimatedOrStatic[float64]{Static: true}
 			variant.Length = components.AnimatedOrStatic[float64]{Static: true}
 			global := f.constantParticleRotation(rotation(nil).(imath.QuaternionRotation)).GlobalSeq
-			offset := func(r float64) imath.Vector3 { return imath.Vector3{-math.Sin(phi) * r, math.Cos(phi) * r, 0} }
+			offset := func(r float64) imath.Vector3 {
+				if elevationCircle {
+					return imath.Vector3{0, math.Cos(phi) * r, -math.Sin(phi) * r}
+				}
+				return imath.Vector3{-math.Sin(phi) * r, math.Cos(phi) * r, 0}
+			}
 			variant.Translation = &components.Animation{Type: components.AnimTypeTranslation, Interpolation: components.InterpDontInterp, GlobalSeq: global, KeyFrames: map[int]any{0: offset(radius)}}
 			if radiusTrack.Anim != nil {
 				anim := *radiusTrack.Anim
@@ -176,7 +195,7 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 			}
 			if circle {
 				// Jitter births along each arc instead of stacking every particle on its center ray.
-				arc := 2 * math.Sin(horizontal/float64(count))
+				arc := 2 * math.Sin(angularRange/float64(count))
 				variant.Length = radiusTrack
 				if radiusTrack.Anim != nil {
 					cloned := *radiusTrack.Anim

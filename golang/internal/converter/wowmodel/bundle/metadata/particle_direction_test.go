@@ -99,6 +99,45 @@ func TestSphereShellPreservesRateAndBindPoint(t *testing.T) {
 	}
 }
 
+func TestVerticalSphereCirclePreservesPortalHole(t *testing.T) {
+	f := &File{mdl: mdl.New(mdl.NewMDLOptions{Name: "vertical portal"})}
+	track := func(v float64) m2.Track {
+		return m2.Track{GlobalSeq: config.BlizzardNull, Timestamps: [][]uint32{{0}}, Values: [][][]float64{{{v}}}}
+	}
+	node := components.NewParticleEmitter2("portal")
+	node.Width = components.AnimatedOrStatic[float64]{Static: true, Value: 1.8}
+	node.Length = node.Width
+	node.Speed = components.AnimatedOrStatic[float64]{Static: true, Value: -1.1}
+	node.LifeSpan = .5
+	node.EmissionRate = components.AnimatedOrStatic[float64]{Static: true, Value: 500}
+	variants := f.particleDirectionVariants(node, m2.ParticleEmitterEntry{
+		EmitterType: 2, HorizontalRange: track(0), VerticalRange: track(math.Pi), EmissionRate: track(500),
+	})
+	if len(variants) != 16 {
+		t.Fatalf("vertical circle fell back to a rectangle: %d sectors", len(variants))
+	}
+	total := 0.0
+	for _, variant := range variants {
+		total += variant.EmissionRate.Value
+		offset := variant.Translation.KeyFrames[0].(imath.Vector3)
+		direction := rotateParticleTest(variant.Rotation.KeyFrames[0].(imath.QuaternionRotation), imath.Vector3{0, 0, 1})
+		if offset[0] != 0 || math.Abs(math.Hypot(offset[1], offset[2])-1.8) > 1e-8 {
+			t.Fatalf("vertical radius lost: %v", offset)
+		}
+		for i := range offset {
+			if math.Abs(direction[i]-offset[i]/1.8) > 1e-8 {
+				t.Fatalf("inward velocity no longer follows birth radius: %v versus %v", direction, offset)
+			}
+		}
+		if variant.Width.Value != 0 || variant.Length.Value > .8 || variant.Latitude.Value > 12 || variant.Speed.Value != -1.1 {
+			t.Fatal("sector spread or source speed changed")
+		}
+	}
+	if math.Abs(total-500) > 1e-8 {
+		t.Fatal("portal emission budget changed")
+	}
+}
+
 func rotateParticleTest(q imath.QuaternionRotation, v imath.Vector3) imath.Vector3 {
 	u := imath.Vector3{q[0], q[1], q[2]}
 	cross := imath.Vector3{u[1]*v[2] - u[2]*v[1], u[2]*v[0] - u[0]*v[2], u[0]*v[1] - u[1]*v[0]}

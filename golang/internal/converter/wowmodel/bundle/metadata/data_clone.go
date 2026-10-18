@@ -109,6 +109,12 @@ func cloneParticles(src []m2.ParticleEmitterEntry) []m2.ParticleEmitterEntry {
 	out := slices.Clone(src)
 	for i := range out {
 		v := &out[i]
+		v.SplinePoints = slices.Clone(v.SplinePoints)
+		for j := range v.SplinePoints {
+			for axis := range v.SplinePoints[j] {
+				v.SplinePoints[j][axis] = finite(v.SplinePoints[j][axis])
+			}
+		}
 		for j := range v.Position {
 			v.Position[j] = finite(v.Position[j])
 		}

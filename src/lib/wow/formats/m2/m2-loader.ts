@@ -709,11 +709,20 @@ export class M2Loader {
       const followSpeed2 = this.data.readFloatLE();
       const followScale2 = this.data.readFloatLE();
 
-      // spline points (array of C3Vector) - header read, contents skipped (matches wow.export)
+      // Spline-generator control points remain in native M2 coordinates.
       const splinePointsCount = this.data.readUInt32LE();
       const splinePointsOfs = this.data.readUInt32LE();
       const splinePoints: number[][] = [];
-      void splinePointsCount; void splinePointsOfs;
+      const splineOffset = splinePointsOfs + ofs;
+      if (splinePointsCount > 0 && splineOffset >= 0 && splineOffset <= this.data.byteLength
+        && splinePointsCount <= Math.floor((this.data.byteLength - splineOffset) / 12)) {
+        const resume = this.data.offset;
+        this.data.seek(splineOffset);
+        for (let point = 0; point < splinePointsCount; point++) {
+          splinePoints.push(this.data.readFloatLE(3));
+        }
+        this.data.seek(resume);
+      }
 
       // enabledIn M2Track<uint8> (bool), use as visibility hint
       const enabledIn = M2Generics.read_m2_track(this.data, ofs, 'uint8');

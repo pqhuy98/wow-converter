@@ -158,12 +158,13 @@ type ParticleEmitterEntry struct {
 		Min float32 `json:"min"`
 		Max float32 `json:"max"`
 	} `json:"twinkleScale"`
-	Drag         float32 `json:"drag"`
-	BaseSpin     float32 `json:"baseSpin"`
-	BaseSpinVary float32 `json:"baseSpinVary"`
-	Spin         float32 `json:"spin"`
-	SpinVary     float32 `json:"spinVary"`
-	EnabledIn    Track   `json:"enabledIn"`
+	Drag         float32      `json:"drag"`
+	BaseSpin     float32      `json:"baseSpin"`
+	BaseSpinVary float32      `json:"baseSpinVary"`
+	Spin         float32      `json:"spin"`
+	SpinVary     float32      `json:"spinVary"`
+	SplinePoints [][3]float32 `json:"splinePoints,omitempty"` // Native generator-local M2 XYZ.
+	EnabledIn    Track        `json:"enabledIn"`
 }
 
 // TextureTransformEntry is an M2 UV transform.
