@@ -27,6 +27,9 @@ func TestParseGenerateWc3BodyAppliesDefaults(t *testing.T) {
 	if !body.AutoClampPercent {
 		t.Fatal("autoClampPercent should default to true")
 	}
+	if body.PlacePathBlockers {
+		t.Fatal("placePathBlockers should default to false")
+	}
 	if body.IncludeBuildingInteriors == nil || !*body.IncludeBuildingInteriors {
 		t.Fatal("includeBuildingInteriors should default to true")
 	}
@@ -54,6 +57,8 @@ func TestParseGenerateWc3BodyRejectsInvalidContractValues(t *testing.T) {
 		}},
 		{"null required boolean", func(body map[string]any) { body["freshExport"] = nil }},
 		{"null optional boolean", func(body map[string]any) { body["autoClampPercent"] = nil }},
+		{"null path blocker flag", func(body map[string]any) { body["placePathBlockers"] = nil }},
+		{"string path blocker flag", func(body map[string]any) { body["placePathBlockers"] = "true" }},
 		{"inverted clamp", func(body map[string]any) {
 			body["clampLower"] = float64(0.8)
 			body["clampUpper"] = float64(0.2)
@@ -68,5 +73,33 @@ func TestParseGenerateWc3BodyRejectsInvalidContractValues(t *testing.T) {
 				t.Fatal("expected validation issue")
 			}
 		})
+	}
+}
+
+func TestParseGenerateWc3BodyEnablesPathBlockersWithoutNPCExport(t *testing.T) {
+	raw := validGenerateWc3Body()
+	raw["placePathBlockers"] = true
+	body, issues := parseGenerateWc3Body(raw)
+	if len(issues) != 0 || !body.PlacePathBlockers || body.Creatures.Enable {
+		t.Fatalf("blockers must be independently selectable: %+v, %v", body, issues)
+	}
+}
+
+func TestMapNavigationOptions(t *testing.T) {
+	raw := validGenerateWc3Body()
+	raw["navigation"] = map[string]any{"jumpHeight": float64(0), "radius": float64(.5)}
+	body, issues := parseGenerateWc3Body(raw)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	if body.Navigation.JumpHeight != 0 || body.Navigation.Radius != .5 || body.Navigation.Height != 1.8 {
+		t.Fatal("partial overrides must keep defaults and preserve explicit zero jump height")
+	}
+	for _, object := range []any{nil, map[string]any{"radius": float64(-1)}, map[string]any{"jumpHeight": nil}, map[string]any{"typo": true}} {
+		raw := validGenerateWc3Body()
+		raw["navigation"] = object
+		if _, issues := parseGenerateWc3Body(raw); len(issues) == 0 {
+			t.Fatalf("invalid navigation config accepted: %v", object)
+		}
 	}
 }

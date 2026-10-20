@@ -34,6 +34,7 @@ type ADTChunk struct {
 	OfsMCLW              uint32
 	Unk2                 uint32
 	Vertices             []float32
+	LegacyLiquid         *LiquidInstance
 	VertexShading        []RGBA
 	Normals              [][3]int8
 	BlendBatches         []BlendBatch
@@ -49,20 +50,21 @@ type BlendBatch struct {
 
 // LiquidInstance is a liquid layer instance.
 type LiquidInstance struct {
-	ChunkIndex, InstanceIndex                        int
-	LiquidType, LiquidObject                         uint16
-	MinHeightLevel, MaxHeightLevel                   float32
-	XOffset, YOffset, Width, Height                  uint8
-	Bitmap                                           []uint8
-	VertexData                                       LiquidVertexData
-	OffsetExistsBitmap, OffsetVertexData             uint32
+	ChunkIndex, InstanceIndex            int
+	LiquidType, LiquidObject             uint16
+	MinHeightLevel, MaxHeightLevel       float32
+	XOffset, YOffset, Width, Height      uint8
+	Bitmap                               []uint8
+	VertexData                           LiquidVertexData
+	OffsetExistsBitmap, OffsetVertexData uint32
 }
 
 // LiquidVertexData holds liquid vertex attributes.
 type LiquidVertexData struct {
-	Height []float32
-	Depth  []uint8
-	UV     []struct{ X, Y uint16 }
+	Invalid bool
+	Height  []float32
+	Depth   []uint8
+	UV      []struct{ X, Y uint16 }
 }
 
 // LiquidChunk is liquid data for a terrain chunk.
@@ -75,11 +77,11 @@ type LiquidChunk struct {
 
 // ADTHeader is the ADT MHDR header.
 type ADTHeader struct {
-	Flags                                            uint32
-	OfsMCIN, OfsMTEX, OfsMMDX, OfsMMID               uint32
-	OfsMWMO, OfsMWID, OfsMDDF, OfsMODF               uint32
-	OfsMFBO, OfsMH20, OfsMTXF                        uint32
-	Unk                                              [4]uint32
+	Flags                              uint32
+	OfsMCIN, OfsMTEX, OfsMMDX, OfsMMID uint32
+	OfsMWMO, OfsMWID, OfsMDDF, OfsMODF uint32
+	OfsMFBO, OfsMH20, OfsMTXF          uint32
+	Unk                                [4]uint32
 }
 
 // TexChunkLayer is a texture layer in a tex ADT chunk.
@@ -96,7 +98,7 @@ type TexChunk struct {
 
 // TexParams holds MTXP parameters.
 type TexParams struct {
-	Flags, Unk3 uint32
+	Flags, Unk3    uint32
 	Height, Offset float32
 }
 
@@ -110,9 +112,9 @@ type DoodadEntry struct {
 
 // WorldModelEntry is a WMO placement.
 type WorldModelEntry struct {
-	MwidEntry, UniqueID uint32
-	Position, Rotation  [3]float32
-	LowerBounds, UpperBounds [3]float32
+	MwidEntry, UniqueID              uint32
+	Position, Rotation               [3]float32
+	LowerBounds, UpperBounds         [3]float32
 	Flags, DoodadSet, NameSet, Scale uint16
 }
 
@@ -121,22 +123,22 @@ type ADTLoader struct {
 	Data *buffer.Buffer
 	WDT  *WDTLoader
 
-	Version              int
-	Chunks               []ADTChunk
-	ChunkIndex           int
-	TexChunks            []TexChunk
-	Header               *ADTHeader
-	LiquidChunks         []LiquidChunk
-	Textures             map[int]string
-	TexParams            []TexParams
+	Version                                             int
+	Chunks                                              []ADTChunk
+	ChunkIndex                                          int
+	TexChunks                                           []TexChunk
+	Header                                              *ADTHeader
+	LiquidChunks                                        []LiquidChunk
+	Textures                                            map[int]string
+	TexParams                                           []TexParams
 	HeightTextureFileDataIDs, DiffuseTextureFileDataIDs []uint32
-	M2Names              map[int]string
-	M2Offsets            []uint32
-	WmoNames             map[int]string
-	WmoOffsets           []uint32
-	Models               []DoodadEntry
-	WorldModels          []WorldModelEntry
-	DoodadSets           []uint16
+	M2Names                                             map[int]string
+	M2Offsets                                           []uint32
+	WmoNames                                            map[int]string
+	WmoOffsets                                          []uint32
+	Models                                              []DoodadEntry
+	WorldModels                                         []WorldModelEntry
+	DoodadSets                                          []uint16
 
 	handlers map[uint32]adtChunkHandler
 }
@@ -194,16 +196,16 @@ var adtRootChunkHandlers = map[uint32]adtChunkHandler{
 			Flags: readU32(data), IndexX: readU32(data), IndexY: readU32(data),
 			NLayers: readU32(data), NDoodadRefs: readU32(data),
 			HolesHighRes: readU8Slice(data, 8),
-			OfsMCLY: readU32(data), OfsMCRF: readU32(data), OfsMCAL: readU32(data),
+			OfsMCLY:      readU32(data), OfsMCRF: readU32(data), OfsMCAL: readU32(data),
 			SizeAlpha: readU32(data), OfsMCSH: readU32(data), SizeShadows: readU32(data),
 			AreaID: readU32(data), NMapObjRefs: readU32(data),
 			HolesLowRes: uint16(readU16(data)), Unk1: uint16(readU16(data)),
 			LowQualityTextureMap: readI16Slice(data, 8),
-			NoEffectDoodad: readI64(data),
-			OfsMCSE: readU32(data), NumMCSE: readU32(data),
+			NoEffectDoodad:       readI64(data),
+			OfsMCSE:              readU32(data), NumMCSE: readU32(data),
 			OfsMCLQ: readU32(data), SizeMCLQ: readU32(data),
 			Position: readFloat3(data),
-			OfsMCCV: readU32(data), OfsMCLW: readU32(data), Unk2: readU32(data),
+			OfsMCCV:  readU32(data), OfsMCLW: readU32(data), Unk2: readU32(data),
 		}
 		a.Chunks[a.ChunkIndex] = chunk
 		a.ChunkIndex++
@@ -232,6 +234,35 @@ var adtRootChunkHandlers = map[uint32]adtChunkHandler{
 type mcnkHandler func(*ADTChunk, *buffer.Buffer, int)
 
 var rootMCNKHandlers = map[uint32]mcnkHandler{
+	0x4D434C51: func(c *ADTChunk, data *buffer.Buffer, size int) {
+		if size < 8+81*8+64 {
+			return
+		}
+		l := &LiquidInstance{Width: 8, Height: 8, Bitmap: make([]byte, 8)}
+		l.MinHeightLevel = data.ReadFloatLE().(float32)
+		l.MaxHeightLevel = data.ReadFloatLE().(float32)
+		switch {
+		case c.Flags&0x20 != 0:
+			l.LiquidType = 4
+		case c.Flags&0x10 != 0:
+			l.LiquidType = 3
+		case c.Flags&8 != 0:
+			l.LiquidType = 2
+		default:
+			l.LiquidType = 1
+		}
+		l.VertexData.Height = make([]float32, 81)
+		for i := range l.VertexData.Height {
+			readU32(data)
+			l.VertexData.Height[i] = data.ReadFloatLE().(float32)
+		}
+		for i := 0; i < 64; i++ {
+			if data.ReadUInt8().(int64)&15 != 15 {
+				l.Bitmap[i/8] |= 1 << uint(i%8)
+			}
+		}
+		c.LegacyLiquid = l
+	},
 	0x4D435654: func(c *ADTChunk, data *buffer.Buffer, _ int) {
 		c.Vertices = readFloatSlice(data, 145)
 	},
@@ -268,7 +299,7 @@ var rootMCNKHandlers = map[uint32]mcnkHandler{
 	},
 }
 
-func parseMH2O(a *ADTLoader, data *buffer.Buffer, _ int) {
+func parseMH2O(a *ADTLoader, data *buffer.Buffer, chunkSize int) {
 	base := data.Offset()
 	dataOffsets := make(map[int]struct{})
 	chunkHeaders := make([]struct {
@@ -281,6 +312,9 @@ func parseMH2O(a *ADTLoader, data *buffer.Buffer, _ int) {
 		chunkHeaders[i] = struct {
 			offsetInstances, layerCount, offsetAttributes uint32
 		}{readU32(data), readU32(data), readU32(data)}
+		if chunkHeaders[i].offsetInstances > 0 {
+			dataOffsets[int(chunkHeaders[i].offsetInstances)] = struct{}{}
+		}
 		if chunkHeaders[i].offsetAttributes > 0 {
 			dataOffsets[int(chunkHeaders[i].offsetAttributes)] = struct{}{}
 		}
@@ -302,7 +336,7 @@ func parseMH2O(a *ADTLoader, data *buffer.Buffer, _ int) {
 					Width: uint8(data.ReadUInt8().(int64)), Height: uint8(data.ReadUInt8().(int64)),
 					OffsetExistsBitmap: readU32(data), OffsetVertexData: readU32(data),
 				}
-				if inst.LiquidObject <= 41 {
+				if inst.LiquidObject > 41 {
 					inst.XOffset, inst.YOffset, inst.Width, inst.Height = 0, 0, 8, 8
 				}
 				if inst.OffsetExistsBitmap > 0 {
@@ -345,10 +379,13 @@ func parseMH2O(a *ADTLoader, data *buffer.Buffer, _ int) {
 			if offsetIndex < len(sortedOffsets)-1 {
 				dataSize = sortedOffsets[offsetIndex+1] - int(inst.OffsetVertexData)
 			} else {
-				dataSize = vertexCount * 5
+				dataSize = chunkSize - int(inst.OffsetVertexData)
 			}
 			data.Seek(base + int(inst.OffsetVertexData))
 			bytesPerVertex := dataSize / vertexCount
+			if inst.LiquidObject <= 3 {
+				bytesPerVertex = []int{5, 8, 1, 9}[inst.LiquidObject]
+			}
 			switch bytesPerVertex {
 			case 5:
 				inst.VertexData.Height = readFloatSlice(data, vertexCount)
@@ -370,6 +407,8 @@ func parseMH2O(a *ADTLoader, data *buffer.Buffer, _ int) {
 				}
 				inst.VertexData.UV = uv
 				inst.VertexData.Depth = readU8Slice(data, vertexCount)
+			default:
+				inst.VertexData.Invalid = true
 			}
 		}
 	}

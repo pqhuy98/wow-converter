@@ -324,7 +324,7 @@ func (e *Exporter) exportLiquid(rootAdt *adtfmt.ADTLoader, dir string, options e
 			centerX := float64(instance.XOffset) + float64(instance.Width)/2
 			centerY := float64(instance.YOffset) + float64(instance.Height)/2
 			worldX := float64(chunkY) - centerX*float64(unitSize)
-			worldY := (float64(instance.MinHeightLevel)+float64(instance.MaxHeightLevel))/2 + float64(chunkZ)
+			worldY := (float64(instance.MinHeightLevel) + float64(instance.MaxHeightLevel)) / 2
 			worldZ := float64(chunkX) - centerY*float64(unitSize)
 			entry := liquidInstanceToMap(instance)
 			entry["worldPosition"] = []float64{worldX, worldY, worldZ}

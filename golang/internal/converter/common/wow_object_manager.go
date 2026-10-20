@@ -16,6 +16,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
 )
 
 const maxWoWSize = 51200.0 / 3.0
@@ -242,6 +243,9 @@ func (m *WowObjectManager) parseRecursive(ctx context.Context, objectPath string
 		ext := ComputeAbsoluteMinMaxExtents([]*WowObject{current})
 		center := math.V3Mean(ext.Min, ext.Max)
 		if !isNaN3(center) {
+			current.Model.Liquids = liquid.Transform(current.Model.Liquids, func(p math.Vector3) math.Vector3 {
+				return math.V3Rotate(math.V3Sub(math.V3Rotate(p, current.Rotation), center), math.V3Negative(current.Rotation))
+			})
 			for _, geoset := range current.Model.MDL.Geosets {
 				for _, v := range geoset.Vertices {
 					vAbs := math.V3Rotate(v.Position, current.Rotation)

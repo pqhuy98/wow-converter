@@ -282,6 +282,27 @@ func updateMapBoundsFromTerrain(info *data.Info, terrain data.Terrain) {
 
 // Save writes all map files to mapDir.
 func (m *MapManager) Save(mapDir string) error {
+	// Creation numbers identify editor placements, not unit types. Keep valid
+	// numbers stable, but repair omitted/duplicate IDs before serialization.
+	used, seen := map[int]bool{}, map[int]bool{}
+	for _, u := range m.Units {
+		if u.ID >= 0 {
+			used[u.ID] = true
+		}
+	}
+	nextID := 0
+	for i := range m.Units {
+		id := m.Units[i].ID
+		if id < 0 || seen[id] {
+			for used[nextID] {
+				nextID++
+			}
+			id = nextID
+			m.Units[i].ID = id
+			used[id] = true
+		}
+		seen[id] = true
+	}
 	m.MapData.UnitData.Custom = map[string][]data.Modification{}
 	for _, ut := range m.UnitTypes {
 		m.MapData.UnitData.Custom[ut.Code+":"+ut.Parent] = ut.Data

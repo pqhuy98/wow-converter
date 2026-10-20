@@ -154,7 +154,7 @@ func loadTileSnapshot(
 			Quality: &quality, ExportAssetDir: exportAssetDir,
 			IncludeM2: &includeM2, IncludeWMO: &includeWMO, IncludeWMOSets: &includeWMOSets,
 			IncludeGameObjects: &includeGO, IncludeHoles: boolPtr(true),
-			IncludeLiquid: boolPtr(false), IncludeFoliage: boolPtr(false),
+			IncludeLiquid: boolPtr(true), IncludeFoliage: boolPtr(false),
 		}
 		return wowClient.ExportADTForConversion(ctx, params)
 	}
@@ -166,7 +166,7 @@ func loadTileSnapshot(
 	opts := exportadt.BuildADTExportOptions(map[string]any{
 		"mapsIncludeM2": true, "mapsIncludeWMO": true, "mapsIncludeWMOSets": includeWMOSets,
 		"mapsIncludeGameObjects": true, "mapsIncludeHoles": true,
-		"mapsIncludeLiquid": false, "mapsIncludeFoliage": false,
+		"mapsIncludeLiquid": true, "mapsIncludeFoliage": false,
 	})
 	gameObjects := map[uint32]db.DB2Row{}
 	if opts.MapsIncludeGameObjects {

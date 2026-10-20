@@ -24,16 +24,18 @@ import (
 )
 
 type generateWc3Body struct {
-	Tiles                    []exportAdtTile `json:"tiles"`
-	Quality                  int             `json:"quality"`
-	MapSaveName              string          `json:"mapSaveName"`
-	ClampLower               float64         `json:"clampLower"`
-	ClampUpper               float64         `json:"clampUpper"`
-	AutoClampPercent         bool            `json:"autoClampPercent"`
-	MapAngleDeg              float64         `json:"mapAngleDeg"`
-	UnitScale                float64         `json:"unitScale"`
-	IncludeBuildingInteriors *bool           `json:"includeBuildingInteriors"`
-	FreshExport              bool            `json:"freshExport"`
+	Tiles                    []exportAdtTile               `json:"tiles"`
+	Quality                  int                           `json:"quality"`
+	MapSaveName              string                        `json:"mapSaveName"`
+	ClampLower               float64                       `json:"clampLower"`
+	ClampUpper               float64                       `json:"clampUpper"`
+	AutoClampPercent         bool                          `json:"autoClampPercent"`
+	MapAngleDeg              float64                       `json:"mapAngleDeg"`
+	UnitScale                float64                       `json:"unitScale"`
+	Navigation               *mapexporter.NavigationConfig `json:"navigation,omitempty"`
+	IncludeBuildingInteriors *bool                         `json:"includeBuildingInteriors"`
+	FreshExport              bool                          `json:"freshExport"`
+	PlacePathBlockers        bool                          `json:"placePathBlockers"`
 	Creatures                struct {
 		Enable        bool `json:"enable"`
 		AllAreDoodads bool `json:"allAreDoodads"`
@@ -241,6 +243,10 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		AllAreDoodads:   req.Body.Creatures.AllAreDoodads,
 	})
 
+	mapExportCfg.PlacePathBlockers = req.Body.PlacePathBlockers
+	if req.Body.Navigation != nil {
+		mapExportCfg.Navigation = *req.Body.Navigation
+	}
 	registry := common.NewTileRegistry()
 	tileCoords := make([]mapexporter.TileCoord, len(req.OrderedTiles))
 	for i, t := range req.OrderedTiles {

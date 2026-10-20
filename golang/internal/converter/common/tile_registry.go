@@ -3,8 +3,8 @@ package common
 import (
 	"sync"
 
-	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 	"github.com/pqhuy98/wow-converter/internal/converter/texturesource"
+	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 )
 
 // TileRegistry holds in-memory ADT tile snapshots for direct map conversion.
@@ -103,6 +103,7 @@ func (r *TileRegistry) TrimAfterParse() {
 		}
 		snap.ObjText = ""
 		snap.MtlText = ""
+		snap.Liquids = nil
 		snap.Textures = nil
 		snap.Placements = nil
 		snap.WmoPlacements = nil
@@ -126,6 +127,7 @@ func (r *TileRegistry) Release() {
 			snap.Textures = nil
 			snap.ObjText = ""
 			snap.MtlText = ""
+			snap.Liquids = nil
 			snap.Placements = nil
 			snap.WmoPlacements = nil
 		}

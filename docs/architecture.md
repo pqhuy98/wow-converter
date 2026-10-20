@@ -22,9 +22,15 @@ All Go paths below are under `golang/internal/`.
 
 `golang/cmd/wow-converter/main.go` wires the bundled runtime and API. `webui/` owns UI behavior, `scripts/` owns build/dev orchestration, and `tests/` owns API/snapshot/map acceptance checks.
 
+Map export stitches loaded ADT minimap tiles into `minimap.blp`, using final placement bounds/rotation and black gaps/padding; `war3mapMap.blp` stays editor-owned. The Lua template initializes that texture and sweeps the camera over placed root ADTs (root WMOs if no ADT has geometry) behind a black screen. Export injects final WC3 coordinates into both `war3map.lua` and length-prefixed `war3map.wct`, refreshes template `war3map.wtg`, registers the texture in `war3map.imp`, and selects Lua in `war3map.w3i`, so editor saves retain the startup behavior. Camera rendering/preload effectiveness still needs in-game verification.
+
+`MapManager.Save` gives unit placements unique creation numbers, preserving existing valid IDs and repairing duplicates. New unit files use the native v8/11 layout with Reforged skins; saving cached converter v9 files repairs their unsupported version header. Map export also generates Lua unit creation from the serialized placements, called after `InitGlobals` and before initialization triggers. This generated code stays out of WCT: World Editor rebuilds unit creation from the DOO when saving, so a persistent custom creation trigger would duplicate units. Cached exports replace old creation calls, including when NPC export is disabled.
+
 Map gameobjects combine client placements with AzerothCore `gameobject` / `gameobject_template` spawns from the bundled SQLite. Their display IDs resolve through the loaded client's `GameObjectDisplayInfo`; server placements follow `GameObject::Create` (orientation by default, quaternion for its explicit exceptions and `gameobject_addon` overrides). Gameobjects become WC3 destructibles (`war3map.w3b`) with explicit imported model filenames and retain individual placements in `war3map.doo`. `gameobjects.json` records exported source identities and WC3 type codes. Missing display rows, model-less displays, and unavailable model assets are logged and skipped; table/database failures and cancellation still stop generation. Instance encounter scripts and initial animation states are not translated into WC3 triggers.
 
-Regenerate all bundled tables with `bun run generate:acore-sqlite`. To update selected tables from AzerothCore's base SQL dumps while retaining other data, use `bun scripts/generate-azerothcore-sqlite.ts --sql-dir=<db_world-directory> --tables=gameobject,gameobject_template,gameobject_addon`.
+Creature and gameobject export use the base world with no active events: positive-only `game_event_creature` / `game_event_gameobject` spawns are omitted, while negative event links remain present. This excludes Arena Tournament NPCs and temporary invisible event barriers from placement. Multiple event links never duplicate a spawn.
+
+Regenerate all bundled tables with `bun run generate:acore-sqlite`. To update selected tables from AzerothCore's base SQL dumps while retaining other data, use `bun scripts/generate-azerothcore-sqlite.ts --sql-dir=<db_world-directory> --tables=gameobject,gameobject_template,gameobject_addon,game_event_gameobject,game_event_creature`.
 
 ## Trace a change before editing
 
@@ -73,3 +79,9 @@ Full snapshots switch Retail/Classic products, clear exported assets, and restor
 Map regression is currently disabled in `scripts/verify.ts`. Browser snapshots protect appearance regressions; they do not certify Warcraft III combat stats or every in-game material/animation effect. Preserve approved baselines during refactors, investigate differences, and follow the [snapshot rule](../.cursor/rules/snapshot-tests.mdc) and [mismatch skill](../.cursor/skills/debug-wowhead-mismatch/SKILL.md) for visual evidence and intentional updates.
 
 Report what changed, the exact checks run, and unverified behavior. Performance claims need comparable inputs/configuration and measured durations or memory; a shorter command alone is not evidence of faster conversion.
+
+Map terrain reachability is owned by converter/mapexporter/terrain_navigation.go and terrain_blockers.go. It uses source ADT/WMO/M2 collision, NPC seeds and packed doodad pathing footprints; see [collision-based terrain](map-terrain-navigation.md) for configuration, diagnostics and native verification boundaries.
+
+Map doodad editor fields follow the source hierarchy: ADTs get Ignore Model Click (`dimc = 1`), and their direct doodad children get Occlusion = Auto (`doct`, string `Auto`), excluding units and gameobjects. Without any ADT, only root WMOs get `dimc = 1`. Shared models use separate object types when these fields differ between placements.
+
+Map liquids travel through typed ADT/WMO model metadata into `mapexporter/terrain_water.go`. Water uses native terrain heights and source-derived WPM movement flags, with no liquid surface doodads. Shoreline detail rounds to the native grid, and unsupported/approximated surfaces are reported. Water pathing is independent of optional blocker doodads and NPC export. See [map water export](map-water-export.md) for encoding, diagnostics and native verification limits.

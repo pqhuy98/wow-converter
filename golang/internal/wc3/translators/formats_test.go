@@ -2,6 +2,7 @@ package translators
 
 import (
 	"bytes"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,36 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wc3"
 	"github.com/pqhuy98/wow-converter/internal/wc3/data"
 )
+
+func TestUnitsUseNativeFormatVersion(t *testing.T) {
+	// Two consecutive World Editor v8/11 placements, including Reforged skins.
+	// These bytes come from a native save, not this translator's writer.
+	native, err := hex.DecodeString("5733646f080000000b000000020000006f777976000000005deb9ec3281f41c4c0d10bc2c66b5a400000803f0000803f0000803f6f77797602000000000000ffffffffffffffffffffffff00000000d4300000000080bf0100000000000000000000000000000000000000000000000000000001000000ffffffffffffffff890000006f77797600000000f85da1c306b9aac4142252c26118f83f0000803f0000803f0000803f6f77797602000000000000ffffffffffffffffffffffff00000000d4300000000080bf0100000000000000000000000000000000000000000000000000000001000000ffffffffffffffff88000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed := UnitsTranslator{}.WarToJSON(native)
+	if len(parsed.JSON) != 2 || parsed.JSON[0].Type != "owyv" || parsed.JSON[1].ID != 136 {
+		t.Fatal("failed to read native placements")
+	}
+	for _, version := range []int{0, 8, 9} {
+		encoded := UnitsTranslator{}.JSONToWar(parsed.JSON, version).Buffer
+		if !bytes.Equal(encoded, native) {
+			t.Fatalf("version %d did not produce the native v8/11 layout", version)
+		}
+	}
+	m := NewMapTranslator()
+	m.SetMapDir(t.TempDir())
+	m.Units = parsed.JSON
+	m.formatVersions = map[FilePath]int{FileUnits: 9}
+	if err := m.Save(FileUnits); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(m.filePaths[FileUnits])
+	if err != nil || !bytes.Equal(saved, native) {
+		t.Fatalf("cached map save did not repair the invalid version: %v", err)
+	}
+}
 
 func TestModernPlacementFields(t *testing.T) {
 	state := byte(5)

@@ -22,9 +22,14 @@ func jsonToWarUnits(unitsJson []data.Unit, versions ...int) wc3.WarResult {
 	out := wc3.NewHexBufferWriter()
 
 	out.AddChars("W3do")
-	version := 9
+	version := 8
 	if len(versions) > 0 && versions[0] != 0 {
 		version = versions[0]
+	}
+	// Older converter exports labelled the v8/11 layout as v9. Warcraft III
+	// does not define that version; repair it when saving cached maps too.
+	if version == 9 {
+		version = 8
 	}
 	out.AddInt(version)
 	out.AddInt(11)

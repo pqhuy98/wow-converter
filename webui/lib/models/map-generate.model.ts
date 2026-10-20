@@ -74,6 +74,7 @@ export interface GenerateWc3FormValues {
   unitScale: number;
   /** Export WMO interior doodads (ADT includeWMOSets + convert prune depth 3). */
   includeBuildingInteriors: boolean;
+  placePathBlockers: boolean;
   freshExport: boolean;
   creatures: {
     enable: boolean;
@@ -89,6 +90,7 @@ export const defaultGenerateWc3FormValues: GenerateWc3FormValues = {
   mapAngleDeg: 0,
   unitScale: 2,
   includeBuildingInteriors: true,
+  placePathBlockers: false,
   freshExport: false,
   creatures: {
     enable: false,

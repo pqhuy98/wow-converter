@@ -74,6 +74,8 @@ export const generateWc3BodySchema = z.object({
   mapAngleDeg: z.number(),
   unitScale: z.number().positive(),
   includeBuildingInteriors: z.boolean().default(true),
+  // Collision navigation is Go-only; the compatibility runtime accepts opt-out.
+  placePathBlockers: z.literal(false).default(false),
   freshExport: z.boolean(),
   creatures: z.object({
     enable: z.boolean(),

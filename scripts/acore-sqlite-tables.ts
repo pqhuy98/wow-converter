@@ -30,6 +30,22 @@ export interface AcoreTableSpec {
  */
 export const ACORE_SQLITE_TABLES: readonly AcoreTableSpec[] = [
   {
+    name: 'game_event_creature',
+    columns: ['eventEntry', 'guid'],
+    createSql: `CREATE TABLE game_event_creature (
+      eventEntry INTEGER NOT NULL, guid INTEGER NOT NULL,
+      PRIMARY KEY (guid, eventEntry)
+    )`,
+  },
+  {
+    name: 'game_event_gameobject',
+    columns: ['eventEntry', 'guid'],
+    createSql: `CREATE TABLE game_event_gameobject (
+      eventEntry INTEGER NOT NULL, guid INTEGER NOT NULL,
+      PRIMARY KEY (guid, eventEntry)
+    )`,
+  },
+  {
     name: 'gameobject_addon',
     columns: ['guid', 'invisibilityType', 'invisibilityValue'],
     createSql: `CREATE TABLE gameobject_addon (

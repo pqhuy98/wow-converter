@@ -12,7 +12,7 @@ var generateWc3AllowedFields = map[string]struct{}{
 	"tiles": {}, "quality": {}, "mapSaveName": {}, "clampLower": {},
 	"clampUpper": {}, "autoClampPercent": {}, "mapAngleDeg": {},
 	"unitScale": {}, "includeBuildingInteriors": {}, "freshExport": {},
-	"creatures": {},
+	"creatures": {}, "navigation": {}, "placePathBlockers": {},
 }
 
 var generateWc3AllowedQualities = map[int]struct{}{
@@ -32,7 +32,8 @@ func parseGenerateWc3Body(raw map[string]any) (generateWc3Body, []string) {
 	if err != nil {
 		return generateWc3Body{}, append(issues, "request body is not valid JSON")
 	}
-	var body generateWc3Body
+	defaults := mapexporter.DefaultNavigationConfig()
+	body := generateWc3Body{Navigation: &defaults}
 	if err := json.Unmarshal(data, &body); err != nil {
 		return generateWc3Body{}, append(issues, err.Error())
 	}
@@ -64,11 +65,37 @@ func parseGenerateWc3Body(raw map[string]any) (generateWc3Body, []string) {
 	if body.UnitScale <= 0 {
 		issues = append(issues, "unitScale must be greater than 0")
 	}
+	if body.Navigation != nil {
+		if err := body.Navigation.Validate(); err != nil {
+			issues = append(issues, err.Error())
+		}
+	}
 	return body, issues
 }
 
 func validateGenerateWc3Shape(raw map[string]any) []string {
 	issues := make([]string, 0)
+	if value, exists := raw["navigation"]; exists {
+		if object, ok := value.(map[string]any); !ok {
+			issues = append(issues, "navigation must be an object")
+		} else {
+			allowed := map[string]bool{"disabled": true, "radius": true, "height": true, "maxSlopeDegrees": true, "stepHeight": true, "jumpHeight": true, "jumpDistance": true, "maxDrop": true, "seedSnap": true, "airBlockHeight": true}
+			for key, v := range object {
+				if !allowed[key] {
+					issues = append(issues, "unknown navigation field "+key)
+				}
+				if key == "disabled" {
+					if _, ok := v.(bool); !ok {
+						issues = append(issues, "navigation.disabled must be a boolean")
+					}
+				} else {
+					if _, ok := v.(float64); !ok {
+						issues = append(issues, "navigation."+key+" must be a number")
+					}
+				}
+			}
+		}
+	}
 	for field := range raw {
 		if _, ok := generateWc3AllowedFields[field]; !ok {
 			issues = append(issues, fmt.Sprintf("unknown field %q", field))
@@ -95,7 +122,7 @@ func validateGenerateWc3Shape(raw map[string]any) []string {
 			issues = append(issues, "mapSaveName must be a string")
 		}
 	}
-	for _, field := range []string{"autoClampPercent", "includeBuildingInteriors", "freshExport"} {
+	for _, field := range []string{"autoClampPercent", "includeBuildingInteriors", "freshExport", "placePathBlockers"} {
 		if value, exists := raw[field]; exists {
 			if _, ok := value.(bool); !ok {
 				issues = append(issues, fmt.Sprintf("%s must be a boolean", field))

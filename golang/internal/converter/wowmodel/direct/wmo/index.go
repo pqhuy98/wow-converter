@@ -21,8 +21,10 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/formats/blp"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
+	imath "github.com/pqhuy98/wow-converter/internal/math"
 	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/wmo"
 )
 
@@ -363,12 +365,52 @@ func ConvertWmoToMdl(ctx context.Context, cfg config.Config, src directm2.FileSo
 	}, cfg)
 
 	result := directm2.ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths, BakeStem: directm2.BakeStemFromListfile(fileName)}
+	if cfg.IsBulkExport {
+		for _, g := range allGroups {
+			surfaces, err := g.LiquidSurfaces(root.Flags)
+			if err != nil {
+				return directm2.ConvertResult{}, err
+			}
+			result.Liquids = append(result.Liquids, liquid.Transform(surfaces, func(p imath.Vector3) imath.Vector3 { return imath.V3Scale(p, cfg.RawModelScaleUp) })...)
+		}
+		result.Collision, err = buildWmoCollision(allGroups, cfg.RawModelScaleUp)
+		if err != nil {
+			return directm2.ConvertResult{}, err
+		}
+	}
 	if cfg.TextureBaking.Enabled {
 		if err := bakeWmoMaterials(ctx, cfg, src, root, allGroups, &result); err != nil {
 			return directm2.ConvertResult{}, err
 		}
 	}
 	return result, nil
+}
+
+func buildWmoCollision(groups []*wmo.Loader, scale float64) ([][3]imath.Vector3, error) {
+	var triangles [][3]imath.Vector3
+	for _, group := range groups {
+		for face, info := range group.MaterialInfo {
+			// MOPY: collision, ordinary render faces, and material 255
+			// participate in WoW collision (including non-rendered groups).
+			if info.Flags&8 == 0 && !(info.Flags&0x20 != 0 && info.Flags&4 == 0) && info.MaterialID != 255 {
+				continue
+			}
+			if face*3+2 >= len(group.Indices) {
+				return nil, fmt.Errorf("WMO collision face outside index array")
+			}
+			var triangle [3]imath.Vector3
+			for j := range triangle {
+				k := int(group.Indices[face*3+j]) * 3
+				if k+2 >= len(group.Vertices) {
+					return nil, fmt.Errorf("WMO collision index outside vertex array")
+				}
+				v := group.Vertices[k : k+3]
+				triangle[j] = imath.V3Scale(imath.Vector3{float64(v[0]), -float64(v[2]), float64(v[1])}, scale)
+			}
+			triangles = append(triangles, triangle)
+		}
+	}
+	return triangles, nil
 }
 
 func bakeWmoMaterials(ctx context.Context, cfg config.Config, src directm2.FileSource, root *wmo.Loader, groups []*wmo.Loader, result *directm2.ConvertResult) error {

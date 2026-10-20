@@ -3,6 +3,8 @@ package common
 import (
 	"context"
 	"fmt"
+	imath "github.com/pqhuy98/wow-converter/internal/math"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -87,7 +89,8 @@ func (a *AssetManager) ResolveModel(ctx context.Context, objectPath string, file
 				if err != nil {
 					return nil, err
 				}
-				model := &Model{RelativePath: result.MDL.Model.Name, MDL: result.MDL, TexturePaths: result.TexturePaths}
+				model := &Model{RelativePath: result.MDL.Model.Name, MDL: result.MDL, TexturePaths: result.TexturePaths,
+					Liquids: liquid.Transform(snap.Liquids, func(p imath.Vector3) imath.Vector3 { return imath.V3Scale(p, a.config.RawModelScaleUp) })}
 				for _, p := range result.TexturePaths {
 					a.textures[normalizeRel(p)] = struct{}{}
 				}
@@ -203,7 +206,7 @@ func (a *AssetManager) ParseDirectOptions(ctx context.Context, opts DirectParseO
 		return nil, err
 	}
 	m := result.MDL
-	model := &Model{RelativePath: m.Model.Name, MDL: m}
+	model := &Model{RelativePath: m.Model.Name, MDL: m, Collision: result.Collision, Liquids: result.Liquids}
 	for p := range result.TexturePaths {
 		a.textures[normalizeRel(p)] = struct{}{}
 		model.TexturePaths = append(model.TexturePaths, normalizeRel(p))

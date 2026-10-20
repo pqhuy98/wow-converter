@@ -48,7 +48,9 @@ const tooltips = {
   mapAngle: 'Rotates the exported map. Use this option to change terrain facing.',
   exportNpcs: 'Export WoW NPC models from the selected area and place them on the WC3 map.',
   allNpcsAsDoodads:
-    'Place all NPCs as destructible doodads instead of units. Doodads keep their exact height; WC3 units are snapped to the ground, which can look wrong on slopes or floating placements.',
+    'Place all NPCs as doodads instead of units. Doodads keep their exact height; WC3 units are snapped to the ground, which can look wrong on slopes or floating placements.',
+  placePathBlockers:
+    'Use NPC-reachable collision surfaces to place ground and air path blockers as doodads. Works even when Export NPCs is off.',
   freshExport: 'Delete the existing map folder before converting. Unchecked reuses cached models and textures.',
   includeBuildingInteriors:
     'Export interior doodads inside buildings (chairs, tables, etc.). Exports more models and textures, so generation takes longer and uses more disk space.',
@@ -177,6 +179,7 @@ export default function GenerateWc3Dialog({
               ...values,
               mapSaveName: normalizeMapSaveName(values.mapSaveName),
               autoClampPercent: creaturesSupported ? values.autoClampPercent : false,
+              placePathBlockers: creaturesSupported && values.placePathBlockers,
               creatures: creaturesSupported
                 ? values.creatures
                 : { enable: false, allAreDoodads: false },
@@ -218,7 +221,7 @@ export default function GenerateWc3Dialog({
             <Alert className="border-yellow-500/50 bg-yellow-500/10 py-3 text-yellow-800 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
               <TriangleAlert className="h-4 w-4" />
               <AlertDescription>
-                This map is from an expansion after Wrath of the Lich King, so auto terrain clamp, unit scale, and NPC export are unavailable.
+                This map is from an expansion after Wrath of the Lich King, so auto terrain clamp, unit scale, NPC export, and path blockers are unavailable.
               </AlertDescription>
             </Alert>
           )}
@@ -227,7 +230,7 @@ export default function GenerateWc3Dialog({
             <Alert className="border-yellow-500/50 bg-yellow-500/10 py-3 text-yellow-800 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
               <TriangleAlert className="h-4 w-4" />
               <AlertDescription>
-                This selected area has no NPC data, so auto terrain clamp, unit scale, and NPC export are unavailable.
+                This selected area has no NPC data, so auto terrain clamp, unit scale, NPC export, and path blockers are unavailable.
               </AlertDescription>
             </Alert>
           )}
@@ -309,7 +312,20 @@ export default function GenerateWc3Dialog({
             </p>
           )}
 
-          {/* Use a fieldset only when grouping 2+ related inputs (see NPC below). */}
+          {creaturesSupported && (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={values.placePathBlockers}
+                onCheckedChange={(checked) => setValues((v) => ({
+                  ...v,
+                  placePathBlockers: checked === true,
+                }))}
+              />
+              Place path blockers
+              <TooltipHelp tooltips={tooltips.placePathBlockers} />
+            </label>
+          )}
+
           {creaturesSupported && (
             <fieldset className="rounded-md border px-3 py-2">
               <legend className="px-1 text-sm font-medium">NPC</legend>

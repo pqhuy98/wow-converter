@@ -3,18 +3,20 @@ package adt
 import (
 	"context"
 	"fmt"
+	imath "github.com/pqhuy98/wow-converter/internal/math"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
 	"math"
 	"path/filepath"
 	"sync"
 
-	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
-	adtfmt "github.com/pqhuy98/wow-converter/internal/wow/formats/adt"
 	"github.com/pqhuy98/wow-converter/internal/buffer"
+	archivecasc "github.com/pqhuy98/wow-converter/internal/wow/archive/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
 	"github.com/pqhuy98/wow-converter/internal/wow/db"
 	"github.com/pqhuy98/wow-converter/internal/wow/export"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
+	adtfmt "github.com/pqhuy98/wow-converter/internal/wow/formats/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
@@ -103,6 +105,13 @@ func (e *Exporter) Export(ctx context.Context, source casc.Source, dir string, q
 
 	rootAdt := adtfmt.NewADTLoader(buffer.From(rootRaw))
 	rootAdt.LoadRoot()
+	if conv != nil {
+		surfaces, err := rootAdt.LiquidSurfaces()
+		if err != nil {
+			return ExportResult{}, err
+		}
+		conv.Liquids = liquid.Transform(surfaces, func(p imath.Vector3) imath.Vector3 { return imath.Vector3{p[1], -p[0], p[2]} })
+	}
 	texAdt := adtfmt.NewADTLoader(buffer.From(texRaw))
 	texAdt.LoadTex(wdt)
 	objAdt := adtfmt.NewADTLoader(buffer.From(objRaw))

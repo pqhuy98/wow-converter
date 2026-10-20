@@ -14,9 +14,11 @@ import (
 	bundlemeta "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/bundle/metadata"
 	"github.com/pqhuy98/wow-converter/internal/converter/wowmodel/bundle/mtl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
+	imath "github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
 	m2export "github.com/pqhuy98/wow-converter/internal/wow/export/m2"
 	"github.com/pqhuy98/wow-converter/internal/wow/export/writers"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/m2"
 )
 
@@ -53,7 +55,10 @@ type ConvertOptions struct {
 
 // ConvertResult is M2 conversion output.
 type ConvertResult struct {
-	MDL                 *mdl.MDL
+	MDL *mdl.MDL
+	// Collision uses the same scaled, Z-up local coordinates as MDL geometry.
+	Collision           [][3]imath.Vector3
+	Liquids             []liquid.Surface
 	TexturePaths        map[string]struct{}
 	BakeStem            string
 	bakeReferencePixels int
@@ -178,6 +183,20 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 		Metadata:    meta,
 	}, cfg)
 	result := ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths, BakeStem: BakeStemFromListfile(fileName)}
+	if cfg.IsBulkExport {
+		for i := 0; i+2 < len(loader.CollisionIndices); i += 3 {
+			var triangle [3]imath.Vector3
+			for j := range triangle {
+				k := int(loader.CollisionIndices[i+j]) * 3
+				if k+2 >= len(loader.CollisionPositions) {
+					return ConvertResult{}, fmt.Errorf("M2 collision index outside vertex array")
+				}
+				v := loader.CollisionPositions[k : k+3]
+				triangle[j] = imath.V3Scale(imath.Vector3{float64(v[0]), -float64(v[2]), float64(v[1])}, cfg.RawModelScaleUp)
+			}
+			result.Collision = append(result.Collision, triangle)
+		}
+	}
 	if cfg.TextureBaking.Enabled {
 		if err := bakeM2Materials(ctx, cfg, src, loader, skin, geosetMask, resolved, meta, &result); err != nil {
 			return ConvertResult{}, err

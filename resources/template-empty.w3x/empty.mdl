@@ -1,0 +1,11 @@
+Version {
+    FormatVersion 800,
+}
+Model "empty" {
+    BlendTime 150,
+}
+Sequences 1 {
+    Anim "Stand" {
+        Interval { 0, 333 },
+    }
+}

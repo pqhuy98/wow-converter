@@ -22,7 +22,7 @@ type GameObject struct {
 	State, AnimProgress         int
 }
 
-// GetGameObjectsInTile reads gameobjects with half-open tile bounds.
+// GetGameObjectsInTile reads the base world (no active events) with half-open tile bounds.
 // Server world X corresponds to ADT tile Y, and world Y to ADT tile X.
 func GetGameObjectsInTile(ctx context.Context, mapID int, tile [2]int) ([]GameObject, error) {
 	path := resolveDatabasePath()
@@ -48,9 +48,11 @@ func queryGameObjects(ctx context.Context, db *sql.DB, mapID int, tile [2]int) (
  FROM gameobject g JOIN gameobject_template t ON t.entry=g.id
  LEFT JOIN gameobject_addon a ON a.guid=g.guid
  WHERE g.map=? AND g.position_x>=? AND g.position_x<? AND g.position_y>=? AND g.position_y<?
+ AND (NOT EXISTS (SELECT 1 FROM game_event_gameobject e WHERE e.guid=g.guid)
+      OR EXISTS (SELECT 1 FROM game_event_gameobject e WHERE e.guid=g.guid AND e.eventEntry<0))
  ORDER BY g.guid`, mapID, minX, maxX, minY, maxY)
 	if err != nil {
-		return nil, fmt.Errorf("query AzerothCore gameobjects (regenerate bin/azerothcore-world.sqlite with gameobject tables): %w", err)
+		return nil, fmt.Errorf("query AzerothCore gameobjects (regenerate bin/azerothcore-world.sqlite with gameobject and game_event_gameobject tables): %w", err)
 	}
 	defer rows.Close()
 	var result []GameObject

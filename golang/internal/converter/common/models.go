@@ -4,6 +4,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/azerothcore"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/math"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
 )
 
 // WowObjectType classifies exported WoW placement objects.
@@ -31,6 +32,8 @@ func IsWowObjectType(s string) bool {
 type Model struct {
 	RelativePath string
 	MDL          *mdl.MDL
+	Collision    [][3]math.Vector3
+	Liquids      []liquid.Surface
 	TexturePaths []string
 }
 

@@ -1646,6 +1646,10 @@ components:
         clampUpper: { type: number, minimum: 0, maximum: 1 }
         autoClampPercent: { type: boolean, default: true }
         includeBuildingInteriors: { type: boolean, default: true }
+        placePathBlockers:
+          type: boolean
+          default: false
+          description: Place collision-based path blocker doodads. Requires grounded NPC spawn data; independent of NPC model export.
         mapAngleDeg: { type: number }
         unitScale: { type: number, minimum: 0, description: Must be greater than 0. }
         freshExport: { type: boolean }

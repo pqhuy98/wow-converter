@@ -1,13 +1,16 @@
 package config
 
-import "runtime"
+import (
+	"math"
+	"runtime"
+)
 
 // Map generation constants from src/lib/constants.ts.
 
 const (
-	DefaultLayer     = 7
-	DistancePerTile  = 128
-	BlizzardNull     = 65535
+	DefaultLayer    = 7
+	DistancePerTile = 128
+	BlizzardNull    = 65535
 )
 
 var (
@@ -38,12 +41,12 @@ func GameZToDataHeight(gameZ float64) int {
 
 // GameZToWaterHeight converts game Z to water height data value.
 func GameZToWaterHeight(waterZ float64) int {
-	return int(waterZ + 89.6*4 + 8192)
+	return int(math.Round((waterZ+89.6)*4 + 8192))
 }
 
 // WaterHeightToGameZ converts water height data to game Z.
 func WaterHeightToGameZ(waterHeight float64) float64 {
-	return (waterHeight - 8192) / 4 - 89.6
+	return (waterHeight-8192)/4 - 89.6
 }
 
 // GameZToPercent maps game Z into 0..1 terrain clamp percent range.

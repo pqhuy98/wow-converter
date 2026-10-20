@@ -39,8 +39,10 @@ func (TerrainTranslator) JSONToWar(terrain data.Terrain) wc3.WarResult {
 				hasBoundary = 0x4000
 			}
 			out.AddShort(int16(terrain.GroundHeight[i][j]))
-			out.AddShort(int16(terrain.WaterHeight[i][j]) | hasBoundary)
-			out.AddShort(int16(terrain.Flags[i][j]) | int16(terrain.GroundTexture[i][j]))
+			out.AddShort(int16(terrain.WaterHeight[i][j]&0x3fff) | hasBoundary)
+			// Keep semantic flags in the v11 positions in memory. W3E v12
+			// expands the texture index to six bits and shifts flags by two.
+			out.AddShort(int16((terrain.Flags[i][j]&0xfff0)<<2) | int16(terrain.GroundTexture[i][j]))
 			out.AddByte(byte(terrain.GroundVariation[i][j] | terrain.CliffVariation[i][j]))
 			out.AddByte(byte(terrain.CliffTexture[i][j] | terrain.LayerHeight[i][j]))
 		}
@@ -80,9 +82,9 @@ func (TerrainTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.Terrain] {
 
 	rowWidth := width + 1
 	var (
-		arrGroundHeight, arrWaterHeight, arrFlags, arrGroundTexture []int
+		arrGroundHeight, arrWaterHeight, arrFlags, arrGroundTexture            []int
 		arrGroundVariation, arrCliffVariation, arrCliffTexture, arrLayerHeight []int
-		arrBoundaryFlag []bool
+		arrBoundaryFlag                                                        []bool
 	)
 	for !buf.IsExhausted() {
 		groundHeight := int(buf.ReadShort())
@@ -96,7 +98,7 @@ func (TerrainTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.Terrain] {
 		groundAndCliffVariation := buf.ReadByte()
 		cliffTextureAndLayerHeight := buf.ReadByte()
 
-		waterHeight := int(waterHeightAndBoundary & 32767)
+		waterHeight := int(waterHeightAndBoundary & 0x3fff)
 		boundaryFlag := (waterHeightAndBoundary & 0x4000) == 0x4000
 		var flagsMask, textureMask int32
 		if version >= 12 {
@@ -110,7 +112,11 @@ func (TerrainTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.Terrain] {
 		arrGroundHeight = append(arrGroundHeight, groundHeight)
 		arrWaterHeight = append(arrWaterHeight, waterHeight)
 		arrBoundaryFlag = append(arrBoundaryFlag, boundaryFlag)
-		arrFlags = append(arrFlags, int(flagsAndGroundTexture&flagsMask))
+		flags := flagsAndGroundTexture & flagsMask
+		if version >= 12 {
+			flags >>= 2
+		}
+		arrFlags = append(arrFlags, int(flags))
 		arrGroundTexture = append(arrGroundTexture, int(flagsAndGroundTexture&textureMask))
 		arrGroundVariation = append(arrGroundVariation, int(groundAndCliffVariation&248))
 		arrCliffVariation = append(arrCliffVariation, int(groundAndCliffVariation&7))

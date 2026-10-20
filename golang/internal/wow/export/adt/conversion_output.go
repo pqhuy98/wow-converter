@@ -1,5 +1,7 @@
 package adt
 
+import "github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
+
 // PlacementRow is one model placement (ADT tile CSV row or WMO interior row).
 type PlacementRow struct {
 	ModelFile   string `json:"modelFile"`
@@ -24,14 +26,15 @@ type BakedTexture struct {
 
 // ConversionOutput holds in-memory ADT export artifacts for map conversion.
 type ConversionOutput struct {
-	ExportAssetDir string                       `json:"exportAssetDir"`
-	TileX          int                          `json:"tileX"`
-	TileY          int                          `json:"tileY"`
-	ObjectPath     string                       `json:"objectPath"`
-	ObjFilePath    string                       `json:"objFilePath"`
-	ObjText        string                       `json:"objText"`
-	MtlText        string                       `json:"mtlText"`
-	Textures       []BakedTexture               `json:"textures"`
-	Placements     []PlacementRow               `json:"placements"`
-	WmoPlacements  map[string][]PlacementRow    `json:"wmoPlacements"`
+	ExportAssetDir string                    `json:"exportAssetDir"`
+	TileX          int                       `json:"tileX"`
+	TileY          int                       `json:"tileY"`
+	ObjectPath     string                    `json:"objectPath"`
+	ObjFilePath    string                    `json:"objFilePath"`
+	ObjText        string                    `json:"objText"`
+	MtlText        string                    `json:"mtlText"`
+	Textures       []BakedTexture            `json:"textures"`
+	Placements     []PlacementRow            `json:"placements"`
+	WmoPlacements  map[string][]PlacementRow `json:"wmoPlacements"`
+	Liquids        []liquid.Surface          `json:"liquids,omitempty"`
 }

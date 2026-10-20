@@ -223,6 +223,14 @@ func (a *AssetManager) gameObjectModels(ctx context.Context, wanted map[int]bool
 
 func gameObjectFileID(value any) int {
 	switch v := value.(type) {
+	case uint8:
+		return int(v)
+	case int8:
+		return int(v)
+	case uint16:
+		return int(v)
+	case int16:
+		return int(v)
 	case uint32:
 		return int(v)
 	case int32:

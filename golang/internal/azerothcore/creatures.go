@@ -111,7 +111,10 @@ func GetCreaturesInTile(mapID int, tileXY [2]int, _ map[string]any) ([]Creature,
 		return nil, err
 	}
 	defer db.Close()
+	return queryCreatures(db, mapID, tileXY)
+}
 
+func queryCreatures(db *sql.DB, mapID int, tileXY [2]int) ([]Creature, error) {
 	tileX, tileY := tileXY[0], tileXY[1]
 	worldMinX := (32 - float64(tileY) - 1) * tileSize
 	worldMaxX := (32 - float64(tileY)) * tileSize
@@ -127,15 +130,17 @@ func GetCreaturesInTile(mapID int, tileXY [2]int, _ map[string]any) ([]Creature,
 	}
 
 	rows, err := db.Query(`
-		SELECT guid, id1, map, position_x, position_y, position_z, orientation,
-		       curhealth, curmana, phaseMask
-		FROM creature
-		WHERE map = ? AND position_x >= ? AND position_x <= ?
-		  AND position_y >= ? AND position_y <= ?`,
+		SELECT c.guid, c.id1, c.map, c.position_x, c.position_y, c.position_z, c.orientation,
+		       c.curhealth, c.curmana, c.phaseMask
+		FROM creature c
+		WHERE c.map = ? AND c.position_x >= ? AND c.position_x <= ?
+		  AND c.position_y >= ? AND c.position_y <= ?
+		  AND (NOT EXISTS (SELECT 1 FROM game_event_creature e WHERE e.guid=c.guid)
+		       OR EXISTS (SELECT 1 FROM game_event_creature e WHERE e.guid=c.guid AND e.eventEntry<0))`,
 		mapID, minX, maxX, minY, maxY,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query AzerothCore creatures (regenerate bin/azerothcore-world.sqlite with creature and game_event_creature tables): %w", err)
 	}
 	defer rows.Close()
 

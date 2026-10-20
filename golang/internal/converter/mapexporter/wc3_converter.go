@@ -30,8 +30,9 @@ type PlacedUnit struct {
 
 // Wc3Converter converts WoW objects to WC3 map data.
 type Wc3Converter struct {
-	config      MapExportConfig
-	gameObjects []gameObjectPlacement
+	config           MapExportConfig
+	gameObjects      []gameObjectPlacement
+	preloadLocations [][2]float32
 }
 
 type gameObjectPlacement struct {
@@ -84,6 +85,26 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 	terrain := mm.GetTerrain()
 	log.Printf("Placing doodads")
 	roots := m.Roots
+	preloadRoots := map[*common.WowObject]bool{}
+	for _, root := range roots {
+		if root.Type != common.WowObjectADT || root.Model == nil {
+			continue
+		}
+		for _, g := range root.Model.MDL.Geosets {
+			if len(g.Vertices) > 0 {
+				preloadRoots[root] = true
+				break
+			}
+		}
+	}
+	if len(preloadRoots) == 0 {
+		for _, root := range roots {
+			if root.Type == common.WowObjectWMO {
+				preloadRoots[root] = true
+			}
+		}
+	}
+	w.preloadLocations = nil
 
 	ext := common.ComputeAbsoluteMinMaxExtents(roots)
 	min, max := ext.Min, ext.Max
@@ -102,6 +123,28 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 		mapSize[2] / (modelSize[2] * clampDiff),
 	}
 	log.Printf("rootScale=%v", rootScale)
+
+	editorFields := map[*common.WowObject]string{}
+	hasADT := false
+	m.IterateObjects(func(obj *common.WowObject, _ common.ObjectAbsolute) {
+		if obj.Type != common.WowObjectADT {
+			return
+		}
+		hasADT = true
+		editorFields[obj] = "dimc"
+		for _, child := range obj.Children {
+			if child.Type != common.WowObjectADT && child.Type != common.WowObjectUnit && child.Type != common.WowObjectGobj {
+				editorFields[child] = "doct"
+			}
+		}
+	})
+	if !hasADT {
+		for _, root := range roots {
+			if root.Type == common.WowObjectWMO {
+				editorFields[root] = "dimc"
+			}
+		}
+	}
 
 	modelPathToDoodadType := map[string]*extra.DoodadType{}
 	doodadsPlaced := 0
@@ -131,7 +174,9 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 			}
 			fileName = strings.ReplaceAll(fileName, "/", "\\")
 		}
-		hashKey := fmt.Sprintf("%t;%s", isDestructible, fileName)
+		// A model can be both a direct ADT child and a nested prop. Keep their
+		// object types separate so editor fields do not leak across placements.
+		hashKey := fmt.Sprintf("%t;%s;%s", isDestructible, fileName, editorFields[obj])
 		if obj.GameObject != nil {
 			hashKey = fmt.Sprintf("%s;entry=%d", hashKey, obj.GameObject.Entry)
 		}
@@ -186,6 +231,13 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 					data.Modification{ID: "danf", Type: data.ModificationInt, Value: 1},
 					data.Modification{ID: "dshf", Type: data.ModificationInt, Value: 1},
 				)
+				switch editorFields[obj] {
+				case "dimc":
+					dt.Data = append(dt.Data, data.Modification{ID: "dimc", Type: data.ModificationInt, Value: 1})
+				case "doct":
+					// World Editor's occlusionType2 stores the enum name, not its index.
+					dt.Data = append(dt.Data, data.Modification{ID: "doct", Type: data.ModificationString, Value: "Auto"})
+				}
 			}
 			if hasRollPitch {
 				dt.Data = append(dt.Data,
@@ -212,6 +264,9 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 			RandomItemSetPtr: -1,
 		}
 		mm.AddDoodad(dt, placement)
+		if preloadRoots[obj] {
+			w.preloadLocations = append(w.preloadLocations, [2]float32{placement.Position[0], placement.Position[1]})
+		}
 		if isDestructible {
 			w.gameObjects = append(w.gameObjects, gameObjectPlacement{
 				ID: obj.ID, Source: obj.GameObject, TypeCode: dt.Code, Model: fileName, Position: placement.Position, Angle: placement.Angle, Scale: placement.Scale,
@@ -287,12 +342,24 @@ func (w *Wc3Converter) PlaceUnits(mm *extra.MapManager, m *common.WowObjectManag
 
 		if mapConfig.Creatures.AllAreDoodads || !withinPlayable || notOnGround {
 			if _, ok := templateIdToDoodadType[c.Template.Entry]; !ok {
-				templateIdToDoodadType[c.Template.Entry] = mm.AddDoodadType([]data.Modification{
-					{ID: "bnam", Type: data.ModificationString, Value: "~U " + creatureName},
-					{ID: "bfil", Type: data.ModificationString, Value: creatureModel},
-					{ID: "bmas", Type: data.ModificationUnreal, Value: float32(creatureScale * 1.5)},
-					{ID: "bmis", Type: data.ModificationUnreal, Value: float32(creatureScale / 1.5)},
-				}, true)
+				// Explicit decoration mode uses actual doodads, with no pathing.
+				// Preserve the existing destructible fallback for ordinary unit exports.
+				prefix, destructible := "b", !mapConfig.Creatures.AllAreDoodads
+				if !destructible {
+					prefix = "d"
+				}
+				mods := []data.Modification{
+					{ID: prefix + "nam", Type: data.ModificationString, Value: "~U " + creatureName},
+					{ID: prefix + "fil", Type: data.ModificationString, Value: creatureModel},
+					{ID: prefix + "mas", Type: data.ModificationUnreal, Value: float32(creatureScale * 1.5)},
+					{ID: prefix + "mis", Type: data.ModificationUnreal, Value: float32(creatureScale / 1.5)},
+				}
+				if !destructible {
+					mods = append(mods,
+						data.Modification{ID: "dptx", Type: data.ModificationString, Value: ""},
+						data.Modification{ID: "dvar", Type: data.ModificationInt, Value: 1})
+				}
+				templateIdToDoodadType[c.Template.Entry] = mm.AddDoodadType(mods, destructible)
 			}
 			dt := templateIdToDoodadType[c.Template.Entry]
 			mm.AddDoodad(dt, data.Doodad{

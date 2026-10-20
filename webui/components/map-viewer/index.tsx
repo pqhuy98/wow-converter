@@ -312,6 +312,7 @@ export default function MapViewer() {
         mapAngleDeg: form.mapAngleDeg,
         unitScale: form.unitScale,
         includeBuildingInteriors: form.includeBuildingInteriors,
+        placePathBlockers: form.placePathBlockers,
         freshExport: form.freshExport,
         creatures: form.creatures,
       };

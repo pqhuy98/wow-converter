@@ -70,7 +70,9 @@ type MapExportConfig struct {
 		Enable        bool
 		AllAreDoodads bool
 	}
-	UnitScale float64
+	UnitScale         float64
+	Navigation        NavigationConfig
+	PlacePathBlockers bool
 }
 
 // DefaultMapExportConfig returns defaults excluding map-specific fields.
@@ -79,7 +81,8 @@ func DefaultMapExportConfig() MapExportConfig {
 		Terrain: struct{ ClampPercent TerrainClampPercent }{
 			ClampPercent: TerrainClampPercent{Lower: 0, Upper: 1},
 		},
-		UnitScale: 1,
+		UnitScale:  1,
+		Navigation: DefaultNavigationConfig(),
 	}
 	cfg.Doodads.Enable = DoodadEnable{ADT: true, WMO: true, M2: true, Gobj: true, Unit: true, Others: true}
 	cfg.Doodads.PitchRollThresholdRadians = math.Radians(5)
@@ -96,6 +99,9 @@ type MapExporter struct {
 	wowClient        client.Client
 	tileRegistry     *common.TileRegistry
 	filterDoodads    func(id string, typ common.WowObjectType) bool
+	preloadLocations [][2]float32
+	water            *mapWater
+	navigation       *terrainNavigation
 }
 
 // NewMapExporter creates an exporter. mapCfg must be non-nil and is mutated in place during export.
@@ -174,11 +180,48 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		return err
 	}
 	wc3 := NewWc3Converter(*e.MapExportConfig)
-	e.MapManager.SetTerrain(wc3.GenerateTerrainWithHeight(e.WowObjectManager))
+	terrain := wc3.GenerateTerrainWithHeight(e.WowObjectManager)
+	water, err := collectMapWater(ctx, e.WowObjectManager, terrain, e.MapExportConfig)
+	if err != nil {
+		return err
+	}
+	e.water = water
+	navigation, err := generateReachableTerrain(ctx, e.WowObjectManager, terrain, e.MapExportConfig, e.Config.RawModelScaleUp, water)
+	if err != nil {
+		return err
+	}
+	e.navigation = navigation
+	if err := water.project(ctx, terrain); err != nil {
+		return err
+	}
+	e.MapManager.SetTerrain(terrain)
+	if navigation != nil {
+		if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			return err
+		}
+	} else {
+		// Do not retain a previous generation's pathing when navigation is disabled
+		// or no grounded NPCs could seed this export.
+		for _, name := range []string{"war3map.wpm", "terrain-navigation.json", "terrain-navigation.png"} {
+			if err := os.Remove(filepath.Join(outputDir, name)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
 
 	_, _ = wc3.PlaceDoodads(e.MapManager, e.WowObjectManager, func(obj *common.WowObject) bool {
 		return e.filterDoodads(obj.ID, obj.Type)
 	})
+	e.preloadLocations = wc3.preloadLocations
+	if navigation != nil {
+		if e.MapExportConfig.PlacePathBlockers {
+			if err := navigation.placeBlockers(e.MapManager, outputDir); err != nil {
+				return err
+			}
+		} else if err := navigation.write(outputDir, false); err != nil {
+			return err
+		}
+	}
 	log.Printf("Total doodads: %d", len(e.MapManager.Doodads))
 	log.Printf("Total doodad types: %d", len(e.MapManager.DoodadTypes))
 	pitchRollCount := 0
@@ -288,6 +331,9 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := removeLegacyWaterMeshes(outputDir); err != nil {
+		return err
+	}
 	templateDir, err := workspace.ResolveTemplateEmptyDir()
 	if err != nil {
 		return err
@@ -297,30 +343,58 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 			return err
 		}
 	} else {
-		entries, _ := os.ReadDir(templateDir)
+		entries, err := os.ReadDir(templateDir)
+		if err != nil {
+			return err
+		}
 		for _, ent := range entries {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 			dst := filepath.Join(outputDir, ent.Name())
 			if _, err := os.Stat(dst); os.IsNotExist(err) {
-				if err := copyFile(ctx, filepath.Join(templateDir, ent.Name()), dst); err != nil {
+				if err := copyDir(ctx, filepath.Join(templateDir, ent.Name()), dst); err != nil {
 					return err
 				}
 			}
 		}
 	}
 	e.MapManager.EnsureMapInfo(mapName)
+	e.MapManager.Info.ScriptLanguage = data.ScriptLanguageLua
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := e.MapManager.Save(outputDir); err != nil {
 		return err
 	}
+	if err := e.exportMinimap(ctx, outputDir); err != nil {
+		return err
+	}
+	if err := e.saveStartupScripts(ctx, templateDir, outputDir); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	_ = os.Remove(filepath.Join(outputDir, "war3map.shd"))
+	// The empty-map template contains a WPM too; do not restore it after an
+	// opt-out export removed cached navigation pathing.
+	if !e.MapExportConfig.PlacePathBlockers {
+		if err := os.Remove(filepath.Join(outputDir, "war3map.wpm")); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if e.water != nil && len(e.water.cells) > 0 {
+		if err := e.water.write(ctx, e.MapManager.GetTerrain(), e.navigation, outputDir, e.MapExportConfig.PlacePathBlockers); err != nil {
+			return err
+		}
+	} else {
+		for _, name := range []string{"terrain-water.json", "terrain-water.png"} {
+			if err := os.Remove(filepath.Join(outputDir, name)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
