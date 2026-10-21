@@ -50,6 +50,10 @@ scaling are not evaluated.
   the unmounted WotLK client calculation using CreatureModelData GeoBox bounds,
   display/model/racial/family scaling and source object scale. The native radius
   is converted to WC3 distance, including map fit and export unit size once;
+  The radius is capped to the exported mesh's horizontal bounding radius:
+  `min(converted WoW radius, max(hypot(vertex.x, vertex.y)) * model scale)`.
+  This uses all geosets around the unit origin, ignores Z, and applies model
+  scale once. Empty horizontal geometry retains the converted WoW radius.
   WE Selection Scale is the resulting diameter divided by 72. The old .5 floor
   and collision-based heuristic are removed. Unit sizing changes apply on top
   of native WoW scaling without applying the latter a second time. The client

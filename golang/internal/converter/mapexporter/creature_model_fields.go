@@ -17,7 +17,7 @@ import (
 )
 
 type creatureModelFields struct {
-	LowerBodyRadius                   float64
+	LowerBodyRadius, HorizontalRadius float64
 	Death, Attack, Release, WalkSpeed float64
 	Alternate, AttackSound            bool
 	Launch                            [3]float64
@@ -134,6 +134,7 @@ func readCreatureModelFields(ctx context.Context, path string) (creatureModelFie
 		}
 	}
 	out.LowerBodyRadius = lowerBodyCollisionRadius(geosets)
+	out.HorizontalRadius = horizontalModelRadius(geosets)
 	hasStand, hasAlternate := false, false
 	for _, s := range sequences {
 		name := strings.ToLower(s.Name)
@@ -240,6 +241,18 @@ func enrichCreatureModelFields(ctx context.Context, outputDir string, mm *extra.
 		// Both candidates are already in model units. usca includes map fit,
 		// source DisplayScale and export UnitScale; apply it exactly once.
 		real("ucol", math.Min(1024, math.Max(8, radius*modelScale)))
+		// Keep WoW's smaller circles, but cap oversized ones to the full mesh's
+		// origin-centered XY radius. Empty geometry retains the native circle.
+		if p.HorizontalRadius > 0 {
+			for _, field := range ut.Data {
+				if field.ID == "ussc" {
+					if scale, ok := field.Value.(float32); ok {
+						set("ussc", data.ModificationReal, float32(math.Min(float64(scale), 2*p.HorizontalRadius*modelScale/72)))
+					}
+					break
+				}
+			}
+		}
 		if p.Death > 0 {
 			real("udtm", p.Death)
 		}
@@ -276,6 +289,20 @@ func enrichCreatureModelFields(ctx context.Context, outputDir string, mm *extra.
 		}
 	}
 	return nil
+}
+
+func horizontalModelRadius(geosets []*mdx.Geoset) float64 {
+	radius := 0.0
+	for _, g := range geosets {
+		for i := 0; i+2 < len(g.Vertices); i += 3 {
+			x, y := float64(g.Vertices[i]), float64(g.Vertices[i+1])
+			if math.IsNaN(x) || math.IsInf(x, 0) || math.IsNaN(y) || math.IsInf(y, 0) {
+				continue
+			}
+			radius = math.Max(radius, math.Hypot(x, y))
+		}
+	}
+	return radius
 }
 
 func lowerBodyCollisionRadius(geosets []*mdx.Geoset) float64 {

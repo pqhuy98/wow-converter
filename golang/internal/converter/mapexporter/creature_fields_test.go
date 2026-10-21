@@ -175,6 +175,9 @@ PivotPoints 2 { { 0, 0, 0 }, { 10, 20, 100 }, }
 	if f["udtm"] != float32(5.2) || f["udp1"] != float32(.6) || f["ucs1"] != "" || f["ulpz"] != float32(100) {
 		t.Fatalf("model fields: %+v", f)
 	}
+	if f["ussc"] != float32(2*1.2*40/72) {
+		t.Fatal("empty geometry must retain native selection sizing")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := readCreatureModelFields(ctx, path); err == nil {
