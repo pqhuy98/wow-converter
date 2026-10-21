@@ -2,8 +2,28 @@
 
 Map generation fills unit WE fields from the bundled AzerothCore world data and
 the exported creature model. Ownership remains Player 1. NPC icons are generated
-from the exported model; unit sound sets are not overridden. Explicit
+from the exported model; unit sound sets use the bundled offline voice dataset. Explicit
 NPC-as-doodad mode remains decoration only.
+
+## Voices
+
+`resources/npc-voices.json` contains 34,201 exact NPC-name/base-model pairs
+from AzerothCore and Wrath 3.3.5. Its Wrath display-ID index resolves each source
+base model independently of exported model names, skins, equipment or model
+deduplication. Different NPC names sharing a model can use different voices.
+The resource loads once; map export needs no LLM, API key or voice-generation step.
+
+Version 1 stores `sounds` (index 0 is silence), `models` with `path`, `displays`
+and `voices` (exact name to sound index), and the total `pairs` count. The
+`resultsSha256` records the source result-file checksum. The plain JSON file is
+about 1 MB and is included by the existing desktop resource-copy step.
+
+Export writes `usnd` on NPC unit types only. Trigger proxies (`flags_extra & 0x80`)
+are always silent; intentional silent mappings and unknown name/model pairs write
+an empty field rather than inheriting Footman. Unknown pairs are counted in the
+export log. NPC destructibles and unrelated unit types are unchanged. Voice
+assignments are approximate, including review-flagged classifications, and can
+be adjusted in World Editor after export.
 
 ## Model animations
 

@@ -28,6 +28,13 @@ type BakeMaterial struct {
 	HeightTex                 *CPUMipTexture
 }
 
+// TerrainHeightWeights applies the production shader's normalized height blend
+// to an authored layer mixture, also used by native-terrain material fitting.
+func TerrainHeightWeights(weights [8]float64, heights [8]float64, count int) [8]float64 {
+	heightBlendWeights(&weights, heights, count)
+	return weights
+}
+
 var bakeTextureCache sync.Map
 
 // LoadBakeTexture loads and decodes a BLP texture for baking.

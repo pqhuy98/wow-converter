@@ -314,13 +314,22 @@ func (e *MapExporter) ExportCreatures(ctx context.Context, outputDir string, onP
 		}
 		return nil
 	}
+	var voices creatureVoices
 	if !mc.Creatures.AllAreDoodads {
+		var err error
+		voices, err = loadCreatureVoices()
+		if err != nil {
+			return err
+		}
 		if err := e.prepareCreatureSelection(ctx); err != nil {
 			return err
 		}
 	}
 	wc3 := NewWc3Converter(*mc)
 	units := wc3.PlaceUnits(e.MapManager, e.WowObjectManager)
+	if !mc.Creatures.AllAreDoodads {
+		applyCreatureVoices(e.MapManager, units, voices)
+	}
 	log.Printf("Created %d custom unit types", len(e.MapManager.UnitTypes))
 	log.Printf("Placed %d unit instances", len(e.MapManager.Units))
 

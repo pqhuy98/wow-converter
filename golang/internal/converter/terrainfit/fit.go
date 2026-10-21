@@ -8,9 +8,9 @@ import (
 	"sort"
 )
 
-// Fixed across all regions: 474x316 for a 3x2 selection, inside WC3's 480 limit.
-// 64px subtiles retain the reference's 8192/158 ~=52 texels per native square.
-const cellsPerADT = 158
+// Align native squares to WoW's128 base texture repeats per ADT. This avoids
+// spending variants on arbitrary subtexel phases;3x2 selections use384x256cells.
+const cellsPerADT = 128
 const samples = 8
 const subtile = 64
 const sampleCount = samples * samples
@@ -28,6 +28,7 @@ type fit struct {
 	variants      []uint8 // cell base variation; serialized at its lower-left corner
 	sheets        []sheet
 	colors        []rgb
+	sequential    bool // newer candidates use each overlay's own alpha
 }
 
 type layers struct {
@@ -372,7 +373,7 @@ func (f *fit) exemplars() [][]exemplar {
 				c := f.target(x, y, p)
 				for j := 1; j < l.count; j++ {
 					for k := range c {
-						c[k] -= w[j][p] * f.colors[l.ids[j]][k]
+						c[k] -= w[j][p] * f.sheets[l.ids[j]].low[l.masks[j]][p][k]
 					}
 				}
 				for k := range c {
@@ -394,8 +395,8 @@ func (f *fit) exemplars() [][]exemplar {
 		}
 		dist := make([]float64, len(pool))
 		for i, e := range pool {
-			for _, p := range e.features {
-				dist[i] += float64(distance(p, f.colors[id]))
+			for p, c := range e.features {
+				dist[i] += float64(distance(c, f.sheets[id].low[16][p]))
 			}
 		}
 		for len(selected[id]) < 15 && len(selected[id]) < len(pool) {
@@ -434,10 +435,14 @@ func (f *fit) fillExemplar(id, variant int, e exemplar, img *image.NRGBA, tileX,
 			py := ((float64(e.y-tileY*cellsPerADT)+v)/cellsPerADT)*float64(img.Rect.Dy()) - .5
 			t := sampleImage(img, px, py)
 			at := ((16+variant)*subtile*subtile + y*subtile + x) * 4
+			var overlay [4][4]float64
+			for j := 1; j < l.count; j++ {
+				overlay[j] = sampleSheet(&f.sheets[l.ids[j]], int(l.masks[j]), u, v)
+			}
 			for k := 0; k < 3; k++ {
 				c := float64(t[k])
 				for j := 1; j < l.count; j++ {
-					c -= w[j] * float64(f.colors[l.ids[j]][k])
+					c -= w[j] * overlay[j][k]
 				}
 				if w[0] > .15 {
 					c /= w[0]

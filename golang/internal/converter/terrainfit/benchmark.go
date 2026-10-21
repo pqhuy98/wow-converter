@@ -16,6 +16,16 @@ import (
 //go:embed viewer.html
 var viewerHTML []byte
 
+//go:embed native-viewer.js
+var nativeViewerJS []byte
+
+func writeViewer(out string) error {
+	if e := os.WriteFile(filepath.Join(out, "native-viewer.js"), nativeViewerJS, 0644); e != nil {
+		return e
+	}
+	return os.WriteFile(filepath.Join(out, "index.html"), viewerHTML, 0644)
+}
+
 type tileReport struct {
 	Name    string  `json:"name"`
 	X       int     `json:"x"`
@@ -23,11 +33,21 @@ type tileReport struct {
 	Metrics metrics `json:"metrics"`
 }
 type stageReport struct {
-	Name         string  `json:"name"`
-	Palette      int     `json:"palette"`
-	TextureBytes int64   `json:"blpBytes"`
-	Metrics      metrics `json:"metrics"`
-	Seconds      float64 `json:"seconds"`
+	Name               string           `json:"name"`
+	Palette            int              `json:"palette"`
+	TextureBytes       int64            `json:"blpBytes"`
+	Metrics            metrics          `json:"metrics"`
+	Seconds            float64          `json:"seconds"`
+	ModelArea          float64          `json:"modelArea,omitempty"`
+	PatchTextureBytes  int64            `json:"patchBLPBytes,omitempty"`
+	PatchTriangles     int              `json:"patchTriangles,omitempty"`
+	NativeMAE          float64          `json:"nativeOnlyMAE,omitempty"`
+	Geometry           *geometryMetrics `json:"geometry,omitempty"`
+	MandatoryModelArea float64          `json:"mandatoryModelArea,omitempty"`
+	NativeMajority     bool             `json:"nativeMajority"`
+	Seams              *seamMetrics     `json:"seams,omitempty"`
+	ModelSourceStage   string           `json:"modelSourceStage,omitempty"`
+	VisualStatus       string           `json:"visualStatus,omitempty"`
 }
 type patchBudget struct {
 	Fraction         float64 `json:"fraction"`
@@ -37,14 +57,18 @@ type patchBudget struct {
 }
 type regionReport struct {
 	Region
-	Cells          [2]int          `json:"cells"`
-	Build          string          `json:"build"`
-	Stages         []stageReport   `json:"stages"`
-	Tiles          []tileReport    `json:"tiles"`
-	Geometry       geometryMetrics `json:"geometry"`
-	PatchCurve     []patchBudget   `json:"idealResidualCurve"`
-	SourcePNGBytes int64           `json:"sourcePNGBytes"`
-	HoleFraction   float64         `json:"holeFraction"`
+	Cells              [2]int          `json:"cells"`
+	Build              string          `json:"build"`
+	Stages             []stageReport   `json:"stages"`
+	Tiles              []tileReport    `json:"tiles"`
+	Geometry           geometryMetrics `json:"geometry"`
+	PatchCurve         []patchBudget   `json:"idealResidualCurve"`
+	SourcePNGBytes     int64           `json:"sourcePNGBytes"`
+	HoleFraction       float64         `json:"holeFraction"`
+	RefinementVersion  int             `json:"refinementVersion,omitempty"`
+	GeometryVersion    int             `json:"geometryVersion,omitempty"`
+	ClampPercent       [2]float64      `json:"clampPercent"`
+	SourceHeightBounds [2]float64      `json:"sourceHeightBounds"`
 }
 type benchmarkReport struct {
 	Version       int            `json:"version"`
@@ -54,6 +78,7 @@ type benchmarkReport struct {
 	CellsPerADT   int            `json:"cellsPerADT"`
 	SubtilePixels int            `json:"subtilePixels"`
 	Regions       []regionReport `json:"regions"`
+	SourceRoot    string         `json:"sourceRoot"`
 }
 type tileData struct {
 	name, dir string
@@ -61,16 +86,21 @@ type tileData struct {
 	coverage  []bool
 }
 
-func Benchmark(ctx context.Context, out string, regions []Region) error {
+func Benchmark(ctx context.Context, out, sourceRoot string, regions []Region) error {
 	report := benchmarkReport{Version: 1, Created: time.Now().UTC().Format(time.RFC3339), Reference: "8192px production Go WoW terrain bake: diffuse/paint/height layers and MCCV; unlit, no objects/water", Renderer: "HiveWE corner sorting, masks, base variation and recursive RGBA mixing; generated BLP1 atlases decoded before evaluation. Browser approximation; native WC3 runtime not verified.", CellsPerADT: cellsPerADT, SubtilePixels: subtile}
-	if e := os.WriteFile(filepath.Join(out, "index.html"), viewerHTML, 0644); e != nil {
+	relative, e := filepath.Rel(out, sourceRoot)
+	if e != nil {
+		return e
+	}
+	report.SourceRoot = filepath.ToSlash(relative)
+	if e := writeViewer(out); e != nil {
 		return e
 	}
 	for _, region := range regions {
 		if e := ctx.Err(); e != nil {
 			return e
 		}
-		r, e := benchmarkRegion(ctx, out, region)
+		r, e := benchmarkRegion(ctx, out, sourceRoot, region)
 		if e != nil {
 			return fmt.Errorf("%s: %w", region.Name, e)
 		}
@@ -82,7 +112,7 @@ func Benchmark(ctx context.Context, out string, regions []Region) error {
 	return nil
 }
 
-func benchmarkRegion(ctx context.Context, out string, region Region) (regionReport, error) {
+func benchmarkRegion(ctx context.Context, out, sourceRoot string, region Region) (regionReport, error) {
 	fmt.Println("FIT", region.Name)
 	nx, ny := region.X1-region.X0+1, region.Y1-region.Y0+1
 	w, h := nx*cellsPerADT, ny*cellsPerADT
@@ -99,7 +129,7 @@ func benchmarkRegion(ctx context.Context, out string, region Region) (regionRepo
 	for ty := 0; ty < ny; ty++ {
 		for tx := 0; tx < nx; tx++ {
 			name := fmt.Sprintf("%s-%d_%d", region.Map, region.X0+tx, region.Y0+ty)
-			d := filepath.Join(out, "source", name)
+			d := filepath.Join(sourceRoot, name)
 			b, e := os.ReadFile(filepath.Join(d, "capture.json"))
 			if e != nil {
 				return r, e

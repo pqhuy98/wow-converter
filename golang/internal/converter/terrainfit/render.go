@@ -39,13 +39,7 @@ func (f *fit) renderTile(tx, ty, size int) *image.NRGBA {
 				}
 				colors[j] = sampleSheet(&f.sheets[l.ids[j]], layer, u, v)
 			}
-			c := colors[l.count-1]
-			for j := l.count - 2; j >= 0; j-- {
-				a := c[3]
-				for k := range c {
-					c[k] = colors[j][k]*(1-a) + c[k]*a
-				}
-			}
+			c := compositeLayers(colors, l.count, f.sequential)
 			at := y*img.Stride + x*4
 			for k := 0; k < 3; k++ {
 				img.Pix[at+k] = byte(clamp(c[k], 0, 255) + .5)
@@ -54,6 +48,28 @@ func (f *fit) renderTile(tx, ty, size int) *image.NRGBA {
 		}
 	}
 	return img
+}
+
+func compositeLayers(colors [4][4]float64, count int, sequential bool) [4]float64 {
+	if sequential {
+		c := colors[0]
+		for j := 1; j < count; j++ {
+			a := colors[j][3]
+			for k := range c {
+				c[k] = c[k]*(1-a) + colors[j][k]*a
+			}
+		}
+		return c
+	}
+	// Retain the historical HiveWE calculation for rejected cached stages.
+	c := colors[count-1]
+	for j := count - 2; j >= 0; j-- {
+		a := c[3]
+		for k := range c {
+			c[k] = colors[j][k]*(1-a) + c[k]*a
+		}
+	}
+	return c
 }
 
 func sampleSheet(s *sheet, layer int, u, v float64) [4]float64 {

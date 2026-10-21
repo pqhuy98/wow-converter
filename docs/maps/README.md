@@ -4,6 +4,8 @@ Map generation enters `golang/internal/server/api/maps_generate.go` and `golang/
 
 The export dialog controls the selected cells, rotation, terrain height clamp, building interiors, NPCs, path blockers and Fresh export. [Preview](preview.md) explains the approximate scene, settings retention and one-time automatic clamp suggestion. [Terrain navigation](terrain-navigation.md) and [water](water.md) describe the native terrain/pathing limits.
 
+[Terrain fitting benchmark](terrain-benchmark.md) describes the experimental 8K comparison and shared-camera viewer for generated native tilesets and model patches.
+
 ## Template, minimap and startup
 
 `resources/template-empty.w3x` supplies map defaults and custom Lua triggers. New exports copy it; existing output receives missing template files before generated map data is saved. Every generation refreshes template Lua/WCT/WTG startup data and injects current placement coordinates.

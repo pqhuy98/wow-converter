@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/pqhuy98/wow-converter/internal/converter/terrainfit"
+	"github.com/pqhuy98/wow-converter/internal/server/reportshot"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/bootstrap"
 	"github.com/pqhuy98/wow-converter/internal/wow/export"
@@ -22,7 +23,10 @@ import (
 
 func main() {
 	outFlag := flag.String("out", "exported-assets/terrain-benchmark", "output directory relative to repository")
-	mode := flag.String("mode", "all", "capture, fit, or all")
+	sourceFlag := flag.String("source", "", "reuse captures from this directory (default OUT/source)")
+	mode := flag.String("mode", "all", "capture, materials, material-fit, fit, refine, views, or all")
+	materialRegion := flag.String("material-region", "", "limit material-fit to one named benchmark region")
+	viewRegion := flag.String("view-region", "", "limit browser captures to one named benchmark region")
 	flag.Parse()
 	if _, err := workspace.ChdirRepoRoot(); err != nil {
 		log.Fatal(err)
@@ -37,6 +41,13 @@ func main() {
 	if err = os.MkdirAll(out, 0755); err != nil {
 		log.Fatal(err)
 	}
+	sourceRoot := filepath.Join(out, "source")
+	if *sourceFlag != "" {
+		sourceRoot, err = filepath.Abs(*sourceFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	regions := []terrainfit.Region{
@@ -45,10 +56,10 @@ func main() {
 		{Name: "Northrend-27_17-29_18", Map: "Northrend", MapID: 571, X0: 27, Y0: 17, X1: 29, Y1: 18},
 		{Name: "Northrend-29_15-31_16", Map: "Northrend", MapID: 571, X0: 29, Y0: 15, X1: 31, Y1: 16},
 	}
-	if *mode != "all" && *mode != "capture" && *mode != "fit" {
+	if *mode != "all" && *mode != "capture" && *mode != "materials" && *mode != "material-fit" && *mode != "fit" && *mode != "refine" && *mode != "views" {
 		log.Fatal("unknown mode")
 	}
-	if *mode != "fit" {
+	if *mode == "all" || *mode == "capture" || *mode == "materials" {
 		if _, err = bootstrap.StartWowDataServer(ctx); err != nil {
 			log.Fatal(err)
 		}
@@ -62,11 +73,24 @@ func main() {
 		for _, region := range regions {
 			for y := region.Y0; y <= region.Y1; y++ {
 				for x := region.X0; x <= region.X1; x++ {
+					if *mode == "materials" {
+						if err = terrainfit.CaptureMaterials(ctx, source, sourceRoot, region, x, y); err != nil {
+							log.Fatal(err)
+						}
+						adt.ClearBakeTextureCache()
+						continue
+					}
 					if err = ctx.Err(); err != nil {
 						log.Fatal(err)
 					}
 					name := fmt.Sprintf("%s-%d_%d", region.Map, x, y)
-					dir := filepath.Join(out, "source", name)
+					dir := filepath.Join(sourceRoot, name)
+					if *mode == "all" {
+						if err = terrainfit.CaptureMaterials(ctx, source, sourceRoot, region, x, y); err != nil {
+							log.Fatal(err)
+						}
+						adt.ClearBakeTextureCache()
+					}
 					if terrainfit.CaptureValid(dir, source.GetBuildName()) {
 						fmt.Println("CACHED", name)
 						continue
@@ -84,8 +108,23 @@ func main() {
 			}
 		}
 	}
-	if *mode != "capture" {
-		if err = terrainfit.Benchmark(ctx, out, regions); err != nil {
+	if *mode == "fit" || *mode == "all" {
+		if err = terrainfit.Benchmark(ctx, out, sourceRoot, regions); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if *mode == "all" || *mode == "fit" || *mode == "refine" {
+		if err = terrainfit.Refine(ctx, out); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if *mode == "material-fit" || *mode == "all" {
+		if err = terrainfit.MaterialBenchmark(ctx, out, sourceRoot, *materialRegion); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if *mode == "views" || *mode == "all" {
+		if err = reportshot.CaptureTerrainBenchmark(ctx, out, *viewRegion); err != nil {
 			log.Fatal(err)
 		}
 	}

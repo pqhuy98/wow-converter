@@ -19,7 +19,7 @@ func TestNativeShaderAndAddressing(t *testing.T) {
 			t.Fatalf("opposite mask = %g", got)
 		}
 	}
-	// Actual recursive shader: top.a=.5; mid mix alpha=.625; final mix .625.
+	// Historical HiveWE shader: top.a=.5; mid mix alpha=.625; final mix .625.
 	w := shaderWeights([4]float64{1, .75, .5}, 3)
 	if w != [4]float64{.375, .3125, .3125, 0} {
 		t.Fatalf("recursive alpha coefficients: %v", w)
@@ -111,5 +111,124 @@ func TestHeightMeshAndHoleCoverage(t *testing.T) {
 	_, ok = rasterHeights(m, 4, true)
 	if !ok[0] || ok[15] {
 		t.Fatal("missing triangles became ground")
+	}
+}
+
+func TestHeightSamplingBridgesSourceCoordinateJitter(t *testing.T) {
+	const gap = 8e-7
+	m := Mesh{
+		Positions: [][3]float64{{0, 0, 10}, {.5 - gap, 0, 15}, {0, 1, 30}, {.5 - gap, 1, 35}, {.5 + gap, 0, 15}, {1, 0, 20}, {.5 + gap, 1, 35}, {1, 1, 40}},
+		Indices:   []uint32{0, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7},
+	}
+	heights, valid := rasterHeights(m, 3, false)
+	if !valid[4] || math.Abs(heights[4]-25) > 1e-8 {
+		t.Fatalf("float32 chunk gap lost the shared height: %v, %v", heights, valid)
+	}
+	if m.Positions[1][0] != .5-gap {
+		t.Fatal("sampling mutated the source mesh")
+	}
+}
+
+func TestSeamMetricsSeparateContinuityFromAccuracy(t *testing.T) {
+	a, b := [3]float64{50, 50, 50}, [3]float64{100, 100, 100}
+	var exact, artificial seamSum
+	exact.add(a, a)
+	artificial.add(a, b)
+	if score := exact.metrics(); score.MAE != 0 || score.P95 != 50 || score.ReferenceStep != 50 {
+		t.Fatalf("authored edge penalized: %+v", score)
+	}
+	if score := artificial.metrics(); score.MAE != 50 || score.P95 != 100 {
+		t.Fatalf("extra tile discontinuity missed: %+v", score)
+	}
+}
+
+func TestBoundaryJumpRemovesSmoothSlopes(t *testing.T) {
+	ref, result := image.NewNRGBA(image.Rect(0, 0, 1024, 1024)), image.NewNRGBA(image.Rect(0, 0, 1024, 1024))
+	mask, coverage := make([]bool, cellsPerADT*cellsPerADT), make([]bool, cellsPerADT*cellsPerADT)
+	coverage[63], coverage[64] = true, true
+	for y := 0; y < 8; y++ {
+		for x := 500; x < 530; x++ {
+			for k := 0; k < 3; k++ {
+				result.Pix[y*result.Stride+x*4+k] = byte(x - 500)
+			}
+		}
+	}
+	var smooth seamMeasurement
+	smooth.add(ref, result, mask, coverage)
+	if score := smooth.metrics().Native; score.ResultStep != 0 || score.Pixels != 8 {
+		t.Fatalf("smooth slope treated as a seam: %+v", score)
+	}
+	for y := 0; y < 8; y++ {
+		for x := 512; x < 530; x++ {
+			for k := 0; k < 3; k++ {
+				result.Pix[y*result.Stride+x*4+k] += 20
+			}
+		}
+	}
+	var stepped seamMeasurement
+	stepped.add(ref, result, mask, coverage)
+	if score := stepped.metrics().Native; score.ResultStep != 20 || score.P95 != 20 {
+		t.Fatalf("tile color jump missed: %+v", score)
+	}
+}
+
+func TestModelFallbackClipsOnlySelectedArea(t *testing.T) {
+	m := Mesh{Positions: [][3]float64{{0, 0, 10}, {1, 0, 20}, {0, 1, 30}, {1, 1, 40}}, Indices: []uint32{0, 1, 2, 2, 1, 3}}
+	mask := make([]bool, cellsPerADT*cellsPerADT)
+	placements := []patchPlacement{}
+	for y := 0; y < cellsPerADT/2; y++ {
+		for x := 0; x < cellsPerADT/2; x++ {
+			mask[y*cellsPerADT+x] = true
+			placements = append(placements, patchPlacement{x: x, y: y})
+		}
+	}
+	result, _ := clipPatches(m, mask, placements, patchAtlasSize, 2)
+	area := 0.0
+	for i := 0; i < len(result.Indices); i += 3 {
+		a, b, c := result.Positions[result.Indices[i]], result.Positions[result.Indices[i+1]], result.Positions[result.Indices[i+2]]
+		area += math.Abs((b[0]-a[0])*(c[1]-a[1])-(c[0]-a[0])*(b[1]-a[1])) / 2
+	}
+	if math.Abs(area-.25) > 1e-9 {
+		t.Fatalf("patch area %g != .25", area)
+	}
+	for _, p := range result.Positions {
+		if p[0] < -1e-10 || p[0] > .5+1e-10 || p[1] < -1e-10 || p[1] > .5+1e-10 || math.Abs(p[2]-(10+10*p[0]+20*p[1])) > 1e-8 {
+			t.Fatalf("source geometry changed: %v", p)
+		}
+	}
+}
+
+func TestHeightClampModelsAreMandatory(t *testing.T) {
+	width, height := cellsPerADT, cellsPerADT
+	mask := make([]bool, width*height)
+	m := Mesh{Positions: [][3]float64{{.5, .5, 250}, {.125, .25, 0}, {.75, .75, 50}}}
+	markHeightFallback(m, 0, 0, width, height, [2]float64{10, 100}, mask)
+	for _, p := range m.Positions[:2] {
+		x, y := int(p[0]*cellsPerADT), int(p[1]*cellsPerADT)
+		for dy := -1; dy <= 0; dy++ {
+			for dx := -1; dx <= 0; dx++ {
+				if !mask[(y+dy)*width+x+dx] {
+					t.Fatal("out-of-range vertex did not preserve all adjoining cells as models")
+				}
+			}
+		}
+	}
+	if mask[96*width+96] {
+		t.Fatal("in-range point became mandatory model")
+	}
+	native := Mesh{Positions: make([][3]float64, (width+1)*(height+1))}
+	for i := range native.Positions {
+		native.Positions[i][2] = 25
+	}
+	patches := make([]bool, width*height)
+	for y := 0; y < height; y++ {
+		for x := width / 2; x < width; x++ {
+			patches[y*width+x] = true
+		}
+	}
+	patch := Mesh{Positions: [][3]float64{{.5, .4, 30}, {.75, .4, 250}, {1, .4, 400}}}
+	before, after := weldPatchBoundary(&patch, nil, native, width, height, 0, 0, patches)
+	if before != 5 || after != 0 || patch.Positions[0][2] != 25 || patch.Positions[1][2] != 250 || patch.Positions[2][2] != 400 {
+		t.Fatalf("welding changed source interior or left a seam: %v, %g %g", patch.Positions, before, after)
 	}
 }
