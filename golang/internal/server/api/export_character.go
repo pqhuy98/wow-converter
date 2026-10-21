@@ -21,6 +21,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/character"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
+	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
 	"github.com/pqhuy98/wow-converter/internal/server/exportlog"
 	"github.com/pqhuy98/wow-converter/internal/server/pathsafe"
 	"github.com/pqhuy98/wow-converter/internal/server/util"
@@ -29,19 +30,22 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
 
+type exportCharacterOptimization struct {
+	FreezeHead                    *bool  `json:"freezeHead"`
+	SortSequences                 *bool  `json:"sortSequences"`
+	AllMaterialsUnshaded          *bool  `json:"allMaterialsUnshaded"`
+	RemoveUnusedVertices          *bool  `json:"removeUnusedVertices"`
+	RemoveUnusedNodes             *bool  `json:"removeUnusedNodes"`
+	RemoveUnusedMaterialsTextures *bool  `json:"removeUnusedMaterialsTextures"`
+	MaxTextureSize                string `json:"maxTextureSize,omitempty"`
+}
+
 type exportCharacterRequest struct {
-	AssetPrefix    string                      `json:"assetPrefix,omitempty"`
-	TextureBaking  config.TextureBakingOptions `json:"textureBaking,omitempty"`
-	Character      character.Character         `json:"character"`
-	OutputFileName string                      `json:"outputFileName"`
-	Optimization   struct {
-		SortSequences                 *bool  `json:"sortSequences"`
-		AllMaterialsUnshaded          *bool  `json:"allMaterialsUnshaded"`
-		RemoveUnusedVertices          *bool  `json:"removeUnusedVertices"`
-		RemoveUnusedNodes             *bool  `json:"removeUnusedNodes"`
-		RemoveUnusedMaterialsTextures *bool  `json:"removeUnusedMaterialsTextures"`
-		MaxTextureSize                string `json:"maxTextureSize,omitempty"`
-	} `json:"optimization"`
+	AssetPrefix      string                      `json:"assetPrefix,omitempty"`
+	TextureBaking    config.TextureBakingOptions `json:"textureBaking,omitempty"`
+	Character        character.Character         `json:"character"`
+	OutputFileName   string                      `json:"outputFileName"`
+	Optimization     exportCharacterOptimization `json:"optimization"`
 	Format           string                      `json:"format"`
 	FormatVersion    string                      `json:"formatVersion,omitempty"`
 	IsBrowse         bool                        `json:"isBrowse"`
@@ -234,9 +238,29 @@ func registerExportCharacter(r Router, d *Deps) {
 	registerExportStatic(r, d)
 	registerReportCapture(r, d, queue)
 	if !d.Config.IsSharedHosting {
-		_ = os.RemoveAll(d.Config.OutputDirBrowse)
-		_ = os.MkdirAll(d.Config.OutputDirBrowse, 0o755)
+		if err := cleanBrowseSessionAssets(d.Config.OutputDirBrowse); err != nil {
+			log.Printf("Browse session cleanup: %v", err)
+		}
 	}
+}
+
+func cleanBrowseSessionAssets(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() == mapexporter.MapPreviewCacheDirectory {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func registerExportStatic(r Router, d *Deps) {
@@ -353,6 +377,7 @@ func runCharacterExport(ctx context.Context, req exportCharacterRequest, jobID s
 		return exportCharacterResponse{}, err
 	}
 	exporter.OptimizeModelsTextures(character.ExportOptimization{
+		FreezeHead:                    optimizationBool(req.Optimization.FreezeHead, true),
 		SortSequences:                 optimizationBool(req.Optimization.SortSequences, true),
 		RemoveUnusedVertices:          optimizationBool(req.Optimization.RemoveUnusedVertices, true),
 		RemoveUnusedNodes:             optimizationBool(req.Optimization.RemoveUnusedNodes, true),

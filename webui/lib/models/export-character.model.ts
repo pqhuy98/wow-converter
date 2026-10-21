@@ -106,6 +106,7 @@ export function toTextureBakingRequest(form: TextureBakingForm): TextureBaking |
 }
 
 export interface Optimization {
+  freezeHead?: boolean
   sortSequences?: boolean
   allMaterialsUnshaded?: boolean
   removeUnusedVertices?: boolean

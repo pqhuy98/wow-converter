@@ -95,6 +95,7 @@ type ExportContext struct {
 	LocalModelSkinID     string
 	SequenceSelection    *directm2.SequenceSelection
 	ModelScale           *float64
+	resolvedBase         *CharacterData
 }
 
 // Context is the cancellation scope of this export.

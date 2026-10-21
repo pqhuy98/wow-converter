@@ -180,7 +180,10 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		return err
 	}
 	wc3 := NewWc3Converter(*e.MapExportConfig)
-	terrain := wc3.GenerateTerrainWithHeight(e.WowObjectManager)
+	terrain, err := wc3.GenerateTerrainWithHeight(e.WowObjectManager)
+	if err != nil {
+		return err
+	}
 	water, err := collectMapWater(ctx, e.WowObjectManager, terrain, e.MapExportConfig)
 	if err != nil {
 		return err
@@ -306,7 +309,15 @@ func (e *MapExporter) ExportCreatures(ctx context.Context, outputDir string, onP
 	}
 	mc := e.MapExportConfig
 	if !mc.Creatures.Enable {
+		if err := os.Remove(filepath.Join(outputDir, "units.json")); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 		return nil
+	}
+	if !mc.Creatures.AllAreDoodads {
+		if err := e.prepareCreatureSelection(ctx); err != nil {
+			return err
+		}
 	}
 	wc3 := NewWc3Converter(*mc)
 	units := wc3.PlaceUnits(e.MapManager, e.WowObjectManager)
@@ -318,7 +329,31 @@ func (e *MapExporter) ExportCreatures(ctx context.Context, outputDir string, onP
 		creatures = append(creatures, u.Creature)
 	}
 	start := time.Now()
-	if err := character.ExportCreatureModels(ctx, creatures, outputDir, e.Config, e.wowClient, MapExportWorkerCount(), onProgress); err != nil {
+	assets, err := character.ExportCreatureModels(ctx, creatures, outputDir, e.Config, e.wowClient, MapExportWorkerCount(), onProgress)
+	if err != nil {
+		return err
+	}
+	icons, iconErr := renderCreatureIcons(ctx, outputDir, assets, mc.Creatures.AllAreDoodads, e.Config.OverrideModels)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if iconErr != nil {
+		log.Printf("NPC icons unavailable: %v (using Footman icons)", iconErr)
+	}
+	applyCreatureAssets(e.MapManager, units, assets, icons)
+	if err := enrichCreatureModelFields(ctx, outputDir, e.MapManager, units, assets); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	report, err := json.MarshalIndent(struct {
+		Units []PlacedUnit `json:"units"`
+	}{units}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "units.json"), report, 0644); err != nil {
 		return err
 	}
 	log.Printf("Exported all unit assets in %s", ansi.Yellowf("%.2fs", time.Since(start).Seconds()))
@@ -360,6 +395,7 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 		}
 	}
 	e.MapManager.EnsureMapInfo(mapName)
+	ensurePlayerStartLocation(e.MapManager)
 	e.MapManager.Info.ScriptLanguage = data.ScriptLanguageLua
 	if err := ctx.Err(); err != nil {
 		return err

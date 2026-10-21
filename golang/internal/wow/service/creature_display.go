@@ -9,7 +9,7 @@ import (
 )
 
 // ResolveNpcDisplayMeta resolves creature model, textures, and geosets from DB2 tables.
-func ResolveNpcDisplayMeta(ctx context.Context, displayID int) (casc.NpcDisplayMeta, error) {
+func ResolveNpcDisplayMeta(ctx context.Context, displayID int, selection ...casc.NpcSelectionOptions) (casc.NpcDisplayMeta, error) {
 	if err := caches.EnsureModelCachesInitialized(ctx); err != nil {
 		return casc.NpcDisplayMeta{}, err
 	}
@@ -36,6 +36,13 @@ func ResolveNpcDisplayMeta(ctx context.Context, displayID int) (casc.NpcDisplayM
 			})
 		}
 		break
+	}
+	if len(selection) > 0 {
+		radius, err := caches.CreatureSelectionRadius(ctx, displayID, selection[0])
+		if err != nil {
+			return casc.NpcDisplayMeta{}, err
+		}
+		meta.SelectionRadius = &radius
 	}
 	return meta, nil
 }

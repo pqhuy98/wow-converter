@@ -1,9 +1,12 @@
 'use client';
 
-import { TriangleAlert } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { LoaderCircle, TriangleAlert } from 'lucide-react';
+import {
+  type ReactNode, useCallback, useEffect, useRef, useState,
+} from 'react';
 
 import { TooltipHelp } from '@/components/common/tooltip-help';
+import { useServerConfig } from '@/components/server-config';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -26,6 +29,8 @@ import {
 } from '@/components/ui/select';
 import type { GenerateWc3FormValues } from '@/lib/models/map-generate.model';
 import { defaultGenerateWc3FormValues, MAP_SAVE_NAME_BASE_REGEX } from '@/lib/models/map-generate.model';
+import type { MapPreviewData } from '@/lib/models/map-preview.model';
+import { fitTerrainClampRange, minimumTerrainClampWidth, readMapPreviewStream } from '@/lib/models/map-preview.model';
 import {
   normalizeMapSaveName,
   stripMapSaveNameExtension,
@@ -35,6 +40,7 @@ import {
   isMapExpansionWithinWotlk,
 } from '@/lib/utils/wow-expansions';
 
+import { MapExportPreview } from './map-export-preview';
 import { TerrainClampSlider } from './terrain-clamp-slider';
 
 const MAP_ANGLE_OPTIONS = [0, 90, 180, 270] as const;
@@ -42,13 +48,13 @@ const MAP_ANGLE_OPTIONS = [0, 90, 180, 270] as const;
 const tooltips = {
   terrainClamp:
     'WoW ground can be much taller than a WC3 map allows. This slider picks the lowest and highest ground that become hills—anything outside that range is left flat or cut off. On very steep maps, use a smaller range so mountains do not look squashed.',
-  autoClamp:
-    'Pick the height range automatically from where NPCs stand in the selected area, so exported units stay on usable ground.',
-  unitScale: 'Size multiplier for NPC units on the map. Higher values make NPCs larger relative to terrain and doodads. Also affects automatic terrain height clamp.',
+  suggestClamp:
+    'Suggest a height range from NPC elevations in the selected cells. Applies the suggestion to the slider so you can review and change it before exporting.',
+  unitScale: 'Size multiplier for NPC units on the map. Higher values make NPCs larger relative to terrain and doodads. Also affects the suggested terrain height clamp.',
   mapAngle: 'Rotates the exported map. Use this option to change terrain facing.',
-  exportNpcs: 'Export WoW NPC models from the selected area and place them on the WC3 map.',
+  exportNpcs: 'Export WoW NPC models from the selected area. In unit mode, NPCs outside playable heights or too far from the ground are not placed; their models are still included.',
   allNpcsAsDoodads:
-    'Place all NPCs as doodads instead of units. Doodads keep their exact height; WC3 units are snapped to the ground, which can look wrong on slopes or floating placements.',
+    'Place all NPCs as destructibles instead of units. Destructibles keep their exact height; WC3 units are snapped to the ground, which can look wrong on slopes or floating placements.',
   placePathBlockers:
     'Use NPC-reachable collision surfaces to place ground and air path blockers as doodads. Works even when Export NPCs is off.',
   freshExport: 'Delete the existing map folder before converting. Unchecked reuses cached models and textures.',
@@ -93,26 +99,82 @@ export default function GenerateWc3Dialog({
   onConfirm,
 }: GenerateWc3DialogProps) {
   const [values, setValues] = useState<GenerateWc3FormValues>(defaultGenerateWc3FormValues);
+  const { buildKey } = useServerConfig();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [preview, setPreview] = useState<MapPreviewData | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState('Preparing map preview — 0/1');
+  const [previewError, setPreviewError] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState('');
+  const suggestionRef = useRef<AbortController | null>(null);
+  const settingsSelectionRef = useRef('');
+  const settingsBySelectionRef = useRef(new Map<string, GenerateWc3FormValues>());
+  const autoSuggestionRef = useRef(new Set<string>());
   const [creatureCheck, setCreatureCheck] = useState({
     loading: false,
     hasCreatures: false,
     count: 0,
   });
 
+  useEffect(() => {
+    if (!open) setIsFullscreen(false);
+  }, [open]);
+
   const selectedTilesKey = selectedTiles
     .map((t) => `${t.x},${t.y}`)
     .sort()
     .join('|');
 
+  const suggestionSelectionKey = `${mapDir?.toLowerCase()}:${selectedTilesKey}`;
   const npcDataSupported = isMapExpansionWithinWotlk(expansionID);
   const expansionAfterWotlk = isMapExpansionAfterWotlk(expansionID);
   const creaturesSupported = npcDataSupported && creatureCheck.hasCreatures && !creatureCheck.loading;
   const noNpcDataInArea = npcDataSupported && !creatureCheck.loading && !creatureCheck.hasCreatures;
-  const showManualClamp = !creaturesSupported || !values.autoClampPercent;
+  const minimumClampWidth = preview ? minimumTerrainClampWidth(preview) : 1;
+  const clampUnavailable = !preview || previewLoading || minimumClampWidth > 1;
+  const clampInvalid = clampUnavailable || values.clampUpper - values.clampLower < minimumClampWidth - 1e-12;
 
   useEffect(() => {
-    if (!open) return;
-    setValues({
+    if (!preview || minimumClampWidth > 1) return;
+    setValues((v) => {
+      const [clampLower, clampUpper] = fitTerrainClampRange(v.clampLower, v.clampUpper, minimumClampWidth);
+      return clampLower === v.clampLower && clampUpper === v.clampUpper ? v : { ...v, clampLower, clampUpper };
+    });
+  }, [preview, minimumClampWidth, values.clampLower, values.clampUpper]);
+
+  useEffect(() => {
+    if (!open || !mapDir || !selectedTilesKey || !npcDataSupported) {
+      setCreatureCheck({ loading: false, hasCreatures: false, count: 0 });
+      return undefined;
+    }
+    const controller = new AbortController();
+    setCreatureCheck({ loading: true, hasCreatures: false, count: 0 });
+    void (async () => {
+      try {
+        const res = await fetch(`/api/maps/${encodeURIComponent(mapDir)}/creatures-check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tiles: selectedTilesKey.split('|').map((part) => { const [x, y] = part.split(',').map(Number); return { x, y }; }) }),
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error('Could not check NPC data.');
+        const data: { hasCreatures: boolean; creatureCount: number } = await res.json();
+        if (!controller.signal.aborted) setCreatureCheck({ loading: false, hasCreatures: data.hasCreatures, count: data.creatureCount });
+      } catch {
+        if (!controller.signal.aborted) setCreatureCheck({ loading: false, hasCreatures: false, count: 0 });
+      }
+    })();
+    return () => controller.abort();
+  }, [open, mapDir, selectedTilesKey, buildKey, npcDataSupported]);
+
+  useEffect(() => {
+    if (!open || !mapDir || !selectedTilesKey) return;
+    const selection = `${mapDir.toLowerCase()}:${selectedTilesKey}`;
+    if (settingsSelectionRef.current === selection) return;
+    if (settingsSelectionRef.current) settingsBySelectionRef.current.set(settingsSelectionRef.current, values);
+    settingsSelectionRef.current = selection;
+    setValues(settingsBySelectionRef.current.get(selection) ?? {
       ...defaultGenerateWc3FormValues,
       mapSaveName: defaultMapSaveName,
       creatures: {
@@ -120,65 +182,94 @@ export default function GenerateWc3Dialog({
         allAreDoodads: false,
       },
     });
-  }, [open, defaultMapSaveName]);
+  }, [open, mapDir, selectedTilesKey, defaultMapSaveName, values]);
 
   useEffect(() => {
-    if (!open || !mapDir || selectedTiles.length === 0 || expansionAfterWotlk) {
-      setCreatureCheck({ loading: false, hasCreatures: false, count: 0 });
+    suggestionRef.current?.abort();
+    setSuggesting(false); setSuggestError('');
+    if (!open || !mapDir || selectedTilesKey === '') {
+      setPreview(null); setPreviewLoading(false);
       return undefined;
     }
-
-    let cancelled = false;
-    setCreatureCheck((prev) => ({ ...prev, loading: true }));
-
+    const controller = new AbortController();
+    setPreview(null); setPreviewLoading(true); setPreviewError('');
+    setPreviewProgress('Checking preview cache — 0/1');
     void (async () => {
       try {
-        const res = await fetch(
-          `/api/maps/${encodeURIComponent(mapDir)}/creatures-check`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tiles: selectedTiles }),
-            cache: 'no-store',
-          },
-        );
-        if (cancelled) return;
-        if (!res.ok) {
-          setCreatureCheck({ loading: false, hasCreatures: false, count: 0 });
-          return;
-        }
-        const data = (await res.json()) as { hasCreatures?: boolean; creatureCount?: number };
-        setCreatureCheck({
-          loading: false,
-          hasCreatures: data.hasCreatures === true,
-          count: data.creatureCount ?? 0,
+        const res = await fetch(`/api/maps/${encodeURIComponent(mapDir)}/preview?progress=1`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tiles: selectedTilesKey.split('|').map((part) => { const [x, y] = part.split(',').map(Number); return { x, y }; }) }),
+          signal: controller.signal,
         });
-      } catch {
-        if (!cancelled) {
-          setCreatureCheck({ loading: false, hasCreatures: false, count: 0 });
+        const data = await readMapPreviewStream(res, (progress) => {
+          if (!controller.signal.aborted) setPreviewProgress(`${progress.message} — ${progress.completed}/${progress.total}`);
+        });
+        if (!controller.signal.aborted) {
+          setPreview(data);
         }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setPreviewError(err instanceof Error ? err.message : 'Could not prepare the map preview.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setPreviewLoading(false);
       }
     })();
+    return () => { controller.abort(); suggestionRef.current?.abort(); };
+  }, [open, mapDir, selectedTilesKey, buildKey]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [open, mapDir, selectedTilesKey, selectedTiles, expansionAfterWotlk]);
+  const suggestClamp = useCallback(async () => {
+    if (!mapDir || !creaturesSupported) return;
+    suggestionRef.current?.abort();
+    const controller = new AbortController(); suggestionRef.current = controller;
+    setSuggesting(true); setSuggestError('');
+    try {
+      const res = await fetch(`/api/maps/${encodeURIComponent(mapDir)}/suggest-clamp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tiles: selectedTilesKey.split('|').map((part) => { const [x, y] = part.split(',').map(Number); return { x, y }; }), unitScale: values.unitScale }),
+        signal: controller.signal,
+      });
+      if (!res.ok) { const failure: { error?: string } = await res.json(); throw new Error(failure.error ?? 'Could not suggest a height range.'); }
+      const data: { lower: number; upper: number } = await res.json();
+      if (!controller.signal.aborted) setValues((v) => ({ ...v, clampLower: data.lower, clampUpper: data.upper }));
+    } catch (err) {
+      if (!controller.signal.aborted) setSuggestError(err instanceof Error ? err.message : 'Could not suggest a height range.');
+    } finally { if (!controller.signal.aborted) setSuggesting(false); }
+  }, [mapDir, creaturesSupported, selectedTilesKey, values.unitScale]);
+
+  useEffect(() => {
+    if (!open || !creaturesSupported || autoSuggestionRef.current.has(suggestionSelectionKey)) return;
+    autoSuggestionRef.current.add(suggestionSelectionKey);
+    void suggestClamp();
+  }, [open, creaturesSupported, suggestionSelectionKey, suggestClamp]);
 
   const trimmedName = values.mapSaveName.trim();
   const nameInvalid = trimmedName.length === 0 || !MAP_SAVE_NAME_BASE_REGEX.test(trimmedName);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent
+        className={`gap-0 overflow-y-auto p-0 lg:overflow-hidden ${isFullscreen
+          ? 'h-dvh w-dvw max-w-none rounded-none border-0 sm:rounded-none'
+          : 'h-[85dvh] w-[calc(100vw-2rem)] max-w-[94rem]'}`}
+        onEscapeKeyDown={(event) => {
+          if (isFullscreen) {
+            event.preventDefault();
+            setIsFullscreen(false);
+          }
+        }}
+      >
+        <div className="grid min-h-0 lg:h-full lg:grid-cols-[28rem_minmax(0,1fr)]">
         <form
+          className="space-y-5 p-6 lg:min-h-0 lg:overflow-y-auto"
           onSubmit={(e) => {
             e.preventDefault();
-            if (nameInvalid) return;
+            if (nameInvalid || creatureCheck.loading || suggesting || clampInvalid) return;
             onConfirm({
               ...values,
               mapSaveName: normalizeMapSaveName(values.mapSaveName),
-              autoClampPercent: creaturesSupported ? values.autoClampPercent : false,
               placePathBlockers: creaturesSupported && values.placePathBlockers,
               creatures: creaturesSupported
                 ? values.creatures
@@ -221,7 +312,7 @@ export default function GenerateWc3Dialog({
             <Alert className="border-yellow-500/50 bg-yellow-500/10 py-3 text-yellow-800 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
               <TriangleAlert className="h-4 w-4" />
               <AlertDescription>
-                This map is from an expansion after Wrath of the Lich King, so auto terrain clamp, unit scale, NPC export, and path blockers are unavailable.
+                This map is from an expansion after Wrath of the Lich King, so clamp suggestions, unit scale, NPC export, and path blockers are unavailable.
               </AlertDescription>
             </Alert>
           )}
@@ -230,12 +321,12 @@ export default function GenerateWc3Dialog({
             <Alert className="border-yellow-500/50 bg-yellow-500/10 py-3 text-yellow-800 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
               <TriangleAlert className="h-4 w-4" />
               <AlertDescription>
-                This selected area has no NPC data, so auto terrain clamp, unit scale, NPC export, and path blockers are unavailable.
+                This selected area has no NPC data, so clamp suggestions, unit scale, NPC export, and path blockers are unavailable.
               </AlertDescription>
             </Alert>
           )}
 
-          <div className={creaturesSupported ? 'grid grid-cols-2 gap-x-4 gap-y-2' : ''}>
+          <div className={creaturesSupported ? 'grid gap-x-4 gap-y-2 sm:grid-cols-2' : ''}>
             <div className="flex items-center gap-3">
               <FieldLabelRow htmlFor="mapAngleDeg" tooltip={tooltips.mapAngle}>Map angle</FieldLabelRow>
               <Select
@@ -267,10 +358,13 @@ export default function GenerateWc3Dialog({
                   step={0.1}
                   className="h-9 w-20 shrink-0"
                   value={values.unitScale}
-                  onChange={(e) => setValues((v) => ({
-                    ...v,
-                    unitScale: parseFloat(e.target.value) || 1,
-                  }))}
+                  onChange={(e) => {
+                    suggestionRef.current?.abort(); setSuggesting(false);
+                    setValues((v) => ({
+                      ...v,
+                      unitScale: Math.max(0.1, parseFloat(e.target.value) || 1),
+                    }));
+                  }}
                 />
               </div>
             )}
@@ -280,30 +374,32 @@ export default function GenerateWc3Dialog({
             <div className="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1">
               <FieldLabelRow tooltip={tooltips.terrainClamp}>Terrain height clamp</FieldLabelRow>
               {creaturesSupported && (
-                <label className="flex items-center gap-1.5 text-sm">
-                  <Checkbox
-                    checked={values.autoClampPercent}
-                    onCheckedChange={(checked) => setValues((v) => ({
-                      ...v,
-                      autoClampPercent: checked === true,
-                    }))}
-                  />
-                  Auto
-                  <TooltipHelp tooltips={tooltips.autoClamp} />
-                </label>
+                <div className="flex items-center gap-1.5">
+                  <Button type="button" variant="outline" size="sm" disabled={suggesting} onClick={() => void suggestClamp()}>
+                    {suggesting && <LoaderCircle className="mr-1.5 h-3 w-3 animate-spin" />}Suggest
+                  </Button>
+                  <TooltipHelp tooltips={tooltips.suggestClamp} />
+                </div>
               )}
             </div>
-            {showManualClamp && (
               <TerrainClampSlider
                 lower={values.clampLower}
                 upper={values.clampUpper}
-                onChange={(clampLower, clampUpper) => setValues((v) => ({
-                  ...v,
-                  clampLower,
-                  clampUpper,
-                }))}
+                minimumWidth={minimumClampWidth}
+                disabled={clampUnavailable}
+                onChange={(clampLower, clampUpper) => {
+                  autoSuggestionRef.current.add(suggestionSelectionKey);
+                  suggestionRef.current?.abort(); setSuggesting(false);
+                  const [safeLower, safeUpper] = fitTerrainClampRange(clampLower, clampUpper, minimumClampWidth);
+                  setValues((v) => ({ ...v, clampLower: safeLower, clampUpper: safeUpper }));
+                }}
               />
+            {preview && minimumClampWidth > 1 ? (
+              <p className="text-xs text-destructive" role="alert">This selection exceeds WC3’s 480-tile map limit even at the full height range. Select fewer cells.</p>
+            ) : preview && (
+              <p className="text-xs text-muted-foreground">Minimum range: {(minimumClampWidth * 100).toFixed(1)}% (WC3 map size limit).</p>
             )}
+            {suggestError && <p className="text-xs text-destructive" role="alert">{suggestError}</p>}
           </div>
 
           {npcDataSupported && creatureCheck.loading && (
@@ -349,7 +445,7 @@ export default function GenerateWc3Dialog({
                       creatures: { ...v.creatures, allAreDoodads: checked === true },
                     }))}
                   />
-                  All NPCs as doodads
+                  All NPCs as destructibles
                   <TooltipHelp tooltips={tooltips.allNpcsAsDoodads} />
                 </label>
               )}
@@ -382,12 +478,22 @@ export default function GenerateWc3Dialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             type="submit"
-            disabled={nameInvalid}
+            disabled={nameInvalid || creatureCheck.loading || suggesting || clampInvalid}
           >
             Generate
           </Button>
         </DialogFooter>
         </form>
+        <MapExportPreview
+          data={preview}
+          values={values}
+          loading={previewLoading}
+          progress={previewProgress}
+          error={previewError}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={() => setIsFullscreen((fullscreen) => !fullscreen)}
+        />
+        </div>
       </DialogContent>
     </Dialog>
   );

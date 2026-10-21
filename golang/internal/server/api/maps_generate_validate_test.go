@@ -63,6 +63,10 @@ func TestParseGenerateWc3BodyRejectsInvalidContractValues(t *testing.T) {
 			body["clampLower"] = float64(0.8)
 			body["clampUpper"] = float64(0.2)
 		}},
+		{"zero clamp width", func(body map[string]any) {
+			body["clampLower"] = float64(0.5)
+			body["clampUpper"] = float64(0.5)
+		}},
 	}
 
 	for _, tt := range tests {

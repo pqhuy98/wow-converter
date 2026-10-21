@@ -1,0 +1,31 @@
+# Map export preview
+
+## Source data and caching
+
+The map export dialog uses `mapexporter/map_preview*.go` and its dedicated static WebGL class `MapExportPreviewViewer`. POST `maps/{map}/preview` caches ADT meshes sampled every two corner vertices, clustered WMO meshes, 512-pixel texture mipmaps, binary source floor samples, masked ADT/WMO liquid meshes and selection manifests under `exported-assets-browse/_map-preview-v5/<build-hash>/`. Per-ADT/WMO caching survives cell/map changes and ordinary server startup; settings only update the renderer. Explicit export cleanup still removes preview caches. Scene metadata also keys on the bundled NPC database revision and NPC-name schema; names refresh scene manifests while retaining cached geometry assets. Missing/truncated assets rebuild on demand; cancellation discards late manifests. No full model conversion, texture baking or NPC model export runs for preview.
+
+Preview liquids reuse source `LiquidSurfaces` and build-cached `LiquidSoundBanks`. ADT heights stay absolute; WMO local heights use the same instance transform as its geometry. Blue water respects geometry depth; orange guides show water excluded by the selected clamp or native WC3 water ceiling. The overlay prompts users to select playable areas with the terrain clamp and retains water-range warnings without a color legend. Preview shores retain source masks; export rounds to the native grid. M2 collision, stacked-surface resolution and native water quantization still require export/game verification; the preview is an overview, not an exact rasterized W3E.
+
+Clamped root terrain uses solid dirt color RGB 140/101/44 on flattened areas. Removed root geometry remains at its original height as a wireframe overlay, reusing cached triangles and shader barycentrics. Only ADTs (implicit roots) or explicitly marked root models are clamped; child WMOs keep their original geometry and material appearance. Opaque children draw over the wireframe guide. The current cell-selection UI exports ADT roots only.
+
+## Dialog and terrain bounds
+
+The export dialog opens centered at a compact size (up to 94rem wide and 85% viewport height, with a 28rem settings pane and 66rem preview pane). The preview expand button toggles the whole dialog to fill the viewport without resetting the camera or reloading assets; Escape exits fullscreen first, and reopening starts compact. Closing via Generate, X or Cancel preserves form settings separately for each map/cell selection; a new selection initializes its defaults. Settings are kept in the mounted map page, without browser-storage persistence.
+
+The clamp slider enforces a selection-dependent minimum gap, rounded up to its 0.1 percentage-point step, to keep both terrain dimensions within 480 tiles. Generate waits for preview bounds; an impossible full-range selection requires fewer cells. Preview bounds exclude vertices used only by terrain holes. Export independently validates dimensions before allocating the height grid or deleting an existing map for Fresh export; invalid ranges fail the job without panicking.
+
+## Progress and cancellation
+
+The dialog requests `preview?progress=1`, streaming NDJSON stage names and completed/total counts over the request itself, followed by the scene or an error. Normal preview callers still receive JSON. Closing the dialog or changing selection/build aborts the request; request cancellation also stops preparation while retaining completed per-asset caches. The renderer reports uploaded/loaded asset counts, including cache hits. No detached preview job or polling is used. Terrain, WMO/group, water, floor and NPC stages report actual work. Default/Fit cameras look north along WC3 +Y so +X points right; preview positions already contain the export axis conversion, and the chosen map angle is applied once to all geometry, water and markers.
+
+## Clamp suggestion and NPCs
+
+POST `maps/{map}/suggest-clamp` uses a separate ADT/NPC metadata manifest, skips WMO processing and calls `SuggestTerrainClamp`, shared with production export. NPC availability checks run alongside preview loading, so Suggest and export controls need not wait for city geometry. The first opening for a particular map and sorted cell selection automatically applies Suggest once NPC availability is known. Reopening that selection restores its settings without suggesting again; the Suggest button remains available. This history lasts while the map page stays mounted. Manual slider edits cancel pending suggestions and take precedence, including edits made before the NPC check completes. The dialog sends `autoClampPercent: false` so export preserves them. Path blockers default on when NPC data is present. NPC spheres disappear when export is off; otherwise source floor distance, clamp and decoration mode predict green unit, yellow destructible or red excluded placement. The overlay uses larger text and warns about small/large in-game NPCs when chosen clamp width differs from the recommendation by more than a factor of 1.2. The preview omits M2 props and the full collision BFS, so conflict resolution and final terrain sampling can change placement during export. Camera gestures match the model viewer, with rendering only on input, resize or settings changes. Browser rendering and WC3 gameplay need separate visual verification.
+
+## Camera and hover
+
+Preview hover uses a lazy 1x1 GPU picking target with the same source transforms, clamped triangles and NPC spheres; wireframe and excluded-water guides are not pick targets. The cursor tooltip names NPC spheres or labels visible solid geometry Playable area / Unreachable area according to clamp flattening, rather than claiming exact collision reachability. Pointer work is limited to one pick per animation frame and is suspended during camera drags; cached mesh data is reused.
+
+Preview camera instructions use the same Mouse icon and TooltipHelp pattern as the model viewer. Source warnings remain in the main preview overlay.
+
+Current UI evidence: [suggestion retention](../screenshots/ui/map-export-suggest-once.png), [native map-size clamp](../screenshots/ui/terrain-clamp-minimum-range.png). Browser captures demonstrate UI behavior; they do not prove WC3 terrain or movement.

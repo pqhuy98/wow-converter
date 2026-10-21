@@ -91,10 +91,6 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 
 	mapSaveName := NormalizeMapSaveName(opts.MapSaveName)
 	outputDir := workspace.ResolveRepoPath(filepath.Join("maps", mapSaveName))
-	if opts.FreshExport {
-		_ = os.RemoveAll(outputDir)
-		LogMapGeneratePhase("Removed existing map folder " + outputDir)
-	}
 	if err := ctx.Err(); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
@@ -131,6 +127,19 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	if autoClamp {
 		AutoChooseClampPercent(exporter, opts.UnitScale)
 	}
+	if len(exporter.WowObjectManager.Roots) > 0 {
+		ext := common.ComputeAbsoluteMinMaxExtents(exporter.WowObjectManager.Roots)
+		if _, _, err := terrainDimensions(ext.Min, ext.Max, opts.MapExportConfig.Terrain.ClampPercent); err != nil {
+			return MapGenerateConversionResult{}, err
+		}
+	}
+	// Validate before removing an existing map, even for a fresh export.
+	if opts.FreshExport {
+		if err := os.RemoveAll(outputDir); err != nil {
+			return MapGenerateConversionResult{}, err
+		}
+		LogMapGeneratePhase("Removed existing map folder " + outputDir)
+	}
 	convertCompleted = 1
 	report("Parsed map data", nil)
 
@@ -159,6 +168,13 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 		LogMapGeneratePhase("Exporting creature models")
 		report("Exporting creature models", &CreatureProgress{Completed: 0, Total: uniqueCreatureCount})
 		if err := exporter.ExportCreatures(ctx, outputDir, func(completed, total int) {
+			if creatureExportSteps != total {
+				creatureExportSteps = total
+				convertSteps = 3 + total
+				if opts.OnConvertStepsKnown != nil {
+					opts.OnConvertStepsKnown(convertSteps)
+				}
+			}
 			convertCompleted = 2 + completed
 			report("Exporting creature models", &CreatureProgress{Completed: completed, Total: total})
 		}); err != nil {

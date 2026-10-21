@@ -268,3 +268,28 @@ func decodeTestBLP1Mip(t *testing.T, data []byte, level int) []color.NRGBA {
 	}
 	return decoded
 }
+
+func TestDecodePalettedBLP1(t *testing.T) {
+	original := makeTestBLP1(func(level, i int) byte { return []byte{0, 85, 170, 255}[(i+level)%4] })
+	compacted, err := compactBLP1AlphaPlane(original, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for level := 0; level < 3; level++ {
+		img, err := DecodePalettedBLP1(compacted, level)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := decodeTestBLP1Mip(t, original, level)
+		for i, want := range expected {
+			if got := img.NRGBAAt(i%img.Rect.Dx(), i/img.Rect.Dx()); got != want {
+				t.Fatalf("mip%d pixel%d: %v != %v", level, i, got, want)
+			}
+		}
+	}
+	for _, bad := range [][]byte{compacted[:20], append([]byte("BLP2"), compacted[4:]...)} {
+		if _, err := DecodePalettedBLP1(bad, 0); err == nil {
+			t.Fatal("malformed data accepted")
+		}
+	}
+}

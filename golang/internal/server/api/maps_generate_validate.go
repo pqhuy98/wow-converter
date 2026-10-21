@@ -59,8 +59,8 @@ func parseGenerateWc3Body(raw map[string]any) (generateWc3Body, []string) {
 	if body.ClampUpper < 0 || body.ClampUpper > 1 {
 		issues = append(issues, "clampUpper must be between 0 and 1")
 	}
-	if body.ClampUpper < body.ClampLower {
-		issues = append(issues, "clampUpper must be >= clampLower")
+	if body.ClampUpper <= body.ClampLower {
+		issues = append(issues, "clampUpper must be > clampLower")
 	}
 	if body.UnitScale <= 0 {
 		issues = append(issues, "unitScale must be greater than 0")

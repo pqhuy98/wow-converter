@@ -46,12 +46,14 @@ import {
 } from './wow-config-settings';
 
 type GameOption = { product: string; label: string };
+type CacheKind = 'casc' | 'browse';
+const cacheOptions: { kind: CacheKind; label: string; description: string }[] = [
+  { kind: 'casc', label: 'Clear CASC cache', description: 'Downloaded game data will be deleted and the loaded installation will be unloaded.' },
+  { kind: 'browse', label: 'Clear browse assets', description: 'Generated browse previews will be deleted and rebuilt as needed.' },
+];
 
 function formatCacheSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function gameOptionsFromBuilds(
@@ -99,8 +101,9 @@ export function WowConfigSetup() {
   const [loading, setLoading] = useState(false);
   const [loadSuccess, setLoadSuccess] = useState(false);
   const [changingSource, setChangingSource] = useState(false);
-  const [clearingCache, setClearingCache] = useState(false);
-  const [cacheSizeBytes, setCacheSizeBytes] = useState<number | null>(null);
+  const [clearingCacheKind, setClearingCacheKind] = useState<CacheKind | null>(null);
+  const clearingCache = clearingCacheKind !== null;
+  const [cacheSizeBytes, setCacheSizeBytes] = useState<Record<CacheKind, number> | null>(null);
   const [pickingFolder, setPickingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,7 +133,10 @@ export function WowConfigSetup() {
       const res = await fetch('/api/wow-config/cache-size');
       const json = await res.json();
       if (res.ok) {
-        setCacheSizeBytes(typeof json.bytes === 'number' ? json.bytes : 0);
+        setCacheSizeBytes({
+          casc: typeof json.casc === 'number' ? json.casc : 0,
+          browse: typeof json.browse === 'number' ? json.browse : 0,
+        });
       }
     } catch {
       // Size is optional UI polish; ignore fetch failures.
@@ -287,20 +293,26 @@ export function WowConfigSetup() {
     }
   };
 
-  const clearCache = async () => {
+  const clearCache = async (kind: CacheKind) => {
     setError(null);
-    setClearingCache(true);
+    setClearingCacheKind(kind);
     try {
-      const res = await fetch('/api/wow-config/clear-cache', { method: 'POST' });
+      const res = await fetch('/api/wow-config/clear-cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind }),
+      });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Could not clear cache');
-      resetSelectionForm();
-      setCacheSizeBytes(0);
-      await refresh();
+      if (kind === 'casc') {
+        resetSelectionForm();
+        await refresh();
+      }
+      await refreshCacheSize();
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setClearingCache(false);
+      setClearingCacheKind(null);
     }
   };
 
@@ -439,40 +451,43 @@ export function WowConfigSetup() {
               </Button>
             )}
             {!isSharedHosting && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={changingSource || clearingCache}
-                  >
-                    {clearingCache && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Clear cache
-                    {cacheSizeBytes !== null && ` (${formatCacheSize(cacheSizeBytes)})`}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Clear cache?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {cacheSizeBytes !== null && cacheSizeBytes > 0
-                        ? `This frees about ${formatCacheSize(cacheSizeBytes)} by clearing wow-converter's local cache. `
-                        : 'This clears wow-converter\'s local cache. '}
-                      Cached files will be rebuilt as needed, so the app may feel slower
-                      at first.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => { void clearCache(); }}
-                      disabled={changingSource || clearingCache}
-                    >
-                      Clear cache
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <div className="space-y-2">
+                <Label>Clear cache</Label>
+                <div className="flex flex-col items-start gap-2">
+                  {cacheOptions.map(({ kind, label, description }) => (
+                    <AlertDialog key={kind}>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          disabled={changingSource || clearingCache}
+                        >
+                          {clearingCacheKind === kind && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          {label}
+                          {cacheSizeBytes !== null && ` (${formatCacheSize(cacheSizeBytes[kind])})`}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{label}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {description}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => { void clearCache(kind); }}
+                            disabled={changingSource || clearingCache}
+                          >
+                            {label}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  ))}
+                </div>
+              </div>
             )}
             <Button variant="outline" asChild>
               <Link href="/">Back</Link>

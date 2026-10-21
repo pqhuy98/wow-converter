@@ -162,12 +162,14 @@ func (s *Service) Reset(ctx context.Context) error {
 	return nil
 }
 
-// ClearCache unloads WoW data and deletes the repo `.cache` directory contents.
-func (s *Service) ClearCache(ctx context.Context) error {
-	if err := s.Reset(ctx); err != nil {
-		return err
+// ClearCache unloads WoW data only when clearing the CASC cache.
+func (s *Service) ClearCache(ctx context.Context, kind string) error {
+	if kind == "casc" {
+		if err := s.Reset(ctx); err != nil {
+			return err
+		}
 	}
-	return workspace.ClearProjectCacheDir()
+	return workspace.ClearProjectCacheDir(kind)
 }
 
 // GetStatus returns current wow-config status for the UI.

@@ -120,6 +120,7 @@ type Loader struct {
 	data          *buffer.Buffer
 	loaded        bool
 	renderingOnly bool
+	IncludeLiquid bool // Also read MLIQ for static previews without other optional chunks.
 	FileDataID    int
 	FileName      string
 
@@ -196,7 +197,7 @@ func (l *Loader) Load() error {
 		nextChunkPos := data.Offset() + chunkSize
 
 		if handler, ok := wmoChunkHandlers[chunkID]; ok {
-			if !l.renderingOnly || !wmoOptionalChunks[chunkID] {
+			if !l.renderingOnly || !wmoOptionalChunks[chunkID] || (l.IncludeLiquid && chunkID == 0x4D4C4951) {
 				handler(l, data, chunkSize)
 			}
 		}

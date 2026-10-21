@@ -157,6 +157,100 @@ func TestWaterNativeNarrowRiverAndChunkSeams(t *testing.T) {
 		}
 	}
 }
+
+func TestWaterCoversEveryCornerOfPartiallyWetNativeQuads(t *testing.T) {
+	for _, source := range []waterCell{
+		waterQuad(-2, -2, 2, 2, 50),     // A tiny pool straddles four native quads.
+		waterQuad(120, 24, 129, 28, 50), // Only one unit overlaps the right-hand quad; no sample center hits it.
+	} {
+		tn := getInitialTerrain(4, 4)
+		for y := range tn.GroundHeight {
+			for x := range tn.GroundHeight[y] {
+				tn.GroundHeight[y][x] = config.GameZToDataHeight(0)
+			}
+		}
+		w := testWater(tn, source)
+		if err := w.project(context.Background(), tn); err != nil {
+			t.Fatal(err)
+		}
+		wetQuads := 0
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				if !waterTouchesWetTerrain(source, w.ox+float64(x)*128, w.oy+float64(y)*128, tn) {
+					continue
+				}
+				wetQuads++
+				for _, d := range [][2]int{{0, 0}, {1, 0}, {1, 1}, {0, 1}} {
+					xx, yy := x+d[0], y+d[1]
+					if tn.Flags[yy][xx]&uint16(data.TerrainWater) == 0 || math.Abs(config.WaterHeightToGameZ(float64(tn.WaterHeight[yy][xx]))-50) > .126 {
+						t.Fatalf("partially wet quad %d,%d has a dry/uninitialized corner %d,%d", x, y, xx, yy)
+					}
+				}
+			}
+		}
+		if wetQuads < 2 {
+			t.Fatal("fixture must exercise multiple touched quads", wetQuads)
+		}
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				if _, present := nativeWaterHeight(tn, w.ox+(float64(x)+.5)*128, w.oy+(float64(y)+.5)*128); !present {
+					continue
+				}
+				for _, d := range [][2]int{{0, 0}, {1, 0}, {1, 1}, {0, 1}} {
+					if math.Abs(config.WaterHeightToGameZ(float64(tn.WaterHeight[y+d[1]][x+d[0]]))-50) > .126 {
+						t.Fatal("rounded shore slopes to an uninitialized outer corner", x, y, d)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestWaterMinorityShoreAndFullyDryBridge(t *testing.T) {
+	tn := getInitialTerrain(4, 4)
+	for y := range tn.GroundHeight {
+		for x := range tn.GroundHeight[y] {
+			tn.GroundHeight[y][x] = config.GameZToDataHeight(100)
+		}
+	}
+	tn.GroundHeight[3][3] = config.GameZToDataHeight(0)
+	source := waterQuad(0, 0, 128, 128, 50)
+	w := testWater(tn, source)
+	if err := w.project(context.Background(), tn); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range [][2]int{{0, 0}, {1, 0}, {1, 1}, {0, 1}} {
+		if tn.Flags[2+d[1]][2+d[0]]&uint16(data.TerrainWater) == 0 {
+			t.Fatal("mostly-land shoreline quad must remain fully water-enabled")
+		}
+	}
+	if tn.GroundHeight[2][2] != config.GameZToDataHeight(100) {
+		t.Fatal("shoreline coverage must not lower the land")
+	}
+	tn.GroundHeight[3][3] = config.GameZToDataHeight(100)
+	if err := w.project(context.Background(), tn); err != nil || w.report.NativeCorners != 0 {
+		t.Fatal("a bridge above all source water must stay dry", err, w.report)
+	}
+}
+
+func TestWaterOverlapChecksWetEdgeExtremaAndIgnoresBoundaryOnlyContact(t *testing.T) {
+	tn := getInitialTerrain(2, 2)
+	for y := range tn.GroundHeight {
+		for x := range tn.GroundHeight[y] {
+			tn.GroundHeight[y][x] = config.GameZToDataHeight(100)
+		}
+	}
+	tn.GroundHeight[0][1], tn.GroundHeight[1][0] = config.GameZToDataHeight(0), config.GameZToDataHeight(0)
+	// Every source corner is above dry land, but the middle of its diagonal
+	// edge crosses a wet low point in the bilinear terrain.
+	c := waterCell{bank: 0, v: [4]imath.Vector3{{-128, -128, 55}, {-127, -128, 55}, {0, 0, 55}, {-1, 0, 55}}}
+	if !waterTouchesWetTerrain(c, -128, -128, tn) {
+		t.Fatal("wet edge interior was missed")
+	}
+	if waterTouchesWetTerrain(c, 0, -128, tn) {
+		t.Fatal("zero-area boundary contact should not add an extra water quad")
+	}
+}
 func TestWaterSaveIndependentOfNPCsAndOptionalBlockers(t *testing.T) {
 	tn := getInitialTerrain(4, 4)
 	for y := range tn.GroundHeight {

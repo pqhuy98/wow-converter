@@ -22,12 +22,17 @@ func registerWowConfig(r Router, d *Deps) {
 			sendError(w, http.StatusForbidden, err.Error())
 			return
 		}
-		bytes, err := workspace.ProjectCacheDirSize()
+		cascBytes, err := workspace.ProjectCacheDirSize("casc")
 		if err != nil {
 			sendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		sendJSON(w, http.StatusOK, map[string]any{"bytes": bytes})
+		browseBytes, err := workspace.ProjectCacheDirSize("browse")
+		if err != nil {
+			sendError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sendJSON(w, http.StatusOK, map[string]any{"bytes": cascBytes + browseBytes, "casc": cascBytes, "browse": browseBytes})
 	})
 
 	r.Post("/wow-config/pick-local-folder", func(w http.ResponseWriter, req *http.Request) {
@@ -84,7 +89,13 @@ func registerWowConfig(r Router, d *Deps) {
 			sendError(w, http.StatusForbidden, err.Error())
 			return
 		}
-		if err := svc.ClearCache(req.Context()); err != nil {
+		body, err := readJSONMap(req)
+		if err != nil {
+			sendError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		kind, _ := body["kind"].(string)
+		if err := svc.ClearCache(req.Context(), kind); err != nil {
 			sendError(w, http.StatusBadRequest, err.Error())
 			return
 		}

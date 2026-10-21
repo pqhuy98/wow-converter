@@ -3,6 +3,7 @@ package character
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
@@ -23,7 +24,13 @@ func ExportCreatureNpcAsMdl(ctx *ExportContext, meta CharacterData) (*mdl.MDL, e
 		}
 	}
 	textureIDs := make([]int, 0, len(meta.Textures))
-	for _, id := range meta.Textures {
+	keys := make([]string, 0, len(meta.Textures))
+	for key := range meta.Textures {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		id := meta.Textures[key]
 		if id > 0 {
 			textureIDs = append(textureIDs, id)
 		}

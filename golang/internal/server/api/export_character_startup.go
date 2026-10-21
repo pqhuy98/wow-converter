@@ -20,14 +20,8 @@ func StartupDemoRequests() []exportCharacterRequest {
 		},
 		OutputFileName: "demo-lichking",
 		Format:         "mdx",
-		Optimization: struct {
-			SortSequences                 *bool  `json:"sortSequences"`
-			AllMaterialsUnshaded          *bool  `json:"allMaterialsUnshaded"`
-			RemoveUnusedVertices          *bool  `json:"removeUnusedVertices"`
-			RemoveUnusedNodes             *bool  `json:"removeUnusedNodes"`
-			RemoveUnusedMaterialsTextures *bool  `json:"removeUnusedMaterialsTextures"`
-			MaxTextureSize                string `json:"maxTextureSize,omitempty"`
-		}{
+		Optimization: exportCharacterOptimization{
+			FreezeHead:                    boolPtr(true),
 			SortSequences:                 boolPtr(true),
 			AllMaterialsUnshaded:          boolPtr(false),
 			RemoveUnusedVertices:          boolPtr(true),

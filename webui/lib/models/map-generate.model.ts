@@ -67,10 +67,8 @@ export interface GenerateWc3FormValues {
   mapSaveName: string;
   clampLower: number;
   clampUpper: number;
-  /** When true, server picks clamp from NPC positions instead of manual slider values. */
-  autoClampPercent: boolean;
   mapAngleDeg: number;
-  /** Unit size on the map; also drives terrain height auto-clamp. */
+  /** Unit size on the map; also drives suggested terrain height clamp. */
   unitScale: number;
   /** Export WMO interior doodads (ADT includeWMOSets + convert prune depth 3). */
   includeBuildingInteriors: boolean;
@@ -86,11 +84,10 @@ export const defaultGenerateWc3FormValues: GenerateWc3FormValues = {
   mapSaveName: '',
   clampLower: 0,
   clampUpper: 1,
-  autoClampPercent: true,
   mapAngleDeg: 0,
   unitScale: 2,
   includeBuildingInteriors: true,
-  placePathBlockers: false,
+  placePathBlockers: true,
   freshExport: false,
   creatures: {
     enable: false,

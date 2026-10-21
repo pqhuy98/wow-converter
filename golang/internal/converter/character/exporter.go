@@ -54,6 +54,8 @@ type ExportOptions struct {
 	LocalModelSkinID string
 	// ModelScale preserves the final WoW-to-WC3 scale during animation-only exports.
 	ModelScale *float64
+	// Prepared map appearances resolve once before conversion/deduplication.
+	resolvedBase *CharacterData
 }
 
 // ExportCharacter exports a character or creature to MDL.
@@ -89,6 +91,7 @@ func (e *CharacterExporter) ExportCharacter(ctx context.Context, char Character,
 	exportCtx := e.newExportContext(outputFile, char, skinID)
 	if len(opts) > 0 {
 		exportCtx.ModelScale = opts[0].ModelScale
+		exportCtx.resolvedBase = opts[0].resolvedBase
 	}
 	exportCtx.ctx = ctx
 	model, err := e.exportBaseMdl(ctx, &exportCtx, char)
@@ -526,9 +529,14 @@ func (e *CharacterExporter) exportBaseMdl(ctx context.Context, exportCtx *Export
 			}
 			return item.MDL, nil
 		}
-		charMeta, err := e.resolveBaseMetadata(exportCtx, zam)
-		if err != nil {
-			return nil, err
+		var charMeta CharacterData
+		if exportCtx.resolvedBase != nil {
+			charMeta = *exportCtx.resolvedBase
+		} else {
+			charMeta, err = e.resolveBaseMetadata(exportCtx, zam)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if hasResolvedModel(charMeta.Model) && charMeta.Character == nil {
 			return ExportCreatureNpcAsMdl(exportCtx, charMeta)
@@ -581,13 +589,13 @@ func (e *CharacterExporter) exportItem(ctx *ExportContext, ref Ref, selections .
 func convertWowheadCharacterData(meta wowhead.CharacterData) CharacterData {
 	out := CharacterData{
 		Model: meta.Model, Textures: meta.Textures, Character: meta.Character,
-		Scale: meta.Scale,
+		Scale:     meta.Scale,
 		Equipment: meta.Equipment, TextureFiles: meta.TextureFiles, ItemEffects: meta.ItemEffects,
 		SeparateShoulders: meta.SeparateShoulders,
 	}
 	if meta.Creature != nil {
 		out.Creature = &CreatureMeta{
-			ParticleColor:         meta.Creature.ParticleColor,
+			ParticleColor:          meta.Creature.ParticleColor,
 			CreatureGeosetData:     make([]GeosetEntry, len(meta.Creature.CreatureGeosetData)),
 			CreatureCustomizations: meta.Creature.CreatureCustomizations,
 		}
@@ -605,6 +613,7 @@ func (e *CharacterExporter) IncludeMdlToOutput(m *mdl.MDL, outputFile string) {
 
 // ExportOptimization mirrors export request optimization flags.
 type ExportOptimization struct {
+	FreezeHead                    bool
 	SortSequences                 bool
 	RemoveUnusedVertices          bool
 	RemoveUnusedNodes             bool
@@ -617,6 +626,7 @@ type ExportOptimization struct {
 // DefaultExportOptimization returns the standard export optimization flags.
 func DefaultExportOptimization() ExportOptimization {
 	return ExportOptimization{
+		FreezeHead:                    true,
 		SortSequences:                 true,
 		RemoveUnusedVertices:          true,
 		RemoveUnusedNodes:             true,
@@ -662,7 +672,10 @@ func (e *CharacterExporter) OptimizeModels(opt ExportOptimization) {
 				}
 			}
 		}
-		m.Modify.OptimizeKeyFrames()
+		if opt.FreezeHead {
+			m.Modify.FreezeHeadOutsidePortrait()
+		}
+		m.Modify.OptimizeKeyFrames().ReduceKeyFramesConservative()
 		m.Sync()
 	}
 }

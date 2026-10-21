@@ -39,6 +39,7 @@ func parseExportCharacterRequest(raw map[string]any) (exportCharacterRequest, []
 func applyExportCharacterDefaults(raw map[string]any) {
 	if optimization, ok := raw["optimization"].(map[string]any); ok {
 		defaults := map[string]bool{
+			"freezeHead":                    true,
 			"sortSequences":                 true,
 			"allMaterialsUnshaded":          false,
 			"removeUnusedVertices":          true,
@@ -175,7 +176,7 @@ func validateExportOptimization(value any, issues *[]string) {
 		return
 	}
 	for _, field := range []string{
-		"sortSequences", "allMaterialsUnshaded", "removeUnusedVertices",
+		"freezeHead", "sortSequences", "allMaterialsUnshaded", "removeUnusedVertices",
 		"removeUnusedNodes", "removeUnusedMaterialsTextures",
 	} {
 		validateOptionalBool(optimization, field, issues)

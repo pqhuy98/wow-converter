@@ -76,6 +76,7 @@ export function CharacterConverter() {
   const [format, setFormat] = useState<ModelFormat>('mdx');
   const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>('1000');
   const [optimization, setOptimization] = useState<Optimization>({
+    freezeHead: true,
     sortSequences: true,
     allMaterialsUnshaded: false,
     removeUnusedVertices: true,

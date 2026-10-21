@@ -36,9 +36,9 @@ type mapWithTiles struct {
 }
 
 var (
-	mapsMu         sync.RWMutex
-	mapsIndexMu    sync.Mutex
-	mapsWithTiles  []mapWithTiles
+	mapsMu        sync.RWMutex
+	mapsIndexMu   sync.Mutex
+	mapsWithTiles []mapWithTiles
 	mapsByDir     = map[string]*mapWithTiles{}
 	fileNameIndex = map[string]casc.ListfileEntry{}
 
@@ -213,6 +213,7 @@ func registerMaps(r Router, d *Deps) {
 	}()
 
 	registerMapGenerateRoutes(r, d)
+	registerMapPreviewRoutes(r, d)
 
 	r.Get("/maps", func(w http.ResponseWriter, req *http.Request) {
 		if err := ensureMapsIndex(req.Context(), d); err != nil {

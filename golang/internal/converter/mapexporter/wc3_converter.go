@@ -18,14 +18,19 @@ import (
 )
 
 const (
+	maxTerrainTiles        = 480
 	terrainFlagUnwalkable  = 0x0002
 	terrainFlagUnflyable   = 0x0004
 	terrainFlagUnbuildable = 0x0008
 )
 
-// PlacedUnit ties a creature to map placement.
+// PlacedUnit retains a creature for asset export, including skipped placements.
 type PlacedUnit struct {
-	Creature azerothcore.Creature
+	Creature       azerothcore.Creature `json:"source"`
+	TypeCode       string               `json:"typeCode,omitempty"`
+	ExcludedReason string               `json:"excludedReason,omitempty"`
+	ModelPath      string               `json:"model,omitempty"`
+	IconPath       string               `json:"icon,omitempty"`
 }
 
 // Wc3Converter converts WoW objects to WC3 map data.
@@ -51,15 +56,15 @@ func NewWc3Converter(cfg MapExportConfig) *Wc3Converter {
 }
 
 // GenerateTerrainWithHeight builds war3map.w3e terrain from ADT roots.
-func (w *Wc3Converter) GenerateTerrainWithHeight(m *common.WowObjectManager) data.Terrain {
+func (w *Wc3Converter) GenerateTerrainWithHeight(m *common.WowObjectManager) (data.Terrain, error) {
 	roots := m.Roots
 	log.Printf("Generating terrain from %d objects", len(roots))
 
-	heightMap, height, width := computeTerrainHeightMap(roots, w.config)
-	log.Printf("Map size height=%d width=%d", height, width)
-	if width > 480 || height > 480 {
-		panic("Map size is too large!")
+	heightMap, height, width, err := computeTerrainHeightMap(roots, w.config)
+	if err != nil {
+		return data.Terrain{}, err
 	}
+	log.Printf("Map size height=%d width=%d", height, width)
 
 	terrain := getInitialTerrain(height, width)
 	for i := 0; i < len(heightMap); i++ {
@@ -77,7 +82,7 @@ func (w *Wc3Converter) GenerateTerrainWithHeight(m *common.WowObjectManager) dat
 			}
 		}
 	}
-	return terrain
+	return terrain, nil
 }
 
 // PlaceDoodads adds doodad instances to the map.
@@ -299,9 +304,20 @@ func (w *Wc3Converter) PlaceUnits(mm *extra.MapManager, m *common.WowObjectManag
 	modelSize := imath.V3Sub(max, min)
 	scale := mapSize[0] / modelSize[0]
 	clampDiff := mapConfig.Terrain.ClampPercent.Upper - mapConfig.Terrain.ClampPercent.Lower
+	// The same source ground gap stays accepted when a manual clamp stretches Z.
+	// At the recommended clamp this is exactly 100 WC3 units.
+	groundTolerance := 100 * recommendedTerrainClampWidth(min, max, mapConfig.UnitScale) / clampDiff
 
-	templateIdToUnitType := map[int]*extra.UnitType{}
-	templateIdToDoodadType := map[int]*extra.DoodadType{}
+	templateIdToUnitType := map[string]*extra.UnitType{}
+	templateIdToDoodadType := map[string]*extra.DoodadType{}
+	type candidate struct {
+		index       int
+		position    [3]float32
+		angle       float32
+		model, name string
+		modelScale  float64
+	}
+	var candidates []candidate
 
 	m.IterateObjects(func(obj *common.WowObject, abs common.ObjectAbsolute) {
 		c := common.ObjectCreature(obj)
@@ -309,12 +325,14 @@ func (w *Wc3Converter) PlaceUnits(mm *extra.MapManager, m *common.WowObjectManag
 			return
 		}
 		units = append(units, PlacedUnit{Creature: *c})
+		index := len(units) - 1
 		absPosition := abs.Position
 
 		if absPosition[0] < min[0]-1 || absPosition[0] > max[0]+1 ||
 			absPosition[1] < min[1]-1 || absPosition[1] > max[1]+1 {
 			log.Printf("%s", ansi.Redf("Creature %s is out of bounds %v", c.Template.Name, absPosition))
 			log.Printf("map[min:%v max:%v]", min, max)
+			units[index].ExcludedReason = "outside map bounds"
 			return
 		}
 
@@ -338,30 +356,29 @@ func (w *Wc3Converter) PlaceUnits(mm *extra.MapManager, m *common.WowObjectManag
 		position := [3]float32{float32(inGameX), float32(inGameY), float32(inGameZ)}
 
 		withinPlayable := percent[2] >= mapConfig.Terrain.ClampPercent.Lower && percent[2] <= mapConfig.Terrain.ClampPercent.Upper
-		notOnGround := inGameZ < terrainZ-100 || inGameZ > terrainZ+100
+		notOnGround := inGameZ < terrainZ-groundTolerance || inGameZ > terrainZ+groundTolerance
 
-		if mapConfig.Creatures.AllAreDoodads || !withinPlayable || notOnGround {
-			if _, ok := templateIdToDoodadType[c.Template.Entry]; !ok {
-				// Explicit decoration mode uses actual doodads, with no pathing.
-				// Preserve the existing destructible fallback for ordinary unit exports.
-				prefix, destructible := "b", !mapConfig.Creatures.AllAreDoodads
-				if !destructible {
-					prefix = "d"
-				}
+		// Keep every creature in the returned asset-export list, but avoid
+		// sharing unit models with scenery when a spawn cannot become a unit.
+		if !mapConfig.Creatures.AllAreDoodads && (!withinPlayable || notOnGround) {
+			units[index].ExcludedReason = "outside playable height or too far from ground"
+			return
+		}
+		if mapConfig.Creatures.AllAreDoodads {
+			key := creatureUnitKey(*c)
+			if _, ok := templateIdToDoodadType[key]; !ok {
 				mods := []data.Modification{
-					{ID: prefix + "nam", Type: data.ModificationString, Value: "~U " + creatureName},
-					{ID: prefix + "fil", Type: data.ModificationString, Value: creatureModel},
-					{ID: prefix + "mas", Type: data.ModificationUnreal, Value: float32(creatureScale * 1.5)},
-					{ID: prefix + "mis", Type: data.ModificationUnreal, Value: float32(creatureScale / 1.5)},
+					{ID: "bnam", Type: data.ModificationString, Value: "~U " + creatureName},
+					{ID: "bfil", Type: data.ModificationString, Value: creatureModel},
+					{ID: "bmas", Type: data.ModificationUnreal, Value: float32(creatureScale * 1.5)},
+					{ID: "bmis", Type: data.ModificationUnreal, Value: float32(creatureScale / 1.5)},
+					{ID: "bptx", Type: data.ModificationString, Value: ""},
+					{ID: "bvar", Type: data.ModificationInt, Value: 1},
 				}
-				if !destructible {
-					mods = append(mods,
-						data.Modification{ID: "dptx", Type: data.ModificationString, Value: ""},
-						data.Modification{ID: "dvar", Type: data.ModificationInt, Value: 1})
-				}
-				templateIdToDoodadType[c.Template.Entry] = mm.AddDoodadType(mods, destructible)
+				templateIdToDoodadType[key] = mm.AddDoodadType(mods, true)
 			}
-			dt := templateIdToDoodadType[c.Template.Entry]
+			dt := templateIdToDoodadType[key]
+			units[index].TypeCode = dt.Code
 			mm.AddDoodad(dt, data.Doodad{
 				Variation:        0,
 				Position:         position,
@@ -375,37 +392,36 @@ func (w *Wc3Converter) PlaceUnits(mm *extra.MapManager, m *common.WowObjectManag
 			return
 		}
 
-		if _, ok := templateIdToUnitType[c.Template.Entry]; !ok {
-			templateIdToUnitType[c.Template.Entry] = mm.AddUnitType(false, "hfoo", []data.Modification{
-				{ID: "unam", Type: data.ModificationString, Value: creatureName},
-				{ID: "unsf", Type: data.ModificationString, Value: fmt.Sprintf("guid=%d template.entry=%d displayId=%d phaseMask=%d",
-					c.Creature.GUID, c.Template.Entry, c.Model.CreatureDisplayID, c.Creature.PhaseMask)},
-				{ID: "umdl", Type: data.ModificationString, Value: creatureModel},
-				{ID: "uabi", Type: data.ModificationString, Value: ""},
-				{ID: "usca", Type: data.ModificationReal, Value: float32(creatureScale)},
-				{ID: "uhpm", Type: data.ModificationInt, Value: c.Creature.CurHealth},
-				{ID: "umpm", Type: data.ModificationInt, Value: c.Creature.CurMana},
-				{ID: "umpi", Type: data.ModificationInt, Value: c.Creature.CurMana},
-				{ID: "ulev", Type: data.ModificationInt, Value: c.Template.MaxLevel},
-			})
-		}
-		ut := templateIdToUnitType[c.Template.Entry]
-		mm.AddUnit(ut, data.Unit{
-			Variation:        0,
-			Position:         position,
-			Rotation:         float32(abs.Rotation[2]),
-			Scale:            [3]float32{1, 1, 1},
-			Skin:             ut.Code,
-			Player:           0,
-			Hitpoints:        100,
-			Mana:             0,
-			RandomItemSetPtr: -1,
-			Hero:             data.UnitHero{Level: c.Template.MaxLevel, Str: 0, Agi: 0, Int: 0},
-			Random:           data.UnitRandom{Type: 0},
-			Color:            23,
-			Waygate:          -1,
-		})
+		candidates = append(candidates, candidate{index, position, float32(abs.Rotation[2]), creatureModel, creatureName, creatureScale})
 	})
+	for _, p := range candidates {
+		c := &units[p.index].Creature
+		key := creatureUnitKey(*c)
+		if _, ok := templateIdToUnitType[key]; !ok {
+			yardScale := scale * m.RawModelScale()
+			mods := creatureUnitFields(*c, p.model, p.name, p.modelScale, yardScale*mapConfig.UnitScale, yardScale)
+			mods = append(mods, data.Modification{ID: "unsf", Type: data.ModificationString, Value: fmt.Sprintf("template.entry=%d displayId=%d", c.Template.Entry, c.Model.CreatureDisplayID)})
+			templateIdToUnitType[key] = mm.AddUnitType(false, "hfoo", mods)
+		}
+		ut := templateIdToUnitType[key]
+		units[p.index].TypeCode = ut.Code
+		mm.AddUnit(ut, data.Unit{
+			Variation:         0,
+			Position:          p.position,
+			Rotation:          p.angle,
+			Scale:             [3]float32{1, 1, 1},
+			Skin:              ut.Code,
+			Player:            0,
+			Hitpoints:         100,
+			Mana:              -1,
+			TargetAcquisition: -1,
+			RandomItemSetPtr:  -1,
+			Hero:              data.UnitHero{Level: 1, Str: 0, Agi: 0, Int: 0},
+			Random:            data.UnitRandom{Type: 0},
+			Color:             23,
+			Waygate:           -1,
+		})
+	}
 	return units
 }
 
@@ -440,14 +456,54 @@ func ComputeRecommendedTerrainClampPercent(roots []*common.WowObject) (ratio flo
 	return ratio, ext.Min, ext.Max
 }
 
-func computeTerrainHeightMap(roots []*common.WowObject, cfg MapExportConfig) ([][]float64, int, int) {
+// minimumTerrainClampWidth is independent of unit scale: narrowing the height
+// range enlarges XY by the same factor. Compute this before any grid allocation.
+func minimumTerrainClampWidth(min, max imath.Vector3) float64 {
+	size := imath.V3Sub(max, min)
+	return config.MaxGameHeightDiff() * math.Max(size[0], size[1]) / (size[2] * config.DistancePerTile * maxTerrainTiles)
+}
+
+func terrainDimensions(min, max imath.Vector3, clamp TerrainClampPercent) (height, width int, err error) {
+	diff := clamp.Upper - clamp.Lower
+	if math.IsNaN(diff) || math.IsInf(diff, 0) || clamp.Lower < 0 || clamp.Upper > 1 || diff <= 0 {
+		return 0, 0, fmt.Errorf("terrain height clamp must have 0 <= lower < upper <= 1")
+	}
+	size := imath.V3Sub(max, min)
+	for _, span := range size {
+		if math.IsNaN(span) || math.IsInf(span, 0) || span <= 0 {
+			return 0, 0, fmt.Errorf("terrain bounds must have a finite positive width, length and height")
+		}
+	}
+	minWidth := minimumTerrainClampWidth(min, max)
+	if minWidth > 1 {
+		return 0, 0, fmt.Errorf("map size is too large even with the full height range (maximum %d tiles per side); select fewer cells", maxTerrainTiles)
+	}
+	if diff+1e-12 < minWidth {
+		return 0, 0, fmt.Errorf("map size is too large (maximum %d tiles per side): terrain clamp must span at least %.3f%%; widen the height range or select fewer cells", maxTerrainTiles, math.Ceil(minWidth*100000)/1000)
+	}
+	ratio := config.MaxGameHeightDiff() / (size[2] * diff) / config.DistancePerTile
+	// Ignore floating-point noise at an exact four-tile boundary.
+	w := math.Ceil(size[0]*ratio/4-1e-10) * 4
+	h := math.Ceil(size[1]*ratio/4-1e-10) * 4
+	if math.IsNaN(w) || math.IsNaN(h) || w > maxTerrainTiles || h > maxTerrainTiles {
+		return 0, 0, fmt.Errorf("map size is too large (maximum %d tiles per side); widen the terrain height range", maxTerrainTiles)
+	}
+	width, height = maxInt(4, int(w)), maxInt(4, int(h))
+	return height, width, nil
+}
+
+func computeTerrainHeightMap(roots []*common.WowObject, cfg MapExportConfig) ([][]float64, int, int, error) {
 	if len(roots) == 0 {
 		heightMap := make2DFloat64(64+1, 64+1, -1)
-		return heightMap, 64, 64
+		return heightMap, 64, 64, nil
 	}
 	log.Printf("Computing terrain height map...")
 	ext := common.ComputeAbsoluteMinMaxExtents(roots)
 	min, max := ext.Min, ext.Max
+	height, width, err := terrainDimensions(min, max, cfg.Terrain.ClampPercent)
+	if err != nil {
+		return nil, 0, 0, err
+	}
 	log.Printf("map[min:%v max:%v]", min, max)
 	terrainSize := imath.V3Sub(max, min)
 	log.Printf("map[terrainSize:%v]", terrainSize)
@@ -455,9 +511,6 @@ func computeTerrainHeightMap(roots []*common.WowObject, cfg MapExportConfig) ([]
 	log.Printf("Recommended terrain clamp percent difference %v", recommendedClamp)
 	clampDiff := cfg.Terrain.ClampPercent.Upper - cfg.Terrain.ClampPercent.Lower
 	ratioZ := config.MaxGameHeightDiff() / (terrainSize[2] * clampDiff)
-	ratioXY := ratioZ
-	width := int(math.Ceil(terrainSize[0]/config.DistancePerTile*ratioXY/4)) * 4
-	height := int(math.Ceil(terrainSize[1]/config.DistancePerTile*ratioXY/4)) * 4
 	log.Printf("map[ratio:%v height:%d width:%d]", ratioZ, height, width)
 	heightMap := make2DFloat64(height+1, width+1, -1)
 	random := imath.SeededRandom(fmt.Sprintf("terrain-height-map:%dx%d", width, height))
@@ -476,7 +529,7 @@ func computeTerrainHeightMap(roots []*common.WowObject, cfg MapExportConfig) ([]
 					(position[2] - (min[2] + terrainSize[2]*cfg.Terrain.ClampPercent.Lower)) / (terrainSize[2] * clampDiff),
 				}
 				if percent[0] < 0 || percent[0] > 1 || percent[1] < 0 || percent[1] > 1 {
-					panic("Out of bounds")
+					return nil, 0, 0, fmt.Errorf("terrain vertex is outside the map bounds")
 				}
 				var iX, iY int
 				if random() > 0.5 {
@@ -517,7 +570,7 @@ func computeTerrainHeightMap(roots []*common.WowObject, cfg MapExportConfig) ([]
 			}
 		}
 	}
-	return heightMap, height, width
+	return heightMap, height, width, nil
 }
 
 func getInitialTerrain(height, width int) data.Terrain {

@@ -160,11 +160,11 @@ paths:
   /api/wow-config/cache-size:
     get:
       tags: [Game data]
-      summary: How much downloaded game data is on disk
+      summary: CASC cache and browse asset sizes on disk
       description: |
         Use this before clear-cache so you know what you are about to delete.
         Desktop server only. A shared server returns 403.
-        bytes is the size of the download cache.
+        casc and browse are their independent sizes; bytes is their sum.
       operationId: getCacheSize
       responses:
         '200':
@@ -173,9 +173,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [bytes]
+                required: [bytes, casc, browse]
                 properties:
                   bytes: { type: integer, format: int64 }
+                  casc: { type: integer, format: int64 }
+                  browse: { type: integer, format: int64 }
         '403':
           $ref: '#/components/responses/DesktopOnly'
 
@@ -302,11 +304,21 @@ paths:
   /api/wow-config/clear-cache:
     post:
       tags: [Game data]
-      summary: Delete downloaded game data
+      summary: Clear the CASC cache or generated browse assets
       description: |
-        Use this to free disk after a remote download. It also closes the open edition, so you must apply again afterwards.
-        Desktop server only. No body.
+        kind casc clears downloaded game data and unloads the open edition.
+        kind browse clears only generated browse assets and keeps the edition loaded.
+        Desktop server only.
       operationId: clearCache
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [casc, browse] }
       responses:
         '200':
           description: Status after the cache was cleared.
@@ -989,6 +1001,94 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/maps/{map}/preview:
+    post:
+      tags: [Maps]
+      summary: Prepare a cached static map preview
+      description: |
+        Desktop only. Reads source ADT/WMO geometry and small texture mipmaps without exporting full models.
+        Returns source-space bounds, column-major placement matrices and NPC floor samples.
+        Asset paths are relative to /api/browse-assets/ and are cached per loaded WoW build.
+        NPCs are included only for maps through Wrath of the Lich King.
+        This is a low-resolution overview; collision terrain is calculated during map export.
+        With progress=1, streams newline-delimited JSON progress events, then a result or error event.
+        Disconnecting cancels preparation; completed per-model cache files remain reusable.
+      operationId: previewMap
+      parameters:
+        - $ref: '#/components/parameters/MapDir'
+        - name: progress
+          in: query
+          schema: { type: integer, enum: [1] }
+          description: Stream stage names and completed/total counts on the same request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MapPreviewRequest'
+      responses:
+        '200':
+          description: Cached source geometry and NPC markers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapPreview'
+            application/x-ndjson:
+              schema:
+                type: object
+                description: One JSON event per line. Progress events precede the final result or error.
+                properties:
+                  progress:
+                    type: object
+                    properties:
+                      message: { type: string }
+                      completed: { type: integer }
+                      total: { type: integer }
+                  result: { $ref: '#/components/schemas/MapPreview' }
+                  error: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+        '409':
+          $ref: '#/components/responses/Error'
+
+  /api/maps/{map}/suggest-clamp:
+    post:
+      tags: [Maps]
+      summary: Suggest a terrain height clamp from selected NPC elevations
+      description: |
+        Desktop only, for maps through Wrath of the Lich King with NPC data.
+        Reuses cached preview metadata and the exporter's clamp algorithm. Does not generate a map.
+        The UI applies the returned fractions to the manual clamp slider.
+      operationId: suggestMapClamp
+      parameters:
+        - $ref: '#/components/parameters/MapDir'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/MapPreviewRequest'
+                - type: object
+                  required: [unitScale]
+      responses:
+        '200':
+          description: Suggested range as fractions of the selected source height span.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lower, upper]
+                properties:
+                  lower: { type: number, minimum: 0, maximum: 1 }
+                  upper: { type: number, minimum: 0, maximum: 1 }
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/DesktopOnly'
+
   /api/maps/{map}/generate-wc3:
     post:
       tags: [Maps]
@@ -1491,6 +1591,7 @@ components:
     CharacterOptimization:
       type: object
       properties:
+        freezeHead: { type: boolean, default: true, description: Freeze head descendants outside portrait animations. }
         sortSequences: { type: boolean, default: true }
         allMaterialsUnshaded: { type: boolean, default: false }
         removeUnusedVertices: { type: boolean, default: true }
@@ -1631,6 +1732,88 @@ components:
         x: { type: integer }
         y: { type: integer }
         hasTexture: { type: boolean }
+    MapPreviewRequest:
+      type: object
+      required: [tiles]
+      properties:
+        tiles:
+          type: array
+          minItems: 1
+          maxItems: 4096
+          items:
+            $ref: '#/components/schemas/TileCoord'
+        unitScale: { type: number, exclusiveMinimum: true, minimum: 0 }
+    PreviewVector:
+      type: array
+      minItems: 3
+      maxItems: 3
+      items: { type: number }
+    MapPreview:
+      type: object
+      required: [assets, instances, npcs, min, max, rawModelScale, groundHeightRange, groundMinZ, waterHeightRange, liquidTypes, warnings]
+      properties:
+        min: { $ref: '#/components/schemas/PreviewVector' }
+        max: { $ref: '#/components/schemas/PreviewVector' }
+        rawModelScale: { type: number }
+        groundHeightRange: { type: number }
+        groundMinZ: { type: number, description: Minimum exported WC3 ground Z. }
+        waterHeightRange:
+          type: array
+          description: Native WC3 water height limits in game Z, before mapping back into source space.
+          minItems: 2
+          maxItems: 2
+          items: { type: number }
+        liquidTypes:
+          type: object
+          description: LiquidType ID to SoundBank; 0 and 1 become native water. Cached per source build.
+          additionalProperties: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+        assets:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              parts:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    mesh: { type: string, description: 'Static triangle buffer, 8 little-endian float32 values per vertex: XYZ, normal XYZ, UV.' }
+                    texture: { type: string, description: Optional PNG thumbnail, at most 512 pixels on its longest side. }
+                    vertices: { type: integer }
+                    liquid:
+                      type: object
+                      description: Optional source liquid geometry with exact masks/heights. Bounds are local to the instance, like the mesh.
+                      properties:
+                        typeId: { type: integer }
+                        min: { $ref: '#/components/schemas/PreviewVector' }
+                        max: { $ref: '#/components/schemas/PreviewVector' }
+        instances:
+          type: array
+          items:
+            type: object
+            properties:
+              asset: { type: string }
+              kind: { type: string, enum: [adt, wmo] }
+              root: { type: boolean, description: Explicit root model, affected by the terrain clamp. ADTs are implicit roots; child WMOs remain unchanged. }
+              transform:
+                type: array
+                minItems: 16
+                maxItems: 16
+                items: { type: number }
+        npcs:
+          type: array
+          items:
+            type: object
+            properties:
+              guid: { type: integer, format: int64 }
+              name: { type: string, description: NPC display name for preview hover labels. }
+              position: { $ref: '#/components/schemas/PreviewVector' }
+              groundZ: { type: number, nullable: true, description: Closest source ADT/WMO collision floor. }
+              terrainZ: { type: number, nullable: true, description: Source ADT floor when collision terrain is disabled. }
     MapGenerateRequest:
       type: object
       required: [tiles, quality, mapSaveName, clampLower, clampUpper, mapAngleDeg, unitScale, freshExport, creatures]
@@ -1643,7 +1826,11 @@ components:
         quality: { type: integer, enum: [0, 512, 1024, 2048, 4096, 8192, 16384] }
         mapSaveName: { type: string }
         clampLower: { type: number, minimum: 0, maximum: 1 }
-        clampUpper: { type: number, minimum: 0, maximum: 1 }
+        clampUpper:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Must be greater than clampLower. The selected height range must keep both terrain dimensions within 480 tiles; oversized maps fail the job with an error.
         autoClampPercent: { type: boolean, default: true }
         includeBuildingInteriors: { type: boolean, default: true }
         placePathBlockers:
@@ -1662,7 +1849,7 @@ components:
               description: Place NPC spawns on the map. Requires spawn data to be installed, or nothing is placed.
             allAreDoodads:
               type: boolean
-              description: Place those NPCs as static scenery instead of units that can be selected.
+              description: Place NPCs as destructibles without pathing, retaining source heights. The legacy allAreDoodads field name is preserved for compatibility.
     MapJob:
       type: object
       properties:

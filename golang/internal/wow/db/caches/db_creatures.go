@@ -108,6 +108,7 @@ func GetCreatureCacheStats() (initialized bool, creatureDisplaysCount, displayID
 
 // ResetCreatureCache clears creature cache.
 func ResetCreatureCache() {
+	resetCreatureSelectionCache()
 	creatureDisplays = make(map[uint32][]ModelDisplay)
 	displayIDToFileDataID = make(map[uint32]uint32)
 	creatureInitialized = false

@@ -108,6 +108,15 @@ func TestParseExportCharacterRequestAppliesOptimizationDefaults(t *testing.T) {
 	if body.Optimization.SortSequences == nil || !*body.Optimization.SortSequences {
 		t.Fatal("sortSequences should default to true")
 	}
+	if body.Optimization.FreezeHead == nil || !*body.Optimization.FreezeHead {
+		t.Fatal("freezeHead should default to true")
+	}
+	raw := validExportCharacterBody()
+	raw["optimization"].(map[string]any)["freezeHead"] = false
+	disabled, issues := parseExportCharacterRequest(raw)
+	if len(issues) > 0 || disabled.Optimization.FreezeHead == nil || *disabled.Optimization.FreezeHead {
+		t.Fatal("explicit freezeHead=false must survive defaults")
+	}
 	if body.Optimization.AllMaterialsUnshaded == nil || *body.Optimization.AllMaterialsUnshaded {
 		t.Fatal("allMaterialsUnshaded should default to false")
 	}
@@ -133,6 +142,9 @@ func TestParseExportCharacterRequestRejectsInvalidContractValues(t *testing.T) {
 		}},
 		{"null optimization flag", func(body map[string]any) {
 			body["optimization"].(map[string]any)["sortSequences"] = nil
+		}},
+		{"invalid freeze head flag", func(body map[string]any) {
+			body["optimization"].(map[string]any)["freezeHead"] = "true"
 		}},
 		{"bad base type", func(body map[string]any) {
 			body["character"].(map[string]any)["base"].(map[string]any)["type"] = "unknown"

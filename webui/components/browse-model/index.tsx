@@ -306,6 +306,7 @@ export default function BrowseModelPage() {
   const [format, setFormat] = useState<ModelFormat>('mdx');
   const [formatVersion, setFormatVersion] = useState<ModelFormatVersion>('1000');
   const [optimization, setOptimization] = useState<Optimization>({
+    freezeHead: true,
     sortSequences: true,
     removeUnusedVertices: true,
     removeUnusedNodes: true,

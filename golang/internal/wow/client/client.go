@@ -60,6 +60,11 @@ type Client interface {
 	FinalizeExportProgress(ctx context.Context, progressKey string) (*casc.ExportProgressSnapshot, error)
 }
 
+// NpcSelectionClient resolves the source client's circle without exporting models.
+type NpcSelectionClient interface {
+	ResolveNpcSelection(ctx context.Context, displayID int, options casc.NpcSelectionOptions) (float64, error)
+}
+
 // DirectListfileClient scans the loaded listfile in-process without copying every entry.
 type DirectListfileClient interface {
 	CollectBrowseFileIndex(ctx context.Context) (models, textures []casc.ListfileEntry, err error)

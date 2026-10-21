@@ -219,15 +219,19 @@ func (w *mapWater) project(ctx context.Context, t data.Terrain) error {
 				// Supply every corner used by a native quad with its nearest source edge
 				// height. Never interpolate towards an unrelated default water height.
 				best := math.Inf(1)
-				for yy := max(0, y-1); yy <= min(w.height-1, y); yy++ {
-					for xx := max(0, x-1); xx <= min(w.width-1, x); xx++ {
+				// Rounded shore flags can also render the adjoining quad. Seed
+				// its outer corners too, so it never slopes to a default height.
+				for yy := max(0, y-2); yy <= min(w.height-1, y+1); yy++ {
+					for xx := max(0, x-2); xx <= min(w.width-1, x+1); xx++ {
 						for _, id := range w.bins[yy*w.width+xx] {
 							c := w.cells[id]
 							if c.bank < 0 || c.bank > 1 {
 								continue
 							}
 							if h, d := waterEdgeHeight(c, px, py); d < best {
-								best, z, found = d, h, true
+								if raw := config.GameZToWaterHeight(h); raw >= 0 && raw <= 0x3fff {
+									best, z, found = d, h, true
+								}
 							}
 						}
 					}
@@ -248,49 +252,36 @@ func (w *mapWater) project(ctx context.Context, t data.Terrain) error {
 			}
 		}
 	}
-	// Native water has one surface per 128-unit quad. Keep wet source samples
-	// covered instead of punching gaps into the surface and patching them with
-	// a second, differently shaded material. Small shores round to this grid.
-	cover := func(px, py float64) {
-		if _, present := nativeWaterHeight(t, px, py); present {
-			return
-		}
-		x, y := int(math.Floor((px-w.ox)/128)), int(math.Floor((py-w.oy)/128))
-		if x == w.width {
-			x--
-		}
-		if y == w.height {
-			y--
-		}
-		if x < 0 || y < 0 || x >= w.width || y >= w.height {
-			return
-		}
-		best, bx, by := math.Inf(1), -1, -1
-		for _, d := range [][2]int{{0, 0}, {1, 0}, {1, 1}, {0, 1}} {
-			xx, yy := x+d[0], y+d[1]
-			if !assigned[yy*(w.width+1)+xx] {
-				continue
-			}
-			if dist := math.Hypot(w.ox+float64(xx)*128-px, w.oy+float64(yy)*128-py); dist < best {
-				best, bx, by = dist, xx, yy
-			}
-		}
-		if bx >= 0 {
-			t.Flags[by][bx] |= uint16(data.TerrainWater)
-			w.report.NativeCorners++
-		}
-	}
-	for y := 0; y < w.height*4; y++ {
+	// A native quad is wet when any positive-area part contains visible source
+	// water. Set all four corners; a nearest-corner/point-sampled mask leaves
+	// dry shoreline notches and misses thin overlaps between sample centers.
+	for y := 0; y < w.height; y++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		for x := 0; x < w.width*4; x++ {
-			px, py := w.ox+(float64(x)+.5)*32, w.oy+(float64(y)+.5)*32
-			ground := config.DataHeightToGameZ(GetTerrainHeight(t, (float64(x)+.5)/float64(w.width*4), (float64(y)+.5)/float64(w.height*4)))
-			if z, _, wet := w.sample(px, py, ground, true); wet {
-				if raw := config.GameZToWaterHeight(z); raw >= 0 && raw <= 0x3fff {
-					cover(px, py)
+		for x := 0; x < w.width; x++ {
+			for _, id := range w.bins[y*w.width+x] {
+				c := w.cells[id]
+				if c.bank < 0 || c.bank > 1 || !waterTouchesWetTerrain(c, w.ox+float64(x)*128, w.oy+float64(y)*128, t) {
+					continue
 				}
+				for _, d := range [][2]int{{0, 0}, {1, 0}, {1, 1}, {0, 1}} {
+					xx, yy := x+d[0], y+d[1]
+					index := yy*(w.width+1) + xx
+					if !assigned[index] {
+						z, _ := waterEdgeHeight(c, w.ox+float64(xx)*128, w.oy+float64(yy)*128)
+						raw := config.GameZToWaterHeight(z)
+						if raw < 0 || raw > 0x3fff {
+							continue
+						}
+						t.WaterHeight[yy][xx], assigned[index] = raw, true
+					}
+					if t.Flags[yy][xx]&uint16(data.TerrainWater) == 0 {
+						t.Flags[yy][xx] |= uint16(data.TerrainWater)
+						w.report.NativeCorners++
+					}
+				}
+				break
 			}
 		}
 	}
@@ -313,10 +304,6 @@ func (w *mapWater) project(ctx context.Context, t data.Terrain) error {
 			continue
 		}
 		center := imath.V3Mean(c.v[0], c.v[2])
-		u, v := (center[0]-w.ox)/(float64(w.width)*128), (center[1]-w.oy)/(float64(w.height)*128)
-		if center[2] > config.DataHeightToGameZ(GetTerrainHeight(t, u, v))+.125 {
-			cover(center[0], center[1])
-		}
 		for _, p := range append(c.v[:], center) {
 			if z, ok := nativeWaterHeight(t, p[0], p[1]); !ok || math.Abs(z-p[2]) > 2 {
 				w.report.ApproximatedCells++
@@ -325,6 +312,79 @@ func (w *mapWater) project(ctx context.Context, t data.Terrain) error {
 		}
 	}
 	return nil
+}
+
+// Clip each source triangle to the native XY quad and encodable water range.
+// The difference between planar water and bilinear terrain has no interior
+// maximum; along each polygon edge it is quadratic. Checking its extrema
+// detects even a tiny wet shoreline sliver while leaving an upper bridge dry.
+func waterTouchesWetTerrain(c waterCell, x0, y0 float64, t data.Terrain) bool {
+	gap := func(p imath.Vector3) float64 {
+		u := (p[0] - float64(t.Map.Offset.X)) / (float64(t.Map.Width) * 128)
+		v := (p[1] - float64(t.Map.Offset.Y)) / (float64(t.Map.Height) * 128)
+		return p[2] - config.DataHeightToGameZ(GetTerrainHeight(t, u, v))
+	}
+	limits := [6]struct {
+		axis        int
+		value, sign float64
+	}{{0, x0, 1}, {0, x0 + 128, -1}, {1, y0, 1}, {1, y0 + 128, -1}, {2, config.WaterHeightToGameZ(0), 1}, {2, config.WaterHeightToGameZ(0x3fff), -1}}
+	for _, ids := range [][3]int{{0, 1, 2}, {0, 2, 3}} {
+		var buffers [2][12]imath.Vector3
+		for i, id := range ids {
+			buffers[0][i] = c.v[id]
+		}
+		n := 3
+		for i, limit := range limits {
+			if n == 0 {
+				break
+			}
+			in, out := &buffers[i%2], &buffers[(i+1)%2]
+			next := 0
+			a := in[n-1]
+			da := (a[limit.axis] - limit.value) * limit.sign
+			for _, b := range in[:n] {
+				db := (b[limit.axis] - limit.value) * limit.sign
+				if (da >= 0) != (db >= 0) {
+					out[next] = imath.V3Sum(a, imath.V3Scale(imath.V3Sub(b, a), da/(da-db)))
+					next++
+				}
+				if db >= 0 {
+					out[next] = b
+					next++
+				}
+				a, da = b, db
+			}
+			n = next
+		}
+		if n < 3 {
+			continue
+		}
+		p := buffers[0][:n]
+		area := 0.
+		for i, a := range p {
+			b := p[(i+1)%n]
+			area += (a[0]-x0)*(b[1]-y0) - (b[0]-x0)*(a[1]-y0)
+		}
+		if math.Abs(area) < 1e-9 {
+			continue
+		}
+		for i, a := range p {
+			b := p[(i+1)%n]
+			d0, d1, mid := gap(a), gap(b), gap(imath.V3Mean(a, b))
+			if max(d0, d1) > .125 {
+				return true
+			}
+			qa := 2 * (d0 + d1 - 2*mid)
+			if qa < 0 {
+				qb := d1 - d0 - qa
+				u := -qb / (2 * qa)
+				if u > 0 && u < 1 && d0+qb*u+qa*u*u > .125 {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func nativeWaterHeight(t data.Terrain, px, py float64) (float64, bool) {

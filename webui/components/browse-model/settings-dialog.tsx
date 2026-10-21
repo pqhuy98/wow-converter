@@ -3,7 +3,7 @@
 import { Settings } from 'lucide-react';
 import { useRef } from 'react';
 
-import { BakeTexturesButton } from '@/components/character-converter/optimization-options';
+import { BakeTexturesButton, FreezeHeadOption } from '@/components/character-converter/optimization-options';
 import { BasicCharacterConfig } from '@/components/common/basic-character-config';
 import { TooltipHelp } from '@/components/common/tooltip-help';
 import { Button } from '@/components/ui/button';
@@ -32,8 +32,8 @@ export function SettingsDialogButton({
   setFormat,
   formatVersion,
   setFormatVersion,
-  optimization: _optimization,
-  setOptimization: _setOptimization,
+  optimization,
+  setOptimization,
   textureBaking,
   setTextureBaking,
   disabled,
@@ -58,7 +58,7 @@ export function SettingsDialogButton({
   }) {
   const snapshotRef = useRef('');
   const settingsSnapshot = JSON.stringify({
-    character, format, formatVersion, textureBaking,
+    character, format, formatVersion, textureBaking, optimization,
   });
 
   return (
@@ -118,7 +118,10 @@ export function SettingsDialogButton({
           </div>
         </div>
 
-        <BakeTexturesButton textureBaking={textureBaking} setTextureBaking={setTextureBaking} />
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <BakeTexturesButton textureBaking={textureBaking} setTextureBaking={setTextureBaking} />
+          <FreezeHeadOption optimization={optimization} setOptimization={setOptimization} />
+        </div>
       </DialogContent>
     </Dialog>
   );

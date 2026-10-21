@@ -309,6 +309,7 @@ func (a *AssetManager) ExportModels(ctx context.Context, assetPath string) error
 				return nil
 			}
 			mdlModel := model.MDL
+			mdlModel.Modify.ReduceKeyFramesConservative()
 			if mdlModel.Model.BoundsRadius > a.config.InfiniteExtentBoundRadiusThreshold {
 				mdlModel.Modify.SetLargeBounds()
 			}

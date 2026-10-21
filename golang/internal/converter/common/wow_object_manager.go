@@ -47,6 +47,9 @@ type WowObjectManager struct {
 	Roots        []*WowObject
 }
 
+// RawModelScale is the source-yards-to-model conversion used by this tree.
+func (m *WowObjectManager) RawModelScale() float64 { return m.config.RawModelScaleUp }
+
 // NewWowObjectManager creates a manager.
 func NewWowObjectManager(cfg config.Config, wowClient client.Client, tileRegistry *TileRegistry) *WowObjectManager {
 	return &WowObjectManager{

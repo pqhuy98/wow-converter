@@ -47,12 +47,19 @@ type CreatureTemplate struct {
 type CreatureTemplateModel struct {
 	CreatureDisplayID int
 	DisplayScale      float64
+	BoundingRadius    float64
+	CombatReach       float64
+	SelectionRadius   *float64
 }
 
 // ItemTemplate holds item metadata for equipment.
 type ItemTemplate struct {
 	Entry         int
 	InventoryType int
+	Class         int
+	Subclass      int
+	SoundSubclass int
+	Delay         int
 }
 
 // Equipment holds optional equipped items.
@@ -68,6 +75,16 @@ type Creature struct {
 	Template  CreatureTemplate
 	Equipment *Equipment
 	Model     CreatureTemplateModel
+	Gameplay  *CreatureGameplay
+}
+
+// CreatureDataRevision invalidates derived previews when the bundled world data changes.
+func CreatureDataRevision() string {
+	info, err := os.Stat(resolveDatabasePath())
+	if err != nil {
+		return "missing"
+	}
+	return fmt.Sprintf("%d-%d", info.Size(), info.ModTime().UnixNano())
 }
 
 func resolveDatabasePath() string {
@@ -211,6 +228,9 @@ func queryCreatures(db *sql.DB, mapID int, tileXY [2]int) ([]Creature, error) {
 		}
 		out = append(out, c)
 	}
+	if err := enrichCreatures(db, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -264,7 +284,7 @@ func loadModels(db *sql.DB, ids map[int]struct{}) map[int]CreatureTemplateModel 
 	if len(ids) == 0 {
 		return out
 	}
-	query := "SELECT CreatureID, CreatureDisplayID, DisplayScale FROM creature_template_model WHERE CreatureID IN (" + intSetSQL(ids) + ")"
+	query := "SELECT CreatureID, CreatureDisplayID, DisplayScale FROM creature_template_model WHERE CreatureID IN (" + intSetSQL(ids) + ") ORDER BY CreatureID, Idx"
 	rows, err := db.Query(query)
 	if err != nil {
 		return out
@@ -286,7 +306,7 @@ func loadEquipment(db *sql.DB, ids map[int]struct{}) map[int]equipRow {
 	if len(ids) == 0 {
 		return out
 	}
-	query := "SELECT CreatureID, ItemID1, ItemID2, ItemID3 FROM creature_equip_template WHERE CreatureID IN (" + intSetSQL(ids) + ")"
+	query := "SELECT CreatureID, ItemID1, ItemID2, ItemID3 FROM creature_equip_template WHERE CreatureID IN (" + intSetSQL(ids) + ") ORDER BY CreatureID, ID"
 	rows, err := db.Query(query)
 	if err != nil {
 		return out

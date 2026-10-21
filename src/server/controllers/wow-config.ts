@@ -72,8 +72,8 @@ export function ControllerWowConfig(router: Router): void {
   router.get('/wow-config/cache-size', async (_req, res, next) => {
     try {
       assertDesktopOnly();
-      const bytes = await getProjectCacheDirSize();
-      res.json({ bytes });
+      const [casc, browse] = await Promise.all([getProjectCacheDirSize('casc'), getProjectCacheDirSize('browse')]);
+      res.json({ bytes: casc + browse, casc, browse });
     } catch (e) {
       const err = e as Error;
       if (desktopOnlyStatus(err) === 403) {
@@ -84,10 +84,15 @@ export function ControllerWowConfig(router: Router): void {
     }
   });
 
-  router.post('/wow-config/clear-cache', async (_req, res) => {
+  router.post('/wow-config/clear-cache', async (req, res) => {
     try {
       assertDesktopOnly();
-      await clearProjectCacheDir();
+      const kind = req.body?.kind;
+      if (kind !== 'casc' && kind !== 'browse') {
+        res.status(400).json({ error: 'cache kind must be casc or browse' });
+        return;
+      }
+      await clearProjectCacheDir(kind);
       res.json(await getWowConfigStatus());
     } catch (e) {
       const err = e as Error;

@@ -19,6 +19,7 @@ import {
 import { Switch } from '../ui/switch';
 
 const tooltips = {
+  freezeHead: 'Keep facial and other head-child bones still outside Portrait animations to reduce file size. Head turns and portrait expressions stay animated. May also freeze ear and hair motion.',
   allMaterialsUnshaded: 'Force all materials to be marked as Unshaded.',
   maxTextureSize: 'Downscale texture images that are larger than this value; smaller ones stay unchanged. Select "Original" to leave textures size unchanged. This is useful to reduce file size, but will decrease visual quality when looking closely. 256px is acceptable for most unit models in Warcraft 3\'s RTS top-down view.',
   bakeTextures: 'Turn this on for advanced WoW models whose flames, glows, or scrolling patterns look wrong in Warcraft III — for example Firehawk flames. Off is faster and keeps files small; most models do not need it.',
@@ -175,6 +176,22 @@ export function BakeTexturesButton({ textureBaking, setTextureBaking }: {
   );
 }
 
+export function FreezeHeadOption({ optimization, setOptimization }: {
+  optimization: Optimization
+  setOptimization: (value: Optimization) => void
+}) {
+  return (
+    <div className="flex items-center space-x-2">
+      <Checkbox id="freezeHead" checked={optimization.freezeHead ?? true}
+        onCheckedChange={(checked) => setOptimization({ ...optimization, freezeHead: checked === true })} />
+      <Label htmlFor="freezeHead" className="text-sm flex items-center gap-2">
+        Freeze head outside portraits
+        <TooltipHelp tooltips={tooltips.freezeHead}/>
+      </Label>
+    </div>
+  );
+}
+
 export function OptimizationOptions({
   optimization, setOptimization, textureBaking, setTextureBaking,
 }: {
@@ -220,6 +237,7 @@ export function OptimizationOptions({
             </SelectContent>
           </Select>
         </div>
+        <FreezeHeadOption optimization={optimization} setOptimization={setOptimization} />
       </div>
     </div>
   );

@@ -308,7 +308,7 @@ export default function MapViewer() {
         mapSaveName: normalizeMapSaveName(form.mapSaveName),
         clampLower: form.clampLower,
         clampUpper: form.clampUpper,
-        autoClampPercent: form.autoClampPercent,
+        autoClampPercent: false,
         mapAngleDeg: form.mapAngleDeg,
         unitScale: form.unitScale,
         includeBuildingInteriors: form.includeBuildingInteriors,

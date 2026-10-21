@@ -65,6 +65,13 @@ func (e *MapExporter) saveStartupScripts(ctx context.Context, templateDir, outpu
 			}
 			call.WriteString(")")
 			raw = regexp.MustCompile(`(?m)^SetCameraBounds\([^\r\n]*\)`).ReplaceAllLiteral(raw, []byte(call.String()))
+			for _, player := range e.MapManager.Info.Players {
+				if player.PlayerNum == 0 {
+					start := fmt.Sprintf("DefineStartLocation(0, %.9g, %.9g)", player.StartingPos.X, player.StartingPos.Y)
+					raw = regexp.MustCompile(`(?m)^DefineStartLocation\(0,[^\r\n]*\)`).ReplaceAllLiteral(raw, []byte(start))
+					break
+				}
+			}
 			raw = windowsNewlines(raw)
 		}
 		if err != nil {

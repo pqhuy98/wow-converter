@@ -5,13 +5,11 @@ import { wowDataClient } from '@/lib/wow-data-client/wow-data-client';
 
 import { resetWowConfig } from './wow-config-service';
 
-/** Total byte size of files under the repo `.cache` directory. */
-export async function getProjectCacheDirSize(): Promise<number> {
-  const cacheDir = path.resolve('.cache');
-  if (!(await fs.pathExists(cacheDir))) {
-    return 0;
-  }
+type CacheKind = 'casc' | 'browse';
+const cacheDirectories = { casc: '.cache', browse: 'exported-assets-browse' };
 
+/** Total byte size of the selected cache. */
+export async function getProjectCacheDirSize(kind: CacheKind): Promise<number> {
   let total = 0;
   const walk = async (dir: string): Promise<void> => {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -24,24 +22,25 @@ export async function getProjectCacheDirSize(): Promise<number> {
       total += (await fs.stat(fullPath)).size;
     }));
   };
-  await walk(cacheDir);
+  const cacheDir = path.resolve(cacheDirectories[kind]);
+  if (await fs.pathExists(cacheDir)) {
+    await walk(cacheDir);
+  }
   return total;
 }
 
-/** Unload WoW data and delete all files under the repo `.cache` directory. */
-export async function clearProjectCacheDir(): Promise<void> {
-  await resetWowConfig();
+/** Clear one cache; unload WoW data only for CASC cleanup. */
+export async function clearProjectCacheDir(kind: CacheKind): Promise<void> {
+  if (kind === 'casc') await resetWowConfig();
 
-  const cacheDir = path.resolve('.cache');
-  if (await fs.pathExists(cacheDir)) {
-    await fs.rm(cacheDir, {
-      recursive: true,
-      force: true,
-      maxRetries: 5,
-      retryDelay: 200,
-    });
-  }
+  const cacheDir = path.resolve(cacheDirectories[kind]);
+  await fs.rm(cacheDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 200,
+  });
   await fs.mkdir(cacheDir, { recursive: true });
 
-  wowDataClient.clearRuntimeCaches();
+  if (kind === 'casc') wowDataClient.clearRuntimeCaches();
 }

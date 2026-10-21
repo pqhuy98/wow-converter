@@ -87,9 +87,9 @@ func TestStormwindCollisionTerrain(t *testing.T) {
 	}
 	assertSavedBlockers(t, result.OutputDir, mapData, wpm[16:], r.Width, r.Height)
 	npcTypes := map[string]bool{}
-	for _, typ := range mapData.DoodadTypes {
+	for _, typ := range mapData.DestructibleTypes {
 		for _, field := range typ.Data {
-			if field.ID == "dfil" {
+			if field.ID == "bfil" {
 				if model, ok := field.Value.(string); ok && strings.HasPrefix(model, "creature-") {
 					npcTypes[typ.Code] = true
 					if _, err := os.Stat(filepath.Join(result.OutputDir, model)); err != nil {
@@ -106,8 +106,8 @@ func TestStormwindCollisionTerrain(t *testing.T) {
 		}
 	}
 	if npcs == 0 {
-		t.Fatal("generated map must contain actual NPC doodad definitions, placements and model assets")
+		t.Fatal("generated map must contain actual NPC destructible definitions, placements and model assets")
 	}
-	t.Logf("verified %d NPC doodad placements across %d types", npcs, len(npcTypes))
+	t.Logf("verified %d NPC destructible placements across %d types", npcs, len(npcTypes))
 	t.Logf("Stormwind map: %s\n%s", filepath.Join(workspace.FindRepoRoot(), "maps", "navigation-stormwind.w3x"), b)
 }

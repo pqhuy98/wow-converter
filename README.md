@@ -67,7 +67,7 @@ bun run dev
 
 The legacy TS server remains available as `bun run dev:ts` for wrapper-library compatibility work.
 
-For module ownership, the conversion flow, and choosing development checks, see [architecture and verification](docs/architecture.md). Read [AGENTS.md](AGENTS.md) before agent-assisted changes.
+Use the [documentation index](docs/README.md) for map generation, animation optimization, texture baking, and development checks. [Architecture](docs/architecture.md) describes module ownership and conversion boundaries. Read [AGENTS.md](AGENTS.md) before agent-assisted changes.
 
 ### API checks
 

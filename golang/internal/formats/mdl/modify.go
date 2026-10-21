@@ -23,6 +23,7 @@ func (mod *Modify) OptimizeAll() *Modify {
 	mod.RemoveUnusedNodes()
 	mod.RemoveUnusedMaterialsTextures()
 	mod.OptimizeKeyFrames()
+	mod.ReduceKeyFramesConservative()
 	mod.MDL.Sync()
 	return mod
 }

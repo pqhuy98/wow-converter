@@ -19,8 +19,6 @@ end
 
 function Trig_LUA_map_init_Actions()
     BlzChangeMinimapTerrainTex("minimap.blp")
-    CinematicFadeBJ(bj_CINEFADETYPE_FADEOUT, 0, "ReplaceableTextures\\CameraMasks\\White_mask.blp", 0, 0, 0, 0)
-    EnableUserControl(false)
 end
 
 function InitTrig_LUA_map_init()
@@ -36,6 +34,8 @@ function Trig_LUA_0s_elapse_Actions()
     -- WOW_CONVERTER_PRELOAD_LOCATIONS_BEGIN
     local locations = {}
     -- WOW_CONVERTER_PRELOAD_LOCATIONS_END
+    CinematicFadeBJ(bj_CINEFADETYPE_FADEOUT, 0, "ReplaceableTextures\\CameraMasks\\White_mask.blp", 0, 0, 0, 0)
+    EnableUserControl(false)
     local cameraX, cameraY = GetCameraTargetPositionX(), GetCameraTargetPositionY()
     local fields = {CAMERA_FIELD_TARGET_DISTANCE, CAMERA_FIELD_FARZ, CAMERA_FIELD_ANGLE_OF_ATTACK, CAMERA_FIELD_FIELD_OF_VIEW, CAMERA_FIELD_ROLL, CAMERA_FIELD_ROTATION, CAMERA_FIELD_ZOFFSET}
     local values = {}
@@ -45,14 +45,46 @@ function Trig_LUA_0s_elapse_Actions()
     local minX, minY = GetCameraBoundMinX(), GetCameraBoundMinY()
     local maxX, maxY = GetCameraBoundMaxX(), GetCameraBoundMaxY()
     SetCameraBoundsToRect(GetWorldBounds())
+
+    -- ICC screen projection, evaluated on the live camera focus plane.
+    -- The seabed can stay off screen after the camera reaches water above it.
+    -- Fog visibility is unrelated; camera fields here are already radians.
+    local function isLocInScreen(x, y)
+        local z = GetCameraTargetPositionZ()
+        local attack = -GetCameraField(CAMERA_FIELD_ANGLE_OF_ATTACK)
+        local fov = GetCameraField(CAMERA_FIELD_FIELD_OF_VIEW)
+        local rotation = GetCameraField(CAMERA_FIELD_ROTATION) + math.pi
+        local cosAttack, sinAttack = math.cos(attack), math.sin(attack)
+        local cosRot, sinRot = math.cos(rotation), math.sin(rotation)
+        local dx = x - GetCameraEyePositionX()
+        local dy = y - GetCameraEyePositionY()
+        local dz = z - GetCameraEyePositionZ()
+        local xPrime = cosAttack * cosRot * dx + cosAttack * sinRot * dy + sinAttack * dz
+        local yPrime = -sinRot * dx + cosRot * dy
+        local zPrime = -cosRot * sinAttack * dx - sinRot * sinAttack * dy + cosAttack * dz
+        local scaling = 1.04 / (2 * math.tan(fov / 2))
+        local screenX = 0.4 - scaling * yPrime / xPrime
+        local screenY = 0.355 - scaling * zPrime / xPrime
+        local aspect = BlzGetLocalClientWidth() / BlzGetLocalClientHeight()
+        local halfWidth = 0.4
+        if aspect > 4 / 3 then
+            halfWidth = halfWidth * aspect / (4 / 3)
+        end
+        return screenX >= 0.4 - halfWidth and screenX <= 0.4 + halfWidth
+            and screenY >= 0 and screenY <= 0.6
+    end
+
     local index = 1
     local timer = CreateTimer()
-    TimerStart(timer, 0.10, true, function()
-        local loc = locations[index]
-        if loc then
-            SetCameraPosition(loc[1], loc[2])
+    local function step()
+        -- Match waitUntil(0.02): test immediately, sleep only while off screen.
+        while locations[index] do
+            local loc = locations[index]
+            PanCameraToTimed(loc[1], loc[2], 0)
+            if not isLocInScreen(loc[1], loc[2]) then
+                return
+            end
             index = index + 1
-            return
         end
         DestroyTimer(timer)
         SetCameraBounds(minX, minY, maxX, maxY, minX, maxY, maxX, minY)
@@ -66,12 +98,15 @@ function Trig_LUA_0s_elapse_Actions()
         SetCameraPosition(cameraX, cameraY)
         EnableUserControl(true)
         CinematicFadeBJ(bj_CINEFADETYPE_FADEIN, 0.50, "ReplaceableTextures\\CameraMasks\\White_mask.blp", 0, 0, 0, 0)
-    end)
+    end
+    TimerStart(timer, 0.02, true, step)
+    step()
 end
 
 function InitTrig_LUA_0s_elapse()
     gg_trg_LUA_0s_elapse = CreateTrigger()
-    TriggerRegisterTimerEventSingle(gg_trg_LUA_0s_elapse, 0.00)
+    -- Apply the black filter and capture the camera after startup, together.
+    TriggerRegisterTimerEventSingle(gg_trg_LUA_0s_elapse, 0.10)
     TriggerAddAction(gg_trg_LUA_0s_elapse, Trig_LUA_0s_elapse_Actions)
 end
 

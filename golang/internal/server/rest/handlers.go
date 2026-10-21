@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -285,7 +286,18 @@ func (h *Handler) ResolveNpcDisplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := service.ResolveNpcDisplayMeta(r.Context(), displayID)
+	var selection []casc.NpcSelectionOptions
+	if r.URL.Query().Get("selection") == "1" {
+		family, familyErr := strconv.Atoi(r.URL.Query().Get("family"))
+		level, levelErr := strconv.Atoi(r.URL.Query().Get("level"))
+		scale, scaleErr := strconv.ParseFloat(r.URL.Query().Get("objectScale"), 64)
+		if familyErr != nil || levelErr != nil || scaleErr != nil || family < 0 || level < 0 || scale <= 0 || math.IsNaN(scale) || math.IsInf(scale, 0) {
+			sendJSON(w, http.StatusBadRequest, map[string]any{"id": "ERR_INVALID_PARAMETERS"})
+			return
+		}
+		selection = append(selection, casc.NpcSelectionOptions{Family: family, Level: level, ObjectScale: scale})
+	}
+	meta, err := service.ResolveNpcDisplayMeta(r.Context(), displayID, selection...)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]any{
 			"id":      "ERR_INTERNAL",
@@ -295,11 +307,12 @@ func (h *Handler) ResolveNpcDisplay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendJSON(w, http.StatusOK, map[string]any{
-		"id":       "NPC_DISPLAY_META",
-		"found":    meta.Found,
-		"model":    meta.Model,
-		"textures": meta.Textures,
-		"geosets":  meta.Geosets,
+		"id":              "NPC_DISPLAY_META",
+		"found":           meta.Found,
+		"model":           meta.Model,
+		"textures":        meta.Textures,
+		"geosets":         meta.Geosets,
+		"selectionRadius": meta.SelectionRadius,
 	})
 }
 
