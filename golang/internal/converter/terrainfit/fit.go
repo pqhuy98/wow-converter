@@ -19,6 +19,7 @@ type rgb [3]float32
 type sheet struct {
 	pixels []byte
 	low    [32][sampleCount]rgb
+	detail []float64 // source material height, for export transition contours
 }
 type fit struct {
 	width, height int
@@ -29,6 +30,7 @@ type fit struct {
 	sheets        []sheet
 	colors        []rgb
 	sequential    bool // newer candidates use each overlay's own alpha
+	materialCount int  // paint dimensions; optional circular phase features follow
 }
 
 type layers struct {

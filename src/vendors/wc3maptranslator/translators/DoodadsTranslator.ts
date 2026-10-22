@@ -72,7 +72,7 @@ export class DoodadsTranslator implements Translator<DoodadList> {
       outBufferToWar.addFloat(tree.scale[2] != null ? tree.scale[2] : 1);
 
       outBufferToWar.addChars(tree.skinId || tree.type);
-      if (formatVersion >= 12) outBufferToWar.addInt(tree.groupId ?? 0);
+      if (formatVersion >= 12) outBufferToWar.addInt(tree.groupId ?? -1);
 
       // Tree flags
       /* | Visible | Solid | Flag value |

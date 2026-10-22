@@ -25,6 +25,8 @@ func main() {
 	outFlag := flag.String("out", "exported-assets/terrain-benchmark", "output directory relative to repository")
 	sourceFlag := flag.String("source", "", "reuse captures from this directory (default OUT/source)")
 	mode := flag.String("mode", "all", "capture, materials, material-fit, fit, refine, views, or all")
+	paintFamilies := flag.Int("paint-families", 0, "material-fit: production export paint budget (1..63); 0 keeps historical candidate")
+	onlyRegion := flag.String("region", "", "capture or evaluate one configured region, preserving the other reports")
 	materialRegion := flag.String("material-region", "", "limit material-fit to one named benchmark region")
 	viewRegion := flag.String("view-region", "", "limit browser captures to one named benchmark region")
 	flag.Parse()
@@ -50,11 +52,30 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	regions := []terrainfit.Region{
+	configuredRegions := []terrainfit.Region{
 		{Name: "Azeroth-34_28-36_29", Map: "Azeroth", MapID: 0, X0: 34, Y0: 28, X1: 36, Y1: 29},
 		{Name: "Azeroth-32_48-32_49", Map: "Azeroth", MapID: 0, X0: 32, Y0: 48, X1: 32, Y1: 49},
 		{Name: "Northrend-27_17-29_18", Map: "Northrend", MapID: 571, X0: 27, Y0: 17, X1: 29, Y1: 18},
 		{Name: "Northrend-29_15-31_16", Map: "Northrend", MapID: 571, X0: 29, Y0: 15, X1: 31, Y1: 16},
+		{Name: "Voidstorm-32_27-33_29", Map: "2771", MapID: 2771, X0: 32, Y0: 27, X1: 33, Y1: 29},
+	}
+	regions := configuredRegions
+	if *onlyRegion != "" {
+		regions = nil
+		for _, region := range configuredRegions {
+			if region.Name == *onlyRegion {
+				regions = append(regions, region)
+			}
+		}
+		if len(regions) == 0 {
+			log.Fatalf("unknown region: %s", *onlyRegion)
+		}
+		if *materialRegion == "" {
+			*materialRegion = *onlyRegion
+		}
+		if *viewRegion == "" {
+			*viewRegion = *onlyRegion
+		}
 	}
 	if *mode != "all" && *mode != "capture" && *mode != "materials" && *mode != "material-fit" && *mode != "fit" && *mode != "refine" && *mode != "views" {
 		log.Fatal("unknown mode")
@@ -119,7 +140,7 @@ func main() {
 		}
 	}
 	if *mode == "material-fit" || *mode == "all" {
-		if err = terrainfit.MaterialBenchmark(ctx, out, sourceRoot, *materialRegion); err != nil {
+		if err = terrainfit.MaterialBenchmark(ctx, out, sourceRoot, *materialRegion, *paintFamilies); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -128,7 +149,22 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	data, err := json.MarshalIndent(regions, "", "  ")
+	// A new focused output has no reports for the other configured cases yet.
+	// Keep completed cases in an existing evaluation without making refinement
+	// require unrequested cases in a fresh directory.
+	if *onlyRegion != "" {
+		configured := configuredRegions
+		configuredRegions = nil
+		for _, region := range configured {
+			_, err := os.Stat(filepath.Join(out, region.Name, "report.json"))
+			if region.Name == *onlyRegion || err == nil {
+				configuredRegions = append(configuredRegions, region)
+			} else if !os.IsNotExist(err) {
+				log.Fatal(err)
+			}
+		}
+	}
+	data, err := json.MarshalIndent(configuredRegions, "", "  ")
 	if err != nil {
 		log.Fatal(err)
 	}

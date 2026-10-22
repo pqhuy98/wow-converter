@@ -5,8 +5,6 @@ function InitGlobals()
 end
 
 function Trig_Melee_Initialization_Actions()
-BlzShowTerrain(false)
-CreateFogModifierRectBJ(true, Player(0), FOG_OF_WAR_VISIBLE, GetPlayableMapRect())
 end
 
 function InitTrig_Melee_Initialization()
@@ -25,7 +23,6 @@ function InitTrig_LUA_map_init()
     gg_trg_LUA_map_init = CreateTrigger()
     TriggerAddAction(gg_trg_LUA_map_init, Trig_LUA_map_init_Actions)
 end
-
 
 function InitTrig_LUA_0s_elapse()
 end
@@ -109,7 +106,6 @@ function InitTrig_LUA_0s_elapse()
     TriggerRegisterTimerEventSingle(gg_trg_LUA_0s_elapse, 0.10)
     TriggerAddAction(gg_trg_LUA_0s_elapse, Trig_LUA_0s_elapse_Actions)
 end
-
 
 function InitCustomTriggers()
 InitTrig_Melee_Initialization()

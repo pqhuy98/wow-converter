@@ -10,6 +10,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	creature "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/creature"
+	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
 )
 
 const preloadLocationsStart = "-- WOW_CONVERTER_PRELOAD_LOCATIONS_BEGIN"
@@ -42,15 +45,18 @@ func (e *MapExporter) saveStartupScripts(ctx context.Context, templateDir, outpu
 		}
 		if name == "war3map.wct" {
 			raw, err = rewriteCustomTriggerText(raw, func(script []byte) ([]byte, error) {
-				script, err := injectPreloadLocations(script, payload)
+				script, err := e.prepareTerrainStartup(script, payload)
 				if err != nil {
 					return nil, err
 				}
-				return windowsNewlines(script), nil
+				script = creature.InjectFactionAlliances(script, e.factions)
+				return windowsNewlines(creature.InjectCreatureDeathSounds(script, e.deathSounds)), nil
 			})
 		} else if name == "war3map.lua" {
-			raw, err = injectPreloadLocations(raw, payload)
+			raw, err = e.prepareTerrainStartup(raw, payload)
 			if err == nil {
+				raw = creature.InjectFactionAlliances(raw, e.factions)
+				raw = creature.InjectCreatureDeathSounds(raw, e.deathSounds)
 				raw, err = injectUnitCreation(raw, e.MapManager.MapData.Units)
 			}
 			// InitBlizzard reads these bounds before the initialization
@@ -65,26 +71,26 @@ func (e *MapExporter) saveStartupScripts(ctx context.Context, templateDir, outpu
 			}
 			call.WriteString(")")
 			raw = regexp.MustCompile(`(?m)^SetCameraBounds\([^\r\n]*\)`).ReplaceAllLiteral(raw, []byte(call.String()))
-			for _, player := range e.MapManager.Info.Players {
-				if player.PlayerNum == 0 {
-					start := fmt.Sprintf("DefineStartLocation(0, %.9g, %.9g)", player.StartingPos.X, player.StartingPos.Y)
-					raw = regexp.MustCompile(`(?m)^DefineStartLocation\(0,[^\r\n]*\)`).ReplaceAllLiteral(raw, []byte(start))
-					break
-				}
+			if err == nil {
+				raw, err = creature.ConfigureFactionScript(raw, e.MapManager, e.factions)
 			}
 			raw = windowsNewlines(raw)
 		}
 		if err != nil {
 			return fmt.Errorf("prepare %s: %w", name, err)
 		}
-		if name != "war3map.wtg" && !bytes.Contains(raw, []byte(payload)) {
+		if name != "war3map.wtg" && !e.MapExportConfig.TerrainAsWc3Tilesets && !bytes.Contains(raw, []byte(payload)) {
 			return fmt.Errorf("%s is missing preload location markers", name)
 		}
 		if err := os.WriteFile(filepath.Join(outputDir, name), raw, 0o644); err != nil {
 			return err
 		}
 	}
-	if err := ensureMinimapImport(outputDir); err != nil {
+	imports := []string{"minimap.blp"}
+	for _, path := range e.deathSounds {
+		imports = append(imports, strings.ReplaceAll(path, "/", `\`))
+	}
+	if err := extra.EnsureCustomImports(outputDir, imports); err != nil {
 		return err
 	}
 	// A cached export from the former JASS template must not keep both scripts.
@@ -94,36 +100,21 @@ func (e *MapExporter) saveStartupScripts(ctx context.Context, templateDir, outpu
 	return nil
 }
 
-func ensureMinimapImport(outputDir string) error {
-	path := filepath.Join(outputDir, "war3map.imp")
-	raw, err := os.ReadFile(path)
+func (e *MapExporter) prepareTerrainStartup(script []byte, locations string) ([]byte, error) {
+	if e.MapExportConfig.TerrainAsWc3Tilesets {
+		// Keep the template trigger registered, but skip the entire camera/fade
+		// preload action in native terrain mode, including after an editor save.
+		action := regexp.MustCompile(`(?ms)^function Trig_LUA_0s_elapse_Actions\(\)\r?\n.*?^end\b`)
+		return action.ReplaceAllLiteral(script, []byte("function Trig_LUA_0s_elapse_Actions()\r\nend")), nil
+	}
+	script, err := injectPreloadLocations(script, locations)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(raw) < 8 {
-		return fmt.Errorf("truncated map import list")
-	}
-	count := binary.LittleEndian.Uint32(raw[4:])
-	pos := 8
-	for i := uint32(0); i < count; i++ {
-		if pos >= len(raw) {
-			return fmt.Errorf("truncated map import entry")
-		}
-		flag := raw[pos]
-		pos++
-		end := bytes.IndexByte(raw[pos:], 0)
-		if end < 0 {
-			return fmt.Errorf("unterminated map import path")
-		}
-		if string(raw[pos:pos+end]) == "minimap.blp" && flag&0xf == 13 {
-			return nil
-		}
-		pos += end + 1
-	}
-	binary.LittleEndian.PutUint32(raw[4:], count+1)
-	raw = append(raw, 13) // Custom path, relative to the map root.
-	raw = append(raw, "minimap.blp\x00"...)
-	return os.WriteFile(path, raw, 0o644)
+	init := []byte("function Trig_LUA_map_init_Actions()")
+	setup := append([]byte(nil), init...)
+	setup = append(setup, "\r\n    BlzShowTerrain(false)\r\n    FogMaskEnable(false)\r\n    FogEnable(false)"...)
+	return bytes.ReplaceAll(script, init, setup), nil
 }
 
 // World Editor custom-text triggers store Windows newlines. Same as the

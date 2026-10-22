@@ -11,7 +11,7 @@ import { TooltipHelp } from '@/components/common/tooltip-help';
 import { Button } from '@/components/ui/button';
 import type { GenerateWc3FormValues } from '@/lib/models/map-generate.model';
 import type { MapPreviewData } from '@/lib/models/map-preview.model';
-import { previewNPCPlacement, previewNPCScaleWarning, previewWaterLevels } from '@/lib/models/map-preview.model';
+import { previewMapSize, previewNPCPlacement, previewWaterLevels } from '@/lib/models/map-preview.model';
 
 import type { MapPreviewHit } from './map-export-preview-viewer';
 import { MapExportPreviewViewer } from './map-export-preview-viewer';
@@ -44,7 +44,7 @@ export function MapExportPreview({
     return result;
   }, [data, values]);
   const water = useMemo(() => data && previewWaterLevels(data, values), [data, values]);
-  const scaleWarning = useMemo(() => data && previewNPCScaleWarning(data, values), [data, values]);
+  const mapSize = data && previewMapSize(data, values);
 
   const clearHover = () => {
     if (hoverFrame.current) cancelAnimationFrame(hoverFrame.current);
@@ -112,17 +112,15 @@ export function MapExportPreview({
         }}
       />
       <div className="pointer-events-none absolute left-4 right-24 top-4 w-fit max-w-[calc(100%-7rem)] rounded-md bg-black/75 px-4 py-3 text-base leading-6 text-slate-100">
-        <div className="font-semibold">Adjust terrain clamp to select playable areas.</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 font-semibold">
+          <span>Adjust terrain clamp to select playable areas.</span>
+          {mapSize && <span className="tabular-nums">WC3 map size: {mapSize.width} x {mapSize.height}</span>}
+        </div>
         {data && (
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
             <span className="text-green-400">● {counts.unit.toLocaleString()} NPCs as units</span>
             <span className="text-yellow-300">● {counts.destructible.toLocaleString()} NPCs as destructibles</span>
             <span className="text-red-400">● {counts.excluded.toLocaleString()} NPCs excluded</span>
-          </div>
-        )}
-        {scaleWarning && (
-          <div className="mt-2 max-w-xl text-amber-300" role="status">
-            NPCs will look very {scaleWarning} in-game. Move the terrain clamp closer to the suggested range.
           </div>
         )}
         {water?.clipped && <div className="mt-2 max-w-xl text-amber-300" role="status">Some water is outside the usable range. Adjust the clamp to include it.</div>}

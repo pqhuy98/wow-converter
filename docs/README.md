@@ -8,7 +8,9 @@ Go owns production conversion and the desktop app. Start with [architecture](arc
 | Choose tests and visual checks | [Verification](development/verification.md) |
 | Generate a WC3 map | [Map generation](maps/README.md) |
 | Understand NPC models and unit fields | [NPC export](maps/npcs.md) |
+| Configure native terrain paint and stock tiles | [WC3 tilesets](maps/terrain-tilesets.md) |
 | Inspect terrain fitting and blockers | [Terrain navigation](maps/terrain-navigation.md) |
+| Reproduce terrain quality comparisons | [Terrain benchmark](maps/terrain-benchmark.md) |
 | Understand native water and swimming | [Water](maps/water.md) |
 | Work on the map dialog and preview | [Preview](maps/preview.md) |
 | Select, rename, or optimize animations | [Animation export](rendering/animations.md) |

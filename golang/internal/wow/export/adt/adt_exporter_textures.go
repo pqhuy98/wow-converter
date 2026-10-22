@@ -453,7 +453,7 @@ func (e *Exporter) exportLargeBake(
 		rotated := Rotate180(chunkCanvas, chunkSizePx)
 		if split {
 			outPath := filepath.Join(dir, fmt.Sprintf("tex_%s_%d.png", e.TileID, job.chunkIndex))
-			if options.OverwriteFiles || !writers.OutputFileExists(outPath) {
+			if conv != nil || options.OverwriteFiles || !writers.OutputFileExists(outPath) {
 				if err := storePNG(outPath, rotated, chunkSizePx, chunkSizePx, conv); err != nil {
 					firstErr.Store(err)
 					return err

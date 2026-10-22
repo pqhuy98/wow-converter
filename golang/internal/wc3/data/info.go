@@ -64,6 +64,7 @@ type MapFlags struct {
 	EnableWaterTinting                                    bool
 	UseAccurateProbabilityForCalculations                 bool
 	UseCustomAbilitySkins                                 bool
+	UseAlphaTileMinimapColor                              bool
 }
 
 // GameVersion is the WC3 game version stored in w3i.

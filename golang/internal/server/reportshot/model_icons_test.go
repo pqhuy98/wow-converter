@@ -3,14 +3,18 @@ package reportshot
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/formats/mdx"
 )
@@ -103,21 +107,85 @@ func TestModelIconEncodingCachingAndCancellation(t *testing.T) {
 	cache := []byte(`{"npcs/wolf.mdx":"` + job.key + `"}`)
 	os.WriteFile(filepath.Join(root, "npcs", "icons.json"), cache, 0644)
 	t.Setenv("WOW_CONVERTER_URL", "http://127.0.0.1:1")
-	icons, err := RenderModelIcons(context.Background(), root, []string{"npcs/wolf.mdx"}, false)
+	icons, err := renderModelIcons(context.Background(), root, []string{"npcs/wolf.mdx"}, false)
 	if err != nil || icons["npcs/wolf.mdx"] != active {
 		t.Fatalf("cached icon should not launch browser: %v", err)
 	}
-	_, err = RenderModelIcons(context.Background(), root, []string{"npcs/wolf.mdx"}, true)
+	_, err = renderModelIcons(context.Background(), root, []string{"npcs/wolf.mdx"}, true)
 	if err == nil {
 		t.Fatal("missing viewer did not report optional failure")
 	}
-	icons, err = RenderModelIcons(context.Background(), root, []string{"npcs/missing.mdx"}, false)
-	if err != nil || len(icons) != 0 {
-		t.Fatal("missing icon model blocked batch")
+	icons, err = renderModelIcons(context.Background(), root, []string{"npcs/missing.mdx"}, false)
+	if err == nil || len(icons) != 0 {
+		t.Fatal("missing icon model must report an optional failure")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err = RenderModelIcons(ctx, root, []string{"npcs/wolf.mdx"}, false); err == nil {
+	if _, err = renderModelIcons(ctx, root, []string{"npcs/wolf.mdx"}, false); err == nil {
 		t.Fatal("ignored cancellation")
+	}
+}
+
+func renderModelIcons(ctx context.Context, root string, models []string, force bool) (map[string]string, error) {
+	q := NewModelIconQueue(ctx, root, force)
+	for _, model := range models {
+		q.Enqueue(model)
+	}
+	return q.Finish(models)
+}
+
+func TestModelIconQueueStartsWhileModelsAreStillExporting(t *testing.T) {
+	root := t.TempDir()
+	iconModelFixture(t, root)
+	contacted := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		contacted <- struct{}{}
+		http.Error(w, "viewer unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	t.Setenv("WOW_CONVERTER_URL", server.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	queue := NewModelIconQueue(ctx, root, false)
+	queue.Enqueue("npcs/wolf.mdx")
+	select {
+	case <-contacted:
+	case <-ctx.Done():
+		t.Fatal("renderer waited for all model exports before starting")
+	}
+	// The producer is still active after viewer failure, beyond the queue capacity.
+	for i := 0; i < 100; i++ {
+		queue.Enqueue(fmt.Sprintf("npcs/missing-%d.mdx", i))
+	}
+	icons, err := queue.Finish([]string{"npcs/wolf.mdx"})
+	if ctx.Err() != nil || err == nil || len(icons) != 0 {
+		t.Fatalf("optional viewer failure stalled model production or was lost: %v, %v", ctx.Err(), err)
+	}
+}
+
+func TestModelIconQueueReportsPartialFailuresAndKeepsCachedSuccess(t *testing.T) {
+	root := t.TempDir()
+	iconModelFixture(t, root)
+	img := image.NewNRGBA(image.Rect(0, 0, 384, 384))
+	var raw bytes.Buffer
+	if err := png.Encode(&raw, img); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeModelIcon(context.Background(), root, "npcs/wolf.mdx", raw.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	job, err := prepareModelIcon(context.Background(), root, "npcs/wolf.mdx", map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveModelIconCache(root, map[string]string{"npcs/wolf.mdx": job.key}, []string{"npcs/wolf.mdx"})
+	t.Setenv("WOW_CONVERTER_URL", "http://127.0.0.1:1")
+	queue := NewModelIconQueue(context.Background(), root, false)
+	queue.Enqueue("npcs/missing.mdx")
+	queue.Enqueue("npcs/wolf.mdx")
+	queue.Enqueue("npcs/wolf.mdx")
+	icons, err := queue.Finish([]string{"npcs/wolf.mdx"})
+	if err == nil || icons["npcs/wolf.mdx"] == "" || len(icons) != 1 {
+		t.Fatalf("partial failure discarded cached success or was hidden: %v %v", icons, err)
 	}
 }

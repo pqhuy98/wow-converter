@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -139,4 +140,41 @@ func testMapGenerateJob(mapDir string) *util.Job[mapGenerateJobRequest, mapGener
 		Status:      util.JobPending,
 		SubmittedAt: time.Now().UnixMilli(),
 	}
+}
+
+func TestOptionalIconWarningRemainsSuccessfulInAPIStatus(t *testing.T) {
+	const warning = "NPC icon rendering failed for some models; default icons were used."
+	queue := util.NewJobQueue(mapGenerateQueueConfig(), func(job *util.Job[mapGenerateJobRequest, mapGenerateJobResult]) (mapGenerateJobResult, error) {
+		return mapGenerateJobResult{ID: "WC3_MAP_GENERATE_SUMMARY", TotalSteps: 3, Warnings: []string{warning}}, nil
+	})
+	job := testMapGenerateJob("Azeroth")
+	queue.AddJob(job)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if status := queue.GetJobStatus(job.ID); status != nil && status.Status == util.JobDone {
+			view := buildMapGenerateStatus(&Deps{}, queue, job.ID)
+			if view.Error != "" {
+				t.Fatalf("optional icon warning became an export error: %v", view.Error)
+			}
+			raw, err := json.Marshal(view)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded struct {
+				Status string `json:"status"`
+				Result struct {
+					Warnings []string `json:"warnings"`
+				} `json:"result"`
+			}
+			if err = json.Unmarshal(raw, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			if decoded.Status != "done" || len(decoded.Result.Warnings) != 1 || decoded.Result.Warnings[0] != warning {
+				t.Fatalf("completion warning missing in API response: %s", raw)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("map job did not complete")
 }

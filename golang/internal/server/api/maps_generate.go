@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"log"
 	"net/http"
 	"runtime"
@@ -12,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
@@ -31,11 +31,13 @@ type generateWc3Body struct {
 	ClampUpper               float64                       `json:"clampUpper"`
 	AutoClampPercent         bool                          `json:"autoClampPercent"`
 	MapAngleDeg              float64                       `json:"mapAngleDeg"`
+	PlayerFaction            string                        `json:"playerFaction"`
 	UnitScale                float64                       `json:"unitScale"`
 	Navigation               *mapexporter.NavigationConfig `json:"navigation,omitempty"`
 	IncludeBuildingInteriors *bool                         `json:"includeBuildingInteriors"`
 	FreshExport              bool                          `json:"freshExport"`
 	PlacePathBlockers        bool                          `json:"placePathBlockers"`
+	TerrainAsWc3Tilesets     bool                          `json:"terrainAsWc3Tilesets"`
 	Creatures                struct {
 		Enable        bool `json:"enable"`
 		AllAreDoodads bool `json:"allAreDoodads"`
@@ -67,6 +69,7 @@ type mapGenerateJobResult struct {
 	TotalSteps   int                    `json:"totalSteps"`
 	Succeeded    []mapExportTileSuccess `json:"succeeded"`
 	Failed       []mapExportTileFailure `json:"failed"`
+	Warnings     []string               `json:"warnings,omitempty"`
 }
 
 type mapGenerateProgressView struct {
@@ -243,7 +246,9 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		AllAreDoodads:   req.Body.Creatures.AllAreDoodads,
 	})
 
+	mapExportCfg.PlayerFaction = req.Body.PlayerFaction
 	mapExportCfg.PlacePathBlockers = req.Body.PlacePathBlockers
+	mapExportCfg.TerrainAsWc3Tilesets = req.Body.TerrainAsWc3Tilesets
 	if req.Body.Navigation != nil {
 		mapExportCfg.Navigation = *req.Body.Navigation
 	}
@@ -343,6 +348,7 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 		MapID:        req.MapID,
 		MapSaveName:  conversion.MapSaveName,
 		OutputDir:    conversion.OutputDir,
+		Warnings:     conversion.Warnings,
 		Quality:      req.Body.Quality,
 		Total:        tileCount,
 		StepsPerTile: stepsPerTile,

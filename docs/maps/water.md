@@ -1,29 +1,32 @@
-# Map water export
+# Native water export
 
-Map generation automatically includes source liquids. It does not change the selected map scale or terrain clamp. NPC export and the optional **Place path blockers** checkbox are independent of water export.
+Water export is automatic and independent of NPC export and **Place path blockers**. It keeps the selected scale/clamp. Owner: `golang/internal/converter/mapexporter/terrain/terrain_water.go`.
 
-The Go pipeline carries masked ADT MH2O/legacy MCLQ cells and WMO MLIQ cells as typed geometry through the existing conversion snapshots and object tree. ADT liquid elevations are absolute WoW Z; WMO elevations are local and receive the complete placement transform once. Terrain snapshots release their liquid payload after the parsed model owns a copy. Reading these source chunks does not require a fresh model/texture export.
+Masked ADT MH2O/legacy MCLQ and WMO MLIQ cells travel through typed snapshots/object geometry. ADT liquid heights are absolute; WMO heights are local and receive the instance transform once. Reading liquid chunks does not require Fresh export. Client `LiquidType.db2` classifies water/ocean/magma/slime, with known legacy-ID fallback; unknown types are preserved in diagnostics.
 
-`mapexporter/terrain_water.go` applies the final terrain transform, including map rotation and clamp. It writes ordinary water/ocean to native WC3 terrain corners while preserving sloping rivers and the bed beneath them. Source liquid depth participates in the NPC ground search. A selected bridge or upper floor above a liquid remains dry.
+## Native representation
 
-Water rendering uses native WC3 water only, with no liquid surface doodad. WC3 has one surface per XY corner and a 128-unit grid. Any positive-area visible water overlap enables all four corners of the native quad, even when most of it is land. Source triangles are clipped against each native cell; edge extrema against the bilinear ground find wet slivers that center sampling misses. Neighboring heights remain coherent, and higher land hides the extended water surface without lowering the shore. Fully covered upper floors remain dry. Source chunk origin seams smaller than 0.0625 WC3 units are joined. Source masks still determine liquid movement flags.
+Water uses native WC3 corners on a 128-unit grid, without liquid surface doodads. Any positive-area visible overlap enables all four corners of a quad. Clipped source triangles and edge extrema catch narrow wet slivers; higher ground hides extended water without lowering shores. Fully covered upper floors stay dry. Origin seams smaller than 0.0625 WC3 units are joined. Source masks still control liquid movement flags.
 
-Stacked levels and source slopes that cannot fit the native grid are recorded as `approximatedCells`. Native height overflow, magma/slime and unknown types are recorded under `unsupportedReasons`; no extra mesh or scale change is introduced. Ordinary water uses the generated map's WC3 water appearance. This cannot reproduce every WoW liquid material, overlapping surface or waterfall.
+Stacked levels and slopes that do not fit the native grid count as approximations. Height overflow, magma/slime and unknown types are unsupported and reported; no model patch or scale change is introduced. Ordinary liquids use the map's WC3 water appearance, so WoW materials, waterfalls and overlapping surfaces are not fully reproduced. Source depth also participates in the navigation ground search.
 
-`LiquidType.db2` supplies water/ocean/magma/slime classification. Known legacy IDs remain available if that table cannot be read. Unknown IDs are preserved and reported.
+## Output
 
-## WC3 files
+| File | Contents |
+|---|---|
+| `war3map.w3e` | Native water corners; v12 presence bit `0x100`, low 14 height bits independent of boundary marker `0x4000` |
+| `war3map.wpm` | Swimming `64` and no-building `8`; depth over 51.2 WC3 units also blocks walking `2`; liquid adds no no-flying flag |
+| `terrain-water.json` | Source layers/cells/types, native coverage, approximations/unsupported reasons, height range and pathing counts |
+| `terrain-water.png` | Light blue shallow, dark blue deep, orange non-water liquid pathing |
 
-- `war3map.w3e`: version 12 water presence is bit `0x100`; semantic flags use the older positions in memory. Water height uses the low 14 bits, independently of the boundary marker `0x4000`. For the generated Lordaeron tileset, visible Z is `(raw - 8192) / 4 - 89.6`, with 0.25-unit precision and range −2137.6…1958.15.
-- `war3map.wpm`: source water gets swimming (`64`) and no-building (`8`) flags. Depth greater than 51.2 WC3 units also blocks ordinary walkers (`2`). Liquid itself never adds no-flying (`4`). Physical obstacle flags are merged when blocker placement is enabled. This file remains present for liquid movement even with NPCs or blocker doodads disabled.
-- Cached exports remove the former generated `water/liquid-*` model/texture files. New map object data contains no liquid surface doodad.
-- `terrain-water.json`: source layers/cells/types, native corner count, approximated/unsupported cells, height range and shallow/deep pathing counts.
-- `terrain-water.png`: source water pathing preview; light blue is shallow, dark blue is deep, orange is non-water liquid. It is separate from the structural navigation preview.
+For the generated Lordaeron tileset, visible water Z is `(raw-8192)/4-89.6`, with 0.25-unit precision and range −2137.6…1958.15. Structural flags merge when blockers are enabled. Liquid WPM remains present with NPC/blocker export off. Cached exports remove formerly generated `water/liquid-*` models/textures.
 
-## Checks and native limits
+## Verification
 
-Run `go -C golang test ./internal/wc3/translators ./internal/wow/formats/adt ./internal/wow/formats/wmo ./internal/converter/common ./internal/converter/mapexporter`. Fixtures cover independent v11/v12 terrain bytes, masks, absolute/local heights, slope preservation, snapshot ownership and rotation, dry bridges, deep water, small native pools, unsupported layers/materials, continuous narrow rivers/chunk seams, cached mesh cleanup, and water with NPC/blocker export disabled.
+```powershell
+go -C golang test ./internal/wc3/translators ./internal/wow/formats/adt ./internal/wow/formats/wmo ./internal/converter/common ./internal/converter/mapexporter/...
+```
 
-To check saved structural blockers together with water pathing, set `WOW_NAV_VERIFY_MAP` to the generated map directory and run `go -C golang test ./internal/converter/mapexporter -run TestExportedNavigationBlockerFootprints -count=1`.
+Fixtures cover masks, independent v11/v12 terrain bytes, absolute/local transforms, slopes, snapshot ownership, bridges, depth, small pools, unsupported types, chunk seams and cached cleanup. [Navigation validation](terrain-navigation.md#diagnostics-and-validation) checks the union of water and saved structural footprints.
 
-Source/serialization checks do not prove native rendering, World Editor save stability, or engine movement. Native shorelines, walking/swimming/flight and bridge traversal still require an editor/game check. The initial depth threshold follows HiveWE's implementation and may require adjustment against a native save.
+Native shorelines, walking/swimming/flight, bridge traversal and editor save stability still require a WC3 check. The depth threshold follows the renderer's native-water convention and remains subject to native readback.

@@ -1,170 +1,80 @@
-# NPC unit export
+# NPC export
 
-Map generation fills unit WE fields from the bundled AzerothCore world data and
-the exported creature model. Ownership remains Player 1. NPC icons are generated
-from the exported model; unit sound sets use the bundled offline voice dataset. Explicit
-NPC-as-doodad mode remains decoration only.
+The Go exporter uses bundled AzerothCore gameplay data and the exported creature model. Source content is based on Wrath; newer client assets can differ from those spawn locations or display IDs. Owner: `golang/internal/converter/mapexporter/creature/`.
+
+## Placement and players
+
+Unit mode excludes spawns outside the playable clamp or too far from fitted ground, retaining them in model export. Ground tolerance is `100 * recommendedClampWidth / chosenClampWidth` WC3 units, so changing the clamp alone does not change the accepted source-space floor gap. **All NPCs as destructibles** places decoration at source heights without pathing footprints; its compatibility key is `allAreDoodads`. Marker colors and placement approximation are in [preview](preview.md).
+
+Player faction appears below the destructible option only when NPC unit export is enabled. Alliance is the default. Slots here are World Editor's one-based numbers:
+
+| Mode | User slot | Race | Name |
+|---|---|---|---|
+| Alliance | 2, blue | Human | `Player (Alliance)` |
+| Horde | 1, red | Orc | `Player (Horde)` |
+| NPC export off or all destructibles | 1, red | Human | `Player 1` |
+
+In faction mode, the unselected red/blue slot remains closed/reserved. Named NPC players use slots 3–24. Every configured player gets a start marker: new user starts are centered, NPC starts occupy a 200-unit grid around the center. Existing markers are preserved; W3I and Lua follow their positions.
+
+`resources/npc-factions.json` contains reviewed ownership policy, Wrath faction templates, masks, flags and explicit friend/enemy exceptions. Named factions retain identity regardless of creature type. Same-name templates merge only if incoming and outgoing hostile/neutral/friendly reactions match against the user and every retained named template in the area. Excluded placements do not consume slots.
+
+Generic factions use only their reaction toward the selected user: hostile becomes Neutral Hostile; neutral/friendly becomes Neutral Passive. When more than 22 named NPC groups remain, the least-populated group moves to neutrals by user reaction and equivalence is recomputed. Ties use name, then lowest template ID. Unknown factions/templates fail export; legacy records with no faction metadata stay with the user.
+
+`factions.json` records assignments, directional reactions and overflow. Static reactions use Human/Orc reference templates and exclude reputation, scripts, temporary overrides and PvP state. Lua follows common-library `SetPlayerAllianceStateBJ` mappings with target-first arguments, named player variables and consecutive opposite directions. Friendly uses `bj_ALLIANCE_ALLIED`, friendly NPC→user uses `bj_ALLIANCE_ALLIED_UNITS` for shared control, neutral uses `bj_ALLIANCE_NEUTRAL`, hostile uses `bj_ALLIANCE_UNALLIED`. W3I/Lua settings and WCT alliance setup persist through editor saves.
+
+## Combat stats
+
+Maximum HP/mana and melee/ranged damage retain source values rounded to WC3 integers, independently of the other selected NPCs. Damage dice preserve both rounded endpoints; attack 2 is disabled. Zero mana/armor stay zero. Stats use class/level/expansion bases and template modifiers at default server rates; spawn `curhealth`/`curmana` remain metadata. Units start at full health/mana. Scripted buffs, encounter scaling and custom server rates are not evaluated.
+
+Armor preserves armor-only physical effective HP against an equal-level attacker using AzerothCore's formula. For level `L`, `K=400+85*L` through 59, then `K=400+85*(L+4.5*(L-59))`. Source reduction is `min(0.75, armor/(armor+K))`; physical EHP is `HP/(1-reduction)`. Stock WC3 reduction uses `0.06*armor/(1+0.06*armor)`, so export writes `round(min(3, sourceArmor/K)/0.06)`, capped at 50, using the NPC's maximum level as reference. HP stays unchanged. Integer armor adds at most 0.03 EHP/HP error; other attacker levels, penetration, buffs, attack/defense multipliers and custom armor constants remain outside this approximation.
+
+## Model-derived and gameplay fields
+
+| Field | Conversion |
+|---|---|
+| Model/portrait | Unit `umdl`/`upor` and destructible `bfil`/`bgpm` share the resolved model path |
+| Collision | Origin-centered horizontal radius of the source M2 collision box; invalid boxes fall back to vertices in the lowest 25% of model height; scale once and clamp to 8–1024 WC3 units |
+| Selection | Native unmounted WoW radius from GeoBox bounds and display/model/racial/family/object scaling; convert to WC3 distance, cap to full mesh XY radius, then write diameter/72 |
+| Movement | Ground, amphibious, fly or rooted from source capabilities; dual ground/flight conservatively stays ground; source run speed uses terrain units/yard, independently of visual Unit scale, capped at 522 |
+| Regeneration | HP 0.1%/second when enabled; mana 0.2%/second; does not reproduce the server's combat-state machine |
+| Classification | Native undead/mechanical/giant classifications and editor race/campaign organization; rank does not imply a hero |
+| Attacks | Ranged equipment selects verified arrow/axe/wand assets or instant-impact rifles; nonphysical schools use magic attacks; mechanical bodies use metal armor sounds |
+| Animation fields | Death time covers the longest Death sequence; alternate tags only when alternate Stand exists without ordinary Stand; humanoids stay upright, beasts permit slight pitch/roll |
+
+Selection uses all geosets around the origin and ignores Z; empty XY geometry keeps the converted WoW radius. Missing/empty native stand boxes use the client's 1.2-yard fallback, while unsupported schemas fail. Collision is independent of embedded picking geometry; its metadata refreshes on cached exports.
+
+Attack-release timing uses embedded sound events when present, otherwise 35% of the animation, bounded by source cooldown. Embedded attack sounds suppress an extra weapon-impact sound; otherwise equipment/body selects a native sound. Attachments supply launch offsets with a body fallback. Critters, noncombat pets, pacified and zero-damage actors have no inherited attacks; civilian flags suppress acquisition. Gossip/vendor flags alone do not disable combat. Stock abilities, upgrades, training/building commands and melee resource costs are cleared. Spells, vendors, quests, patrols and encounter AI are not translated.
+
+## Shared models and animation policy
+
+Appearance resolution precedes conversion. Keys include build, resolved base model, skins, customizations/geosets, particle colors, equipment and export settings. Identity alone does not force another model. Particle-free display scale is excluded from the model key. Serialized models also deduplicate by content, ignoring the model-name field; gameplay fields, ownership and placement remain independent.
+
+Shared output is `npcs/<normalized-name>.mdx` with lowercase ASCII letters, digits and dashes. Different appearances with colliding names receive `_<display ID>` suffixes. Representative names are deterministic. `npcs/models.json` stores appearance mappings; Fresh export off reuses matching animation-policy/configuration fingerprints. Unversioned root `creature-<id>.mdx` files are rebuilt and cleaned after success.
+
+Unequipped NPCs select Unarmed; equipped NPCs infer attack tags from weapon inventory types. Map generation freezes head descendants outside portraits, always reduces keys conservatively, removes Mount/Sleep, deduplicates practically identical animations within each name family, and retains at most four variants per family. Attack Slam and other tagged families stay distinct. [Animation export](../rendering/animations.md) owns tolerances and optimization details.
+
+## Icons
+
+Each completed model enters a bounded icon queue while remaining models export. Up to three tabs share one installed headless browser. They use the portrait camera, frozen Stand pose and 1.7× framing, capturing at 384 pixels and producing 128-pixel ClassicHD2.0 BTN/DISBTN BLPs under `ReplaceableTextures/CommandButtons/` and `CommandButtonsDisabled/`. Unit `uico` points to the shared active icon.
+
+`npcs/icons.json` keys model/texture contents and render settings. Fresh export rebuilds icons; destructible mode skips rendering and icon-cache changes. Browser reads drain before model deduplication or staged-cache cleanup deletes files. Viewer availability allows 30 seconds. Browser, camera, capture or encoding failures use default Footman icons and show yellow completion warnings without failing the map. Explicit cancellation still stops export.
 
 ## Voices
 
-`resources/npc-voices.json` contains 34,201 exact NPC-name/base-model pairs
-from AzerothCore and Wrath 3.3.5. Its Wrath display-ID index resolves each source
-base model independently of exported model names, skins, equipment or model
-deduplication. Different NPC names sharing a model can use different voices.
-The resource loads once; map export needs no LLM, API key or voice-generation step.
+`resources/npc-voices.json` stores 34,201 exact NPC-name/base-model pairs from Wrath, with a display-ID index independent of exported names, skins, equipment and model deduplication. Names sharing a model can use different voices. The offline resource loads once; map export needs no LLM/API key.
 
-Version 1 stores `sounds` (index 0 is silence), `models` with `path`, `displays`
-and `voices` (exact name to sound index), and the total `pairs` count. The
-`resultsSha256` records the source result-file checksum. The plain JSON file is
-about 1 MB and is included by the existing desktop resource-copy step.
+Version 1 stores `sounds` (index 0 is silence), `models` with path/display/voice indexes, pair count and source-result checksum. Export writes unit `usnd` only. Trigger proxies (`flags_extra & 0x80`), intentional silence and unknown pairs get an empty field rather than inherited Footman sounds. Unknown pairs are logged. Voice choices are approximate and editable in World Editor.
 
-Export writes `usnd` on NPC unit types only. Trigger proxies (`flags_extra & 0x80`)
-are always silent; intentional silent mappings and unknown name/model pairs write
-an empty field rather than inheriting Footman. Unknown pairs are counted in the
-export log. NPC destructibles and unrelated unit types are unchanged. Voice
-assignments are approximate, including review-flagged classifications, and can
-be adjusted in World Editor after export.
+## Death audio
 
-## Model animations
+Client `CreatureDisplayInfo` → `CreatureModelData` → `CreatureSoundData.SoundDeathID` → `SoundKitEntry` supplies death audio; AzerothCore supplies display IDs but not the complete lookup/audio. Display overrides precede model defaults, existing silent records remain silent, and trigger proxies are skipped. The first variant is the lowest SoundKitEntry record ID with a valid audio file.
 
-NPCs without equipment default to the Unarmed attack family. Equipped NPCs infer their family from the exported weapon inventory types; other weapon-style attacks are filtered before writing the model.
+Export deduplicates required files under `Sounds/WoW/Death/<fileDataID>.wav` and registers their imports. Ogg Vorbis, MP3 and PCM WAV become mono 16-bit WAV in-process. The persistent death trigger uses `wowDeathSounds[GetUnitTypeId(unit)]`, playing at unit X/Y and Z=0 with `play3dSound` defaults: volume 127, distances 0–7000, fade 10/10, DefaultEAXON and KillSoundWhenDone. Re-export replaces the lookup; disabling NPC unit export removes the trigger. Silent/unknown types do nothing, and WC3 sound sets remain assigned.
 
-Map generation enables freezing head descendants outside portraits and always applies conservative key reduction. It also removes Mount/Sleep animations, deduplicates practically identical variants within each WC3 animation-name family, then keeps at most four variants per family. Stand/Attack/Spell families remain distinct, including tags such as Attack Slam. [Animation export](../rendering/animations.md) defines the option, tolerances and map-only scope.
+## Audit and verification
 
-## Source combat stats
+`units.json` records source identity/stats, owner, type code, exclusion reason and model/icon paths. Cached-model metadata scans decode animation/event/attachment chunks without loading geometry/textures into the conversion graph.
 
-Maximum HP/mana and melee/ranged damage are exported at their source
-values, rounded to WC3 integer fields. They are independent of which other NPCs
-are selected; there is no WC3 reference-range normalization. Damage dice preserve
-both rounded source endpoints, and attack 2 remains disabled. Zero mana/armor
-remain zero, and noncombat creatures have no attacks.
+The bundled SQLite includes expanded creature/item templates, class-level stats and movement overrides. Regenerate it through `generate:acore-sqlite`. Older schemas use conservative level-based defaults; incomplete expanded bundles fail instead of silently losing NPCs.
 
-Armor is converted to preserve armor-only physical effective HP against an
-equal-level attacker, using AzerothCore's `Unit::CalcArmorReducedDamage` formula.
-For attacker level L, K is `400 + 85*L` through level 59, or
-`400 + 85*(L + 4.5*(L-59))` above 59. Source reduction is
-`min(0.75, armor/(armor+K))`; physical effective HP is `HP/(1-reduction)`.
-Stock WC3 uses `0.06*armor/(1+0.06*armor)`, so exported armor is
-`round(min(3, sourceArmor/K)/0.06)`, capped at 50. HP itself stays unchanged.
-The fixed armor field uses the NPC's source maximum level as the reference
-attacker level. Different attacker levels, armor penetration, buffs, WC3 attack
-versus defense-type multipliers and custom armor constants are outside this
-approximation. Integer armor introduces at most 0.03 error in the EHP/HP multiplier.
-
-Source values use class/level/expansion base stats and template modifiers,
-following AzerothCore's default-rate formulas. Spawn `curhealth` and `curmana`
-remain source metadata rather than maximums. WC3 units start with full source
-health and mana. Source server-rate changes, scripted buffs and encounter-specific
-scaling are not evaluated.
-
-## Field heuristics
-
-- Model and portrait share the exported model. Collision uses the enclosing
-  horizontal circle of the source M2 collision box, centered on the unit origin.
-  Missing, empty or invalid boxes fall back to the enclosing horizontal circle
-  of vertices in the lowest 25% of the exported model height. Both use map fit,
-  display scale and export unit size once, retaining the 8..1024 WC3 radius
-  limits (8 for empty geometry). Server BoundingRadius is no longer used.
-  Collision metadata refreshes even when models are reused without Fresh export.
-  Combat reach determines melee reach. Selection circles independently follow
-  the unmounted WotLK client calculation using CreatureModelData GeoBox bounds,
-  display/model/racial/family scaling and source object scale. The native radius
-  is converted to WC3 distance, including map fit and export unit size once;
-  The radius is capped to the exported mesh's horizontal bounding radius:
-  `min(converted WoW radius, max(hypot(vertex.x, vertex.y)) * model scale)`.
-  This uses all geosets around the unit origin, ignores Z, and applies model
-  scale once. Empty horizontal geometry retains the converted WoW radius.
-  WE Selection Scale is the resulting diameter divided by 72. The old .5 floor
-  and collision-based heuristic are removed. Unit sizing changes apply on top
-  of native WoW scaling without applying the latter a second time. The client
-  lookup tables are cached until the source build changes. Missing/empty native
-  stand boxes use WoW's own 1.2-yard fallback; unsupported data schemas raise an
-  error. This models static unmounted NPCs; temporary auras/mount state and WoW's
-  circle texture/pulse visuals are not reproduced. Collision remains independent
-  of the model's embedded picking geometry.
-- Humanoids stay upright; beasts can pitch/roll slightly. Death time covers the
-  longest Death animation. Required alternate tags are set only when the model
-  has alternate Stand sequences and no ordinary Stand sequence.
-- Movement uses source ground/swim/flight/rooted capabilities. Dual ground/flight
-  actors conservatively retain ground movement; swim-capable ground creatures
-  use amphibious movement. Speed is source yards/second times terrain units per
-  yard, independent of the visual Unit scale setting, and capped at 522. Ground
-  actors use source run speed; walking patrol state is not reproduced. Existing
-  placement eligibility still excludes creatures outside playable heights or too
-  far from fitted ground.
-- HP regeneration uses 0.1% of source HP/second when source regeneration is
-  enabled; mana uses 0.2%/second. Native regeneration is an approximation, not
-  AzerothCore's out-of-combat regeneration state machine.
-- Undead, mechanical and giant classifications are mapped where native WC3
-  semantics exist. Race/campaign fields organize exported types in WE. Rank does
-  not automatically turn an NPC into a WC3 hero.
-- Defense type uses converted armor, caster class and flight; mechanical bodies
-  use metal armor sounds. Nonphysical damage schools map to WC3 magic attacks.
-  WoW school resistances and WC3 armor tables are not interchangeable.
-- Recognized ranged equipment selects arrow, thrown axe, wand or rifle behavior.
-  Stock projectile paths are verified assets. Rifles deliberately use WC3's
-  instant impact attack; other ranged weapons use traveling missiles. Range,
-  speed, straight arc and homing are conservative native defaults.
-- Model attack sound events provide a release-time cue where available; otherwise
-  use 35% of the attack animation. Timing is bounded by the source cooldown.
-  Embedded attack sounds suppress an extra native weapon-impact sound. Otherwise
-  equipment subclass/body family selects a WC3 weapon sound. Weapon/hand
-  attachments supply launch offsets, with a body-based fallback.
-- Critters, noncombat pets, pacified actors and zero-damage creatures do not
-  inherit attacks. Civilian flags suppress automatic acquisition. Gossip/vendor
-  flags alone never disable combat. Inherited abilities, upgrades, training,
-  building commands and melee resource costs are cleared explicitly.
-
-WoW spells, vendors, quests, patrols and encounter AI are not translated into
-runtime gameplay by these unit-field mappings.
-
-## Caching and audit
-
-NPC appearance metadata is resolved before model conversion. The deduplication
-key includes the loaded build, resolved base model, skin textures, character
-customizations/geosets, particle colors, equipment and model export settings;
-creature/template/display identity alone does not force another model export.
-Converted and reused cached models also share output when their serialized
-content matches, ignoring only the model-name field. Display scale is excluded
-for particle-free creatures because it does not affect their model conversion.
-Gameplay stats, ownership and placement remain independent for each unit type.
-
-Shared models live at `npcs/<normalized-wow-name>.mdx`. Names use lowercase ASCII
-letters, digits and dashes. Different appearances with the same normalized name
-receive `_<display ID>` suffixes. The representative name is selected
-deterministically; appearance aliases use the same model path. `npcs/models.json`
-stores the resolved configuration mapping. Fresh export off reuses models with
-a matching current appearance/animation-policy fingerprint. Unversioned legacy
-root-level `creature-<id>.mdx` models are rebuilt, then removed after successful
-export; they cannot bypass attack filtering or the current animation policy.
-
-Unit `upor` and NPC destructible `bgpm` use the same shared model path as their
-model field, including cached exports. NPC-as-destructibles mode skips icon
-rendering and icon-cache updates entirely.
-
-In unit mode, one icon per shared model uses its portrait camera, a frozen Stand pose and
-1.7x framing. Three tabs reuse one installed headless browser, capturing at 384px
-and producing 128px ClassicHD2.0 BTN/DISBTN BLPs. The active icon is
-`ReplaceableTextures/CommandButtons/BTN_<model-name>.blp`; the matching DISBTN
-lives under `ReplaceableTextures/CommandButtonsDisabled/`. Unit `uico` points to
-the shared active icon. `npcs/icons.json` caches icons against model and texture
-contents plus rendering settings. Fresh export rebuilds them. Missing browser,
-viewer, model camera, capture or icon encoding errors retain the default Footman
-icon and do not fail map generation; explicit job cancellation still stops work.
-
-Existing creature models are reused with Fresh export off. A small metadata scan
-seeks past geometry/textures and decodes only animation/event/attachment chunks.
-`units.json` records original source identities and gameplay stats, placed type
-codes, exclusion reasons and shared model/icon paths.
-Type-wide editor suffixes no longer contain a misleading first-spawn GUID.
-
-The bundled SQLite includes expanded creature/item templates, class-level stats,
-model radius/reach, template movement and spawn movement overrides. Regenerate
-these through the existing `generate:acore-sqlite` pipeline. Older bundles without
-the expanded template schema use conservative level-based defaults; an incomplete
-expanded bundle raises an error rather than silently losing NPCs.
-
-Unit fields are regenerated on the next map generation. Object-data changes need
-a restarted WC3 map session. Offline tests cover source calculations, preserved
-combat stats, stock-field cleanup and cached model metadata. Native animation, pathing,
-projectile and sound behavior still needs in-game checking.
+Run `go -C golang test ./internal/converter/mapexporter/...` for field, faction, asset and startup coverage. Changes apply on the next map export; object-data edits need a fresh WC3 session. Native combat, audio, animation and pathing still require in-game verification.

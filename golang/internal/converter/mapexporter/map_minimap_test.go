@@ -12,6 +12,7 @@ import (
 
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
+	mapterrain "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/terrain"
 	"github.com/pqhuy98/wow-converter/internal/formats/blp"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
@@ -92,8 +93,8 @@ func TestPreloadLocationsSelectPlacedADTsOrRootWMOs(t *testing.T) {
 		manager := common.NewWowObjectManager(config.DefaultConfig(), nil, nil)
 		manager.Roots = roots
 		mm := extra.NewMapManager()
-		mm.SetTerrain(getInitialTerrain(16, 16))
-		converter := NewWc3Converter(DefaultMapExportConfig())
+		mm.SetTerrain(mapterrain.GetInitialTerrain(16, 16))
+		converter := mapterrain.NewWc3Converter(DefaultMapExportConfig())
 		if _, err := converter.PlaceDoodads(mm, manager, func(*common.WowObject) bool { return true }); err != nil {
 			t.Fatal(err)
 		}
@@ -103,8 +104,8 @@ func TestPreloadLocationsSelectPlacedADTsOrRootWMOs(t *testing.T) {
 		}
 		placed := mm.Doodads[idx].Doodad.Position
 		want := [][2]float32{{placed[0], placed[1]}}
-		if !reflect.DeepEqual(converter.preloadLocations, want) {
-			t.Fatalf("ADT=%v: got %v, want final WC3 placement %v", adt, converter.preloadLocations, want)
+		if !reflect.DeepEqual(converter.PreloadLocations, want) {
+			t.Fatalf("ADT=%v: got %v, want final WC3 placement %v", adt, converter.PreloadLocations, want)
 		}
 	}
 }
@@ -159,7 +160,7 @@ func TestExportMinimapReadsSelectedTilesAndWritesBLP(t *testing.T) {
 	root.TileX, root.TileY = 26, 23
 	manager.Roots = []*common.WowObject{root}
 	mm := extra.NewMapManager()
-	mm.SetTerrain(getInitialTerrain(16, 16))
+	mm.SetTerrain(mapterrain.GetInitialTerrain(16, 16))
 	e := &MapExporter{MapExportConfig: &cfg, MapManager: mm, WowObjectManager: manager, wowClient: c}
 	dir := t.TempDir()
 	if err := e.exportMinimap(context.Background(), dir); err != nil {

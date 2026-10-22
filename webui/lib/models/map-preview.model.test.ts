@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { defaultGenerateWc3FormValues } from './map-generate.model';
 import type { MapPreviewData, MapPreviewNPC } from './map-preview.model';
 import {
-  fitTerrainClampRange, minimumTerrainClampWidth, previewIsWater, previewNPCIsUnit, previewNPCPlacement, previewNPCScaleWarning, previewWaterLevels, previewWaterRange, readMapPreviewStream,
+  fitTerrainClampRange, minimumTerrainClampWidth, previewIsWater, previewMapSize, previewNPCIsUnit, previewNPCPlacement, previewWaterLevels, previewWaterRange, readMapPreviewStream,
 } from './map-preview.model';
 
 const scene: MapPreviewData = {
@@ -25,6 +25,18 @@ const npc: MapPreviewNPC = {
 const enabled = { ...defaultGenerateWc3FormValues, creatures: { enable: true, allAreDoodads: false } };
 
 describe('terrain clamp map size limit', () => {
+  test('reports output width and height as the clamp changes, rounded to four cells', () => {
+    const data: MapPreviewData = { ...scene, min: [-100, -200, -10], max: [900, 300, 990] };
+    expect(previewMapSize(data, { ...enabled, clampLower: 0, clampUpper: 1 })).toEqual({ width: 32, height: 16 });
+    expect(previewMapSize(data, { ...enabled, clampLower: 0.1, clampUpper: 0.6 })).toEqual({ width: 60, height: 32 });
+    expect(previewMapSize(data, { ...enabled, clampLower: 0.1, clampUpper: 0.6, unitScale: 99 })).toEqual({ width: 60, height: 32 });
+    expect(previewMapSize({ ...data, max: [900, -199, 990] }, { ...enabled, clampLower: 0, clampUpper: 1 })).toEqual({ width: 32, height: 4 });
+    expect(previewMapSize(data, { ...enabled, clampLower: 0.5, clampUpper: 0.5 })).toBeNull();
+    expect(previewMapSize({ ...data, max: [900, 300, -10] }, enabled)).toBeNull();
+    const limit: MapPreviewData = { ...scene, max: [122881, 100, 10000] };
+    expect(previewMapSize(limit, { ...enabled, clampLower: 0, clampUpper: minimumTerrainClampWidth(limit) })).toEqual({ width: 480, height: 4 });
+  });
+
   test('rounds the gap upwards and keeps either horizontal axis within 480 tiles', () => {
     for (const x of [100, 10000, 122881]) {
       for (const y of [100, 10000, 122881]) {
@@ -154,7 +166,7 @@ describe('map preview water', () => {
   });
 });
 
-describe('preview placement and scale guidance', () => {
+describe('preview placement', () => {
   test('distinguishes units, destructibles and excluded NPCs using export rules', () => {
     expect(previewNPCPlacement(npc, scene, enabled)).toBe('unit');
     expect(previewNPCPlacement(npc, scene, { ...enabled, clampUpper: 0.4 })).toBe('excluded');
@@ -163,17 +175,5 @@ describe('preview placement and scale guidance', () => {
     expect(previewNPCPlacement({ ...npc, groundZ: null }, scene, decorations)).toBe('destructible');
     expect(previewNPCPlacement({ ...npc, position: [-10, 50, 50] }, scene, decorations)).toBe('excluded');
     expect(previewNPCPlacement(npc, scene, defaultGenerateWc3FormValues)).toBe('excluded');
-  });
-  test('warns on both sides of the 1.2x recommended scale tolerance', () => {
-    const data: MapPreviewData = { ...scene, max: [100, 100, 200], npcs: [npc] };
-    const width = 3840 / 11200 * enabled.unitScale;
-    const form = { ...enabled, clampLower: 0 };
-    expect(previewNPCScaleWarning(data, { ...form, clampUpper: width })).toBeNull();
-    expect(previewNPCScaleWarning(data, { ...form, clampUpper: width * 1.19 })).toBeNull();
-    expect(previewNPCScaleWarning(data, { ...form, clampUpper: width / 1.19 })).toBeNull();
-    expect(previewNPCScaleWarning(data, { ...form, clampUpper: width * 1.21 })).toBe('small');
-    expect(previewNPCScaleWarning(data, { ...form, clampUpper: width / 1.21 })).toBe('large');
-    expect(previewNPCScaleWarning(data, defaultGenerateWc3FormValues)).toBeNull();
-    expect(previewNPCScaleWarning(scene, form)).toBeNull();
   });
 });

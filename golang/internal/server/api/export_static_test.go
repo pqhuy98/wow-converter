@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
+	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter/preview"
 )
 
 func TestBrowseAssetsStaticRoute(t *testing.T) {
@@ -38,7 +38,7 @@ func TestBrowseAssetsStaticRoute(t *testing.T) {
 
 func TestBrowseSessionCleanupPreservesMapPreviewCache(t *testing.T) {
 	dir := t.TempDir()
-	cached := filepath.Join(dir, mapexporter.MapPreviewCacheDirectory)
+	cached := filepath.Join(dir, preview.MapPreviewCacheDirectory)
 	if err := os.MkdirAll(cached, 0755); err != nil {
 		t.Fatal(err)
 	}

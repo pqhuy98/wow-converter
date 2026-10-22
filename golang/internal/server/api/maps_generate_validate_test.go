@@ -30,6 +30,9 @@ func TestParseGenerateWc3BodyAppliesDefaults(t *testing.T) {
 	if body.PlacePathBlockers {
 		t.Fatal("placePathBlockers should default to false")
 	}
+	if body.TerrainAsWc3Tilesets {
+		t.Fatal("terrainAsWc3Tilesets should default to false")
+	}
 	if body.IncludeBuildingInteriors == nil || !*body.IncludeBuildingInteriors {
 		t.Fatal("includeBuildingInteriors should default to true")
 	}
@@ -59,6 +62,8 @@ func TestParseGenerateWc3BodyRejectsInvalidContractValues(t *testing.T) {
 		{"null optional boolean", func(body map[string]any) { body["autoClampPercent"] = nil }},
 		{"null path blocker flag", func(body map[string]any) { body["placePathBlockers"] = nil }},
 		{"string path blocker flag", func(body map[string]any) { body["placePathBlockers"] = "true" }},
+		{"null tileset flag", func(body map[string]any) { body["terrainAsWc3Tilesets"] = nil }},
+		{"string tileset flag", func(body map[string]any) { body["terrainAsWc3Tilesets"] = "true" }},
 		{"inverted clamp", func(body map[string]any) {
 			body["clampLower"] = float64(0.8)
 			body["clampUpper"] = float64(0.2)
@@ -77,6 +82,15 @@ func TestParseGenerateWc3BodyRejectsInvalidContractValues(t *testing.T) {
 				t.Fatal("expected validation issue")
 			}
 		})
+	}
+}
+
+func TestParseGenerateWc3BodyEnablesTilesetWithoutNPCExport(t *testing.T) {
+	raw := validGenerateWc3Body()
+	raw["terrainAsWc3Tilesets"] = true
+	body, issues := parseGenerateWc3Body(raw)
+	if len(issues) != 0 || !body.TerrainAsWc3Tilesets || body.Creatures.Enable {
+		t.Fatalf("tileset must be independently selectable: %+v, %v", body, issues)
 	}
 }
 
@@ -104,6 +118,28 @@ func TestMapNavigationOptions(t *testing.T) {
 		raw["navigation"] = object
 		if _, issues := parseGenerateWc3Body(raw); len(issues) == 0 {
 			t.Fatalf("invalid navigation config accepted: %v", object)
+		}
+	}
+}
+
+func TestGeneratePlayerFaction(t *testing.T) {
+	for _, side := range []string{"Horde", "Alliance"} {
+		raw := validGenerateWc3Body()
+		raw["playerFaction"] = side
+		body, issues := parseGenerateWc3Body(raw)
+		if len(issues) != 0 || body.PlayerFaction != side {
+			t.Fatalf("%s: %v %+v", side, issues, body)
+		}
+	}
+	body, issues := parseGenerateWc3Body(validGenerateWc3Body())
+	if len(issues) != 0 || body.PlayerFaction != "Alliance" {
+		t.Fatalf("default: %v %+v", issues, body)
+	}
+	for _, v := range []any{nil, true, 2.0, "horde", "Scourge", ""} {
+		raw := validGenerateWc3Body()
+		raw["playerFaction"] = v
+		if _, issues := parseGenerateWc3Body(raw); len(issues) == 0 {
+			t.Fatalf("accepted faction %v", v)
 		}
 	}
 }

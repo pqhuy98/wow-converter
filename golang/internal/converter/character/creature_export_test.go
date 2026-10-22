@@ -21,7 +21,11 @@ func (failingModelCacheClient) InitModelCaches(context.Context) error {
 }
 
 func TestExportCreatureModelsPropagatesModelCacheFailure(t *testing.T) {
-	_, err := ExportCreatureModels(context.Background(), nil, t.TempDir(), config.DefaultConfig(), failingModelCacheClient{}, 1, nil)
+	drained := 0
+	_, err := ExportCreatureModels(context.Background(), nil, t.TempDir(), config.DefaultConfig(), failingModelCacheClient{}, 1, CreatureExportCallbacks{ModelsDone: func() { drained++ }})
+	if drained != 1 {
+		t.Fatalf("model failure must drain pending readers exactly once: %d", drained)
+	}
 	if err == nil || !strings.Contains(err.Error(), "cache unavailable") {
 		t.Fatalf("expected model cache error, got %v", err)
 	}
@@ -66,7 +70,7 @@ func TestExportCreatureModelsPropagatesPerCreatureFailure(t *testing.T) {
 		config.DefaultConfig(),
 		failingCreatureFileClient{},
 		1,
-		nil,
+		CreatureExportCallbacks{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "model file unavailable") {
 		t.Fatalf("expected per-creature export error, got %v", err)

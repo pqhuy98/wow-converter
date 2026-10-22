@@ -98,6 +98,16 @@ export function minimumTerrainClampWidth(scene: MapPreviewData): number {
   return Math.max(0.001, Math.ceil(width * 1000 - 1e-9) / 1000);
 }
 
+/** Output terrain cells, matching Go TerrainDimensions' four-tile rounding. */
+export function previewMapSize(scene: MapPreviewData, form: GenerateWc3FormValues): { width: number; height: number } | null {
+  const spans = scene.max.map((value, axis) => value - scene.min[axis]);
+  const clampWidth = form.clampUpper - form.clampLower;
+  if (spans.some((span) => !Number.isFinite(span) || span <= 0) || !Number.isFinite(clampWidth) || clampWidth <= 0) return null;
+  const ratio = scene.groundHeightRange / (spans[2] * clampWidth) / 128;
+  const tiles = (span: number) => Math.max(4, Math.ceil(span * ratio / 4 - 1e-10) * 4);
+  return { width: tiles(spans[0]), height: tiles(spans[1]) };
+}
+
 /** Widen stale settings or a suggestion that falls below the safe minimum. */
 export function fitTerrainClampRange(lower: number, upper: number, minimumWidth: number): [number, number] {
   const width = Math.min(1, minimumWidth);
@@ -165,15 +175,6 @@ export function previewNPCPlacement(npc: MapPreviewNPC, scene: MapPreviewData, f
   if (ratio < form.clampLower || ratio > form.clampUpper) return 'excluded';
   const referenceWidth = recommendedTerrainClampWidth(scene, form.unitScale);
   return Math.abs(npc.position[2] - groundZ) * scene.groundHeightRange <= 100 * span * referenceWidth ? 'unit' : 'excluded';
-}
-
-/** Wider clamps shrink exported NPCs; narrower clamps enlarge them. */
-export function previewNPCScaleWarning(scene: MapPreviewData, form: GenerateWc3FormValues): 'small' | 'large' | null {
-  if (scene.npcs.length === 0 || !form.creatures.enable || scene.max[2] <= scene.min[2]) return null;
-  const ratio = (form.clampUpper - form.clampLower) / recommendedTerrainClampWidth(scene, form.unitScale);
-  if (ratio > 1.2) return 'small';
-  if (ratio < 1 / 1.2) return 'large';
-  return null;
 }
 
 /** Mirrors mapexporter's recommendation width, including four-tile rounding and

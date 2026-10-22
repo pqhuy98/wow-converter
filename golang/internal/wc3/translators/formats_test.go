@@ -43,7 +43,8 @@ func TestUnitsUseNativeFormatVersion(t *testing.T) {
 
 func TestModernPlacementFields(t *testing.T) {
 	state := byte(5)
-	doodads := data.DoodadList{Doodads: []data.Doodad{{Type: "LTlt", SkinID: "LTlt", GroupID: 123, Unknown1: -7, Angle: 37.5, Roll: 0.25, Pitch: -0.75, State: &state, Life: 0, ID: 17, Scale: [3]float32{1, 2, 3}, Lights: []data.DoodadLight{{Index: 2, ShadowCasting: 1, Color: -1, Intensity: 3.5, ShadowCastingStart: 1, ShadowCastingEnd: 2, QuadraticFalloff: 4, LinearFalloff: 5, Damping: 6}}}}}
+	groupID := int32(123)
+	doodads := data.DoodadList{Doodads: []data.Doodad{{Type: "LTlt", SkinID: "LTlt", GroupID: &groupID, Unknown1: -7, Angle: 37.5, Roll: 0.25, Pitch: -0.75, State: &state, Life: 0, ID: 17, Scale: [3]float32{1, 2, 3}, Lights: []data.DoodadLight{{Index: 2, ShadowCasting: 1, Color: -1, Intensity: 3.5, ShadowCastingStart: 1, ShadowCastingEnd: 2, QuadraticFalloff: 4, LinearFalloff: 5, Damping: 6}}}}}
 	for _, version := range []int{12, 13} {
 		encoded := DoodadsTranslator{}.JSONToWar(doodads, version).Buffer
 		parsed := DoodadsTranslator{}.WarToJSON(encoded)
@@ -80,6 +81,41 @@ func TestModernPlacementFields(t *testing.T) {
 	encoded = InfoTranslator{}.JSONToWar(info).Buffer
 	if !bytes.Equal(encoded, InfoTranslator{}.JSONToWar(InfoTranslator{}.WarToJSON(encoded).JSON).Buffer) {
 		t.Fatal("info bytes changed")
+	}
+}
+
+func TestAlphaTileMinimapColorFlagCanBeDisabled(t *testing.T) {
+	info := DefaultInfo()
+	info.FileVersion = 39
+	// Native bit 24 enables the custom alpha-tile color; bit 25 is unrelated.
+	info.UnknownFlags = 1<<24 | 1<<25
+	parsed := InfoTranslator{}.WarToJSON(InfoTranslator{}.JSONToWar(info).Buffer).JSON
+	if !parsed.Map.Flags.UseAlphaTileMinimapColor || parsed.UnknownFlags != 1<<25 {
+		t.Fatal("alpha-tile color enable bit was not decoded separately")
+	}
+	parsed.Map.Flags.UseAlphaTileMinimapColor = false
+	parsed = InfoTranslator{}.WarToJSON(InfoTranslator{}.JSONToWar(parsed).Buffer).JSON
+	if parsed.Map.Flags.UseAlphaTileMinimapColor || parsed.UnknownFlags != 1<<25 {
+		t.Fatal("clearing alpha-tile color enable bit changed unrelated flags")
+	}
+}
+
+func TestDoodadTiltPromotesOlderFormats(t *testing.T) {
+	for _, version := range []int{0, 8, 12, 13} {
+		for _, tilt := range []data.Doodad{{Roll: .2}, {Pitch: -.4}} {
+			tilt.Type = "LTlt"
+			encoded := DoodadsTranslator{}.JSONToWar(data.DoodadList{Doodads: []data.Doodad{tilt}}, version)
+			parsed := DoodadsTranslator{}.WarToJSON(encoded.Buffer)
+			wantVersion := max(12, version)
+			if parsed.FormatVersion != wantVersion || len(parsed.JSON.Doodads) != 1 || parsed.JSON.Doodads[0].Roll != tilt.Roll || parsed.JSON.Doodads[0].Pitch != tilt.Pitch {
+				t.Fatalf("version %d lost native tilt", version)
+			}
+		}
+	}
+	// Ordinary legacy placements retain their existing binary layout.
+	parsed := DoodadsTranslator{}.WarToJSON(DoodadsTranslator{}.JSONToWar(data.DoodadList{}).Buffer)
+	if parsed.FormatVersion != 8 {
+		t.Fatal("legacy format changed without modern fields")
 	}
 }
 
@@ -128,5 +164,40 @@ func TestMapFormatRoundTrip(t *testing.T) {
 			}
 			t.Logf("round-trip %d bytes", len(b))
 		})
+	}
+}
+
+func TestNativeTerrainVariationBitFields(t *testing.T) {
+	for _, version := range []int{11, 12} {
+		// Four native corners: ground variation 17 in low five bits,
+		// cliff variation 5 in the high three bits. Independent byte fixture.
+		w := wc3.NewHexBufferWriter()
+		w.AddChars("W3E!")
+		w.AddInt(version)
+		w.AddChar("L")
+		w.AddInt(1)
+		w.AddInt(1)
+		w.AddChars("Ldrt")
+		w.AddInt(1)
+		w.AddChars("CLdi")
+		w.AddInt(2)
+		w.AddInt(2)
+		w.AddFloat(0)
+		w.AddFloat(0)
+		for i := 0; i < 4; i++ {
+			w.AddShort(8192)
+			w.AddShort(0)
+			if version == 12 {
+				w.AddShort(0)
+			} else {
+				w.AddByte(0)
+			}
+			w.AddByte(0xb1)
+			w.AddByte(7)
+		}
+		terrain := TerrainTranslator{}.WarToJSON(w.GetBuffer()).JSON
+		if terrain.GroundVariation[0][0] != 17 || terrain.CliffVariation[0][0] != 0xa0 {
+			t.Fatalf("v%d: ground/cliff %d/%d", version, terrain.GroundVariation[0][0], terrain.CliffVariation[0][0])
+		}
 	}
 }

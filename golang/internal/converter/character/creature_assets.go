@@ -49,8 +49,22 @@ type creatureExport struct {
 	cachedPath string
 }
 
+// CreatureExportCallbacks observe completed files without blocking model workers.
+// ModelsDone drains readers before deduplication/cache cleanup removes files.
+type CreatureExportCallbacks struct {
+	Progress   func(completed, total int)
+	ModelReady func(model string)
+	ModelsDone func()
+}
+
 // ExportCreatureModels resolves appearances before conversion, and exports each once.
-func ExportCreatureModels(ctx context.Context, creatures []azerothcore.Creature, outputPath string, cfg config.Config, wowClient client.Client, workers int, onProgress func(completed, total int)) (CreatureAssets, error) {
+func ExportCreatureModels(ctx context.Context, creatures []azerothcore.Creature, outputPath string, cfg config.Config, wowClient client.Client, workers int, callbacks CreatureExportCallbacks) (CreatureAssets, error) {
+	done := sync.OnceFunc(func() {
+		if callbacks.ModelsDone != nil {
+			callbacks.ModelsDone()
+		}
+	})
+	defer done()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -134,15 +148,20 @@ func ExportCreatureModels(ctx context.Context, creatures []azerothcore.Creature,
 			if err := exportCreatureAppearance(ctx, job, outputPath, cfg, wowClient); err != nil {
 				return err
 			}
-			if onProgress != nil {
+			if callbacks.ModelReady != nil {
+				callbacks.ModelReady(job.asset.ModelPath)
+			}
+			if callbacks.Progress != nil {
 				progressMu.Lock()
-				onProgress(int(completed.Add(1)), len(jobs))
+				callbacks.Progress(int(completed.Add(1)), len(jobs))
 				progressMu.Unlock()
 			}
 			return nil
 		})
 	}
-	if err = common.WorkerPoolContext(ctx, workers, tasks); err != nil {
+	err = common.WorkerPoolContext(ctx, workers, tasks)
+	done()
+	if err != nil {
 		return nil, err
 	}
 	// Distinct configurations can still produce identical models (unused overrides).

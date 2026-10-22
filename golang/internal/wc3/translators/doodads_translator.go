@@ -25,6 +25,16 @@ func (DoodadsTranslator) JSONToWar(composite data.DoodadList, versions ...int) w
 	if len(versions) > 0 && versions[0] != 0 {
 		version = versions[0]
 	}
+	// Older templates cannot store per-instance tilt. Promote only when needed,
+	// and retain newer native versions (including their additional fields).
+	if version < 12 {
+		for _, tree := range composite.Doodads {
+			if tree.Roll != 0 || tree.Pitch != 0 {
+				version = 12
+				break
+			}
+		}
+	}
 	out.AddInt(version)
 	out.AddInt(11)
 	out.AddInt(len(composite.Doodads))
@@ -54,7 +64,11 @@ func (DoodadsTranslator) JSONToWar(composite data.DoodadList, versions ...int) w
 		}
 		out.AddChars(skin)
 		if version >= 12 {
-			out.AddInt(int(tree.GroupID))
+			groupID := int32(-1) // Native sentinel for an ungrouped placement.
+			if tree.GroupID != nil {
+				groupID = *tree.GroupID
+			}
+			out.AddInt(int(groupID))
 		}
 
 		treeFlag := byte(doodadFlagSolid)
@@ -142,7 +156,8 @@ func (DoodadsTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.DoodadList
 		doodad.Scale = [3]float32{buf.ReadFloat(), buf.ReadFloat(), buf.ReadFloat()}
 		doodad.SkinID = buf.ReadChars(4)
 		if version >= 12 {
-			doodad.GroupID = buf.ReadInt()
+			groupID := buf.ReadInt()
+			doodad.GroupID = &groupID
 		}
 
 		state := buf.ReadByte()

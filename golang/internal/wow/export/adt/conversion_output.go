@@ -1,6 +1,10 @@
 package adt
 
-import "github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
+import (
+	"sync"
+
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
+)
 
 // PlacementRow is one model placement (ADT tile CSV row or WMO interior row).
 type PlacementRow struct {
@@ -37,4 +41,5 @@ type ConversionOutput struct {
 	Placements     []PlacementRow            `json:"placements"`
 	WmoPlacements  map[string][]PlacementRow `json:"wmoPlacements"`
 	Liquids        []liquid.Surface          `json:"liquids,omitempty"`
+	texturesMu     sync.Mutex                // Split chunk bakes collect PNGs concurrently.
 }

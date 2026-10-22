@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
+	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter/preview"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
@@ -20,14 +20,14 @@ import (
 func TestMapPreviewStreamFlushAndFailure(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	stream := newMapPreviewStream(recorder)
-	p := mapexporter.PreviewProgress{Message: "Preparing terrain", Completed: 2, Total: 4}
+	p := preview.PreviewProgress{Message: "Preparing terrain", Completed: 2, Total: 4}
 	if err := stream.send(mapPreviewEvent{Progress: &p}); err != nil {
 		t.Fatal(err)
 	}
 	if !recorder.Flushed || recorder.Header().Get("Content-Type") != "application/x-ndjson" {
 		t.Fatal("progress must flush immediately")
 	}
-	if err := stream.send(mapPreviewEvent{Result: &mapexporter.MapPreview{}}); err != nil {
+	if err := stream.send(mapPreviewEvent{Result: &preview.MapPreview{}}); err != nil {
 		t.Fatal(err)
 	}
 	decoder := json.NewDecoder(recorder.Body)

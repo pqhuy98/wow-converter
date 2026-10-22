@@ -13,6 +13,7 @@ var generateWc3AllowedFields = map[string]struct{}{
 	"clampUpper": {}, "autoClampPercent": {}, "mapAngleDeg": {},
 	"unitScale": {}, "includeBuildingInteriors": {}, "freshExport": {},
 	"creatures": {}, "navigation": {}, "placePathBlockers": {},
+	"terrainAsWc3Tilesets": {}, "playerFaction": {},
 }
 
 var generateWc3AllowedQualities = map[int]struct{}{
@@ -28,6 +29,9 @@ func parseGenerateWc3Body(raw map[string]any) (generateWc3Body, []string) {
 		raw["includeBuildingInteriors"] = true
 	}
 
+	if _, ok := raw["playerFaction"]; !ok {
+		raw["playerFaction"] = "Alliance"
+	}
 	data, err := json.Marshal(raw)
 	if err != nil {
 		return generateWc3Body{}, append(issues, "request body is not valid JSON")
@@ -38,6 +42,9 @@ func parseGenerateWc3Body(raw map[string]any) (generateWc3Body, []string) {
 		return generateWc3Body{}, append(issues, err.Error())
 	}
 
+	if body.PlayerFaction != "Horde" && body.PlayerFaction != "Alliance" {
+		issues = append(issues, "playerFaction must be Horde or Alliance")
+	}
 	if len(body.Tiles) == 0 {
 		issues = append(issues, "tiles must contain at least one tile")
 	}
@@ -122,7 +129,7 @@ func validateGenerateWc3Shape(raw map[string]any) []string {
 			issues = append(issues, "mapSaveName must be a string")
 		}
 	}
-	for _, field := range []string{"autoClampPercent", "includeBuildingInteriors", "freshExport", "placePathBlockers"} {
+	for _, field := range []string{"autoClampPercent", "includeBuildingInteriors", "freshExport", "placePathBlockers", "terrainAsWc3Tilesets"} {
 		if value, exists := raw[field]; exists {
 			if _, ok := value.(bool); !ok {
 				issues = append(issues, fmt.Sprintf("%s must be a boolean", field))

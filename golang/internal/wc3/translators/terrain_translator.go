@@ -118,8 +118,8 @@ func (TerrainTranslator) WarToJSON(buffer []byte) wc3.JsonResult[data.Terrain] {
 		}
 		arrFlags = append(arrFlags, int(flags))
 		arrGroundTexture = append(arrGroundTexture, int(flagsAndGroundTexture&textureMask))
-		arrGroundVariation = append(arrGroundVariation, int(groundAndCliffVariation&248))
-		arrCliffVariation = append(arrCliffVariation, int(groundAndCliffVariation&7))
+		arrGroundVariation = append(arrGroundVariation, int(groundAndCliffVariation&31))
+		arrCliffVariation = append(arrCliffVariation, int(groundAndCliffVariation&224))
 		arrCliffTexture = append(arrCliffTexture, int(cliffTextureAndLayerHeight&240))
 		arrLayerHeight = append(arrLayerHeight, int(cliffTextureAndLayerHeight&15))
 	}

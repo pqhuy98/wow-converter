@@ -93,6 +93,18 @@ func Benchmark(ctx context.Context, out, sourceRoot string, regions []Region) er
 		return e
 	}
 	report.SourceRoot = filepath.ToSlash(relative)
+	if raw, err := os.ReadFile(filepath.Join(out, "report.json")); err == nil {
+		var previous benchmarkReport
+		if err = json.Unmarshal(raw, &previous); err != nil {
+			return err
+		}
+		if previous.Version != report.Version || previous.CellsPerADT != cellsPerADT || previous.SubtilePixels != subtile || previous.SourceRoot != report.SourceRoot {
+			return fmt.Errorf("existing benchmark uses a different capture source or sampling grid")
+		}
+		report = previous
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	if e := writeViewer(out); e != nil {
 		return e
 	}
@@ -104,7 +116,18 @@ func Benchmark(ctx context.Context, out, sourceRoot string, regions []Region) er
 		if e != nil {
 			return fmt.Errorf("%s: %w", region.Name, e)
 		}
-		report.Regions = append(report.Regions, r)
+		at := len(report.Regions)
+		for i := range report.Regions {
+			if report.Regions[i].Name == r.Name {
+				at = i
+				break
+			}
+		}
+		if at == len(report.Regions) {
+			report.Regions = append(report.Regions, r)
+		} else {
+			report.Regions[at] = r
+		}
 		if e = writeJSON(filepath.Join(out, "report.json"), report); e != nil {
 			return e
 		}

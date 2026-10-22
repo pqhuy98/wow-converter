@@ -11,6 +11,7 @@ import (
 
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
+	mapterrain "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/terrain"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl/components"
 	imath "github.com/pqhuy98/wow-converter/internal/math"
@@ -21,9 +22,9 @@ import (
 
 func TestTerrainDimensionsClampLimit(t *testing.T) {
 	min, max := imath.Vector3{}, imath.Vector3{122881, 100, 10000}
-	minimum := minimumTerrainClampWidth(min, max)
+	minimum := mapterrain.MinimumTerrainClampWidth(min, max)
 	for _, lower := range []float64{0, 1 - minimum} {
-		h, w, err := terrainDimensions(min, max, TerrainClampPercent{Lower: lower, Upper: lower + minimum})
+		h, w, err := mapterrain.TerrainDimensions(min, max, TerrainClampPercent{Lower: lower, Upper: lower + minimum})
 		if err != nil || w != 480 || h != 4 {
 			t.Fatalf("exact limit should fit: %dx%d, %v", w, h, err)
 		}
@@ -32,16 +33,16 @@ func TestTerrainDimensionsClampLimit(t *testing.T) {
 		{Upper: minimum - 1e-6}, {Upper: 1e-100}, {Lower: .5, Upper: .5},
 		{Upper: math.NaN()}, {Upper: math.Inf(1)}, {Lower: -.1, Upper: .8},
 	} {
-		if _, _, err := terrainDimensions(min, max, clamp); err == nil {
+		if _, _, err := mapterrain.TerrainDimensions(min, max, clamp); err == nil {
 			t.Fatalf("invalid range accepted: %+v", clamp)
 		}
 	}
 	max[2] = 0
-	if _, _, err := terrainDimensions(min, max, TerrainClampPercent{Upper: 1}); err == nil {
+	if _, _, err := mapterrain.TerrainDimensions(min, max, TerrainClampPercent{Upper: 1}); err == nil {
 		t.Fatal("flat bounds should fail safely")
 	}
 	max[2] = 1
-	if _, _, err := terrainDimensions(min, max, TerrainClampPercent{Upper: 1}); err == nil || !strings.Contains(err.Error(), "fewer cells") {
+	if _, _, err := mapterrain.TerrainDimensions(min, max, TerrainClampPercent{Upper: 1}); err == nil || !strings.Contains(err.Error(), "fewer cells") {
 		t.Fatalf("impossible full range should explain selection limit: %v", err)
 	}
 }
@@ -94,7 +95,7 @@ func TestOversizedTerrainFailsJobAndQueueContinues(t *testing.T) {
 	queue := util.NewJobQueue(util.QueueConfig[float64, int]{Concurrency: 1, JobTTL: time.Minute, JobTimeout: time.Minute}, func(job *util.Job[float64, int]) (int, error) {
 		cfg := DefaultMapExportConfig()
 		cfg.Terrain.ClampPercent.Upper = job.Request
-		terrain, err := NewWc3Converter(cfg).GenerateTerrainWithHeight(m)
+		terrain, err := mapterrain.NewWc3Converter(cfg).GenerateTerrainWithHeight(m)
 		return terrain.Map.Width, err
 	})
 	queue.AddJob(&util.Job[float64, int]{ID: "oversized", Request: 1e-100, Status: util.JobPending})

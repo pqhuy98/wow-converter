@@ -57,6 +57,8 @@ const tooltips = {
     'Place all NPCs as destructibles instead of units. Destructibles keep their exact height; WC3 units are snapped to the ground, which can look wrong on slopes or floating placements.',
   placePathBlockers:
     'Use NPC-reachable collision surfaces to place ground and air path blockers as doodads. Works even when Export NPCs is off.',
+  terrainAsWc3Tilesets:
+    'Paint playable ground with generated Warcraft III tileset textures instead of covering it with ADT models. This significantly increases in-game performance, but lowers terrain visual quality.',
   freshExport: 'Delete the existing map folder before converting. Unchecked reuses cached models and textures.',
   includeBuildingInteriors:
     'Export interior doodads inside buildings (chairs, tables, etc.). Exports more models and textures, so generation takes longer and uses more disk space.',
@@ -370,7 +372,7 @@ export default function GenerateWc3Dialog({
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 rounded-md border border-primary/60 bg-primary/10 px-3 py-2.5 ring-1 ring-primary/25">
             <div className="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1">
               <FieldLabelRow tooltip={tooltips.terrainClamp}>Terrain height clamp</FieldLabelRow>
               {creaturesSupported && (
@@ -394,13 +396,23 @@ export default function GenerateWc3Dialog({
                   setValues((v) => ({ ...v, clampLower: safeLower, clampUpper: safeUpper }));
                 }}
               />
-            {preview && minimumClampWidth > 1 ? (
+            {preview && minimumClampWidth > 1 && (
               <p className="text-xs text-destructive" role="alert">This selection exceeds WC3’s 480-tile map limit even at the full height range. Select fewer cells.</p>
-            ) : preview && (
-              <p className="text-xs text-muted-foreground">Minimum range: {(minimumClampWidth * 100).toFixed(1)}% (WC3 map size limit).</p>
             )}
             {suggestError && <p className="text-xs text-destructive" role="alert">{suggestError}</p>}
           </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={values.terrainAsWc3Tilesets}
+              onCheckedChange={(checked) => setValues((v) => ({
+                ...v,
+                terrainAsWc3Tilesets: checked === true,
+              }))}
+            />
+            Terrain as WC3 tilesets
+            <TooltipHelp tooltips={tooltips.terrainAsWc3Tilesets} />
+          </label>
 
           {npcDataSupported && creatureCheck.loading && (
             <p className="text-xs text-muted-foreground">
@@ -448,6 +460,20 @@ export default function GenerateWc3Dialog({
                   All NPCs as destructibles
                   <TooltipHelp tooltips={tooltips.allNpcsAsDoodads} />
                 </label>
+              )}
+              {values.creatures.enable && !values.creatures.allAreDoodads && (
+                <div className="mt-2 flex items-center gap-3">
+                  <FieldLabelRow htmlFor="playerFaction" tooltip="Your WoW affiliation determines NPC reactions and your WC3 slot: Horde is red Orc, Alliance is blue Human.">Player faction</FieldLabelRow>
+                  <Select value={values.playerFaction} onValueChange={(faction) => {
+                    if (faction === 'Horde' || faction === 'Alliance') setValues((v) => ({ ...v, playerFaction: faction }));
+                  }}>
+                    <SelectTrigger id="playerFaction" className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Alliance">Alliance</SelectItem>
+                      <SelectItem value="Horde">Horde</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
             </fieldset>
           )}

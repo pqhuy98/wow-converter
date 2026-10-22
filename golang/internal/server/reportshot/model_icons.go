@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -33,154 +32,236 @@ type modelIconJob struct {
 	camera               cameraReference
 }
 
-// RenderModelIcons renders one shared 1.7x portrait per map model. Individual
-// failures are logged and omitted; callers retain their inherited unit icon.
-// Cancellation is propagated, including while loading assets or encoding BLP.
-func RenderModelIcons(ctx context.Context, root string, models []string, force bool) (map[string]string, error) {
-	result := map[string]string{}
-	var jobs []modelIconJob
-	cache := map[string]string{}
+// ModelIconQueue renders completed models using one browser and up to three tabs.
+// Enqueue is safe for concurrent model workers. Wait must follow all producers;
+// it also keeps model files alive until browser reads finish, before deduplication.
+type ModelIconQueue struct {
+	ctx          context.Context
+	root         string
+	pending      chan string
+	done         chan struct{}
+	once         sync.Once
+	mu           sync.Mutex
+	seen         map[string]bool
+	icons, cache map[string]string
+	err          error
+}
+
+func NewModelIconQueue(ctx context.Context, root string, force bool) *ModelIconQueue {
+	q := &ModelIconQueue{ctx: ctx, root: root, pending: make(chan string, 32), done: make(chan struct{}), seen: map[string]bool{}, icons: map[string]string{}, cache: map[string]string{}}
+	go func() {
+		defer close(q.done)
+		q.err = renderModelIconStream(ctx, root, q.pending, force, q.icons, q.cache)
+		// A missing viewer/browser is optional. Keep accepting model notifications so
+		// icon failure cannot block the remaining model exports.
+		for range q.pending {
+		}
+	}()
+	return q
+}
+
+func (q *ModelIconQueue) Enqueue(model string) {
+	q.mu.Lock()
+	if q.seen[model] {
+		q.mu.Unlock()
+		return
+	}
+	q.seen[model] = true
+	q.mu.Unlock()
+	select {
+	case q.pending <- model:
+	case <-q.ctx.Done():
+	}
+}
+
+func (q *ModelIconQueue) Wait() {
+	q.once.Do(func() { close(q.pending) })
+	<-q.done
+}
+
+// Finish retains only canonical models after character content deduplication.
+func (q *ModelIconQueue) Finish(models []string) (map[string]string, error) {
+	q.Wait()
+	if q.ctx.Err() == nil {
+		saveModelIconCache(q.root, q.cache, models)
+	}
+	return q.icons, q.err
+}
+
+func renderModelIconStream(ctx context.Context, root string, models <-chan string, force bool, result, cache map[string]string) error {
 	cachePath := filepath.Join(root, "npcs", "icons.json")
 	if raw, err := os.ReadFile(cachePath); err == nil {
-		_ = json.Unmarshal(raw, &cache)
-	}
-	if cache == nil {
-		cache = map[string]string{}
+		var persisted map[string]string
+		if json.Unmarshal(raw, &persisted) == nil {
+			for model, key := range persisted {
+				cache[model] = key
+			}
+		}
 	}
 	dependencies := map[string]string{}
-	sort.Strings(models)
-	for _, model := range models {
+	pending := make(chan modelIconJob, 3)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var failures []error
+	started := false
+	var startupErr error
+	completed := 0
+	// Join browser workers before closing the proxy and browser, even on cancel.
+	var cleanup func()
+	join := sync.OnceFunc(func() { close(pending); wg.Wait() })
+	defer func() {
+		join()
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
+	start := func() error {
+		base := os.Getenv("WOW_CONVERTER_URL")
+		if base == "" {
+			port := os.Getenv("PORT")
+			if port == "" {
+				port = "3001"
+			}
+			base = "http://127.0.0.1:" + port
+		}
+		target, err := url.Parse(base)
+		if err != nil {
+			return err
+		}
+		mux := http.NewServeMux()
+		mux.Handle("/api/assets/", http.StripPrefix("/api/assets/", http.FileServer(http.Dir(root))))
+		mux.Handle("/", httputil.NewSingleHostReverseProxy(target))
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return err
+		}
+		server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+		go server.Serve(listener)
+		cleanup = func() { server.Close() }
+		renderBase := "http://" + listener.Addr().String()
+		check, err := http.NewRequestWithContext(ctx, "GET", base+"/viewer", nil)
+		if err != nil {
+			return err
+		}
+		response, err := (&http.Client{Timeout: 30 * time.Second}).Do(check)
+		if err != nil {
+			return err
+		}
+		response.Body.Close()
+		if response.StatusCode != 200 {
+			return fmt.Errorf("icon viewer unavailable: HTTP %d", response.StatusCode)
+		}
+		owner, err := openBrowser(ctx)
+		if err != nil {
+			return err
+		}
+		tabs := []*browser{owner}
+		cleanup = func() {
+			for i := len(tabs) - 1; i >= 0; i-- {
+				tabs[i].close()
+			}
+			server.Close()
+		}
+		for len(tabs) < 3 {
+			tab, err := owner.newTab(ctx)
+			if err != nil {
+				break
+			}
+			tabs = append(tabs, tab)
+		}
+		for _, tab := range tabs {
+			if err = tab.setCacheDisabled(ctx, true); err != nil {
+				return err
+			}
+			if _, err = tab.call(ctx, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 384, "height": 384, "deviceScaleFactor": 1, "mobile": false}); err != nil {
+				return err
+			}
+			if _, err = tab.call(ctx, "Emulation.setFocusEmulationEnabled", map[string]bool{"enabled": true}); err != nil {
+				return err
+			}
+		}
+		for _, tab := range tabs {
+			wg.Add(1)
+			go func(b *browser) {
+				defer wg.Done()
+				for job := range pending {
+					if ctx.Err() != nil {
+						return
+					}
+					jobCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+					request := Request{BaseURL: renderBase, Model: job.model, Sequence: job.sequence, ModelScale: 1, cameras: make([]chan cameraReference, len(views))}
+					request.cameras[0] = make(chan cameraReference, 1)
+					request.cameras[0] <- job.camera
+					frames, _, err := captureConverter(jobCtx, b, request, []int{0})
+					if err == nil && len(frames) == 1 {
+						err = writeModelIcon(jobCtx, root, job.model, frames[0])
+					} else if err == nil {
+						err = fmt.Errorf("empty capture")
+					}
+					cancel()
+					mu.Lock()
+					completed++
+					if err == nil {
+						active, _ := modelIconPaths(job.model)
+						result[job.model] = active
+						cache[job.model] = job.key
+					} else {
+						failures = append(failures, fmt.Errorf("%s: %w", job.model, err))
+						log.Printf("NPC icon %s: %v (using Footman icon)", job.model, err)
+					}
+					log.Printf("NPC icons completed: %d", completed)
+					mu.Unlock()
+				}
+			}(tab)
+		}
+		return nil
+	}
+	for model := range models {
 		if err := ctx.Err(); err != nil {
-			return result, err
+			return err
 		}
 		job, err := prepareModelIcon(ctx, root, model, dependencies)
 		if err != nil {
+			mu.Lock()
+			failures = append(failures, fmt.Errorf("%s: %w", model, err))
+			mu.Unlock()
 			log.Printf("NPC icon %s: %v (using Footman icon)", model, err)
 			continue
 		}
 		active, disabled := modelIconPaths(model)
-		if !force && cache[model] == job.key && validIconBLP(root, active) && validIconBLP(root, disabled) {
+		mu.Lock()
+		cached := !force && cache[model] == job.key && validIconBLP(root, active) && validIconBLP(root, disabled)
+		if cached {
 			result[model] = active
+		}
+		mu.Unlock()
+		if cached {
 			continue
 		}
-		jobs = append(jobs, job)
-	}
-	if len(jobs) == 0 {
-		if ctx.Err() == nil {
-			saveModelIconCache(root, cache, models)
+		if !started {
+			startupErr = start()
+			started = true
 		}
-		return result, ctx.Err()
-	}
-	base := os.Getenv("WOW_CONVERTER_URL")
-	if base == "" {
-		port := os.Getenv("PORT")
-		if port == "" {
-			port = "3001"
+		if startupErr != nil {
+			mu.Lock()
+			failures = append(failures, fmt.Errorf("%s: %w", model, startupErr))
+			mu.Unlock()
+			continue
 		}
-		base = "http://127.0.0.1:" + port
-	}
-	target, err := url.Parse(base)
-	if err != nil {
-		return result, err
-	}
-	// Read the generated map assets in place. The running UI supplies the exact
-	// production viewer, with no asset copies or extra browser dependencies.
-	mux := http.NewServeMux()
-	mux.Handle("/api/assets/", http.StripPrefix("/api/assets/", http.FileServer(http.Dir(root))))
-	mux.Handle("/", httputil.NewSingleHostReverseProxy(target))
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return result, err
-	}
-	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-	go server.Serve(listener)
-	defer server.Close()
-	renderBase := "http://" + listener.Addr().String()
-	// Avoid launching a browser when a CLI/headless-only export has no UI server.
-	check, err := http.NewRequestWithContext(ctx, "GET", base+"/viewer", nil)
-	if err != nil {
-		return result, err
-	}
-	response, err := (&http.Client{Timeout: 3 * time.Second}).Do(check)
-	if err != nil {
-		return result, err
-	}
-	response.Body.Close()
-	if response.StatusCode != 200 {
-		return result, fmt.Errorf("icon viewer unavailable: HTTP %d", response.StatusCode)
-	}
-	owner, err := openBrowser(ctx)
-	if err != nil {
-		return result, err
-	}
-	defer owner.close()
-	tabs := []*browser{owner}
-	for len(tabs) < min(3, len(jobs)) {
-		tab, err := owner.newTab(ctx)
-		if err != nil {
-			break
-		}
-		tabs = append(tabs, tab)
-		defer tab.close()
-	}
-	for _, tab := range tabs {
-		if err = tab.setCacheDisabled(ctx, true); err != nil {
-			return result, err
-		}
-		if _, err = tab.call(ctx, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 384, "height": 384, "deviceScaleFactor": 1, "mobile": false}); err != nil {
-			return result, err
-		}
-		if _, err = tab.call(ctx, "Emulation.setFocusEmulationEnabled", map[string]bool{"enabled": true}); err != nil {
-			return result, err
+		select {
+		case pending <- job:
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
-	pending := make(chan modelIconJob, len(jobs))
-	for _, job := range jobs {
-		pending <- job
+	join()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	close(pending)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	completed := 0
-	for _, tab := range tabs {
-		wg.Add(1)
-		go func(b *browser) {
-			defer wg.Done()
-			for job := range pending {
-				if ctx.Err() != nil {
-					return
-				}
-				jobCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-				request := Request{BaseURL: renderBase, Model: job.model, Sequence: job.sequence, ModelScale: 1, cameras: make([]chan cameraReference, len(views))}
-				request.cameras[0] = make(chan cameraReference, 1)
-				request.cameras[0] <- job.camera
-				frames, _, err := captureConverter(jobCtx, b, request, []int{0})
-				if err == nil && len(frames) == 1 {
-					err = writeModelIcon(jobCtx, root, job.model, frames[0])
-				} else if err == nil {
-					err = fmt.Errorf("empty capture")
-				}
-				cancel()
-				mu.Lock()
-				completed++
-				if err == nil {
-					active, _ := modelIconPaths(job.model)
-					result[job.model] = active
-					cache[job.model] = job.key
-				} else {
-					log.Printf("NPC icon %s: %v (using Footman icon)", job.model, err)
-				}
-				log.Printf("NPC icons %d/%d", completed, len(jobs))
-				mu.Unlock()
-			}
-		}(tab)
+	if len(failures) > 0 {
+		return fmt.Errorf("%d NPC icon(s) failed: %w", len(failures), failures[0])
 	}
-	wg.Wait()
-	if err = ctx.Err(); err != nil {
-		return result, err
-	}
-	saveModelIconCache(root, cache, models)
-	return result, nil
+	return nil
 }
 
 func saveModelIconCache(root string, cache map[string]string, models []string) {

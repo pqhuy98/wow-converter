@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
+	mappreview "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/preview"
 )
 
 type mapPreviewBody struct {
@@ -84,18 +85,18 @@ func registerMapPreviewRoutes(r Router, d *Deps) {
 			}
 			ctx, cancel := context.WithCancel(req.Context())
 			defer cancel()
-			options := mapexporter.PreviewOptions{Client: d.Client, CacheDir: d.Config.OutputDirBrowse, BuildKey: info.BuildKey, MapID: id, MapDir: dir, Tiles: tiles, NPCsSupported: npcSupported, SuggestOnly: suggest}
+			options := mappreview.PreviewOptions{Client: d.Client, CacheDir: d.Config.OutputDirBrowse, BuildKey: info.BuildKey, MapID: id, MapDir: dir, Tiles: tiles, NPCsSupported: npcSupported, SuggestOnly: suggest}
 			streaming := !suggest && req.URL.Query().Get("progress") == "1"
 			var stream *mapPreviewStream
 			if streaming {
 				stream = newMapPreviewStream(w)
-				options.Progress = func(progress mapexporter.PreviewProgress) {
+				options.Progress = func(progress mappreview.PreviewProgress) {
 					if stream.send(mapPreviewEvent{Progress: &progress}) != nil {
 						cancel()
 					}
 				}
 			}
-			preview, err := mapexporter.BuildMapPreview(ctx, options)
+			preview, err := mappreview.BuildMapPreview(ctx, options)
 			if err != nil {
 				if streaming {
 					if ctx.Err() == nil {
@@ -116,7 +117,7 @@ func registerMapPreviewRoutes(r Router, d *Deps) {
 					sendError(w, http.StatusBadRequest, "No NPC data in the selected cells")
 					return
 				}
-				clamp := mapexporter.SuggestPreviewClamp(preview, body.UnitScale)
+				clamp := mappreview.SuggestPreviewClamp(preview, body.UnitScale)
 				sendJSON(w, http.StatusOK, map[string]float64{"lower": clamp.Lower, "upper": clamp.Upper})
 				return
 			}
@@ -126,9 +127,9 @@ func registerMapPreviewRoutes(r Router, d *Deps) {
 }
 
 type mapPreviewEvent struct {
-	Progress *mapexporter.PreviewProgress `json:"progress,omitempty"`
-	Result   *mapexporter.MapPreview      `json:"result,omitempty"`
-	Error    string                       `json:"error,omitempty"`
+	Progress *mappreview.PreviewProgress `json:"progress,omitempty"`
+	Result   *mappreview.MapPreview      `json:"result,omitempty"`
+	Error    string                      `json:"error,omitempty"`
 }
 
 type mapPreviewStream struct {

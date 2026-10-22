@@ -5,6 +5,8 @@ go 1.25.0
 require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hajimehoshi/go-mp3 v0.3.4
+	github.com/jfreymuth/oggvorbis v1.0.5
 	golang.org/x/text v0.40.0
 	modernc.org/sqlite v1.52.0
 )
@@ -21,6 +23,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gohugoio/hugo v0.149.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/jfreymuth/vorbis v1.0.2 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

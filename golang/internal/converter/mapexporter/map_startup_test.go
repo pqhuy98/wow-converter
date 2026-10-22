@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	mapterrain "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/terrain"
 	"github.com/pqhuy98/wow-converter/internal/wc3/data"
 	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
@@ -28,7 +29,7 @@ func TestMapStartupSurvivesCachedExportAndEditorRegeneration(t *testing.T) {
 	}
 	cfg := DefaultMapExportConfig()
 	mm := extra.NewMapManager()
-	mm.SetTerrain(getInitialTerrain(16, 32))
+	mm.SetTerrain(mapterrain.GetInitialTerrain(16, 32))
 	unitType := mm.AddUnitType(false, "hfoo", nil)
 	for i := 0; i < 2; i++ {
 		mm.AddUnit(unitType, data.Unit{Position: [3]float32{float32(i * 64), 32, 0}, Scale: [3]float32{1, 1, 1}, Hitpoints: 100, Color: -1})
@@ -133,4 +134,66 @@ func hasBareLF(b []byte) bool {
 		}
 	}
 	return false
+}
+
+func TestTerrainModeStartupSurvivesCachedExportAndEditorRegeneration(t *testing.T) {
+	dir := t.TempDir()
+	templateDir, err := workspace.ResolveTemplateEmptyDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantWTG, err := os.ReadFile(filepath.Join(templateDir, "war3map.wtg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Switch modes on the same output, then switch back to catch stale startup.
+	for _, enabled := range []bool{false, true, false} {
+		cfg := DefaultMapExportConfig()
+		cfg.TerrainAsWc3Tilesets = enabled
+		mm := extra.NewMapManager()
+		mm.SetTerrain(mapterrain.GetInitialTerrain(4, 4))
+		e := MapExporter{MapExportConfig: &cfg, MapManager: mm, preloadLocations: [][2]float32{{123.5, -987.25}}}
+		if err := e.SaveWar3mapFiles(context.Background(), dir, "visibility"); err != nil {
+			t.Fatal(err)
+		}
+		lua, err := os.ReadFile(filepath.Join(dir, "war3map.lua"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"war3map.lua", "war3map.wct"} {
+			raw, err := os.ReadFile(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, call := range []string{"BlzShowTerrain(false)", "FogMaskEnable(false)", "FogEnable(false)", "PanCameraToTimed(", "CinematicFadeBJ(", "EnableUserControl(false)", "{123.5, -987.25}"} {
+				if bytes.Contains(raw, []byte(call)) == enabled {
+					t.Fatalf("%s: %s disagrees with tileset mode %v", name, call, enabled)
+				}
+			}
+			if !bytes.Contains(raw, []byte(`BlzChangeMinimapTerrainTex("minimap.blp")`)) {
+				t.Fatalf("%s lost custom minimap setup", name)
+			}
+			if enabled && !bytes.Contains(raw, []byte("function Trig_LUA_0s_elapse_Actions()\r\nend")) {
+				t.Fatalf("%s still performs a preload action in tileset mode", name)
+			}
+			if name == "war3map.wct" {
+				_, err = rewriteCustomTriggerText(raw, func(script []byte) ([]byte, error) {
+					if len(script) > 0 && !bytes.Contains(lua, bytes.TrimRight(script, "\x00")) {
+						t.Fatal("editor custom trigger differs from runtime Lua")
+					}
+					return script, nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		gotWTG, err := os.ReadFile(filepath.Join(dir, "war3map.wtg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(gotWTG, wantWTG) {
+			t.Fatal("modified template GUI triggers")
+		}
+	}
 }

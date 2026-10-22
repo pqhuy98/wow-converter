@@ -3,6 +3,7 @@ package adt
 import (
 	"context"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
@@ -29,10 +30,12 @@ func storePNG(path string, pixels []byte, width, height int, conv *ConversionOut
 		if err != nil {
 			rel = filepath.Base(path)
 		}
+		conv.texturesMu.Lock()
 		conv.Textures = append(conv.Textures, BakedTexture{
 			RelPath: filepath.ToSlash(rel),
 			PNG:     data,
 		})
+		conv.texturesMu.Unlock()
 		return nil
 	}
 	return writers.WriteOutputFile(path, data)
@@ -63,6 +66,8 @@ func (e *Exporter) ExportForConversion(
 	if err != nil {
 		return nil, err
 	}
+	// Worker completion order must not determine snapshot serialization order.
+	sort.Slice(conv.Textures, func(i, j int) bool { return conv.Textures[i].RelPath < conv.Textures[j].RelPath })
 	return conv, nil
 }
 

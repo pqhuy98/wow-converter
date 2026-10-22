@@ -12,8 +12,9 @@ type DoodadFlag struct {
 // Doodad is a placed doodad/destructible instance.
 type Doodad struct {
 	// AngleRadians retains the original DOO float when Angle has not been edited.
-	AngleRadians     *float32
-	GroupID          int32
+	AngleRadians *float32
+	// A nil GroupID defaults to -1 (ungrouped); 0 is a real editor group.
+	GroupID          *int32
 	Unknown1         int32
 	Roll             float32
 	Pitch            float32

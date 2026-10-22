@@ -1,37 +1,49 @@
-# Map generation
+# Map export
 
-Map generation enters `golang/internal/server/api/maps_generate.go` and `golang/internal/converter/mapexporter/`. The Go path loads selected ADTs into a typed in-memory registry and reuses the production model converter. Generated maps are unpacked `.w3x` directories under `maps/`.
+Map generation produces unpacked `.w3x` directories under `maps/`. Start the Go app with `bun run dev`, select map cells, and open **Generate WC3 map**. The dialog controls rotation, height clamp, unit scale, building interiors, NPC export, path blockers, terrain mode and Fresh export.
 
-The export dialog controls the selected cells, rotation, terrain height clamp, building interiors, NPCs, path blockers and Fresh export. [Preview](preview.md) explains the approximate scene, settings retention and one-time automatic clamp suggestion. [Terrain navigation](terrain-navigation.md) and [water](water.md) describe the native terrain/pathing limits.
+| Topic | Guide |
+|---|---|
+| Dialog, clamp suggestions and cached preview | [Preview](preview.md) |
+| Native ground, stock tile selection and model boundaries | [WC3 tilesets](terrain-tilesets.md) |
+| Collision fitting and structural blockers | [Navigation](terrain-navigation.md) |
+| Native water and liquid pathing | [Water](water.md) |
+| NPC players, fields, models, voices, death audio and icons | [NPC export](npcs.md) |
+| Reproduce terrain comparisons and evaluate quality | [Terrain benchmark](terrain-benchmark.md) |
 
-[Terrain fitting benchmark](terrain-benchmark.md) describes the experimental 8K comparison and shared-camera viewer for generated native tilesets and model patches.
+**Terrain as WC3 tilesets** defaults off. Whole-ADT model terrain uses converted models for the ground; native mode uses editable WC3 ground inside the chosen height window and models outside it. **Export NPCs** defaults off. **Place path blockers** defaults on in the UI when NPC data is supported, independently of NPC export; direct Go/API configuration defaults it off.
 
-## Template, minimap and startup
+## Template and startup
 
-`resources/template-empty.w3x` supplies map defaults and custom Lua triggers. New exports copy it; existing output receives missing template files before generated map data is saved. Every generation refreshes template Lua/WCT/WTG startup data and injects current placement coordinates.
+`resources/template-empty.w3x` supplies map defaults and custom Lua triggers. New exports copy it; existing output receives missing template files. Every generation refreshes template Lua/WCT/WTG and inherits the alpha-tile minimap color and loading-screen settings in W3I. Template WTS loading-screen strings are resolved without replacing the output's other strings or generated bounds/placements.
 
-Selected ADT minimap tiles are stitched into a 256×256 `minimap.blp`, using final map bounds and rotation. Gaps and padding are black. The imported custom texture is separate from the editor-generated `war3mapMap.blp`, so an editor minimap rebuild does not replace it.
+Selected ADT minimaps are stitched into a rotated, bounds-aligned 256×256 `minimap.blp`; gaps and padding are black. This import is separate from World Editor's `war3mapMap.blp`.
 
-The Lua template selects `minimap.blp` and sweeps the camera behind a black screen over root ADTs with geometry, or root WMOs when there are no such ADTs. Export writes locations into `war3map.lua` and length-prefixed custom trigger text in `war3map.wct`, refreshes `war3map.wtg`, registers the texture in `war3map.imp`, and selects Lua in `war3map.w3i`. It uses template hooks directly. Camera rendering and preload effectiveness need verification in the game.
+Both modes select `minimap.blp`. Whole-ADT model terrain additionally hides native terrain, disables fog/fog mask, and preloads root ADTs behind a black screen by moving the camera to their injected positions. Root WMOs are used when no ADT has geometry. Native tileset mode leaves terrain and vision enabled and empties the preload action, including its fade/camera movement. Startup changes are injected into both runtime Lua and custom-trigger WCT so they survive editor saves. Imports share `wc3/extra.EnsureCustomImports`.
 
-Unit placements receive unique creation numbers. New unit files use the native v8/11 layout with Reforged skins; saving converter v9 files repairs the unsupported version header. Generated Lua creates serialized units after `InitGlobals` and before initialization triggers. This creation code is kept out of WCT because World Editor rebuilds it from the placement file on save. Cached exports replace old creation calls, including when NPC export is disabled.
+Unit placements get unique creation numbers and the native v8/11 layout with Reforged skins. Lua creates serialized units after `InitGlobals`, before initialization triggers. WCT omits this generated creation code because World Editor rebuilds it from placements. Re-exporting replaces old creation calls, including when NPC export is disabled.
 
-## NPC placements
+## Gameobjects and scenery
 
-NPC unit mode excludes positions outside the playable clamp or too far from fitted ground, while retaining those creatures in model export. At the recommended clamp width the ground tolerance is 100 WC3 units. Manual widths use `100 * recommendedWidth / chosenWidth`, so merely changing the clamp does not change a supported NPC's source-space floor status.
+Client placements combine with bundled AzerothCore `gameobject` spawns/templates. Display IDs resolve through client `GameObjectDisplayInfo`; server orientation includes quaternion exceptions and addon overrides. Gameobjects become destructibles in W3B/DOO, with a `gameobjects.json` source/type manifest. Missing displays, model-less entries and unavailable assets are logged/skipped; database failures and cancellation stop generation. Encounter scripts and initial animation states are not translated.
 
-**All NPCs as destructibles** places decoration at source heights without pathing footprints. The retained API/config key is `allAreDoodads`. Preview spheres are green for units, yellow for destructibles and red for excluded placements. See [NPC export](npcs.md) for appearance sharing, animation policy, fields and icons.
+Server NPCs and gameobjects use the base world with no active events: positive-only event spawns are omitted, negative event links remain, and multiple links do not duplicate a spawn. This policy applies to collision as well as placement.
 
-## Gameobjects
+ADT doodad types use Ignore Model Click (`dimc=1`); direct doodad children use Occlusion Auto (`doct`), excluding units/gameobjects. Without ADTs, root WMOs receive `dimc`. Shared models can use separate object types when editor fields differ by placement.
 
-Client placements combine with AzerothCore `gameobject` / `gameobject_template` spawns. Display IDs resolve through the loaded client's `GameObjectDisplayInfo`. Server placements follow AzerothCore orientation rules, with quaternion exceptions and `gameobject_addon` overrides.
+Doodads and gameobjects store pitch/roll per instance in WC3 3.0 DOO v12, preserving small tilts without duplicate rotation types. Source `Rz*Ry*Rx` rotations are converted to WC3's `Rz*Rx*Ry`; type-level max pitch/roll are zero. Regeneration removes old rotation variants while reusing cached assets. The conversion follows the [Doodad Handler orientation reference](https://www.hiveworkshop.com/threads/doodad-handler-preplaced-special-effect.374394/).
 
-Gameobjects become WC3 destructibles in `war3map.w3b`, with imported model filenames and individual placements in `war3map.doo`. `gameobjects.json` records source identities and WC3 type codes. Missing display rows, model-less displays and unavailable assets are logged and skipped; database failures and cancellation stop generation. Encounter scripts and initial animation states are not translated to WC3 triggers.
+## Code ownership and verification
 
-Server creatures and gameobjects use the base world with no active events. Positive-only event spawns are omitted; negative event links remain. Multiple event links never duplicate a spawn.
+All owners below are under `golang/internal/`:
 
-ADT doodad types use Ignore Model Click (`dimc = 1`), and direct doodad children use Occlusion = Auto (`doct`), excluding units/gameobjects. Without ADTs, only root WMOs receive `dimc`. Shared models use separate object types when these fields differ by placement.
+| Owner | Responsibility |
+|---|---|
+| `server/api/maps_generate.go` | Request validation and export jobs |
+| `converter/mapexporter/` | Run, template, startup and map-file orchestration |
+| `converter/mapexporter/creature/` | NPC placement, ownership, fields and assets |
+| `converter/mapexporter/terrain/` | Native ground, tilesets, boundaries, navigation and water |
+| `converter/mapexporter/preview/` | Fast source-data preview |
+| `converter/mapexporter/settings/` | Shared configuration; root aliases retain CLI/API callers |
 
-## Verification
-
-Package checks and map smoke tests are in [verification](../development/verification.md). Generated reports explain source calculations and exclusions; source/serialization tests do not certify terrain traversal, startup camera rendering or combat behavior in Warcraft III. Object-data changes require a restarted map session.
+Run `go -C golang test ./internal/converter/mapexporter/... ./internal/server/api ./internal/wc3/extra` for focused coverage. See [verification](../development/verification.md) for broader checks. Serialization/browser tests do not establish native rendering or gameplay correctness; use a fresh WC3 session for object-data changes and test World Editor save/reload separately.

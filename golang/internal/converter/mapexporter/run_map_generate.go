@@ -10,6 +10,7 @@ import (
 
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
+	mapterrain "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/terrain"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
@@ -42,6 +43,7 @@ type MapGenerateConversionResult struct {
 	OutputDir    string
 	MapSaveName  string
 	ConvertSteps int
+	Warnings     []string
 }
 
 // BuildMapExportConfig constructs MapExportConfig from API parameters.
@@ -129,7 +131,7 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	}
 	if len(exporter.WowObjectManager.Roots) > 0 {
 		ext := common.ComputeAbsoluteMinMaxExtents(exporter.WowObjectManager.Roots)
-		if _, _, err := terrainDimensions(ext.Min, ext.Max, opts.MapExportConfig.Terrain.ClampPercent); err != nil {
+		if _, _, err := mapterrain.TerrainDimensions(ext.Min, ext.Max, opts.MapExportConfig.Terrain.ClampPercent); err != nil {
 			return MapGenerateConversionResult{}, err
 		}
 	}
@@ -206,5 +208,6 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 		OutputDir:    absOut,
 		MapSaveName:  mapSaveName,
 		ConvertSteps: convertSteps,
+		Warnings:     exporter.warnings,
 	}, nil
 }

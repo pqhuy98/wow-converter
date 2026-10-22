@@ -35,6 +35,8 @@ type Model struct {
 	Collision    [][3]math.Vector3
 	Liquids      []liquid.Surface
 	TexturePaths []string
+	// Generated map geometry depends on this export's terrain and navigation.
+	AlwaysExport bool
 }
 
 // ObjectAbsolute is world-space placement for a tree node.

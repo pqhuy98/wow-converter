@@ -7,10 +7,10 @@ import (
 )
 
 var (
-	mapSaveNameInvalidChars = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
+	mapSaveNameInvalidChars    = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
 	mapSaveNameMultiUnderscore = regexp.MustCompile(`_+`)
-	mapSaveNameTrimEdges = regexp.MustCompile(`^[_.-]+|[_.-]+$`)
-	mapSaveNameW3xSuffix = regexp.MustCompile(`(?i)\.w3x$`)
+	mapSaveNameTrimEdges       = regexp.MustCompile(`^[_.-]+|[_.-]+$`)
+	mapSaveNameW3xSuffix       = regexp.MustCompile(`(?i)\.w3x$`)
 )
 
 func stripMapSaveNameExtension(name string) string {

@@ -19,7 +19,10 @@ import (
 
 // MaterialBenchmark uses source paint mixtures and vertex tint, never fitted
 // world-image fragments. Its model exceptions are complete source texture blocks.
-func MaterialBenchmark(ctx context.Context, out, source, onlyRegion string) error {
+func MaterialBenchmark(ctx context.Context, out, source, onlyRegion string, paintFamilies int) error {
+	if paintFamilies < 0 || paintFamilies > 63 {
+		return fmt.Errorf("invalid export paint budget %d", paintFamilies)
+	}
 	data, err := os.ReadFile(filepath.Join(out, "report.json"))
 	if err != nil {
 		return err
@@ -36,7 +39,7 @@ func MaterialBenchmark(ctx context.Context, out, source, onlyRegion string) erro
 			continue
 		}
 		found = true
-		if err = fitMaterialRegion(ctx, out, source, r); err != nil {
+		if err = fitMaterialRegion(ctx, out, source, r, paintFamilies); err != nil {
 			return err
 		}
 		if err = writeJSON(filepath.Join(out, r.Name, "report.json"), r); err != nil {
@@ -52,13 +55,11 @@ func MaterialBenchmark(ctx context.Context, out, source, onlyRegion string) erro
 	return writeViewer(out)
 }
 
-func fitMaterialRegion(ctx context.Context, out, source string, r *regionReport) error {
+func fitMaterialRegion(ctx context.Context, out, source string, r *regionReport, paintFamilies int) error {
 	start := time.Now()
 	fmt.Println("MATERIAL FIT", r.Name)
-	w, h, nx := r.Cells[0], r.Cells[1], r.X1-r.X0+1
+	w, h, nx, ny := r.Cells[0], r.Cells[1], r.X1-r.X0+1, r.Y1-r.Y0+1
 	captures := make([]materialCapture, len(r.Tiles))
-	catalog := []terrainMaterial{}
-	lookup := map[terrainMaterial]int{}
 	for ti, t := range r.Tiles {
 		data, err := os.ReadFile(filepath.Join(source, t.Name, "layers.json"))
 		if err != nil {
@@ -71,72 +72,40 @@ func fitMaterialRegion(ctx context.Context, out, source string, r *regionReport)
 		if c.Version != 2 || c.Build != r.Build || len(c.Chunks) != 256 {
 			return fmt.Errorf("material capture mismatch: %s", t.Name)
 		}
+	}
+	images := map[uint32]*image.NRGBA{}
+	for _, c := range captures {
 		for _, m := range c.Materials {
-			if m.ID == 0 {
-				continue
-			}
-			if m.Scale != 1 {
-				return fmt.Errorf("material scale %d needs explicit phase allocation: %s", m.Scale, t.Name)
-			}
-			if _, ok := lookup[m]; !ok {
-				lookup[m] = len(catalog)
-				catalog = append(catalog, m)
-			}
-		}
-	}
-	dim := len(catalog) + 3
-	features, counts := make([]float32, (w+1)*(h+1)*dim), make([]int, (w+1)*(h+1))
-	for ti, c := range captures {
-		for y := 0; y <= cellsPerADT; y++ {
-			for x := 0; x <= cellsPerADT; x++ {
-				cx, cy := min(15, x/8), min(15, y/8)
-				chunk := c.Chunks[cy*16+cx]
-				u, v := float64(x-cx*8)/8, float64(y-cy*8)/8
-				at := (ti/nx*cellsPerADT+y)*(w+1) + ti%nx*cellsPerADT + x
-				var alpha [8]float64
-				alpha[0] = 1
-				for j := 1; j < min(8, len(chunk.Layers)); j++ {
-					if j < len(chunk.Alpha) && len(chunk.Alpha[j]) == 4096 {
-						alpha[j] = sampleMaterialAlpha(chunk.Alpha[j], u, v)
-						alpha[0] -= alpha[j]
-					}
+			for _, id := range []uint32{m.ID, m.HeightID} {
+				if id == 0 || images[id] != nil {
+					continue
 				}
-				alpha[0] = max(0, alpha[0])
-				sum := 0.0
-				for _, a := range alpha {
-					sum += a
+				img, err := loadPNG(filepath.Join(source, "materials", r.Build, fmt.Sprintf("%d.png", id)))
+				if err != nil {
+					return err
 				}
-				for j, index := range chunk.Layers {
-					if j < 8 && c.Materials[index].ID != 0 {
-						features[at*dim+lookup[c.Materials[index]]] += float32(alpha[j] / max(sum, 1e-9))
-					}
-				}
-				tint := rgb{1, 1, 1}
-				if len(chunk.Tint) == 145 {
-					tint = chunk.Tint[(y-cy*8)*17+x-cx*8]
-				}
-				for k := 0; k < 3; k++ {
-					features[at*dim+len(catalog)+k] += tint[k] * .5
-				}
-				counts[at]++
+				images[id] = img
 			}
 		}
 	}
-	for at, count := range counts {
-		for k := 0; k < dim; k++ {
-			features[at*dim+k] /= float32(max(1, count))
-		}
+	var grid *TilesetGrid
+	stage := "material-blend"
+	if paintFamilies > 0 {
+		grid = &TilesetGrid{Width: w, Height: h, StepX: [2]float64{1.0 / cellsPerADT, 0}, StepY: [2]float64{0, 1.0 / cellsPerADT}, PaintFamilies: paintFamilies}
+		stage = fmt.Sprintf("export-%d", paintFamilies)
 	}
-	centers := clusterMaterialFeatures(features, dim, 64)
-	f := &fit{width: w, height: h, labels: make([]uint8, (w+1)*(h+1)), variants: make([]uint8, w*h), sequential: true}
-	for at := range f.labels {
-		f.labels[at] = uint8(nearestMaterialFeature(features[at*dim:(at+1)*dim], centers))
-	}
-	if err := f.makeMaterialSheets(source, r.Build, catalog, centers, captures[0].HeightTexturing); err != nil {
+	f, catalog, centers, err := fitCaptures(captures, nx, ny, images, grid)
+	if err != nil {
 		return err
 	}
-	dir := filepath.Join(out, r.Name, "material-blend")
-	textureBytes, err := f.saveSheets(filepath.Join(dir, "tileset"))
+	dir := filepath.Join(out, r.Name, stage)
+	var textureBytes int64
+	if grid != nil {
+		f.prepareExportSheets(centers, *grid)
+		_, textureBytes, err = f.saveExportSheets(filepath.Join(dir, "tileset"))
+	} else {
+		textureBytes, err = f.saveSheets(filepath.Join(dir, "tileset"))
+	}
 	if err != nil {
 		return err
 	}
@@ -248,7 +217,7 @@ func fitMaterialRegion(ctx context.Context, out, source string, r *regionReport)
 	geometry := hybridGeometry(native, w, h, tiles, nx, mask, r.Geometry.Window)
 	geometry.BoundaryAdjustment, geometry.SeamMax = adjustment, gap
 	continuity := seams.metrics()
-	s := stageReport{Name: "material-blend", Palette: len(centers), TextureBytes: textureBytes + patchBytes, Metrics: aggregate.metrics, Seconds: time.Since(start).Seconds(), ModelArea: area, PatchTextureBytes: patchBytes, PatchTriangles: triangles, NativeMAE: nativeAbs / float64(nativePixels*3), Geometry: &geometry, MandatoryModelArea: area, NativeMajority: area < .5, Seams: &continuity, VisualStatus: "pending"}
+	s := stageReport{Name: stage, Palette: len(f.sheets), TextureBytes: textureBytes + patchBytes, Metrics: aggregate.metrics, Seconds: time.Since(start).Seconds(), ModelArea: area, PatchTextureBytes: patchBytes, PatchTriangles: triangles, NativeMAE: nativeAbs / float64(nativePixels*3), Geometry: &geometry, MandatoryModelArea: area, NativeMajority: area < .5, Seams: &continuity, VisualStatus: "pending"}
 	for i, old := range r.Stages {
 		if old.Name == s.Name {
 			r.Stages[i] = s
@@ -336,15 +305,238 @@ func clusterMaterialFeatures(points []float32, dim, maximum int) [][]float32 {
 	return centers
 }
 
+func fitCaptures(captures []materialCapture, nx, ny int, images map[uint32]*image.NRGBA, grid ...*TilesetGrid) (*fit, []terrainMaterial, [][]float32, error) {
+	if nx <= 0 || ny <= 0 || len(captures) != nx*ny {
+		return nil, nil, nil, fmt.Errorf("tileset capture grid is %dx%d with %d tiles", nx, ny, len(captures))
+	}
+	w, h := nx*cellsPerADT, ny*cellsPerADT
+	catalog := []terrainMaterial{}
+	lookup := map[terrainMaterial]int{}
+	heightBlend := false
+	for ti, c := range captures {
+		if len(c.Chunks) != 256 {
+			continue
+		}
+		if c.Version != 2 {
+			return nil, nil, nil, fmt.Errorf("material capture mismatch at tile %d", ti)
+		}
+		heightBlend = heightBlend || c.HeightTexturing
+		for _, m := range c.Materials {
+			if m.ID == 0 {
+				continue
+			}
+			if m.Scale < 1 || m.Scale > 1<<15 || m.Scale&(m.Scale-1) != 0 {
+				return nil, nil, nil, fmt.Errorf("invalid terrain material scale %d", m.Scale)
+			}
+			if _, ok := lookup[m]; !ok {
+				lookup[m] = len(catalog)
+				catalog = append(catalog, m)
+			}
+		}
+	}
+	if len(catalog) == 0 {
+		return nil, nil, nil, fmt.Errorf("no terrain materials in selected tiles")
+	}
+	phases := newMaterialPhases(catalog, images, heightBlend)
+	dim := len(catalog) + 4*len(phases.scales) + 3
+	features, counts := make([]float32, (w+1)*(h+1)*dim), make([]int, (w+1)*(h+1))
+	for ti, c := range captures {
+		if len(c.Chunks) != 256 {
+			continue
+		}
+		for y := 0; y <= cellsPerADT; y++ {
+			for x := 0; x <= cellsPerADT; x++ {
+				cx, cy := min(15, x/8), min(15, y/8)
+				chunk := c.Chunks[cy*16+cx]
+				u, v := float64(x-cx*8)/8, float64(y-cy*8)/8
+				at := (ti/nx*cellsPerADT+y)*(w+1) + ti%nx*cellsPerADT + x
+				var alpha [8]float64
+				alpha[0] = 1
+				for j := 1; j < min(8, len(chunk.Layers)); j++ {
+					if j < len(chunk.Alpha) && len(chunk.Alpha[j]) == 4096 {
+						alpha[j] = sampleMaterialAlpha(chunk.Alpha[j], u, v)
+						alpha[0] -= alpha[j]
+					}
+				}
+				alpha[0] = max(0, alpha[0])
+				sum := 0.0
+				for _, a := range alpha {
+					sum += a
+				}
+				for j, index := range chunk.Layers {
+					if j < 8 && c.Materials[index].ID != 0 {
+						features[at*dim+lookup[c.Materials[index]]] += float32(alpha[j] / max(sum, 1e-9))
+					}
+				}
+				tint := rgb{1, 1, 1}
+				if len(chunk.Tint) == 145 {
+					tint = chunk.Tint[(y-cy*8)*17+x-cx*8]
+				}
+				for k := 0; k < 3; k++ {
+					features[at*dim+dim-3+k] += tint[k] * .5
+				}
+				counts[at]++
+			}
+		}
+	}
+	for at, count := range counts {
+		for k := 0; k < dim; k++ {
+			features[at*dim+k] /= float32(max(1, count))
+		}
+	}
+	maximum := 64
+	if len(grid) > 0 && grid[0] != nil {
+		g := grid[0]
+		if g.Width < 1 || g.Height < 1 || g.Width > 480 || g.Height > 480 {
+			return nil, nil, nil, fmt.Errorf("invalid native tileset grid %dx%d", g.Width, g.Height)
+		}
+		features = resampleMaterialFeatures(features, dim, w, h, *g)
+		w, h = g.Width, g.Height
+		if g.PaintFamilies < 1 || g.PaintFamilies > 63 {
+			return nil, nil, nil, fmt.Errorf("invalid native paint family budget %d", g.PaintFamilies)
+		}
+		maximum = g.PaintFamilies // The separate alpha entry also consumes a palette slot.
+	}
+	if len(phases.scales) > 0 {
+		var g *TilesetGrid
+		if len(grid) > 0 {
+			g = grid[0]
+		}
+		phases.allocate(features, catalog, w, h, g)
+	}
+	centers := clusterMaterialFeatures(features, dim, maximum)
+	f := &fit{width: w, height: h, labels: make([]uint8, (w+1)*(h+1)), variants: make([]uint8, w*h), sequential: true}
+	for at := range f.labels {
+		f.labels[at] = uint8(nearestMaterialFeature(features[at*dim:(at+1)*dim], centers))
+	}
+	if err := f.makeMaterialSheetsFrom(catalog, centers, heightBlend, images, phases); err != nil {
+		return nil, nil, nil, err
+	}
+	if len(grid) > 0 && grid[0] != nil {
+		sortExportPalette(f, centers)
+		f.sheets = append(f.sheets, sheet{pixels: make([]byte, 32*subtile*subtile*4)})
+	}
+	return f, catalog, centers, nil
+}
+
+// Order the editor swatches along a nearest-neighbor walk through material
+// mixtures and average color. Keep texture relatives together as tint changes.
+func sortExportPalette(f *fit, centers [][]float32) {
+	n := len(f.sheets)
+	colors := make([]rgb, n)
+	for i, s := range f.sheets {
+		for _, c := range s.low[16] {
+			for k := range c {
+				colors[i][k] += c[k] / sampleCount / 255
+			}
+		}
+	}
+	start := 0
+	for i := range colors {
+		if .2126*colors[i][0]+.7152*colors[i][1]+.0722*colors[i][2] < .2126*colors[start][0]+.7152*colors[start][1]+.0722*colors[start][2] {
+			start = i
+		}
+	}
+	used := make([]bool, n)
+	order := make([]int, 0, n)
+	at := start
+	for len(order) < n {
+		order = append(order, at)
+		used[at] = true
+		next := -1
+		best := float64(math.Inf(1))
+		for j := 0; j < n; j++ {
+			if used[j] {
+				continue
+			}
+			d := 0.0
+			for k := range colors[j] {
+				delta := float64(colors[j][k] - colors[at][k])
+				d += delta * delta * 4
+			}
+			for k := 0; k < len(centers[j])-3; k++ {
+				delta := float64(centers[j][k] - centers[at][k])
+				d += delta * delta * .25
+			}
+			if d < best {
+				next, best = j, d
+			}
+		}
+		at = next
+	}
+	sorted := make([]sheet, n)
+	remap := make([]uint8, n)
+	for new, old := range order {
+		sorted[new] = f.sheets[old]
+		remap[old] = uint8(new)
+	}
+	for i, id := range f.labels {
+		f.labels[i] = remap[id]
+	}
+	sortedCenters := make([][]float32, n)
+	for new, old := range order {
+		sortedCenters[new] = centers[old]
+	}
+	copy(centers, sortedCenters)
+	f.sheets = sorted
+}
+
+// Interpolate paint mixtures before quantization. Resizing already-quantized
+// labels by nearest neighbor stamps repeated square blocks into the final map.
+func resampleMaterialFeatures(src []float32, dim, width, height int, grid TilesetGrid) []float32 {
+	out := make([]float32, (grid.Width+1)*(grid.Height+1)*dim)
+	for y := 0; y <= grid.Height; y++ {
+		for x := 0; x <= grid.Width; x++ {
+			u := clamp((grid.Origin[0]+float64(x)*grid.StepX[0]+float64(y)*grid.StepY[0])*cellsPerADT, 0, float64(width))
+			v := clamp((grid.Origin[1]+float64(x)*grid.StepX[1]+float64(y)*grid.StepY[1])*cellsPerADT, 0, float64(height))
+			ix, iy := int(u), int(v)
+			for j := 0; j < 2; j++ {
+				for i := 0; i < 2; i++ {
+					from := (min(height, iy+j)*(width+1) + min(width, ix+i)) * dim
+					weight := float32([2]float64{1 - (u - float64(ix)), u - float64(ix)}[i] * [2]float64{1 - (v - float64(iy)), v - float64(iy)}[j])
+					to := (y*(grid.Width+1) + x) * dim
+					for k := 0; k < dim; k++ {
+						out[to+k] += src[from+k] * weight
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
 func (f *fit) makeMaterialSheets(source, build string, catalog []terrainMaterial, centers [][]float32, heightBlend bool) error {
-	load := func(id uint32) (*image.NRGBA, error) {
-		img, err := loadPNG(filepath.Join(source, "materials", build, fmt.Sprintf("%d.png", id)))
-		if err != nil {
-			return nil, err
+	images := map[uint32]*image.NRGBA{}
+	for _, m := range catalog {
+		for _, id := range []uint32{m.ID, m.HeightID} {
+			if id == 0 || images[id] != nil {
+				continue
+			}
+			img, err := loadPNG(filepath.Join(source, "materials", build, fmt.Sprintf("%d.png", id)))
+			if err != nil {
+				return err
+			}
+			images[id] = img
+		}
+	}
+	return f.makeMaterialSheetsFrom(catalog, centers, heightBlend, images)
+}
+
+func (f *fit) makeMaterialSheetsFrom(catalog []terrainMaterial, centers [][]float32, heightBlend bool, images map[uint32]*image.NRGBA, phasePlan ...materialPhases) error {
+	f.materialCount = len(catalog)
+	phases := materialPhases{span: [2]float64{1, 1}}
+	if len(phasePlan) > 0 {
+		phases = phasePlan[0]
+	}
+	load := func(id uint32, scale int) (*image.NRGBA, error) {
+		img := images[id]
+		if img == nil {
+			return nil, fmt.Errorf("missing terrain material texture %d", id)
 		}
 		mips := bake.BuildMipChain(img.Pix, img.Rect.Dx(), img.Rect.Dy())
 		level := 0
-		for level+1 < len(mips) && max(mips[level].Width, mips[level].Height) > subtile {
+		target := float64(subtile*scale) / max(phases.span[0], phases.span[1])
+		for level+1 < len(mips) && float64(max(mips[level].Width, mips[level].Height)) > target {
 			level++
 		}
 		mip := mips[level]
@@ -353,11 +545,11 @@ func (f *fit) makeMaterialSheets(source, build string, catalog []terrainMaterial
 	diffuse, height := make([]*image.NRGBA, len(catalog)), make([]*image.NRGBA, len(catalog))
 	for i, m := range catalog {
 		var err error
-		if diffuse[i], err = load(m.ID); err != nil {
+		if diffuse[i], err = load(m.ID, m.Scale); err != nil {
 			return err
 		}
 		if m.HeightID != 0 {
-			if height[i], err = load(m.HeightID); err != nil {
+			if height[i], err = load(m.HeightID, m.Scale); err != nil {
 				return err
 			}
 		}
@@ -381,16 +573,18 @@ func (f *fit) makeMaterialSheets(source, build string, catalog []terrainMaterial
 		}
 		s := &f.sheets[ci]
 		s.pixels = make([]byte, 32*subtile*subtile*4)
+		s.detail = make([]float64, subtile*subtile)
 		for y := 0; y < subtile; y++ {
 			for x := 0; x < subtile; x++ {
 				u, v := (float64(x)+.5)/subtile, (float64(y)+.5)/subtile
 				var samples [8][4]float64
 				var heights [8]float64
 				for i, id := range ids {
-					samples[i] = sampleMaterialImage(diffuse[id], u, v)
+					tu, tv := phases.uv(center, len(catalog), catalog[id].Scale, u, v)
+					samples[i] = sampleMaterialImage(diffuse[id], tu, tv)
 					h := samples[i][3]
 					if height[id] != nil {
-						h = sampleMaterialImage(height[id], u, v)[3]
+						h = sampleMaterialImage(height[id], tu, tv)[3]
 					}
 					heights[i] = h/255*catalog[id].HeightScale + catalog[id].HeightOffset
 				}
@@ -400,8 +594,9 @@ func (f *fit) makeMaterialSheets(source, build string, catalog []terrainMaterial
 				}
 				var color [3]float64
 				for i := range ids {
+					s.detail[y*subtile+x] += heights[i] * weights[i]
 					for k := range color {
-						color[k] += samples[i][k] * weights[i] * float64(center[len(catalog)+k]*2)
+						color[k] += samples[i][k] * weights[i] * float64(center[len(center)-3+k]*2)
 					}
 				}
 				for layer := 0; layer < 32; layer++ {
@@ -412,6 +607,11 @@ func (f *fit) makeMaterialSheets(source, build string, catalog []terrainMaterial
 					s.pixels[at+3] = 255
 					if layer < 16 {
 						s.pixels[at+3] = byte(materialMaskAlpha(uint8(layer), u, v)*255 + .5)
+					}
+					// WE can select variations 17..31, which address layer 0.
+					// Overlay mask 0 is never drawn, so make that brush fallback full.
+					if layer == 0 {
+						s.pixels[at+3] = 255
 					}
 				}
 			}

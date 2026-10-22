@@ -311,8 +311,10 @@ export default function MapViewer() {
         autoClampPercent: false,
         mapAngleDeg: form.mapAngleDeg,
         unitScale: form.unitScale,
+        playerFaction: form.playerFaction,
         includeBuildingInteriors: form.includeBuildingInteriors,
         placePathBlockers: form.placePathBlockers,
+        terrainAsWc3Tilesets: form.terrainAsWc3Tilesets,
         freshExport: form.freshExport,
         creatures: form.creatures,
       };
@@ -599,6 +601,9 @@ export default function MapViewer() {
                           ? ` (${(generateJob.result.failed ?? []).length} tile load failures)`
                           : ''}
                       </p>
+                      {(generateJob.result.warnings ?? []).map((warning, index) => (
+                        <p key={index} role="status" className="text-xs text-yellow-500">{warning}</p>
+                      ))}
                       {generateJob.result.outputDir && (
                         <div className="flex items-center gap-2">
                           <Button

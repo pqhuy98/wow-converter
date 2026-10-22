@@ -7,17 +7,21 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/ansi"
 	"github.com/pqhuy98/wow-converter/internal/azerothcore"
 	"github.com/pqhuy98/wow-converter/internal/config"
-	"github.com/pqhuy98/wow-converter/internal/converter/character"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
+	creature "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/creature"
+	mapterrain "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/terrain"
 	"github.com/pqhuy98/wow-converter/internal/math"
 	"github.com/pqhuy98/wow-converter/internal/wc3/data"
 	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
+	"github.com/pqhuy98/wow-converter/internal/wc3/translators"
 	"github.com/pqhuy98/wow-converter/internal/workspace"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 )
@@ -34,62 +38,6 @@ func MapExportWorkerCount() int {
 	return n
 }
 
-// TerrainClampPercent configures Z clamp for terrain generation.
-type TerrainClampPercent struct {
-	Lower float64
-	Upper float64
-}
-
-// DoodadEnable toggles doodad types during export.
-type DoodadEnable struct {
-	ADT    bool
-	WMO    bool
-	M2     bool
-	Gobj   bool
-	Unit   bool
-	Others bool
-}
-
-// MapExportConfig drives a single map export run.
-type MapExportConfig struct {
-	MapID           int
-	CascMapDir      string
-	WowExportFolder string
-	WMOSet          []string
-	Min             math.Vector2
-	Max             math.Vector2
-	MapAngleDeg     float64
-	Terrain         struct {
-		ClampPercent TerrainClampPercent
-	}
-	Doodads struct {
-		Enable                    DoodadEnable
-		PitchRollThresholdRadians float64
-	}
-	Creatures struct {
-		Enable        bool
-		AllAreDoodads bool
-	}
-	UnitScale         float64
-	Navigation        NavigationConfig
-	PlacePathBlockers bool
-}
-
-// DefaultMapExportConfig returns defaults excluding map-specific fields.
-func DefaultMapExportConfig() MapExportConfig {
-	cfg := MapExportConfig{
-		Terrain: struct{ ClampPercent TerrainClampPercent }{
-			ClampPercent: TerrainClampPercent{Lower: 0, Upper: 1},
-		},
-		UnitScale:  1,
-		Navigation: DefaultNavigationConfig(),
-	}
-	cfg.Doodads.Enable = DoodadEnable{ADT: true, WMO: true, M2: true, Gobj: true, Unit: true, Others: true}
-	cfg.Doodads.PitchRollThresholdRadians = math.Radians(5)
-	cfg.Creatures.Enable = true
-	return cfg
-}
-
 // MapExporter orchestrates WoW -> WC3 map conversion.
 type MapExporter struct {
 	Config           config.Config
@@ -100,8 +48,12 @@ type MapExporter struct {
 	tileRegistry     *common.TileRegistry
 	filterDoodads    func(id string, typ common.WowObjectType) bool
 	preloadLocations [][2]float32
-	water            *mapWater
-	navigation       *terrainNavigation
+	water            *mapterrain.MapWater
+	navigation       *mapterrain.TerrainNavigation
+	terrainConverter *mapterrain.Wc3Converter
+	factions         *creature.FactionPlan
+	deathSounds      map[string]string
+	warnings         []string
 }
 
 // NewMapExporter creates an exporter. mapCfg must be non-nil and is mutated in place during export.
@@ -179,23 +131,35 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	wc3 := NewWc3Converter(*e.MapExportConfig)
+	wc3 := mapterrain.NewWc3Converter(*e.MapExportConfig)
 	terrain, err := wc3.GenerateTerrainWithHeight(e.WowObjectManager)
 	if err != nil {
 		return err
 	}
-	water, err := collectMapWater(ctx, e.WowObjectManager, terrain, e.MapExportConfig)
+	if e.MapExportConfig.TerrainAsWc3Tilesets {
+		e.terrainConverter = wc3
+		if err := wc3.ApplyWc3Tileset(ctx, &terrain, e.WowObjectManager, e.wowClient, e.Config); err != nil {
+			return err
+		}
+	}
+	water, err := mapterrain.CollectMapWater(ctx, e.WowObjectManager, terrain, e.MapExportConfig)
 	if err != nil {
 		return err
 	}
 	e.water = water
-	navigation, err := generateReachableTerrain(ctx, e.WowObjectManager, terrain, e.MapExportConfig, e.Config.RawModelScaleUp, water)
+	navigation, err := mapterrain.GenerateReachableTerrain(ctx, e.WowObjectManager, terrain, e.MapExportConfig, e.Config.RawModelScaleUp, water)
 	if err != nil {
 		return err
 	}
 	e.navigation = navigation
-	if err := water.project(ctx, terrain); err != nil {
+	if err := water.Project(ctx, terrain); err != nil {
 		return err
+	}
+	if wc3.Tileset != nil {
+		if err := wc3.FinishTilesetModels(ctx, e.WowObjectManager, terrain, wc3.Tileset, e.Config); err != nil {
+			return err
+		}
+		wc3.BlockModelCells(navigation)
 	}
 	e.MapManager.SetTerrain(terrain)
 	if navigation != nil {
@@ -212,31 +176,22 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		}
 	}
 
-	_, _ = wc3.PlaceDoodads(e.MapManager, e.WowObjectManager, func(obj *common.WowObject) bool {
+	tiltedDoodads, _ := wc3.PlaceDoodads(e.MapManager, e.WowObjectManager, func(obj *common.WowObject) bool {
 		return e.filterDoodads(obj.ID, obj.Type)
 	})
-	e.preloadLocations = wc3.preloadLocations
+	e.preloadLocations = wc3.PreloadLocations
 	if navigation != nil {
 		if e.MapExportConfig.PlacePathBlockers {
-			if err := navigation.placeBlockers(e.MapManager, outputDir); err != nil {
+			if err := navigation.PlaceBlockers(e.MapManager, outputDir); err != nil {
 				return err
 			}
-		} else if err := navigation.write(outputDir, false); err != nil {
+		} else if err := navigation.Write(outputDir, false); err != nil {
 			return err
 		}
 	}
 	log.Printf("Total doodads: %d", len(e.MapManager.Doodads))
 	log.Printf("Total doodad types: %d", len(e.MapManager.DoodadTypes))
-	pitchRollCount := 0
-	for _, t := range e.MapManager.DoodadTypes {
-		for _, m := range t.Data {
-			if m.ID == "dprx" || m.ID == "dpro" {
-				pitchRollCount++
-				break
-			}
-		}
-	}
-	log.Printf("Doodad types with custom pitch/roll: %d", pitchRollCount)
+	log.Printf("Doodad instances with custom pitch/roll: %d", tiltedDoodads)
 
 	if len(e.MapManager.Doodads) > 130000 {
 		return fmt.Errorf("too many doodads: %d, limit is 130000", len(e.MapManager.Doodads))
@@ -291,7 +246,7 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 	if err := am.ExportModels(ctx, outputDir); err != nil {
 		return err
 	}
-	manifest, err := json.MarshalIndent(wc3.gameObjects, "", "  ")
+	manifest, err := json.MarshalIndent(wc3.GameObjects, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -308,27 +263,38 @@ func (e *MapExporter) ExportCreatures(ctx context.Context, outputDir string, onP
 		return err
 	}
 	mc := e.MapExportConfig
+	e.deathSounds = nil
+	e.warnings = nil
 	if !mc.Creatures.Enable {
 		if err := os.Remove(filepath.Join(outputDir, "units.json")); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	}
-	var voices creatureVoices
+	var voices creature.CreatureVoices
 	if !mc.Creatures.AllAreDoodads {
 		var err error
-		voices, err = loadCreatureVoices()
+		voices, err = creature.LoadCreatureVoices()
 		if err != nil {
 			return err
 		}
-		if err := e.prepareCreatureSelection(ctx); err != nil {
+		if err := creature.PrepareCreatureSelection(ctx, e.wowClient, e.WowObjectManager); err != nil {
 			return err
 		}
 	}
-	wc3 := NewWc3Converter(*mc)
-	units := wc3.PlaceUnits(e.MapManager, e.WowObjectManager)
+	units := creature.PlaceUnits(*mc, e.MapManager, e.WowObjectManager)
 	if !mc.Creatures.AllAreDoodads {
-		applyCreatureVoices(e.MapManager, units, voices)
+		if plan, err := creature.ConvertFactionPlayers(e.MapExportConfig.PlayerFaction, e.MapManager, units); err != nil {
+			return err
+		} else {
+			e.factions = plan
+		}
+		creature.ApplyCreatureVoices(e.MapManager, units, voices)
+		if sounds, err := creature.ExportCreatureDeathSounds(ctx, e.wowClient, outputDir, units); err != nil {
+			return err
+		} else {
+			e.deathSounds = sounds
+		}
 	}
 	log.Printf("Created %d custom unit types", len(e.MapManager.UnitTypes))
 	log.Printf("Placed %d unit instances", len(e.MapManager.Units))
@@ -338,26 +304,24 @@ func (e *MapExporter) ExportCreatures(ctx context.Context, outputDir string, onP
 		creatures = append(creatures, u.Creature)
 	}
 	start := time.Now()
-	assets, err := character.ExportCreatureModels(ctx, creatures, outputDir, e.Config, e.wowClient, MapExportWorkerCount(), onProgress)
+	exported, err := creature.ExportCreatureAssets(ctx, creatures, outputDir, e.Config, e.wowClient, MapExportWorkerCount(), mc.Creatures.AllAreDoodads, onProgress)
 	if err != nil {
 		return err
 	}
-	icons, iconErr := renderCreatureIcons(ctx, outputDir, assets, mc.Creatures.AllAreDoodads, e.Config.OverrideModels)
-	if ctx.Err() != nil {
-		return ctx.Err()
+	assets, icons := exported.Models, exported.Icons
+	if exported.IconError != nil {
+		log.Printf("NPC icons unavailable: %v (using Footman icons)", exported.IconError)
+		e.warnings = append(e.warnings, "NPC icon rendering failed for some models; default icons were used.")
 	}
-	if iconErr != nil {
-		log.Printf("NPC icons unavailable: %v (using Footman icons)", iconErr)
-	}
-	applyCreatureAssets(e.MapManager, units, assets, icons)
-	if err := enrichCreatureModelFields(ctx, outputDir, e.MapManager, units, assets); err != nil {
+	creature.ApplyCreatureAssets(e.MapManager, units, assets, icons)
+	if err := creature.EnrichCreatureModelFields(ctx, outputDir, e.MapManager, units, assets); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	report, err := json.MarshalIndent(struct {
-		Units []PlacedUnit `json:"units"`
+		Units []creature.PlacedUnit `json:"units"`
 	}{units}, "", "  ")
 	if err != nil {
 		return err
@@ -375,7 +339,7 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := removeLegacyWaterMeshes(outputDir); err != nil {
+	if err := mapterrain.RemoveLegacyWaterMeshes(outputDir); err != nil {
 		return err
 	}
 	templateDir, err := workspace.ResolveTemplateEmptyDir()
@@ -404,12 +368,37 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 		}
 	}
 	e.MapManager.EnsureMapInfo(mapName)
-	ensurePlayerStartLocation(e.MapManager)
+	if err := e.inheritTemplateMapSettings(templateDir); err != nil {
+		return err
+	}
+	if !e.MapExportConfig.Creatures.Enable || e.MapExportConfig.Creatures.AllAreDoodads {
+		e.deathSounds = nil
+		e.factions = &creature.FactionPlan{
+			UserSlot:  0,
+			Players:   []creature.FactionPlayer{{Slot: 0, Name: "Player 1", FactionName: "Player 1"}},
+			Reactions: [][]creature.FactionReaction{{creature.FactionFriendly}},
+		}
+	} else if e.factions == nil {
+		var err error
+		e.factions, err = creature.MakeFactionPlan(e.MapExportConfig.PlayerFaction, nil, nil)
+		if err != nil {
+			return err
+		}
+	}
+	creature.ConfigureFactionSlots(e.MapManager, e.factions)
+	ensureFactionStartLocations(e.MapManager, e.factions.UserSlot)
 	e.MapManager.Info.ScriptLanguage = data.ScriptLanguageLua
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := e.MapManager.Save(outputDir); err != nil {
+		return err
+	}
+	factionsJSON, err := json.MarshalIndent(e.factions, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "factions.json"), factionsJSON, 0644); err != nil {
 		return err
 	}
 	if err := e.exportMinimap(ctx, outputDir); err != nil {
@@ -429,8 +418,11 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 			return err
 		}
 	}
-	if e.water != nil && len(e.water.cells) > 0 {
-		if err := e.water.write(ctx, e.MapManager.GetTerrain(), e.navigation, outputDir, e.MapExportConfig.PlacePathBlockers); err != nil {
+	if err := e.terrainConverter.WriteWc3Tileset(outputDir); err != nil {
+		return err
+	}
+	if e.water != nil && e.water.HasCells() {
+		if err := e.water.Write(ctx, e.MapManager.GetTerrain(), e.navigation, outputDir, e.MapExportConfig.PlacePathBlockers); err != nil {
 			return err
 		}
 	} else {
@@ -439,6 +431,53 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func (e *MapExporter) inheritTemplateMapSettings(templateDir string) error {
+	raw, err := os.ReadFile(filepath.Join(templateDir, "war3map.w3i"))
+	if err != nil {
+		return err
+	}
+	template := translators.InfoTranslator{}.WarToJSON(raw).JSON
+	info := &e.MapManager.Info
+	// Alpha-tile color is only serialized in v39+. Seed the new format's
+	// companion settings from the template when upgrading older map metadata.
+	if info.FileVersion < template.FileVersion {
+		info.FileVersion = template.FileVersion
+		info.EditorVersion = template.EditorVersion
+		info.GameVersion = template.GameVersion
+		info.RaceHud = template.RaceHud
+		info.Fog3 = template.Fog3
+		info.Water3 = template.Water3
+	}
+	info.Water3.AlphaTileMinimapColor = template.Water3.AlphaTileMinimapColor
+	info.Map.Flags.UseAlphaTileMinimapColor = template.Map.Flags.UseAlphaTileMinimapColor
+	info.LoadingScreen = template.LoadingScreen
+	// Inline template strings so cached output cannot resolve them through an
+	// older WTS table (or require replacing unrelated map strings).
+	var wts []byte
+	for _, text := range []*string{&info.LoadingScreen.Text, &info.LoadingScreen.Title, &info.LoadingScreen.Subtitle} {
+		if !strings.HasPrefix(*text, "TRIGSTR_") {
+			continue
+		}
+		id, err := strconv.Atoi(strings.TrimPrefix(*text, "TRIGSTR_"))
+		if err != nil {
+			return fmt.Errorf("invalid template loading screen string %q: %w", *text, err)
+		}
+		if wts == nil {
+			wts, err = os.ReadFile(filepath.Join(templateDir, "war3map.wts"))
+			if err != nil {
+				return err
+			}
+		}
+		pattern := fmt.Sprintf(`(?ms)^STRING[ \t]+0*%d[ \t]*\r?\n(?:[^\n]*\n)?\{\r?\n(.*?)\r?\n\}`, id)
+		match := regexp.MustCompile(pattern).FindSubmatch(wts)
+		if match == nil {
+			return fmt.Errorf("template loading screen string %q missing from war3map.wts", *text)
+		}
+		*text = string(match[1])
 	}
 	return nil
 }

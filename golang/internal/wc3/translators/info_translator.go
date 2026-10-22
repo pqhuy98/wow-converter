@@ -229,7 +229,7 @@ func (*InfoTranslator) warToJSON(buffer []byte) wc3.JsonResult[data.Info] {
 
 	flags := buf.ReadInt()
 	result.Map.Flags = intToMapFlags(flags)
-	result.UnknownFlags = flags & ^int32(0x7ffff)
+	result.UnknownFlags = flags & ^int32(0x107ffff)
 	result.Map.MainTileType = buf.ReadChars(1)
 
 	result.LoadingScreen.Background = int(buf.ReadInt())
@@ -504,6 +504,9 @@ func mapFlagsToInt(f data.MapFlags) int {
 	if f.UseCustomAbilitySkins {
 		flags |= 0x40000
 	}
+	if f.UseAlphaTileMinimapColor {
+		flags |= 0x1000000
+	}
 	return flags
 }
 
@@ -528,6 +531,7 @@ func intToMapFlags(flags int32) data.MapFlags {
 		EnableWaterTinting:                                    flags&0x10000 != 0,
 		UseAccurateProbabilityForCalculations:                 flags&0x20000 != 0,
 		UseCustomAbilitySkins:                                 flags&0x40000 != 0,
+		UseAlphaTileMinimapColor:                              flags&0x1000000 != 0,
 	}
 }
 

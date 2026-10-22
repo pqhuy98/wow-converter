@@ -73,9 +73,12 @@ export const generateWc3BodySchema = z.object({
   autoClampPercent: z.boolean().default(true),
   mapAngleDeg: z.number(),
   unitScale: z.number().positive(),
+  // Shared UI sends this field; faction-aware ownership remains Go-only.
+  playerFaction: z.enum(['Horde', 'Alliance']).optional(),
   includeBuildingInteriors: z.boolean().default(true),
   // Collision navigation is Go-only; the compatibility runtime accepts opt-out.
   placePathBlockers: z.literal(false).default(false),
+  terrainAsWc3Tilesets: z.literal(false).default(false),
   freshExport: z.boolean(),
   creatures: z.object({
     enable: z.boolean(),

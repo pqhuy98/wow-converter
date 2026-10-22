@@ -10,17 +10,13 @@ import (
 	"sync/atomic"
 
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
+	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter/settings"
 	"github.com/pqhuy98/wow-converter/internal/wow/casc"
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/wow/db"
 	exportadt "github.com/pqhuy98/wow-converter/internal/wow/export/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
-
-// TileCoord is an ADT tile coordinate.
-type TileCoord struct {
-	X, Y int
-}
 
 // TileLoadFailure identifies an ADT tile that could not be loaded.
 type TileLoadFailure struct {
@@ -108,7 +104,7 @@ func LoadADTTilesForConversionSummary(
 	if err := ctx.Err(); err != nil {
 		return loaded, failures, err
 	}
-	sortTileCoords(loaded)
+	settings.SortTileCoords(loaded)
 	if len(failures) > 0 {
 		sort.Slice(failures, func(i, j int) bool {
 			if failures[i].Tile.Y != failures[j].Tile.Y {
@@ -123,15 +119,6 @@ func LoadADTTilesForConversionSummary(
 		return loaded, failures, errors.Join(errs...)
 	}
 	return loaded, failures, nil
-}
-
-func sortTileCoords(tiles []TileCoord) {
-	sort.Slice(tiles, func(i, j int) bool {
-		if tiles[i].Y != tiles[j].Y {
-			return tiles[i].Y < tiles[j].Y
-		}
-		return tiles[i].X < tiles[j].X
-	})
 }
 
 func loadTileSnapshot(

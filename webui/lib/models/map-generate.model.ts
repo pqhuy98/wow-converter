@@ -31,6 +31,7 @@ export interface MapGenerateJobResult {
   totalSteps: number;
   succeeded: MapGenerateTileSuccess[];
   failed: MapGenerateTileFailure[];
+  warnings?: string[];
 }
 
 export interface MapGenerateProgress {
@@ -70,9 +71,11 @@ export interface GenerateWc3FormValues {
   mapAngleDeg: number;
   /** Unit size on the map; also drives suggested terrain height clamp. */
   unitScale: number;
+  playerFaction: 'Horde' | 'Alliance';
   /** Export WMO interior doodads (ADT includeWMOSets + convert prune depth 3). */
   includeBuildingInteriors: boolean;
   placePathBlockers: boolean;
+  terrainAsWc3Tilesets: boolean;
   freshExport: boolean;
   creatures: {
     enable: boolean;
@@ -86,8 +89,10 @@ export const defaultGenerateWc3FormValues: GenerateWc3FormValues = {
   clampUpper: 1,
   mapAngleDeg: 0,
   unitScale: 2,
+  playerFaction: 'Alliance',
   includeBuildingInteriors: true,
   placePathBlockers: true,
+  terrainAsWc3Tilesets: false,
   freshExport: false,
   creatures: {
     enable: false,

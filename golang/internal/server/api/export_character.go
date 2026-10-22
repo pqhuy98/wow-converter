@@ -21,7 +21,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/character"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
-	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
+	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter/preview"
 	"github.com/pqhuy98/wow-converter/internal/server/exportlog"
 	"github.com/pqhuy98/wow-converter/internal/server/pathsafe"
 	"github.com/pqhuy98/wow-converter/internal/server/util"
@@ -253,7 +253,7 @@ func cleanBrowseSessionAssets(dir string) error {
 		return err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() == mapexporter.MapPreviewCacheDirectory {
+		if entry.IsDir() && entry.Name() == preview.MapPreviewCacheDirectory {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {

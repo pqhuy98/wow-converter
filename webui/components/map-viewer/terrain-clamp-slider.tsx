@@ -27,6 +27,7 @@ export function TerrainClampSlider({
   return (
     <div className="space-y-2">
       <Slider
+        className="[&>span:first-child]:bg-slate-400/50 [&>span:first-child]:ring-1 [&>span:first-child]:ring-inset [&>span:first-child]:ring-slate-400/40"
         min={0}
         max={100}
         step={0.1}

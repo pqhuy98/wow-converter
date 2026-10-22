@@ -305,7 +305,7 @@ func (a *AssetManager) ExportModels(ctx context.Context, assetPath string) error
 				ext = ".mdx"
 			}
 			full := filepath.Join(assetPath, a.config.AssetPrefix, relPath+ext)
-			if !a.config.OverrideModels && ExportAssetExists(full) {
+			if !a.config.OverrideModels && !model.AlwaysExport && ExportAssetExists(full) {
 				return nil
 			}
 			mdlModel := model.MDL
