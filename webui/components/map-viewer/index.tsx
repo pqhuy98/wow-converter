@@ -509,7 +509,7 @@ export default function MapViewer() {
                               {typeof m.expansionID === 'number' && (
                                 <ExpansionIcon expansionID={m.expansionID} />
                               )}
-                              <span>[<span className="text-yellow-600">{m.id}</span>]</span>
+                              <span>[<span className="text-yellow-800 dark:text-yellow-400">{m.id}</span>]</span>
                               <span className="text-foreground/80">{m.name}</span>
                               <span className="text-muted-foreground/60">({m.dir})</span>
                             </div>
@@ -518,7 +518,7 @@ export default function MapViewer() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-destructive text-sm p-2">{mapsError}</div>
+                    <div className="text-red-700 dark:text-red-400 text-sm p-2">{mapsError}</div>
                   )}
                 </div>
                 {!isSharedHosting && showMapExport && <div>
@@ -566,7 +566,7 @@ export default function MapViewer() {
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            className="h-6 w-6 shrink-0 text-red-700 dark:text-red-400 hover:bg-destructive/10 hover:text-red-800 dark:hover:text-red-300"
                             title={isHalting ? 'Halting export…' : 'Halt export'}
                             aria-label={isHalting ? 'Halting export' : 'Halt export'}
                             disabled={!generateJob.id || isHalting}
@@ -587,13 +587,13 @@ export default function MapViewer() {
                         </p>
                       )}
                       {haltError && (
-                        <p className="text-xs text-destructive">{haltError}</p>
+                        <p className="text-xs text-red-700 dark:text-red-400">{haltError}</p>
                       )}
                     </div>
                   )}
                   {generateJob?.status === 'done' && generateJob.result && (
                     <div className="pt-2 space-y-2">
-                      <p className="text-xs text-green-600">
+                      <p className="text-xs text-green-700 dark:text-green-400">
                         Generated {generateJob.result.mapSaveName} in {formatElapsedDuration(
                         (generateJob.finishedAt ?? clockNow) - generateJob.submittedAt,
                       )} — loaded {generateJob.result.succeeded.length}/{generateJob.result.total} tiles
@@ -602,7 +602,7 @@ export default function MapViewer() {
                           : ''}
                       </p>
                       {(generateJob.result.warnings ?? []).map((warning, index) => (
-                        <p key={index} role="status" className="text-xs text-yellow-500">{warning}</p>
+                        <p key={index} role="status" className="text-xs text-yellow-800 dark:text-yellow-300">{warning}</p>
                       ))}
                       {generateJob.result.outputDir && (
                         <div className="flex items-center gap-2">
@@ -629,7 +629,7 @@ export default function MapViewer() {
                     </div>
                   )}
                   {generateJob?.status === 'failed' && (
-                    <p className="text-xs text-destructive pt-2">{generateJob.error ?? 'Generation failed'}</p>
+                    <p className="text-xs text-red-700 dark:text-red-400 pt-2">{generateJob.error ?? 'Generation failed'}</p>
                   )}
                   {generateJob?.status === 'cancelled' && (
                     <p className="text-xs text-muted-foreground pt-2">Export halted</p>
@@ -665,7 +665,7 @@ export default function MapViewer() {
                 </div>
                 {hover ? (
                   <div
-                    className="pointer-events-none absolute z-20 whitespace-nowrap text-xs text-foreground drop-shadow"
+                    className="pointer-events-none absolute z-20 whitespace-nowrap rounded border bg-background/95 px-2 py-1 text-xs text-foreground shadow-sm"
                     style={{ left: hover.x + 12, top: hover.y + 12 }}
                   >
                     Tile {hover.tile.x},{hover.tile.y}

@@ -223,16 +223,9 @@ func MakeFactionPlan(side string, counts map[int]int, c *factionCatalog) (*Facti
 		}
 		named = kept
 	}
-	nameCounts := map[string]int{}
-	for _, g := range p.Players[1:] {
-		nameCounts[g.Name]++
-	}
 	for i := 1; i < len(p.Players); i++ {
 		g := &p.Players[i]
 		g.Slot = i + 1
-		if nameCounts[g.Name] > 1 {
-			g.Name = fmt.Sprintf("%s [%d]", g.Name, g.TemplateIDs[0])
-		}
 		for _, id := range g.TemplateIDs {
 			p.owners[id] = g.Slot
 		}

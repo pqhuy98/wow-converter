@@ -171,7 +171,7 @@ func TestFactionCatalogAndInvalidInput(t *testing.T) {
 func TestFactionLuaNamedVariablesAndConsecutiveDirections(t *testing.T) {
 	p := &FactionPlan{
 		UserSlot: 1,
-		Players:  []FactionPlayer{{Slot: 1, Name: "Player (Alliance)", FactionName: "Alliance"}, {Slot: 2, Name: "Stormwind", FactionName: "Stormwind"}, {Slot: 3, Name: "Stormwind [123]", FactionName: "Stormwind"}},
+		Players:  []FactionPlayer{{Slot: 1, Name: "Player (Alliance)", FactionName: "Alliance"}, {Slot: 2, Name: "Stormwind", FactionName: "Stormwind"}, {Slot: 3, Name: "Stormwind", FactionName: "Stormwind"}},
 		Reactions: [][]FactionReaction{
 			{FactionFriendly, factionHostile, factionNeutral},
 			{FactionFriendly, FactionFriendly, factionNeutral},

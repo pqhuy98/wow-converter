@@ -8,8 +8,8 @@ export function MapViewerControlHints() {
   return (
     <TooltipHelp
       trigger={(
-        <span className="inline-flex">
-          <Mouse className="h-6 w-6 text-foreground drop-shadow" />
+        <span className="inline-flex rounded-md border bg-background/95 p-1 text-foreground shadow-sm">
+          <Mouse className="h-6 w-6" />
         </span>
       )}
       tooltips={(

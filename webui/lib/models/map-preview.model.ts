@@ -66,11 +66,28 @@ export interface MapPreviewInstance {
 }
 
 export interface MapPreviewNPC {
+  faction?: number;
   guid: number;
   name: string;
   position: PreviewVector;
   groundZ: number | null;
   terrainZ: number | null;
+}
+
+export interface MapPreviewFactions {
+  allies: { name: string; units: number }[];
+  enemies: { name: string; units: number }[];
+  neutral: { name: string; units: number }[];
+  neutralHostile: number;
+  neutralPassive: number;
+}
+
+export function previewFactionCounts(scene: MapPreviewData, form: GenerateWc3FormValues): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const npc of scene.npcs) {
+    if (npc.faction && previewNPCPlacement(npc, scene, form) === 'unit') counts[npc.faction] = (counts[npc.faction] ?? 0) + 1;
+  }
+  return counts;
 }
 
 export interface MapPreviewData {

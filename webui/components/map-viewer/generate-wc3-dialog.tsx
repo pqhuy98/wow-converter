@@ -304,7 +304,7 @@ export default function GenerateWc3Dialog({
               <span className="shrink-0 text-sm text-muted-foreground">.w3x</span>
             </div>
             {nameInvalid && trimmedName.length > 0 ? (
-              <p className="text-xs text-destructive">
+              <p className="text-xs text-red-700 dark:text-red-400">
                 Use letters, numbers, underscores, dots, and hyphens only.
               </p>
             ) : null}
@@ -397,9 +397,9 @@ export default function GenerateWc3Dialog({
                 }}
               />
             {preview && minimumClampWidth > 1 && (
-              <p className="text-xs text-destructive" role="alert">This selection exceeds WC3’s 480-tile map limit even at the full height range. Select fewer cells.</p>
+              <p className="text-xs text-red-700 dark:text-red-400" role="alert">This selection exceeds WC3’s 480-tile map limit even at the full height range. Select fewer cells.</p>
             )}
-            {suggestError && <p className="text-xs text-destructive" role="alert">{suggestError}</p>}
+            {suggestError && <p className="text-xs text-red-700 dark:text-red-400" role="alert">{suggestError}</p>}
           </div>
 
           <label className="flex items-center gap-2 text-sm">

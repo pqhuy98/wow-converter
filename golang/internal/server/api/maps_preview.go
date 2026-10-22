@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter"
+	"github.com/pqhuy98/wow-converter/internal/converter/mapexporter/creature"
 	mappreview "github.com/pqhuy98/wow-converter/internal/converter/mapexporter/preview"
 )
 
@@ -25,6 +26,32 @@ type mapPreviewTile struct {
 }
 
 func registerMapPreviewRoutes(r Router, d *Deps) {
+	r.Post("/maps/preview-factions", func(w http.ResponseWriter, req *http.Request) {
+		if err := assertDesktopOnly(d.Config.IsSharedHosting); err != nil {
+			sendError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		var body struct {
+			PlayerFaction string      `json:"playerFaction"`
+			Counts        map[int]int `json:"counts"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, req.Body, 1<<20)).Decode(&body); err != nil {
+			sendError(w, http.StatusBadRequest, "Invalid faction counts")
+			return
+		}
+		for id, count := range body.Counts {
+			if id <= 0 || count <= 0 || count > 1000000 {
+				sendError(w, http.StatusBadRequest, "Invalid faction counts")
+				return
+			}
+		}
+		summary, err := creature.PreviewFactionSummary(body.PlayerFaction, body.Counts)
+		if err != nil {
+			sendError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sendJSON(w, http.StatusOK, summary)
+	})
 	for _, suggest := range []bool{false, true} {
 		path := "/maps/{map}/preview"
 		if suggest {

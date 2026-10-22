@@ -10,7 +10,9 @@ The clamp slider enforces a selection-dependent minimum gap, rounded up to its 0
 
 NPC-supported selections automatically apply Suggest only on their first opening, once availability is known. Manual edits cancel pending suggestions and take precedence; the Suggest button remains available. The dialog sends `autoClampPercent: false` to preserve the chosen range. NPC availability checks run alongside geometry loading. NPC-dependent controls are unavailable when the selection has no supported NPC data.
 
-NPC markers are hidden when export is off. Otherwise green means a predicted unit placement, yellow a destructible, and red an excluded spawn. This prediction uses source floor distance, clamp and decoration mode; it omits M2 props and the full collision search. The overlay warns when the chosen clamp implies unusually small/large units.
+NPC markers are hidden when export is off. Otherwise green means a predicted unit placement, yellow a destructible, and red an excluded spawn. This prediction uses source floor distance, clamp and decoration mode; it omits M2 props and the full collision search. The header shows the output WC3 width × height using the exporter's four-cell rounding.
+
+The faction panel appears only with predicted unit placements. It sends faction-template counts to `POST /api/maps/preview-factions`, which reuses the exporter's merged-player and overflow policy. Allies (teal), enemies (red), named neutral groups and generic neutral totals (gray) reflect NPC-to-user reactions for the selected Alliance/Horde player. Same-name entries within each reaction group combine their unit counts; each row includes a total. All faction counts stay white on a dark inset in either theme. Clamp, path blocker and decoration settings update counts without rebuilding geometry. Preview metadata includes faction-template IDs; the scene-cache revision invalidates older manifests while retaining reusable geometry. The map controls use theme-aware surfaces and contrasting text in both themes.
 
 ## Cached source data
 

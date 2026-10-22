@@ -14,7 +14,7 @@ Player faction appears below the destructible option only when NPC unit export i
 | Horde | 1, red | Orc | `Player (Horde)` |
 | NPC export off or all destructibles | 1, red | Human | `Player 1` |
 
-In faction mode, the unselected red/blue slot remains closed/reserved. Named NPC players use slots 3–24. Every configured player gets a start marker: new user starts are centered, NPC starts occupy a 200-unit grid around the center. Existing markers are preserved; W3I and Lua follow their positions.
+In faction mode, the unselected red/blue slot remains closed/reserved. Named NPC players use slots 3–24. Player names have no diagnostic ID suffixes. Same-name players can retain separate slots when their NPC relationships differ; the preview combines their counts when their reaction toward the user also matches. Every configured player gets a start marker: new user starts are centered, NPC starts occupy a 200-unit grid around the center. Existing markers are preserved; W3I and Lua follow their positions.
 
 `resources/npc-factions.json` contains reviewed ownership policy, Wrath faction templates, masks, flags and explicit friend/enemy exceptions. Named factions retain identity regardless of creature type. Same-name templates merge only if incoming and outgoing hostile/neutral/friendly reactions match against the user and every retained named template in the area. Excluded placements do not consume slots.
 

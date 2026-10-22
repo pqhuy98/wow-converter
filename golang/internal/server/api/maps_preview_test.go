@@ -48,6 +48,51 @@ func TestMapPreviewStreamFlushAndFailure(t *testing.T) {
 
 type previewDisconnectedWriter struct{}
 
+func TestPreviewFactionRoute(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		shared     bool
+		status     int
+	}{
+		{"empty", `{"playerFaction":"Alliance","counts":{}}`, false, http.StatusOK},
+		{"real factions Horde", `{"playerFaction":"Horde","counts":{"12":4,"14":3,"35":2}}`, false, http.StatusOK},
+		{"real factions Alliance", `{"playerFaction":"Alliance","counts":{"12":4,"14":3,"35":2}}`, false, http.StatusOK},
+		{"bad side", `{"playerFaction":"invalid","counts":{}}`, false, http.StatusBadRequest},
+		{"bad count", `{"playerFaction":"Alliance","counts":{"12":-1}}`, false, http.StatusBadRequest},
+		{"bad id", `{"playerFaction":"Alliance","counts":{"0":1}}`, false, http.StatusBadRequest},
+		{"invalid JSON", `{`, false, http.StatusBadRequest},
+		{"shared hosting", `{"playerFaction":"Alliance","counts":{}}`, true, http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := chi.NewRouter()
+			registerMapPreviewRoutes(r, &Deps{Config: Config{IsSharedHosting: tc.shared}})
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/maps/preview-factions", strings.NewReader(tc.body)))
+			if rec.Code != tc.status {
+				t.Fatalf("HTTP %d: %s", rec.Code, rec.Body.String())
+			}
+			if strings.HasPrefix(tc.name, "real factions") {
+				var summary struct {
+					Allies         []struct{ Units int } `json:"allies"`
+					Enemies        []struct{ Units int } `json:"enemies"`
+					NeutralHostile int                   `json:"neutralHostile"`
+					NeutralPassive int                   `json:"neutralPassive"`
+				}
+				if err := json.Unmarshal(rec.Body.Bytes(), &summary); err != nil {
+					t.Fatal(err)
+				}
+				players := summary.Allies
+				if tc.name == "real factions Horde" {
+					players = summary.Enemies
+				}
+				if len(players) != 1 || players[0].Units != 4 || summary.NeutralHostile != 3 || summary.NeutralPassive != 2 {
+					t.Fatalf("incorrect faction counts: %s", rec.Body.String())
+				}
+			}
+		})
+	}
+}
+
 func (previewDisconnectedWriter) Header() http.Header       { return http.Header{} }
 func (previewDisconnectedWriter) WriteHeader(int)           {}
 func (previewDisconnectedWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { defaultGenerateWc3FormValues } from './map-generate.model';
 import type { MapPreviewData, MapPreviewNPC } from './map-preview.model';
 import {
-  fitTerrainClampRange, minimumTerrainClampWidth, previewIsWater, previewMapSize, previewNPCIsUnit, previewNPCPlacement, previewWaterLevels, previewWaterRange, readMapPreviewStream,
+  fitTerrainClampRange, minimumTerrainClampWidth, previewFactionCounts, previewIsWater, previewMapSize, previewNPCIsUnit, previewNPCPlacement, previewWaterLevels, previewWaterRange, readMapPreviewStream,
 } from './map-preview.model';
 
 const scene: MapPreviewData = {
@@ -29,7 +29,9 @@ describe('terrain clamp map size limit', () => {
     const data: MapPreviewData = { ...scene, min: [-100, -200, -10], max: [900, 300, 990] };
     expect(previewMapSize(data, { ...enabled, clampLower: 0, clampUpper: 1 })).toEqual({ width: 32, height: 16 });
     expect(previewMapSize(data, { ...enabled, clampLower: 0.1, clampUpper: 0.6 })).toEqual({ width: 60, height: 32 });
-    expect(previewMapSize(data, { ...enabled, clampLower: 0.1, clampUpper: 0.6, unitScale: 99 })).toEqual({ width: 60, height: 32 });
+    expect(previewMapSize(data, {
+      ...enabled, clampLower: 0.1, clampUpper: 0.6, unitScale: 99,
+    })).toEqual({ width: 60, height: 32 });
     expect(previewMapSize({ ...data, max: [900, -199, 990] }, { ...enabled, clampLower: 0, clampUpper: 1 })).toEqual({ width: 32, height: 4 });
     expect(previewMapSize(data, { ...enabled, clampLower: 0.5, clampUpper: 0.5 })).toBeNull();
     expect(previewMapSize({ ...data, max: [900, 300, -10] }, enabled)).toBeNull();
@@ -167,6 +169,25 @@ describe('map preview water', () => {
 });
 
 describe('preview placement', () => {
+  test('counts factions only for NPCs exported as units', () => {
+    const data = {
+      ...scene,
+      npcs: [
+        { ...npc, faction: 10 }, { ...npc, guid: 2, faction: 10 }, { ...npc, guid: 3, faction: 20 },
+        {
+          ...npc, guid: 4, faction: 30, groundZ: null,
+        }, {
+          ...npc, guid: 5, faction: 40, position: [50, 50, 90] satisfies [number, number, number],
+        },
+      ],
+    };
+    const form = { ...enabled, clampLower: 0.25, clampUpper: 0.75 };
+    expect(previewFactionCounts(data, form)).toEqual({ 10: 2, 20: 1 });
+    expect(previewFactionCounts(data, { ...form, creatures: { enable: true, allAreDoodads: true } })).toEqual({});
+    expect(previewFactionCounts(data, { ...form, creatures: { enable: false, allAreDoodads: false } })).toEqual({});
+    expect(previewFactionCounts(data, { ...form, clampLower: 0.6 })).toEqual({});
+  });
+
   test('distinguishes units, destructibles and excluded NPCs using export rules', () => {
     expect(previewNPCPlacement(npc, scene, enabled)).toBe('unit');
     expect(previewNPCPlacement(npc, scene, { ...enabled, clampUpper: 0.4 })).toBe('excluded');
