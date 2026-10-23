@@ -238,19 +238,26 @@ func EnrichCreatureModelFields(ctx context.Context, outputDir string, mm *extra.
 				}
 			}
 		}
-		// Both candidates are already in model units. usca includes map fit,
+		sizeMultiplier := 1.0
+		if asset := assets.For(u.Creature); asset != nil && asset.CharacterModel {
+			sizeMultiplier = 1.2
+			set("usca", data.ModificationReal, float32(modelScale*sizeMultiplier))
+		}
+		// Both candidates are already in model units. The base scale includes map fit,
 		// source DisplayScale and export UnitScale; apply it exactly once.
-		real("ucol", math.Min(1024, math.Max(8, radius*modelScale)))
+		real("ucol", math.Min(1024, math.Max(8, radius*modelScale)*sizeMultiplier))
 		// Keep WoW's smaller circles, but cap oversized ones to the full mesh's
 		// origin-centered XY radius. Empty geometry retains the native circle.
-		if p.HorizontalRadius > 0 {
-			for _, field := range ut.Data {
-				if field.ID == "ussc" {
-					if scale, ok := field.Value.(float32); ok {
-						set("ussc", data.ModificationReal, float32(math.Min(float64(scale), 2*p.HorizontalRadius*modelScale/72)))
+		for _, field := range ut.Data {
+			if field.ID == "ussc" {
+				if scale, ok := field.Value.(float32); ok {
+					selection := float64(scale)
+					if p.HorizontalRadius > 0 {
+						selection = math.Min(selection, 2*p.HorizontalRadius*modelScale/72)
 					}
-					break
+					set("ussc", data.ModificationReal, float32(selection*sizeMultiplier))
 				}
+				break
 			}
 		}
 		if p.Death > 0 {

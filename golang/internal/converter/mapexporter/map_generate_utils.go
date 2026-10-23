@@ -67,7 +67,7 @@ func AutoChooseClampPercent(exporter *MapExporter, unitScale float64) {
 	mapCfg.Terrain.ClampPercent = mapterrain.SuggestTerrainClamp(min, max, heights, unitScale, mapCfg.Terrain.ClampPercent)
 }
 
-// PruneDepth limits object tree depth (1=adt, 2=+top m2, 3=+interiors).
+// PruneDepth limits object tree depth (1=ADT, 2=+top M2, 3=+WMO children).
 func PruneDepth(exporter *MapExporter, depth int) {
 	if exporter.WowObjectManager == nil || depth >= 3 {
 		return

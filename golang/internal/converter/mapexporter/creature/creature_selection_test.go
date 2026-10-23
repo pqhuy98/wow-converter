@@ -9,6 +9,7 @@ import (
 
 	"github.com/pqhuy98/wow-converter/internal/azerothcore"
 	"github.com/pqhuy98/wow-converter/internal/config"
+	"github.com/pqhuy98/wow-converter/internal/converter/character"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdx"
 	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
@@ -45,7 +46,7 @@ Geoset {
 		{.1, 2, 11.2 / 36},  // Smaller native circle must not grow.
 		{1.5, .25, 3.0 / 36},
 	} {
-		c := azerothcore.Creature{Template: azerothcore.CreatureTemplate{Entry: i + 1}, Model: azerothcore.CreatureTemplateModel{DisplayScale: 1, SelectionRadius: &tc.nativeRadius}}
+		c := azerothcore.Creature{Template: azerothcore.CreatureTemplate{Entry: i + 1}, Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 1, DisplayScale: 1, SelectionRadius: &tc.nativeRadius}}
 		ut := mm.AddUnitType(false, "hfoo", creatureUnitFields(c, "shared.mdx", "Fixture", tc.scale, 56*tc.scale, 56))
 		units = append(units, PlacedUnit{Creature: c, TypeCode: ut.Code, ModelPath: "shared.mdx"})
 		wants = append(wants, tc.want)
@@ -66,6 +67,16 @@ Geoset {
 			if f[id] != before[i][id] {
 				t.Fatalf("selection cap changed %s", id)
 			}
+		}
+	}
+	assets := character.CreatureAssets{fixtureCreatureAssetKey(): {ModelPath: "shared.mdx", CharacterModel: true}}
+	if err := EnrichCreatureModelFields(context.Background(), dir, mm, units, assets); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range wants {
+		f := fieldValues(t, mm.UnitTypes[i].Data)
+		if math.Abs(float64(f["ussc"].(float32))-want*1.2) > 1e-6 {
+			t.Fatalf("character %d selection=%v, want %g", i, f["ussc"], want*1.2)
 		}
 	}
 	if after, err := os.ReadFile(path); err != nil || string(after) != string(raw) {

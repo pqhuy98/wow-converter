@@ -27,6 +27,8 @@ import (
 
 // CreatureAsset is shared by NPCs with the same resolved export appearance.
 type CreatureAsset struct {
+	CharacterModel bool `json:"characterModel,omitempty"`
+	WowRace        int  `json:"wowRace,omitempty"`
 	// CollisionRadius is in exported model units, before WE model/unit scaling.
 	// Zero means the source has no usable M2 collision box.
 	CollisionRadius float64  `json:"collisionRadius,omitempty"`
@@ -171,7 +173,7 @@ func ExportCreatureModels(ctx context.Context, creatures []azerothcore.Creature,
 		asset := job.asset
 		if asset.ContentKey != "" {
 			if shared := byContent[asset.ContentKey]; shared != nil {
-				aliases[asset] = shareCreatureAsset(shared, asset.CollisionRadius)
+				aliases[asset] = shareCreatureAsset(shared, asset.CollisionRadius, asset.CharacterModel, asset.WowRace)
 				if err = os.Remove(filepath.Join(outputPath, filepath.FromSlash(asset.ModelPath))); err != nil && !os.IsNotExist(err) {
 					return nil, err
 				}
@@ -250,7 +252,10 @@ func planCreatureExports(ctx context.Context, creatures []azerothcore.Creature, 
 		}
 		job := byAppearance[key]
 		if job == nil {
-			job = &creatureExport{creature: c, character: ch, metadata: meta, asset: &CreatureAsset{ConfigKey: key}}
+			job = &creatureExport{creature: c, character: ch, metadata: meta, asset: &CreatureAsset{ConfigKey: key, CharacterModel: meta.Character != nil}}
+			if meta.Character != nil {
+				job.asset.WowRace = meta.Character.Race
+			}
 			byAppearance[key] = job
 			jobs = append(jobs, job)
 		}
@@ -310,7 +315,7 @@ func creatureAppearanceKey(meta CharacterData, ch Character, cfg config.Config, 
 		Metadata  CharacterData
 		Character Character
 		Config    config.Config
-	}{3, build, meta, ch, cfg})
+	}{4, build, meta, ch, cfg})
 	if err != nil {
 		return "", err
 	}
@@ -397,12 +402,14 @@ func creatureCollisionBoxRadius(box m2.CAABox) float64 {
 	return math.Hypot(x, y)
 }
 
-func shareCreatureAsset(shared *CreatureAsset, collisionRadius float64) *CreatureAsset {
-	if shared.CollisionRadius == collisionRadius {
+func shareCreatureAsset(shared *CreatureAsset, collisionRadius float64, characterModel bool, wowRace int) *CreatureAsset {
+	if shared.CollisionRadius == collisionRadius && shared.CharacterModel == characterModel && shared.WowRace == wowRace {
 		return shared
 	}
-	// Identical rendered models may come from M2s with different collision boxes.
+	// Identical rendered models can have different source collision/classification.
 	copy := *shared
 	copy.CollisionRadius = collisionRadius
+	copy.CharacterModel = characterModel
+	copy.WowRace = wowRace
 	return &copy
 }

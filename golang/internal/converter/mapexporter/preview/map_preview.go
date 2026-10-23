@@ -23,6 +23,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/client"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/adt"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats/liquid"
+	"github.com/pqhuy98/wow-converter/internal/wow/formats/wmo"
 )
 
 // MapPreviewCacheDirectory is persistent across ordinary browse-session cleanup.
@@ -120,11 +121,13 @@ type previewTile struct {
 }
 
 type previewBuilder struct {
-	ctx      context.Context
-	options  PreviewOptions
-	prefix   string
-	wdt      *adt.WDTLoader
-	warnings []string
+	ctx                                context.Context
+	options                            PreviewOptions
+	prefix                             string
+	wdt                                *adt.WDTLoader
+	warnings                           []string
+	wmoRoots                           map[int]*wmo.Loader
+	wmoGroupsCompleted, wmoGroupsTotal int
 }
 
 var previewAssetLocks sync.Map
@@ -208,15 +211,41 @@ func buildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 			models = append(models, p)
 		}
 	}
-	for modelIndex, p := range models {
-		if err := b.progress("Preparing WMOs", modelIndex, len(models)); err != nil {
+	// Count unique source groups before processing so the denominator stays fixed
+	// across WMOs, repeated placements and per-asset cache hits.
+	var wmoIDs []int
+	seenWMO := map[int]bool{}
+	for _, p := range models {
+		if !seenWMO[p.ID] {
+			seenWMO[p.ID] = true
+			wmoIDs = append(wmoIDs, p.ID)
+		}
+	}
+	for i, id := range wmoIDs {
+		if err := b.progress("Counting WMO groups", i, len(wmoIDs)); err != nil {
 			return result, err
 		}
+		root, err := b.wmoRoot(id)
+		if err != nil {
+			return result, fmt.Errorf("preview WMO %d: %w", id, err)
+		}
+		b.wmoGroupsTotal += int(root.GroupCount)
+	}
+	if b.wmoGroupsTotal > 0 {
+		if err := b.progress("Preparing WMO groups", 0, b.wmoGroupsTotal); err != nil {
+			return result, err
+		}
+	}
+	for _, p := range models {
 		a, err := b.wmo(p.ID)
 		if err != nil {
 			return result, fmt.Errorf("preview WMO %d: %w", p.ID, err)
 		}
 		if !assetIndex[a.Asset.ID] {
+			b.wmoGroupsCompleted += int(b.wmoRoots[p.ID].GroupCount)
+			if err := b.progress("Preparing WMO groups", b.wmoGroupsCompleted, b.wmoGroupsTotal); err != nil {
+				return result, err
+			}
 			assetIndex[a.Asset.ID] = true
 			result.Assets = append(result.Assets, a.Asset)
 		}
@@ -233,11 +262,6 @@ func buildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 				f.V[i] = previewApply(matrix, p)
 			}
 			floors = append(floors, f)
-		}
-	}
-	if len(models) > 0 {
-		if err := b.progress("Preparing WMOs", len(models), len(models)); err != nil {
-			return result, err
 		}
 	}
 	if len(tiles) == 0 || math.IsInf(result.Min[0], 1) {

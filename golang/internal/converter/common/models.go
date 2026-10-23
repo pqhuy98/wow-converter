@@ -37,6 +37,8 @@ type Model struct {
 	TexturePaths []string
 	// Generated map geometry depends on this export's terrain and navigation.
 	AlwaysExport bool
+	// Terrain chunks use their measured bounds, without the large-model override.
+	TightBounds bool
 }
 
 // ObjectAbsolute is world-space placement for a tree node.

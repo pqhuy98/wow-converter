@@ -88,3 +88,65 @@ func TestDestructibleNPCsSkipIconGeneration(t *testing.T) {
 		t.Fatal("destructible mode must preserve job cancellation")
 	}
 }
+
+func TestCreatureRaceUsesResolvedSourceWithoutChangingCampaignOrClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		race, creatureType int
+		want               string
+	}{
+		{"human", 1, 7, "human"}, {"dwarf", 3, 7, "human"},
+		{"gnome", 7, 7, "human"}, {"blood elf", 10, 7, "human"},
+		{"orc", 2, 7, "orc"}, {"tauren", 6, 7, "orc"},
+		{"troll", 8, 7, "orc"}, {"goblin", 9, 7, "orc"},
+		{"night elf", 4, 7, "nightelf"}, {"forsaken", 5, 7, "undead"},
+		{"human zombie", 1, 6, "undead"}, {"demon", 4, 3, "demon"},
+		{"critter", 0, 8, "critters"}, {"beast", 0, 1, "creeps"},
+		{"unknown race", 999, 7, "other"}, {"draenei", 11, 7, "other"},
+		{"naga", 13, 7, "naga"}, {"undead naga", 13, 6, "undead"},
+		{"broken", 14, 7, "other"}, {"vrykul", 16, 7, "other"},
+		{"tuskarr", 17, 7, "other"}, {"pandaren", 24, 7, "other"},
+		{"fel orc", 12, 7, "orc"}, {"forest troll", 18, 7, "orc"},
+		{"taunka", 19, 7, "orc"}, {"ice troll", 21, 7, "orc"},
+		{"skeleton", 15, 7, "undead"}, {"northrend skeleton", 20, 7, "undead"},
+		{"noncombat pet", 0, 12, "critters"}, {"elemental", 0, 4, "other"},
+		{"mechanical", 0, 9, "other"}, {"totem", 0, 11, "other"},
+		{"missing race", 0, 7, "creeps"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := azerothcore.Creature{Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 1}, Gameplay: &azerothcore.CreatureGameplay{Type: tc.creatureType}}
+			mm := extra.NewMapManager()
+			u := mm.AddUnitType(false, "hfoo", creatureUnitFields(c, "x.mdx", tc.name, 1, 56, 56))
+			before := fieldValues(t, u.Data)
+			assets := character.CreatureAssets{fixtureCreatureAssetKey(): {ModelPath: "npcs/shared.mdx", WowRace: tc.race}}
+			ApplyCreatureAssets(mm, []PlacedUnit{{Creature: c, TypeCode: u.Code}}, assets, nil)
+			got := fieldValues(t, mm.UnitTypes[0].Data)
+			if got["urac"] != tc.want || got["ucam"] != 1 || got["utyp"] != before["utyp"] {
+				t.Fatalf("race/campaign/classification = %v/%v/%v", got["urac"], got["ucam"], got["utyp"])
+			}
+		})
+	}
+}
+
+func TestCreatureCommonerRequiresExplicitHumanoidCivilian(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		race, creatureType, flags int
+		want                      string
+	}{
+		{"human civilian", 1, 7, 2, "commoner"},
+		{"civilian without character race", 0, 7, 2, "commoner"},
+		{"unflagged human", 1, 7, 0, "human"},
+		{"civilian beast", 0, 1, 2, "creeps"},
+		{"undead civilian", 1, 6, 2, "undead"},
+		{"forsaken civilian", 5, 7, 2, "undead"},
+		{"naga civilian", 13, 7, 2, "naga"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := azerothcore.Creature{Template: azerothcore.CreatureTemplate{FlagsExtra: tc.flags}, Gameplay: &azerothcore.CreatureGameplay{Type: tc.creatureType}}
+			if got := creatureRace(c, tc.race); got != tc.want {
+				t.Fatalf("race = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

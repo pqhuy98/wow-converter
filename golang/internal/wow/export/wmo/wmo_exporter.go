@@ -18,10 +18,11 @@ type DoodadSetMaskEntry struct {
 	Checked bool
 }
 
-// Exporter writes WMO interior doodad placement CSV for ADT map export.
+// Exporter collects WMO child doodads and writes placement CSV for ADT map export.
 type Exporter struct {
-	Loader        *wmo.Loader
-	doodadSetMask []DoodadSetMaskEntry
+	Loader         *wmo.Loader
+	doodadSetMask  []DoodadSetMaskEntry
+	excludeDoodads []bool
 }
 
 // NewExporter creates an exporter from raw WMO bytes.
@@ -36,7 +37,7 @@ func (e *Exporter) SetDoodadSetMask(mask []DoodadSetMaskEntry) {
 	e.doodadSetMask = mask
 }
 
-// InteriorPlacement is one WMO interior doodad row for in-memory map conversion.
+// InteriorPlacement is one WMO child doodad row for in-memory map conversion.
 type InteriorPlacement struct {
 	ModelFile   string
 	PositionX   string
@@ -50,7 +51,7 @@ type InteriorPlacement struct {
 	FileDataID  string
 }
 
-// CollectDoodadPlacements returns interior M2 placements for enabled doodad sets.
+// CollectDoodadPlacements returns child M2 placements for enabled doodad sets.
 func (e *Exporter) CollectDoodadPlacements(out string, options exportpkg.ADTExportOptions) ([]InteriorPlacement, error) {
 	if err := e.Loader.Load(); err != nil {
 		return nil, err
@@ -66,6 +67,9 @@ func (e *Exporter) CollectDoodadPlacements(out string, options exportpkg.ADTExpo
 		for j := uint32(0); j < set.DoodadCount; j++ {
 			idx := set.FirstInstanceIndex + j
 			if int(idx) >= len(e.Loader.Doodads) {
+				continue
+			}
+			if int(idx) < len(e.excludeDoodads) && e.excludeDoodads[idx] {
 				continue
 			}
 			doodad := e.Loader.Doodads[idx]
@@ -126,7 +130,7 @@ func (e *Exporter) CollectDoodadPlacements(out string, options exportpkg.ADTExpo
 	return rows, nil
 }
 
-// ExportDoodadPlacementCsv writes interior M2 placements for enabled doodad sets.
+// ExportDoodadPlacementCsv writes child M2 placements for enabled doodad sets.
 func (e *Exporter) ExportDoodadPlacementCsv(
 	out string,
 	options exportpkg.ADTExportOptions,
@@ -171,6 +175,9 @@ func (e *Exporter) ExportDoodadPlacementCsv(
 			}
 			idx := set.FirstInstanceIndex + j
 			if int(idx) >= len(e.Loader.Doodads) {
+				continue
+			}
+			if int(idx) < len(e.excludeDoodads) && e.excludeDoodads[idx] {
 				continue
 			}
 			doodad := e.Loader.Doodads[idx]

@@ -193,19 +193,14 @@ func creatureUnitFields(c azerothcore.Creature, model, name string, modelScale, 
 	integer("ulev", max(1, min(100, c.Template.MaxLevel)))
 	integer("ucam", 1)
 	integer("uspe", 0)
-	race, classification, targetType := "creeps", "", "ground"
+	classification, targetType := "", "ground"
 	switch g.Type {
 	case 6:
-		race = "undead"
 		classification = "undead"
 	case 9:
 		classification = "mechanical"
 	case 5:
 		classification = "giant"
-	case 3:
-		race = "demon"
-	case 8:
-		race = "critters"
 	}
 	if movement == "fly" {
 		targetType = "air"
@@ -215,7 +210,7 @@ func creatureUnitFields(c azerothcore.Creature, model, name string, modelScale, 
 	} else {
 		targetType += ",organic"
 	}
-	str("urac", race)
+	str("urac", creatureRace(c, 0))
 	str("utyp", classification)
 	str("utar", targetType)
 	attacks := 1
@@ -317,6 +312,46 @@ func creatureUnitFields(c azerothcore.Creature, model, name string, modelScale, 
 	}
 	real("uacq", acquisition)
 	return mods
+}
+
+// Creature type takes precedence over the character rig: a human-bodied zombie
+// still belongs to Undead. Commoner is an editor grouping for explicit civilians.
+func creatureRace(c azerothcore.Creature, wowRace int) string {
+	g := sourceCreatureGameplay(c)
+	switch g.Type {
+	case 6:
+		return "undead"
+	case 3:
+		return "demon"
+	case 8, 12: // Critters and noncombat pets.
+		return "critters"
+	}
+	switch wowRace {
+	case 5, 15, 20: // Forsaken and both skeleton display races.
+		return "undead"
+	case 13:
+		return "naga"
+	}
+	if g.Type == 7 && c.Template.FlagsExtra&2 != 0 {
+		return "commoner"
+	}
+	switch wowRace {
+	case 1, 3, 7, 10, 22, 29, 32, 34, 37: // Human, Dwarf, Gnome, Blood Elf and related races.
+		return "human"
+	case 2, 6, 8, 9, 12, 18, 19, 21, 28, 30, 31, 35, 36: // Orc, Tauren, Troll, Goblin and related races.
+		return "orc"
+	case 4, 27: // Night Elf, Nightborne.
+		return "nightelf"
+	default:
+		if wowRace > 0 {
+			return "other"
+		}
+		switch g.Type {
+		case 4, 9, 10, 11, 13: // Elemental, mechanical, unspecified, totem, gas cloud.
+			return "other"
+		}
+		return "creeps"
+	}
 }
 
 func creatureUnitKey(c azerothcore.Creature) string {

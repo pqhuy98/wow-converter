@@ -82,6 +82,7 @@ func BuildADTExportOptions(overrides map[string]any) export.ADTExportOptions {
 		MapsIncludeWMO:         pickBool("mapsIncludeWMO", cfg.MapsIncludeWMO),
 		MapsIncludeM2:          pickBool("mapsIncludeM2", cfg.MapsIncludeM2),
 		MapsIncludeWMOSets:     pickBool("mapsIncludeWMOSets", cfg.MapsIncludeWMOSets),
+		ExcludeWMOInteriors:    pickBool("excludeWMOInteriors", false),
 		ExportFoliageMeta:      pickBool("exportFoliageMeta", cfg.ExportFoliageMeta),
 		MapsIncludeFoliage:     pickBool("mapsIncludeFoliage", cfg.MapsIncludeFoliage),
 		MapsIncludeLiquid:      pickBool("mapsIncludeLiquid", cfg.MapsIncludeLiquid),

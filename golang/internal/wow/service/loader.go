@@ -115,6 +115,9 @@ func (l *Loader) finalizeLoad(casc archivecasc.CASC, buildIndex int) (apicasc.So
 	}
 	_, _ = client.ExpireOtherRawBuildCaches(casc.GetBuildKey())
 	adapter := &SourceAdapter{CASC: casc}
+	// Requests made while unloaded may have cached initialization errors.
+	// Publish the new source with fresh source-dependent caches.
+	runtimecache.ClearWowDataServerRuntimeCaches()
 	server.GlobalRuntime.SetCasc(adapter)
 	if err := server.RunLoadFuncs(); err != nil {
 		return nil, err

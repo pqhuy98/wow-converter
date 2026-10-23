@@ -31,11 +31,13 @@ type MapExportConfig struct {
 		ClampPercent TerrainClampPercent
 	}
 	Doodads struct {
-		Enable DoodadEnable
+		Enable         DoodadEnable
+		MaxTextureSize int // Zero retains source resolution; excludes ADT terrain and NPCs.
 	}
 	Creatures struct {
-		Enable        bool
-		AllAreDoodads bool
+		Enable         bool
+		AllAreDoodads  bool
+		MaxTextureSize int // Zero retains source resolution; applies only to NPC assets.
 	}
 	PlayerFaction        string
 	UnitScale            float64

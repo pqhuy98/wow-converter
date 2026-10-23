@@ -621,6 +621,11 @@ func (r *WDCReader) Parse(ctx context.Context, input []byte) error {
 
 				switch CompressionType(fi.fieldCompression) {
 				case CompressionNone:
+					// A preceding packed/common field does not leave the cursor at
+					// the next inline field. Normal records have explicit offsets.
+					if sec.isNormal {
+						data.Seek(sec.recordDataOfs + recordOfs + fieldOffsetBytes)
+					}
 					switch fieldType {
 					case FieldTypeString:
 						if sec.isNormal {
@@ -862,6 +867,14 @@ func readFieldFloats(data *buffer.Buffer, count int) any {
 
 func toUint64(v any) uint64 {
 	switch x := v.(type) {
+	case uint8:
+		return uint64(x)
+	case uint16:
+		return uint64(x)
+	case int8:
+		return uint64(x)
+	case int16:
+		return uint64(x)
 	case uint64:
 		return x
 	case uint32:

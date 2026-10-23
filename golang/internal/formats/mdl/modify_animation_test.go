@@ -63,6 +63,9 @@ func TestConservativeReductionPreservesBoundariesAndCurvedMotion(t *testing.T) {
 	b.Rotation = &components.Animation{Type: components.AnimTypeRotation, Interpolation: components.InterpLinear, KeyFrames: map[int]any{}}
 	for _, timestamp := range []int{0, 25, 50, 75, 100} {
 		angle := float64(timestamp) * math.Pi / 200
+		if timestamp == 50 {
+			angle += 0.08 * math.Pi / 180
+		}
 		q := imath.QuaternionRotation{0, 0, math.Sin(angle / 2), math.Cos(angle / 2)}
 		if timestamp == 50 { // q and -q are the same orientation.
 			for i := range q {
@@ -87,7 +90,7 @@ func TestConservativeReductionPreservesBoundariesAndCurvedMotion(t *testing.T) {
 	}
 	curve := newAnimationCurve(b.Translation)
 	for timestamp, value := range before {
-		if error := animationValueError(value, curve.sample(float64(timestamp), components.InterpLinear)); error > 0.005 {
+		if error := animationValueError(value, curve.sample(float64(timestamp), components.InterpLinear)); error > 0.05 {
 			t.Fatalf("translation error %g at %d", error, timestamp)
 		}
 	}

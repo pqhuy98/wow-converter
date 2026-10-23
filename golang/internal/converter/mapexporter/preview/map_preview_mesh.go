@@ -148,21 +148,36 @@ func (b *previewBuilder) texture(id uint32, name, path string) (string, error) {
 	return path, nil
 }
 
+func (b *previewBuilder) wmoRoot(id int) (*wmo.Loader, error) {
+	if root := b.wmoRoots[id]; root != nil {
+		return root, nil
+	}
+	entry, err := b.options.Client.GetFileByID(b.ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := b.file(uint32(id), "")
+	if err != nil {
+		return nil, err
+	}
+	root := wmo.NewLoader(buffer.From(raw), id, entry.FileName, true)
+	if err := root.Load(); err != nil {
+		return nil, err
+	}
+	if b.wmoRoots == nil {
+		b.wmoRoots = map[int]*wmo.Loader{}
+	}
+	b.wmoRoots[id] = root
+	return root, nil
+}
+
 func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 	stem := fmt.Sprintf("%s/wmo-%d", b.prefix, id)
 	var result previewWMO
 	err := b.cached(stem+".json", &result, func() error {
 		result = previewWMO{}
-		entry, err := b.options.Client.GetFileByID(b.ctx, id)
+		root, err := b.wmoRoot(id)
 		if err != nil {
-			return err
-		}
-		raw, err := b.file(uint32(id), "")
-		if err != nil {
-			return err
-		}
-		root := wmo.NewLoader(buffer.From(raw), id, entry.FileName, true)
-		if err = root.Load(); err != nil {
 			return err
 		}
 		result.Asset = PreviewAsset{ID: stem, Parts: []PreviewPart{}}
@@ -176,14 +191,14 @@ func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 			rootCell = max(rootCell, math.Sqrt(dx*dx+dy*dy+dz*dz)/128)
 		}
 		for groupIndex := 0; groupIndex < int(root.GroupCount); groupIndex++ {
-			if err := b.progress("Preparing WMO groups", groupIndex, int(root.GroupCount)); err != nil {
+			if err := b.progress("Preparing WMO groups", b.wmoGroupsCompleted+groupIndex, b.wmoGroupsTotal); err != nil {
 				return err
 			}
 			groupID := uint32(0)
 			if groupIndex < len(root.GroupIDs) {
 				groupID = root.GroupIDs[groupIndex]
 			}
-			name := fmt.Sprintf("%s_%03d.wmo", strings.TrimSuffix(entry.FileName, ".wmo"), groupIndex)
+			name := fmt.Sprintf("%s_%03d.wmo", strings.TrimSuffix(root.FileName, ".wmo"), groupIndex)
 			raw, err := b.file(groupID, name)
 			if err != nil {
 				return err
@@ -305,7 +320,7 @@ func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 				partVertices[index] = append(partVertices[index], vertices...)
 			}
 		}
-		if err := b.progress("Preparing WMO groups", int(root.GroupCount), int(root.GroupCount)); err != nil {
+		if err := b.progress("Preparing WMO groups", b.wmoGroupsCompleted+int(root.GroupCount), b.wmoGroupsTotal); err != nil {
 			return err
 		}
 		for i, vertices := range partVertices {

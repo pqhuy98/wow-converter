@@ -33,6 +33,7 @@ type Wc3Converter struct {
 	PreloadLocations [][2]float32
 	modelCells       [][]bool
 	adtModels        map[*common.WowObject]*common.Model
+	adtChunks        map[*common.WowObject][]adtChunk
 	Tileset          *terrainfit.Tileset
 	tilesetSlots     []stockTile
 }
@@ -154,17 +155,7 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 	doodadsPlaced := 0
 	doodadsOutOfBounds := 0
 
-	m.IterateObjects(func(obj *common.WowObject, abs common.ObjectAbsolute) {
-		if !filter(obj) {
-			return
-		}
-		visual := obj.Model
-		if w.config.TerrainAsWc3Tilesets && obj.Type == common.WowObjectADT {
-			visual = w.adtModels[obj]
-			if visual == nil {
-				return
-			}
-		}
+	place := func(obj *common.WowObject, abs common.ObjectAbsolute, visual *common.Model, center imath.Vector3) {
 		doodadsPlaced++
 		yaw, roll, pitch := doodadInstanceRotation(abs.Rotation)
 
@@ -198,6 +189,13 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 		inGameY := mapMin[1] + percent[1]*mapSize[1]
 		zDiff := float64(config.DataHeightMax()-config.DataHeightMin()) * (percent[2] - w.config.Terrain.ClampPercent.Lower) / clampDiff
 		inGameZ := config.DataHeightToGameZ(float64(config.DataHeightMin()) + zDiff)
+		// Match the model's native scale-then-rotate transform when moving its
+		// origin. This also preserves placement with nonuniform map XY scales.
+		offset := imath.Vector3{center[0] * abs.ScaleFactor * rootScale[0], center[1] * abs.ScaleFactor * rootScale[1], center[2] * abs.ScaleFactor * rootScale[2]}
+		offset = imath.V3Rotate(offset, abs.Rotation)
+		inGameX += offset[0]
+		inGameY += offset[1]
+		inGameZ += offset[2]
 
 		if inGameX < mapMin[0] || inGameX > mapMax[0] || inGameY < mapMin[1] || inGameY > mapMax[1] {
 			doodadsOutOfBounds++
@@ -206,7 +204,7 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 
 		if _, ok := modelPathToDoodadType[hashKey]; !ok {
 			dt := mm.AddDoodadType(nil, isDestructible)
-			doodadName := fmt.Sprintf("~D %s -- %s -- %s", filepath.Base(obj.Model.RelativePath), obj.Type, dt.Code)
+			doodadName := fmt.Sprintf("~D %s -- %s -- %s", filepath.Base(visual.RelativePath), obj.Type, dt.Code)
 			if obj.GameObject != nil {
 				doodadName = fmt.Sprintf("~G %s (%d)", obj.GameObject.Name, obj.GameObject.Entry)
 			}
@@ -278,6 +276,25 @@ func (w *Wc3Converter) PlaceDoodads(mm *extra.MapManager, m *common.WowObjectMan
 				ID: obj.ID, Source: obj.GameObject, TypeCode: dt.Code, Model: fileName, Position: placement.Position, Angle: placement.Angle, Roll: roll, Pitch: pitch, Scale: placement.Scale,
 			})
 		}
+	}
+	m.IterateObjects(func(obj *common.WowObject, abs common.ObjectAbsolute) {
+		if !filter(obj) {
+			return
+		}
+		if chunks, prepared := w.adtChunks[obj]; prepared {
+			for _, chunk := range chunks {
+				place(obj, abs, chunk.model, chunk.center)
+			}
+			return
+		}
+		visual := obj.Model
+		if w.config.TerrainAsWc3Tilesets && obj.Type == common.WowObjectADT {
+			visual = w.adtModels[obj]
+			if visual == nil {
+				return
+			}
+		}
+		place(obj, abs, visual, imath.Vector3{})
 	})
 
 	if doodadsOutOfBounds > 0 {

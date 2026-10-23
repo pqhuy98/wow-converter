@@ -63,7 +63,7 @@ func LoadADTTilesForConversionSummary(
 		return nil, nil, fmt.Errorf("no CASC source has been loaded")
 	}
 
-	includeWMOSets := includeInteriors
+	includeWMOSets := true // Exterior WMO children are always included.
 	var completed atomic.Int32
 	var resultMu sync.Mutex
 	loaded := make([]TileCoord, 0, len(tiles))
@@ -140,7 +140,8 @@ func loadTileSnapshot(
 			MapID: mc.MapID, MapDir: cascMapDir, TileX: tile.X, TileY: tile.Y,
 			Quality: &quality, ExportAssetDir: exportAssetDir,
 			IncludeM2: &includeM2, IncludeWMO: &includeWMO, IncludeWMOSets: &includeWMOSets,
-			IncludeGameObjects: &includeGO, IncludeHoles: boolPtr(true),
+			ExcludeWMOInteriors: !includeInteriors,
+			IncludeGameObjects:  &includeGO, IncludeHoles: boolPtr(true),
 			IncludeLiquid: boolPtr(true), IncludeFoliage: boolPtr(false),
 		}
 		return wowClient.ExportADTForConversion(ctx, params)
@@ -154,6 +155,7 @@ func loadTileSnapshot(
 		"mapsIncludeM2": true, "mapsIncludeWMO": true, "mapsIncludeWMOSets": includeWMOSets,
 		"mapsIncludeGameObjects": true, "mapsIncludeHoles": true,
 		"mapsIncludeLiquid": true, "mapsIncludeFoliage": false,
+		"excludeWMOInteriors": !includeInteriors,
 	})
 	gameObjects := map[uint32]db.DB2Row{}
 	if opts.MapsIncludeGameObjects {

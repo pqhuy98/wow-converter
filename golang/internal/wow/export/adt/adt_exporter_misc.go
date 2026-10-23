@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	foliageOnce      sync.Once
+	foliageMu        sync.Mutex
+	foliageErr       error
 	foliageAvailable bool
 	foliageLoaded    bool
 	dbTextures       *db.WDCReader
@@ -29,35 +30,49 @@ var (
 )
 
 func clearFoliageTables() {
+	foliageMu.Lock()
+	defer foliageMu.Unlock()
 	dbTextures = nil
 	dbDoodads = nil
 	foliageLoaded = false
 	foliageAvailable = false
-	foliageOnce = sync.Once{}
+	foliageErr = nil
 }
 
-func loadFoliageTables(ctx context.Context) {
-	foliageOnce.Do(func() {
-		if foliageLoaded {
-			return
+func loadFoliageTables(ctx context.Context) error {
+	foliageMu.Lock()
+	defer foliageMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if foliageLoaded {
+		return foliageErr
+	}
+	dbDoodads = db.NewWDCReader("DBFilesClient/GroundEffectDoodad.db2", nil)
+	dbTextures = db.NewWDCReader("DBFilesClient/GroundEffectTexture.db2", nil)
+	if err := dbDoodads.Parse(ctx, nil); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
-		dbDoodads = db.NewWDCReader("DBFilesClient/GroundEffectDoodad.db2", nil)
-		dbTextures = db.NewWDCReader("DBFilesClient/GroundEffectTexture.db2", nil)
-		if err := dbDoodads.Parse(ctx, nil); err != nil {
-			foliageAvailable = false
-			log.Write("Unable to load foliage tables, foliage exporting will be unavailable for all tiles.")
-			foliageLoaded = true
-			return
-		}
-		if err := dbTextures.Parse(ctx, nil); err != nil {
-			foliageAvailable = false
-			log.Write("Unable to load foliage tables, foliage exporting will be unavailable for all tiles.")
-			foliageLoaded = true
-			return
-		}
-		foliageAvailable = true
+		foliageErr = err
+		foliageAvailable = false
+		log.Write("Unable to load foliage tables, foliage exporting will be unavailable for all tiles.")
 		foliageLoaded = true
-	})
+		return err
+	}
+	if err := dbTextures.Parse(ctx, nil); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		foliageErr = err
+		foliageAvailable = false
+		log.Write("Unable to load foliage tables, foliage exporting will be unavailable for all tiles.")
+		foliageLoaded = true
+		return err
+	}
+	foliageAvailable = true
+	foliageLoaded = true
+	return nil
 }
 
 func (e *Exporter) exportModelPlacements(
@@ -216,6 +231,14 @@ func (e *Exporter) exportModelPlacements(
 				if options.MapsIncludeWMOSets {
 					mask := buildWMOSetsMask(wmoExp.Loader.DoodadSets, useADTSets, doodadSets, model.DoodadSet)
 					wmoExp.SetDoodadSetMask(mask)
+					if options.ExcludeWMOInteriors {
+						if err := wmoExp.ExcludeInteriorDoodads(ctx, getFile); err != nil {
+							if ctx.Err() != nil {
+								return
+							}
+							log.Write("Unable to classify WMO children [%d], keeping all: %v", fileDataID, err)
+						}
+					}
 					if conv != nil {
 						rows, err := wmoExp.CollectDoodadPlacements(modelPath, options)
 						if err != nil {
@@ -267,6 +290,9 @@ func (e *Exporter) exportModelPlacements(
 	}
 	if progress != nil {
 		progress.Advance()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if conv != nil {
 		return nil

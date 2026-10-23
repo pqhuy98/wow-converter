@@ -175,6 +175,7 @@ type ADTExportParams struct {
 	IncludeM2              *bool  `json:"includeM2,omitempty"`
 	IncludeWMO             *bool  `json:"includeWMO,omitempty"`
 	IncludeWMOSets         *bool  `json:"includeWMOSets,omitempty"`
+	ExcludeWMOInteriors    bool   `json:"excludeWMOInteriors,omitempty"`
 	IncludeGameObjects     *bool  `json:"includeGameObjects,omitempty"`
 	IncludeLiquid          *bool  `json:"includeLiquid,omitempty"`
 	IncludeFoliage         *bool  `json:"includeFoliage,omitempty"`

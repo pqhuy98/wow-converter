@@ -26,6 +26,7 @@ import (
 type generateWc3Body struct {
 	Tiles                    []exportAdtTile               `json:"tiles"`
 	Quality                  int                           `json:"quality"`
+	DoodadMaxTextureSize     *int                          `json:"doodadMaxTextureSize,omitempty"`
 	MapSaveName              string                        `json:"mapSaveName"`
 	ClampLower               float64                       `json:"clampLower"`
 	ClampUpper               float64                       `json:"clampUpper"`
@@ -39,8 +40,9 @@ type generateWc3Body struct {
 	PlacePathBlockers        bool                          `json:"placePathBlockers"`
 	TerrainAsWc3Tilesets     bool                          `json:"terrainAsWc3Tilesets"`
 	Creatures                struct {
-		Enable        bool `json:"enable"`
-		AllAreDoodads bool `json:"allAreDoodads"`
+		Enable         bool `json:"enable"`
+		AllAreDoodads  bool `json:"allAreDoodads"`
+		MaxTextureSize *int `json:"maxTextureSize,omitempty"`
 	} `json:"creatures"`
 }
 
@@ -130,6 +132,18 @@ func registerMapGenerateRoutes(r Router, d *Deps) {
 				"issues": issues,
 			})
 			return
+		}
+		if body.Creatures.MaxTextureSize == nil || body.DoodadMaxTextureSize == nil {
+			maxSize := 0
+			if d.Client != nil && d.IsClassic(req.Context()) {
+				maxSize = 256
+			}
+			if body.Creatures.MaxTextureSize == nil {
+				body.Creatures.MaxTextureSize = &maxSize
+			}
+			if body.DoodadMaxTextureSize == nil {
+				body.DoodadMaxTextureSize = &maxSize
+			}
 		}
 
 		ordered := dedupeTiles(body.Tiles)
@@ -247,6 +261,12 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 	})
 
 	mapExportCfg.PlayerFaction = req.Body.PlayerFaction
+	if req.Body.Creatures.MaxTextureSize != nil {
+		mapExportCfg.Creatures.MaxTextureSize = *req.Body.Creatures.MaxTextureSize
+	}
+	if req.Body.DoodadMaxTextureSize != nil {
+		mapExportCfg.Doodads.MaxTextureSize = *req.Body.DoodadMaxTextureSize
+	}
 	mapExportCfg.PlacePathBlockers = req.Body.PlacePathBlockers
 	mapExportCfg.TerrainAsWc3Tilesets = req.Body.TerrainAsWc3Tilesets
 	if req.Body.Navigation != nil {
@@ -312,16 +332,15 @@ func runMapGenerateJob(ctx context.Context, d *Deps, job *util.Job[mapGenerateJo
 	cfg.ExportAssetDir = d.ExportAssetDir()
 	convertSteps := initialConvertSteps
 	conversion, err := mapexporter.RunMapGenerateConversion(ctx, mapexporter.MapGenerateConversionOptions{
-		Config:                   cfg,
-		MapExportConfig:          &mapExportCfg,
-		MapSaveName:              req.Body.MapSaveName,
-		FreshExport:              req.Body.FreshExport,
-		IncludeBuildingInteriors: includeInteriors,
-		AutoClampPercent:         req.Body.AutoClampPercent,
-		UnitScale:                req.Body.UnitScale,
-		WowClient:                d.Client,
-		TileRegistry:             registry,
-		TileQuality:              req.Body.Quality,
+		Config:           cfg,
+		MapExportConfig:  &mapExportCfg,
+		MapSaveName:      req.Body.MapSaveName,
+		FreshExport:      req.Body.FreshExport,
+		AutoClampPercent: req.Body.AutoClampPercent,
+		UnitScale:        req.Body.UnitScale,
+		WowClient:        d.Client,
+		TileRegistry:     registry,
+		TileQuality:      req.Body.Quality,
 		OnConvertStepsKnown: func(steps int) {
 			convertSteps = steps
 			updateMapGenerateTotalSteps(progressKey, convertSteps, adtTotalSteps)

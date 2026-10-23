@@ -27,8 +27,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { GenerateWc3FormValues } from '@/lib/models/map-generate.model';
-import { defaultGenerateWc3FormValues, MAP_SAVE_NAME_BASE_REGEX } from '@/lib/models/map-generate.model';
+import type { GenerateWc3FormValues, MapTextureSettings } from '@/lib/models/map-generate.model';
+import {
+  defaultGenerateWc3FormValues, MAP_CLAMP_STORAGE_KEY, MAP_SAVE_NAME_BASE_REGEX, mapClampCacheKey,
+  readMapClampCache, readMapExportPreferences, touchMapClampCache,
+} from '@/lib/models/map-generate.model';
 import type { MapPreviewData } from '@/lib/models/map-preview.model';
 import { fitTerrainClampRange, minimumTerrainClampWidth, readMapPreviewStream } from '@/lib/models/map-preview.model';
 import {
@@ -44,6 +47,12 @@ import { MapExportPreview } from './map-export-preview';
 import { TerrainClampSlider } from './terrain-clamp-slider';
 
 const MAP_ANGLE_OPTIONS = [0, 90, 180, 270] as const;
+const MODEL_TEXTURE_OPTIONS = [256, 512, 1024, 0];
+const TEXTURE_FIELDS: { key: keyof MapTextureSettings; label: string; options: number[] }[] = [
+  { key: 'terrain', label: 'Terrain', options: [1024, 2048, 4096, 8192] },
+  { key: 'unit', label: 'Unit', options: MODEL_TEXTURE_OPTIONS },
+  { key: 'doodad', label: 'Doodad', options: MODEL_TEXTURE_OPTIONS },
+];
 
 const tooltips = {
   terrainClamp:
@@ -61,7 +70,7 @@ const tooltips = {
     'Paint playable ground with generated Warcraft III tileset textures instead of covering it with ADT models. This significantly increases in-game performance, but lowers terrain visual quality.',
   freshExport: 'Delete the existing map folder before converting. Unchecked reuses cached models and textures.',
   includeBuildingInteriors:
-    'Export interior doodads inside buildings (chairs, tables, etc.). Exports more models and textures, so generation takes longer and uses more disk space.',
+    'Include interior-only building props such as chairs and tables. Exterior decorations are always included. Props with missing or ambiguous group data are kept.',
 };
 
 function FieldLabelRow({
@@ -85,6 +94,7 @@ interface GenerateWc3DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mapDir: string | null;
+  mapId: number | string | null;
   expansionID?: number;
   defaultMapSaveName: string;
   selectedTiles: { x: number; y: number }[];
@@ -95,17 +105,19 @@ export default function GenerateWc3Dialog({
   open,
   onOpenChange,
   mapDir,
+  mapId,
   expansionID,
   defaultMapSaveName,
   selectedTiles,
   onConfirm,
 }: GenerateWc3DialogProps) {
   const [values, setValues] = useState<GenerateWc3FormValues>(defaultGenerateWc3FormValues);
-  const { buildKey } = useServerConfig();
+  const { buildKey, isClassic, product } = useServerConfig();
+  const preferenceStorageKey = `wow-converter.map-textures.${product || (isClassic ? 'wow_classic' : 'wow')}`;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [preview, setPreview] = useState<MapPreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewProgress, setPreviewProgress] = useState('Preparing map preview — 0/1');
+  const [previewProgress, setPreviewProgress] = useState('Preparing map preview (0/1)');
   const [previewError, setPreviewError] = useState('');
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState('');
@@ -123,12 +135,23 @@ export default function GenerateWc3Dialog({
     if (!open) setIsFullscreen(false);
   }, [open]);
 
-  const selectedTilesKey = selectedTiles
-    .map((t) => `${t.x},${t.y}`)
+  const selectedTilesKey = [...new Set(selectedTiles.map((t) => `${t.x},${t.y}`))]
     .sort()
     .join('|');
 
   const suggestionSelectionKey = `${mapDir?.toLowerCase()}:${selectedTilesKey}`;
+  const clampCacheKey = mapId == null ? '' : mapClampCacheKey(mapId, selectedTiles);
+  const rememberClamp = useCallback((lower: number, upper: number) => {
+    if (!clampCacheKey) return;
+    try {
+      const entries = readMapClampCache(localStorage.getItem(MAP_CLAMP_STORAGE_KEY));
+      localStorage.setItem(MAP_CLAMP_STORAGE_KEY, JSON.stringify(touchMapClampCache(entries, { key: clampCacheKey, lower, upper })));
+    } catch { /* Clamp edits still work when browser storage is unavailable. */ }
+  }, [clampCacheKey]);
+
+  const savePreferences = (textures: MapTextureSettings, includeBuildingInteriors: boolean) => {
+    try { localStorage.setItem(preferenceStorageKey, JSON.stringify({ ...textures, includeBuildingInteriors })); } catch { /* Keep using these settings when storage is unavailable. */ }
+  };
   const npcDataSupported = isMapExpansionWithinWotlk(expansionID);
   const expansionAfterWotlk = isMapExpansionAfterWotlk(expansionID);
   const creaturesSupported = npcDataSupported && creatureCheck.hasCreatures && !creatureCheck.loading;
@@ -171,20 +194,40 @@ export default function GenerateWc3Dialog({
   }, [open, mapDir, selectedTilesKey, buildKey, npcDataSupported]);
 
   useEffect(() => {
+    if (!open) return;
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(preferenceStorageKey); } catch { /* Storage may be unavailable. */ }
+    const { includeBuildingInteriors, ...textures } = readMapExportPreferences(saved, isClassic);
+    setValues((v) => ({ ...v, textures, includeBuildingInteriors }));
+  }, [open, preferenceStorageKey, isClassic]);
+
+  useEffect(() => {
     if (!open || !mapDir || !selectedTilesKey) return;
-    const selection = `${mapDir.toLowerCase()}:${selectedTilesKey}`;
+    const selection = `${buildKey}:${mapDir.toLowerCase()}:${selectedTilesKey}`;
     if (settingsSelectionRef.current === selection) return;
     if (settingsSelectionRef.current) settingsBySelectionRef.current.set(settingsSelectionRef.current, values);
     settingsSelectionRef.current = selection;
-    setValues(settingsBySelectionRef.current.get(selection) ?? {
-      ...defaultGenerateWc3FormValues,
-      mapSaveName: defaultMapSaveName,
-      creatures: {
-        enable: false,
-        allAreDoodads: false,
-      },
-    });
-  }, [open, mapDir, selectedTilesKey, defaultMapSaveName, values]);
+    setValues((v) => ({
+      ...(settingsBySelectionRef.current.get(selection) ?? {
+        ...defaultGenerateWc3FormValues,
+        mapSaveName: defaultMapSaveName,
+      }),
+      textures: v.textures,
+      includeBuildingInteriors: v.includeBuildingInteriors,
+    }));
+  }, [open, mapDir, selectedTilesKey, defaultMapSaveName, values, buildKey]);
+
+  useEffect(() => {
+    if (!open || !clampCacheKey || !selectedTilesKey) return;
+    try {
+      const entries = readMapClampCache(localStorage.getItem(MAP_CLAMP_STORAGE_KEY));
+      const saved = entries.find((entry) => entry.key === clampCacheKey);
+      if (!saved) return;
+      autoSuggestionRef.current.add(suggestionSelectionKey);
+      setValues((v) => ({ ...v, clampLower: saved.lower, clampUpper: saved.upper }));
+      localStorage.setItem(MAP_CLAMP_STORAGE_KEY, JSON.stringify(touchMapClampCache(entries, saved)));
+    } catch { /* Use the in-memory selection settings when storage is unavailable. */ }
+  }, [open, clampCacheKey, selectedTilesKey, suggestionSelectionKey, buildKey]);
 
   useEffect(() => {
     suggestionRef.current?.abort();
@@ -195,7 +238,7 @@ export default function GenerateWc3Dialog({
     }
     const controller = new AbortController();
     setPreview(null); setPreviewLoading(true); setPreviewError('');
-    setPreviewProgress('Checking preview cache — 0/1');
+    setPreviewProgress('Checking preview cache (0/1)');
     void (async () => {
       try {
         const res = await fetch(`/api/maps/${encodeURIComponent(mapDir)}/preview?progress=1`, {
@@ -205,7 +248,7 @@ export default function GenerateWc3Dialog({
           signal: controller.signal,
         });
         const data = await readMapPreviewStream(res, (progress) => {
-          if (!controller.signal.aborted) setPreviewProgress(`${progress.message} — ${progress.completed}/${progress.total}`);
+          if (!controller.signal.aborted) setPreviewProgress(`${progress.message} (${progress.completed}/${progress.total})`);
         });
         if (!controller.signal.aborted) {
           setPreview(data);
@@ -235,11 +278,14 @@ export default function GenerateWc3Dialog({
       });
       if (!res.ok) { const failure: { error?: string } = await res.json(); throw new Error(failure.error ?? 'Could not suggest a height range.'); }
       const data: { lower: number; upper: number } = await res.json();
-      if (!controller.signal.aborted) setValues((v) => ({ ...v, clampLower: data.lower, clampUpper: data.upper }));
+      if (!controller.signal.aborted) {
+        setValues((v) => ({ ...v, clampLower: data.lower, clampUpper: data.upper }));
+        rememberClamp(data.lower, data.upper);
+      }
     } catch (err) {
       if (!controller.signal.aborted) setSuggestError(err instanceof Error ? err.message : 'Could not suggest a height range.');
     } finally { if (!controller.signal.aborted) setSuggesting(false); }
-  }, [mapDir, creaturesSupported, selectedTilesKey, values.unitScale]);
+  }, [mapDir, creaturesSupported, selectedTilesKey, values.unitScale, rememberClamp]);
 
   useEffect(() => {
     if (!open || !creaturesSupported || autoSuggestionRef.current.has(suggestionSelectionKey)) return;
@@ -269,6 +315,7 @@ export default function GenerateWc3Dialog({
           onSubmit={(e) => {
             e.preventDefault();
             if (nameInvalid || creatureCheck.loading || suggesting || clampInvalid) return;
+            rememberClamp(values.clampLower, values.clampUpper);
             onConfirm({
               ...values,
               mapSaveName: normalizeMapSaveName(values.mapSaveName),
@@ -394,6 +441,7 @@ export default function GenerateWc3Dialog({
                   suggestionRef.current?.abort(); setSuggesting(false);
                   const [safeLower, safeUpper] = fitTerrainClampRange(clampLower, clampUpper, minimumClampWidth);
                   setValues((v) => ({ ...v, clampLower: safeLower, clampUpper: safeUpper }));
+                  rememberClamp(safeLower, safeUpper);
                 }}
               />
             {preview && minimumClampWidth > 1 && (
@@ -481,14 +529,39 @@ export default function GenerateWc3Dialog({
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={values.includeBuildingInteriors}
-              onCheckedChange={(checked) => setValues((v) => ({
-                ...v,
-                includeBuildingInteriors: checked === true,
-              }))}
+              onCheckedChange={(checked) => {
+                const includeBuildingInteriors = checked === true;
+                setValues((v) => ({ ...v, includeBuildingInteriors }));
+                savePreferences(values.textures, includeBuildingInteriors);
+              }}
             />
             Include building interiors
             <TooltipHelp tooltips={tooltips.includeBuildingInteriors} />
           </label>
+
+          <fieldset className="space-y-2 rounded-md border px-3 py-2">
+            <legend className="px-1 text-sm font-medium">Textures</legend>
+            {TEXTURE_FIELDS.map(({ key, label, options }) => (
+              <div key={key} className="flex items-center justify-between gap-3">
+                <Label htmlFor={`${key}TextureSize`}>{label}</Label>
+                <Select
+                  value={String(values.textures[key])}
+                  onValueChange={(value) => {
+                    const textures = { ...values.textures, [key]: Number(value) };
+                    setValues((v) => ({ ...v, textures }));
+                    savePreferences(textures, values.includeBuildingInteriors);
+                  }}
+                >
+                  <SelectTrigger id={`${key}TextureSize`} className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {options.map((size) => (
+                      <SelectItem key={size} value={String(size)}>{key === 'terrain' ? `${size / 1024}k` : size === 0 ? 'Unlimited' : `${size}px`}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </fieldset>
 
           <label className="flex items-center gap-2 text-sm">
             <Checkbox

@@ -32,7 +32,7 @@ function Trig_LUA_0s_elapse_Actions()
     local locations = {}
     -- WOW_CONVERTER_PRELOAD_LOCATIONS_END
     CinematicFadeBJ(bj_CINEFADETYPE_FADEOUT, 0, "ReplaceableTextures\\CameraMasks\\White_mask.blp", 0, 0, 0, 0)
-    EnableUserControl(false)
+    CinematicModeExBJ(true, GetPlayersAll(), 0)
     local cameraX, cameraY = GetCameraTargetPositionX(), GetCameraTargetPositionY()
     local fields = {CAMERA_FIELD_TARGET_DISTANCE, CAMERA_FIELD_FARZ, CAMERA_FIELD_ANGLE_OF_ATTACK, CAMERA_FIELD_FIELD_OF_VIEW, CAMERA_FIELD_ROLL, CAMERA_FIELD_ROTATION, CAMERA_FIELD_ZOFFSET}
     local values = {}
@@ -93,7 +93,7 @@ function Trig_LUA_0s_elapse_Actions()
             SetCameraField(field, value, 0)
         end
         SetCameraPosition(cameraX, cameraY)
-        EnableUserControl(true)
+        CinematicModeExBJ(false, GetPlayersAll(), 0)
         CinematicFadeBJ(bj_CINEFADETYPE_FADEIN, 0.50, "ReplaceableTextures\\CameraMasks\\White_mask.blp", 0, 0, 0, 0)
     end
     TimerStart(timer, 0.02, true, step)

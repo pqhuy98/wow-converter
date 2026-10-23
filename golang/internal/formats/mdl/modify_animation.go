@@ -77,9 +77,9 @@ func (mod *Modify) ReduceKeyFramesConservative() *Modify {
 		tolerance := 0.0
 		switch anim.Type {
 		case components.AnimTypeTranslation:
-			tolerance = 0.005
+			tolerance = 0.05
 		case components.AnimTypeRotation:
-			tolerance = 0.01 * math.Pi / 180
+			tolerance = 0.1 * math.Pi / 180
 		case components.AnimTypeScaling:
 			tolerance = 0.0001
 		default:

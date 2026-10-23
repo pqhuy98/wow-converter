@@ -165,9 +165,18 @@ func TestTerrainModeStartupSurvivesCachedExportAndEditorRegeneration(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, call := range []string{"BlzShowTerrain(false)", "FogMaskEnable(false)", "FogEnable(false)", "PanCameraToTimed(", "CinematicFadeBJ(", "EnableUserControl(false)", "{123.5, -987.25}"} {
+			for _, call := range []string{"BlzShowTerrain(false)", "FogMaskEnable(false)", "FogEnable(false)", "PanCameraToTimed(", "CinematicFadeBJ(", "CinematicModeExBJ(true, GetPlayersAll(), 0)", "CinematicModeExBJ(false, GetPlayersAll(), 0)", "{123.5, -987.25}"} {
 				if bytes.Contains(raw, []byte(call)) == enabled {
 					t.Fatalf("%s: %s disagrees with tileset mode %v", name, call, enabled)
+				}
+			}
+			if !enabled {
+				enter := bytes.Index(raw, []byte("CinematicModeExBJ(true, GetPlayersAll(), 0)"))
+				pan := bytes.Index(raw, []byte("PanCameraToTimed("))
+				exit := bytes.Index(raw, []byte("CinematicModeExBJ(false, GetPlayersAll(), 0)"))
+				fadeIn := bytes.Index(raw, []byte("CinematicFadeBJ(bj_CINEFADETYPE_FADEIN"))
+				if enter >= pan || pan >= exit || exit >= fadeIn {
+					t.Fatalf("%s cinematic mode must surround preload and end before fade-in", name)
 				}
 			}
 			if !bytes.Contains(raw, []byte(`BlzChangeMinimapTerrainTex("minimap.blp")`)) {

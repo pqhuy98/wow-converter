@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	imath "github.com/pqhuy98/wow-converter/internal/math"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -49,6 +51,7 @@ type AssetManager struct {
 	models            map[string]*Model
 	textures          map[string]struct{}
 	texturesOverwrite map[string]struct{}
+	textureMaxSizes   map[string]int
 	blpTextures       map[string][]byte
 }
 
@@ -61,6 +64,7 @@ func NewAssetManager(cfg config.Config, wowClient client.Client, tileRegistry *T
 		models:            map[string]*Model{},
 		textures:          map[string]struct{}{},
 		texturesOverwrite: map[string]struct{}{},
+		textureMaxSizes:   map[string]int{},
 		blpTextures:       map[string][]byte{},
 	}
 }
@@ -283,6 +287,7 @@ func (a *AssetManager) ReleaseAfterExport() {
 	a.models = map[string]*Model{}
 	a.textures = map[string]struct{}{}
 	a.texturesOverwrite = map[string]struct{}{}
+	a.textureMaxSizes = map[string]int{}
 	a.blpTextures = map[string][]byte{}
 }
 
@@ -310,7 +315,7 @@ func (a *AssetManager) ExportModels(ctx context.Context, assetPath string) error
 			}
 			mdlModel := model.MDL
 			mdlModel.Modify.ReduceKeyFramesConservative()
-			if mdlModel.Model.BoundsRadius > a.config.InfiniteExtentBoundRadiusThreshold {
+			if !model.TightBounds && mdlModel.Model.BoundsRadius > a.config.InfiniteExtentBoundRadiusThreshold {
 				mdlModel.Modify.SetLargeBounds()
 			}
 			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -324,6 +329,11 @@ func (a *AssetManager) ExportModels(ctx context.Context, assetPath string) error
 				if err := ctx.Err(); err != nil {
 					return err
 				}
+				if model.TightBounds {
+					if previous, err := os.ReadFile(full); err == nil && bytes.Equal(previous, data) {
+						return nil
+					}
+				}
 				if err := os.WriteFile(full, data, 0o644); err != nil {
 					return err
 				}
@@ -331,6 +341,11 @@ func (a *AssetManager) ExportModels(ctx context.Context, assetPath string) error
 				data := []byte(mdlModel.ToMdl())
 				if err := ctx.Err(); err != nil {
 					return err
+				}
+				if model.TightBounds {
+					if previous, err := os.ReadFile(full); err == nil && bytes.Equal(previous, data) {
+						return nil
+					}
 				}
 				if err := os.WriteFile(full, data, 0o644); err != nil {
 					return err
@@ -498,6 +513,9 @@ func (a *AssetManager) prepTextureForExport(ctx context.Context, rel, assetPath 
 	}
 
 	maxSize := a.config.MaxTextureSize
+	if limit, ok := a.textureMaxSizes[rel]; ok {
+		maxSize = limit
+	}
 	if maxSize <= 0 {
 		maxSize = stdmath.MaxInt32
 	}
@@ -523,7 +541,7 @@ func (a *AssetManager) prepTextureForExport(ctx context.Context, rel, assetPath 
 	}
 
 	var resizeTo *blp.Size
-	if a.config.MaxTextureSize > 0 && (width > targetW || height > targetH) {
+	if width > targetW || height > targetH {
 		resizeTo = &blp.Size{Width: targetW, Height: targetH}
 	}
 
@@ -577,6 +595,18 @@ func readTextureDimensions(ctx context.Context, source texturesource.Source, has
 		return 0, 0
 	}
 	return cfg.Width, cfg.Height
+}
+
+// SetTextureMaxSize assigns a source texture's export limit. Shared textures use
+// the largest requested resolution; zero means unlimited and takes precedence.
+// Call before ExportTextures starts its workers.
+func (a *AssetManager) SetTextureMaxSize(p string, size int) {
+	p = strings.ReplaceAll(p, "\\", "/")
+	p = strings.TrimPrefix(p, strings.ReplaceAll(a.config.AssetPrefix, "\\", "/")+"/")
+	p = strings.TrimSuffix(strings.TrimSuffix(p, ".blp"), ".png") + ".png"
+	if previous, ok := a.textureMaxSizes[p]; !ok || (previous != 0 && (size == 0 || size > previous)) {
+		a.textureMaxSizes[p] = size
+	}
 }
 
 // PurgeTextures keeps only used texture paths.
@@ -681,7 +711,13 @@ func (a *AssetManager) SmoothAdtTileBorders() {
 		_, _, _, _ = aMinX, aMaxX, aMinZ, aMaxZ
 	}
 
-	for key, model := range tiles {
+	keys := make([]string, 0, len(tiles))
+	for key := range tiles {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		model := tiles[key]
 		parts := strings.Split(key, "_")
 		if len(parts) != 2 {
 			continue

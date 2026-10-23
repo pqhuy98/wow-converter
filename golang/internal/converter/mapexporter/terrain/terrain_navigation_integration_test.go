@@ -56,7 +56,7 @@ func TestStormwindCollisionTerrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := mapexporter.RunMapGenerateConversion(ctx, mapexporter.MapGenerateConversionOptions{
-		Config: cfg, MapExportConfig: &mapCfg, MapSaveName: "navigation-stormwind.w3x", IncludeBuildingInteriors: true,
+		Config: cfg, MapExportConfig: &mapCfg, MapSaveName: "navigation-stormwind.w3x",
 		AutoClampPercent: true, UnitScale: 2, WowClient: c, TileRegistry: registry, TileQuality: 512,
 	})
 	if err != nil {

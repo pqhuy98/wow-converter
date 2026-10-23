@@ -18,18 +18,17 @@ import (
 
 // MapGenerateConversionOptions configures a server-side WC3 conversion run.
 type MapGenerateConversionOptions struct {
-	Config                   config.Config
-	MapExportConfig          *MapExportConfig
-	MapSaveName              string
-	FreshExport              bool
-	IncludeBuildingInteriors bool
-	AutoClampPercent         bool
-	UnitScale                float64
-	WowClient                client.Client
-	TileRegistry             *common.TileRegistry
-	TileQuality              int
-	OnConvertStepsKnown      func(convertSteps int)
-	OnProgress               func(convertCompleted int, taskName string, creatureProgress *CreatureProgress)
+	Config              config.Config
+	MapExportConfig     *MapExportConfig
+	MapSaveName         string
+	FreshExport         bool
+	AutoClampPercent    bool
+	UnitScale           float64
+	WowClient           client.Client
+	TileRegistry        *common.TileRegistry
+	TileQuality         int
+	OnConvertStepsKnown func(convertSteps int)
+	OnProgress          func(convertCompleted int, taskName string, creatureProgress *CreatureProgress)
 }
 
 // CreatureProgress tracks creature export progress.
@@ -121,11 +120,8 @@ func RunMapGenerateConversion(ctx context.Context, opts MapGenerateConversionOpt
 	if err := ctx.Err(); err != nil {
 		return MapGenerateConversionResult{}, err
 	}
-	pruneDepth := 2
-	if opts.IncludeBuildingInteriors {
-		pruneDepth = 3
-	}
-	PruneDepth(exporter, pruneDepth)
+	// Interior-only WMO children are filtered while loading source placements.
+	// Depth pruning would also remove exterior decorations.
 	if autoClamp {
 		AutoChooseClampPercent(exporter, opts.UnitScale)
 	}

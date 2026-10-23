@@ -2,6 +2,8 @@
 
 The Go exporter uses bundled AzerothCore gameplay data and the exported creature model. Source content is based on Wrath; newer client assets can differ from those spawn locations or display IDs. Owner: `golang/internal/converter/mapexporter/creature/`.
 
+The dialog's **Textures → Unit** setting caps NPC textures at 256px, 512px, 1024px or Unlimited. Classic defaults to 256px; retail defaults to Unlimited. The cap preserves aspect ratio and affects both unit and destructible NPC exports. The API field is `creatures.maxTextureSize`, with zero meaning Unlimited. NPC textures use a separate import namespace so their cap cannot resize scenery textures. Changing the cap invalidates the NPC appearance cache without requiring Fresh export.
+
 ## Placement and players
 
 Unit mode excludes spawns outside the playable clamp or too far from fitted ground, retaining them in model export. Ground tolerance is `100 * recommendedClampWidth / chosenClampWidth` WC3 units, so changing the clamp alone does not change the accepted source-space floor gap. **All NPCs as destructibles** places decoration at source heights without pathing footprints; its compatibility key is `allAreDoodads`. Marker colors and placement approximation are in [preview](preview.md).
@@ -43,9 +45,13 @@ Armor preserves armor-only physical effective HP against an equal-level attacker
 
 Selection uses all geosets around the origin and ignores Z; empty XY geometry keeps the converted WoW radius. Missing/empty native stand boxes use the client's 1.2-yard fallback, while unsupported schemas fail. Collision is independent of embedded picking geometry; its metadata refreshes on cached exports.
 
+Editor race (`urac`) uses the resolved WoW character race: Human/Dwarf/Gnome/Blood Elf/Worgen and related races → Human; Orc/Tauren/Troll/Goblin and related races → Orc; Night Elf/Nightborne → Night Elf; Forsaken and skeleton display races → Undead; Naga → Naga. Fel Orc, Taunka and forest/ice troll display races use Orc. WoW creature types Undead, Demon and Critter/noncombat pet take precedence over the character rig. Explicit humanoid civilians (`flags_extra & 2`) use Commoner, except Undead and Naga retain their race. Known races without a mapped WC3 counterpart (Draenei, Broken, Vrykul, Tuskarr, Pandaren, etc.) use Other. Elemental/mechanical/unspecified/totem/gas-cloud creature types also fall back to Other. Remaining missing-race NPCs retain Creep (`creeps`); None (`unknown`) is not assigned to normal NPCs. Race metadata refreshes even when model files are reused. Campaign (`ucam`) is always Yes for these exported presentation units; it controls editor organization, not race, ownership or campaign membership. Gameplay classifications (`utyp`) continue to follow creature type.
+
 Attack-release timing uses embedded sound events when present, otherwise 35% of the animation, bounded by source cooldown. Embedded attack sounds suppress an extra weapon-impact sound; otherwise equipment/body selects a native sound. Attachments supply launch offsets with a body fallback. Critters, noncombat pets, pacified and zero-damage actors have no inherited attacks; civilian flags suppress acquisition. Gossip/vendor flags alone do not disable combat. Stock abilities, upgrades, training/building commands and melee resource costs are cleared. Spells, vendors, quests, patrols and encounter AI are not translated.
 
 ## Shared models and animation policy
+
+NPC units using resolved character models (such as Human or Orc) receive an additional 1.2× multiplier in the unit object's Scaling Value (`usca`), selection circle (`ussc`) and collision size (`ucol`, still capped at 1024). This stacks with their existing sizing, including the selection circle's native/mesh radius cap. Creature models and NPC destructibles retain their previous sizing. Model assets and other object fields are unchanged; cached-model re-exports apply the multiplier too.
 
 Appearance resolution precedes conversion. Keys include build, resolved base model, skins, customizations/geosets, particle colors, equipment and export settings. Identity alone does not force another model. Particle-free display scale is excluded from the model key. Serialized models also deduplicate by content, ignoring the model-name field; gameplay fields, ownership and placement remain independent.
 

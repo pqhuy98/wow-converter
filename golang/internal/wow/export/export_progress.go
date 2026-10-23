@@ -22,6 +22,7 @@ type ADTExportOptions struct {
 	MapsIncludeWMO         bool
 	MapsIncludeM2          bool
 	MapsIncludeWMOSets     bool
+	ExcludeWMOInteriors    bool
 	ExportFoliageMeta      bool
 	MapsIncludeFoliage     bool
 	MapsIncludeLiquid      bool
@@ -59,12 +60,12 @@ type BatchExportProgressParams struct {
 
 // ProgressReporter tracks export progress for a single tile.
 type ProgressReporter struct {
-	key, taskName              string
-	tileIndex, tileCount       int
-	stepsPerTile, tileSteps    int
-	totalSteps, tileBase       int
-	currentTile                apicasc.TileCoord
-	taskValue, taskMax         *int
+	key, taskName           string
+	tileIndex, tileCount    int
+	stepsPerTile, tileSteps int
+	totalSteps, tileBase    int
+	currentTile             apicasc.TileCoord
+	taskValue, taskMax      *int
 }
 
 // CreateBatchExportProgress creates a progress reporter.

@@ -45,8 +45,6 @@ interface MapResponse {
   expansionID?: number;
 }
 
-type TextureResolution = '0' | '512' | '1024' | '4096' | '8192' | '16384'
-
 const showMapExport = true;
 const POLL_INTERVAL_MS = 500;
 
@@ -66,7 +64,6 @@ export default function MapViewer() {
   const [mapInfo, setMapInfo] = useState<MapInfo | null>(null);
   const [hover, setHover] = useState<MapHoverChange>(null);
   const [selectedTiles, setSelectedTiles] = useState<{ x: number; y: number }[]>([]);
-  const [texSize, setTexSize] = useState<TextureResolution>('8192');
   const [generateJob, setGenerateJob] = useState<MapGenerateJobStatus | undefined>(undefined);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -304,7 +301,8 @@ export default function MapViewer() {
     try {
       const body = {
         tiles: selectedTiles,
-        quality: parseInt(texSize, 10),
+        quality: form.textures.terrain,
+        doodadMaxTextureSize: form.textures.doodad,
         mapSaveName: normalizeMapSaveName(form.mapSaveName),
         clampLower: form.clampLower,
         clampUpper: form.clampUpper,
@@ -316,7 +314,7 @@ export default function MapViewer() {
         placePathBlockers: form.placePathBlockers,
         terrainAsWc3Tilesets: form.terrainAsWc3Tilesets,
         freshExport: form.freshExport,
-        creatures: form.creatures,
+        creatures: { ...form.creatures, maxTextureSize: form.textures.unit },
       };
       const res = await fetch(`/api/maps/${encodeURIComponent(String(mapInfo.mapId))}/generate-wc3`, {
         method: 'POST',
@@ -345,7 +343,7 @@ export default function MapViewer() {
       });
       clearStoredGenerateJob();
     }
-  }, [mapInfo, selectedTiles, texSize, isGenerating, applyJobUpdate]);
+  }, [mapInfo, selectedTiles, isGenerating, applyJobUpdate]);
 
   const onHaltGenerate = useCallback(async () => {
     const jobID = generateJob?.id;
@@ -454,6 +452,7 @@ export default function MapViewer() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         mapDir={selectedMapDir}
+        mapId={maps.find((m) => m.dir === selectedMapDir)?.id ?? selectedMapDir}
         expansionID={selectedMapExpansionID}
         defaultMapSaveName={suggestedMapName}
         selectedTiles={selectedTiles}
@@ -523,20 +522,6 @@ export default function MapViewer() {
                 </div>
                 {!isSharedHosting && showMapExport && <div>
                   <div className="flex items-center gap-2 pt-2 mt-auto">
-                    <label className="text-sm text-muted-foreground whitespace-nowrap">Terrain texture size</label>
-                    <select
-                      className="border rounded px-2 py-1 bg-background disabled:cursor-not-allowed disabled:opacity-50"
-                      value={texSize}
-                      onChange={(e) => setTexSize(e.target.value as TextureResolution)}
-                      disabled={isGenerating}
-                    >
-                      <option value="0">None</option>
-                      <option value="512">512</option>
-                      <option value="1024">1024</option>
-                      <option value="4096">4096</option>
-                      <option value="8192">8192</option>
-                      <option value="16384">16384</option>
-                    </select>
                     <Button
                       type="button"
                       className="ml-auto"

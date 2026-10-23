@@ -54,6 +54,7 @@ type MapExporter struct {
 	factions         *creature.FactionPlan
 	deathSounds      map[string]string
 	warnings         []string
+	terrainAssets    map[string]bool
 }
 
 // NewMapExporter creates an exporter. mapCfg must be non-nil and is mutated in place during export.
@@ -132,12 +133,12 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		return err
 	}
 	wc3 := mapterrain.NewWc3Converter(*e.MapExportConfig)
+	e.terrainConverter = wc3
 	terrain, err := wc3.GenerateTerrainWithHeight(e.WowObjectManager)
 	if err != nil {
 		return err
 	}
 	if e.MapExportConfig.TerrainAsWc3Tilesets {
-		e.terrainConverter = wc3
 		if err := wc3.ApplyWc3Tileset(ctx, &terrain, e.WowObjectManager, e.wowClient, e.Config); err != nil {
 			return err
 		}
@@ -160,6 +161,9 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 			return err
 		}
 		wc3.BlockModelCells(navigation)
+	}
+	if err := wc3.PrepareAdtChunks(ctx, e.WowObjectManager, e.Config.AssetPrefix); err != nil {
+		return err
 	}
 	e.MapManager.SetTerrain(terrain)
 	if navigation != nil {
@@ -231,16 +235,28 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 	var usedTextures []string
 	for _, model := range am.Models() {
 		for _, tex := range model.MDL.Textures {
+			var p string
 			if tex.WowData.PngPath != "" {
-				usedTextures = append(usedTextures, strings.ReplaceAll(tex.WowData.PngPath, "\\", "/"))
+				p = strings.ReplaceAll(tex.WowData.PngPath, "\\", "/")
 			} else if tex.Image != "" {
-				usedTextures = append(usedTextures, strings.ReplaceAll(strings.ReplaceAll(tex.Image, ".blp", ".png"), "\\", "/"))
+				p = strings.ReplaceAll(strings.ReplaceAll(tex.Image, ".blp", ".png"), "\\", "/")
+			}
+			if p != "" {
+				usedTextures = append(usedTextures, p)
+				limit := e.MapExportConfig.Doodads.MaxTextureSize
+				if model.TightBounds {
+					limit = 0 // ADT chunks retain the terrain bake resolution.
+				}
+				am.SetTextureMaxSize(p, limit)
 			}
 		}
 	}
 	am.PurgeTextures(usedTextures)
 
 	if _, err := am.ExportTextures(ctx, outputDir); err != nil {
+		return err
+	}
+	if err := e.prepareTerrainAssets(ctx, outputDir); err != nil {
 		return err
 	}
 	if err := am.ExportModels(ctx, outputDir); err != nil {
@@ -304,14 +320,28 @@ func (e *MapExporter) ExportCreatures(ctx context.Context, outputDir string, onP
 		creatures = append(creatures, u.Creature)
 	}
 	start := time.Now()
-	exported, err := creature.ExportCreatureAssets(ctx, creatures, outputDir, e.Config, e.wowClient, MapExportWorkerCount(), mc.Creatures.AllAreDoodads, onProgress)
+	creatureConfig := e.Config
+	creatureConfig.MaxTextureSize = mc.Creatures.MaxTextureSize
+	exported, err := creature.ExportCreatureAssets(ctx, creatures, outputDir, creatureConfig, e.wowClient, MapExportWorkerCount(), mc.Creatures.AllAreDoodads, onProgress)
 	if err != nil {
 		return err
 	}
 	assets, icons := exported.Models, exported.Icons
 	if exported.IconError != nil {
 		log.Printf("NPC icons unavailable: %v (using Footman icons)", exported.IconError)
-		e.warnings = append(e.warnings, "NPC icon rendering failed for some models; default icons were used.")
+		models := map[string]bool{}
+		failed := 0
+		for _, asset := range assets {
+			if !models[asset.ModelPath] {
+				models[asset.ModelPath] = true
+				if icons[asset.ModelPath] == "" {
+					failed++
+				}
+			}
+		}
+		if failed > 0 {
+			e.warnings = append(e.warnings, fmt.Sprintf("NPC icon rendering failed for %d/%d models.", failed, len(models)))
+		}
 	}
 	creature.ApplyCreatureAssets(e.MapManager, units, assets, icons)
 	if err := creature.EnrichCreatureModelFields(ctx, outputDir, e.MapManager, units, assets); err != nil {
@@ -432,7 +462,7 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 			}
 		}
 	}
-	return nil
+	return e.cleanTerrainAssets(ctx, outputDir)
 }
 
 func (e *MapExporter) inheritTemplateMapSettings(templateDir string) error {

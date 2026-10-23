@@ -8,7 +8,7 @@
 
 When enabled, descendants of the `Head` bone keep a fixed pose outside `Portrait*` sequences. `Head` itself remains animated so head turns are retained. Portrait motion remains intact. Independent global tracks and nonlinear tracks are skipped.
 
-Conservative key reduction always runs for final exports. It removes redundant keys from linear translation, rotation and scale tracks while retaining sequence endpoints. The permitted interpolation differences are 0.005 model units per translation component, 0.01° quaternion angle and 0.0001 per scale component. There is no separate toggle. This optimizes animation data; it does not reduce mesh geometry or texture resolution.
+Conservative key reduction always runs for final exports. It removes redundant keys from linear translation, rotation and scale tracks while retaining sequence endpoints. The permitted interpolation differences are 0.05 model units per translation component, 0.1° quaternion angle and 0.0001 per scale component. There is no separate toggle. This optimizes animation data; it does not reduce mesh geometry or texture resolution.
 
 ## Map NPC policy
 

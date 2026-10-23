@@ -37,12 +37,16 @@ func TestCreatureCollisionBoxUsesHorizontalEnclosingCircle(t *testing.T) {
 
 func TestSharedCreatureModelsRetainDifferentSourceCollision(t *testing.T) {
 	shared := &CreatureAsset{ModelPath: "npcs/shared.mdx", ContentKey: "same", CollisionRadius: 12}
-	other := shareCreatureAsset(shared, 24)
+	other := shareCreatureAsset(shared, 24, false, 0)
 	if other == shared || other.ModelPath != shared.ModelPath || other.CollisionRadius != 24 || shared.CollisionRadius != 12 {
 		t.Fatal("content dedup lost source-specific collision")
 	}
-	if shareCreatureAsset(shared, 12) != shared {
+	if shareCreatureAsset(shared, 12, false, 0) != shared {
 		t.Fatal("equal source metadata should share the asset")
+	}
+	character := shareCreatureAsset(shared, 12, true, 1)
+	if !character.CharacterModel || shared.CharacterModel || character.ModelPath != shared.ModelPath || character.WowRace != 1 || shared.WowRace != 0 {
+		t.Fatal("content sharing lost source character classification")
 	}
 	if len(uniqueCreatureAssets(CreatureAssets{"a": shared, "b": other})) != 1 {
 		t.Fatal("collision differences duplicated model assets")
@@ -72,7 +76,7 @@ func TestCachedCreatureModelRefreshesCollisionWithoutFreshExport(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := map[string]*CreatureAsset{"key": {ConfigKey: "key", ModelPath: "npcs/same.mdx", CollisionRadius: 999}}
-	job := &creatureExport{asset: &CreatureAsset{ConfigKey: "key", ModelPath: "npcs/same.mdx", CollisionRadius: 24}}
+	job := &creatureExport{asset: &CreatureAsset{ConfigKey: "key", ModelPath: "npcs/same.mdx", CollisionRadius: 24, WowRace: 1}}
 	cfg := config.DefaultConfig()
 	cfg.OverrideModels = false
 	cleanup, err := stageCreatureCache(context.Background(), root, []*creatureExport{job}, cfg, old)
@@ -88,6 +92,9 @@ func TestCachedCreatureModelRefreshesCollisionWithoutFreshExport(t *testing.T) {
 	}
 	if job.asset.CollisionRadius != 24 {
 		t.Fatal("stale collision metadata overwrote refreshed source box")
+	}
+	if job.asset.WowRace != 1 {
+		t.Fatal("cached model lost refreshed source race")
 	}
 	after, err := os.ReadFile(path)
 	if err != nil || string(after) != string(raw) {

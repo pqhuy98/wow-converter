@@ -143,7 +143,7 @@ func testMapGenerateJob(mapDir string) *util.Job[mapGenerateJobRequest, mapGener
 }
 
 func TestOptionalIconWarningRemainsSuccessfulInAPIStatus(t *testing.T) {
-	const warning = "NPC icon rendering failed for some models; default icons were used."
+	const warning = "NPC icon rendering failed for 3/92 models."
 	queue := util.NewJobQueue(mapGenerateQueueConfig(), func(job *util.Job[mapGenerateJobRequest, mapGenerateJobResult]) (mapGenerateJobResult, error) {
 		return mapGenerateJobResult{ID: "WC3_MAP_GENERATE_SUMMARY", TotalSteps: 3, Warnings: []string{warning}}, nil
 	})

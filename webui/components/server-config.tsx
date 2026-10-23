@@ -9,6 +9,7 @@ type ServerConfig = {
   isSharedHosting: boolean
   isDev: boolean
   isClassic: boolean
+  product: string
   buildKey: string
   mapGenerateHalt?: boolean
 };
@@ -18,6 +19,7 @@ const defaultConfig: ServerConfig = {
   isSharedHosting: false,
   isDev: false,
   isClassic: false,
+  product: '',
   buildKey: '',
   mapGenerateHalt: false,
 };
@@ -55,6 +57,7 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
             && prevConfig.isSharedHosting === newConfig.isSharedHosting
             && prevConfig.isDev === newConfig.isDev
             && prevConfig.isClassic === newConfig.isClassic
+            && prevConfig.product === newConfig.product
             && prevConfig.buildKey === newConfig.buildKey
             && prevConfig.mapGenerateHalt === newConfig.mapGenerateHalt
           ) {

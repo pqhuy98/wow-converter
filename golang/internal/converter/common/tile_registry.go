@@ -1,6 +1,7 @@
 package common
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/pqhuy98/wow-converter/internal/converter/texturesource"
@@ -145,5 +146,6 @@ func (r *TileRegistry) ObjectPaths() []string {
 	for path := range r.byObjectPath {
 		out = append(out, path)
 	}
+	sort.Strings(out)
 	return out
 }

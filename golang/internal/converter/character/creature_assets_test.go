@@ -10,6 +10,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/azerothcore"
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdx"
+	"github.com/pqhuy98/wow-converter/internal/wowhead"
 )
 
 func TestCreatureAttackTagMatchesEquipment(t *testing.T) {
@@ -32,6 +33,23 @@ func TestCreatureAttackTagMatchesEquipment(t *testing.T) {
 				t.Fatalf("attack tag = %q, want %q", ch.AttackTag, tt.want)
 			}
 		})
+	}
+}
+
+func TestCreatureAssetKeepsResolvedCharacterClassification(t *testing.T) {
+	for _, isCharacter := range []bool{false, true} {
+		model := 123
+		c := azerothcore.Creature{Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 1}}
+		_, assets, err := planCreatureExports(context.Background(), []azerothcore.Creature{c}, config.DefaultConfig(), "build", func(azerothcore.Creature) (CharacterData, error) {
+			meta := CharacterData{Model: &model}
+			if isCharacter {
+				meta.Character = &wowhead.CharacterMeta{}
+			}
+			return meta, nil
+		})
+		if err != nil || assets.For(c) == nil || assets.For(c).CharacterModel != isCharacter {
+			t.Fatalf("character classification lost: %v, %+v", err, assets.For(c))
+		}
 	}
 }
 
@@ -90,6 +108,12 @@ func TestCreatureAppearanceKeyIncludesVisualSettingsNotIdentity(t *testing.T) {
 	if same != key {
 		t.Fatal("identity/output cache switches changed appearance")
 	}
+	capped := cfg
+	capped.MaxTextureSize = 512
+	cappedKey, _ := creatureAppearanceKey(meta, ch, capped, "a")
+	if cappedKey == key {
+		t.Fatal("texture cap missing from appearance cache key")
+	}
 	variants := []CharacterData{{Model: &id, Textures: map[string]int{"1": 3}}, {Model: &id, Textures: meta.Textures, Creature: &CreatureMeta{CreatureGeosetData: []GeosetEntry{{GeosetIndex: 1, GeosetValue: 2}}}}, {Model: &id, Textures: meta.Textures, Scale: 2}}
 	for _, variant := range variants {
 		k, _ := creatureAppearanceKey(variant, ch, cfg, "a")
@@ -105,6 +129,17 @@ func TestCreatureAppearanceKeyIncludesVisualSettingsNotIdentity(t *testing.T) {
 	withItem, _ := creatureAppearanceKey(meta, ch, cfg, "a")
 	if withItem == key {
 		t.Fatal("equipment missing from fingerprint")
+	}
+}
+
+func TestCreaturePlanRefreshesRaceFromResolvedMetadata(t *testing.T) {
+	id := 1
+	c := azerothcore.Creature{Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 1}}
+	jobs, assets, err := planCreatureExports(context.Background(), []azerothcore.Creature{c}, config.DefaultConfig(), "build", func(azerothcore.Creature) (CharacterData, error) {
+		return CharacterData{Model: &id, Character: &wowhead.CharacterMeta{Race: 1}}, nil
+	})
+	if err != nil || len(jobs) != 1 || assets.For(c) == nil || assets.For(c).WowRace != 1 {
+		t.Fatalf("resolved character race missing: %v, %v", assets.For(c), err)
 	}
 }
 

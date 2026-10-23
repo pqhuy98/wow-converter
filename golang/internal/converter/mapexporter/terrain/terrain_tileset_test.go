@@ -242,6 +242,23 @@ func TestTilesetModelCoverageAndClipping(t *testing.T) {
 		if welded == 0 {
 			t.Fatal("fixture exercised no model boundary")
 		}
+		// Partition only after the final native-ground weld. Every boundary
+		// vertex must retain its world position in the centered chunk models.
+		if err := wc.PrepareAdtChunks(context.Background(), manager, ""); err != nil {
+			t.Fatal(err)
+		}
+		chunkArea := 0.0
+		for _, chunk := range wc.adtChunks[root] {
+			for _, g := range chunk.model.MDL.Geosets {
+				for _, f := range g.Faces {
+					p, q, r := f.Vertices[0].Position, f.Vertices[1].Position, f.Vertices[2].Position
+					chunkArea += math.Abs((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0])) * .5
+				}
+			}
+		}
+		if math.Abs(chunkArea-40) > 1e-6 {
+			t.Fatalf("splitting changed clipped/welded footprint: %g", chunkArea)
+		}
 		grid, err := tilesetGrid(manager, 8, 8)
 		if err != nil {
 			t.Fatal(err)

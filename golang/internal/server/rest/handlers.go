@@ -259,6 +259,11 @@ func (h *Handler) GetModelSkins(w http.ResponseWriter, r *http.Request) {
 
 // GET /rest/initModelCaches
 func (h *Handler) InitModelCaches(w http.ResponseWriter, r *http.Request) {
+	cascSource := h.Runtime.GetCascOptional()
+	if cascSource == nil || !cascSource.IsLoaded() {
+		sendJSON(w, http.StatusConflict, map[string]any{"id": "ERR_NO_CASC"})
+		return
+	}
 	if err := h.Services.ModelCache.EnsureInitialized(r.Context()); err != nil {
 		sendJSON(w, http.StatusInternalServerError, map[string]any{
 			"id":      "ERR_INTERNAL",

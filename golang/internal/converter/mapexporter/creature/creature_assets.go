@@ -2,6 +2,7 @@ package creature
 
 import (
 	"context"
+	"path"
 	"sort"
 	"strings"
 
@@ -23,6 +24,8 @@ type AssetExportResult struct {
 // ExportCreatureAssets queues icons as complete models become available.
 // Optional icon errors are returned separately from fatal model/cancel errors.
 func ExportCreatureAssets(ctx context.Context, creatures []azerothcore.Creature, outputDir string, cfg config.Config, wowClient client.Client, workers int, destructibles bool, onProgress func(int, int)) (AssetExportResult, error) {
+	// NPC texture caps must not overwrite shared scenery imports.
+	cfg.AssetPrefix = path.Join(cfg.AssetPrefix, "npcs")
 	var result AssetExportResult
 	callbacks := character.CreatureExportCallbacks{Progress: onProgress}
 	var queue *reportshot.ModelIconQueue
@@ -87,6 +90,9 @@ func ApplyCreatureAssets(mm *extra.MapManager, units []PlacedUnit, assets charac
 		}
 		set(&unit.Data, "umdl", source.ModelPath)
 		set(&unit.Data, "upor", source.ModelPath)
+		if asset := assets.For(source.Creature); asset != nil {
+			set(&unit.Data, "urac", creatureRace(source.Creature, asset.WowRace))
+		}
 		icon := source.IconPath
 		if icon == "" {
 			icon = `ReplaceableTextures\CommandButtons\BTNFootman.blp`

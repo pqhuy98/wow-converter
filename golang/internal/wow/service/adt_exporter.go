@@ -36,6 +36,7 @@ func (ADTExporterService) Export(ctx context.Context, params casc.ADTExportParam
 	if params.IncludeWMOSets != nil {
 		overrides["mapsIncludeWMOSets"] = *params.IncludeWMOSets
 	}
+	overrides["excludeWMOInteriors"] = params.ExcludeWMOInteriors
 	if params.IncludeGameObjects != nil {
 		overrides["mapsIncludeGameObjects"] = *params.IncludeGameObjects
 	}
@@ -145,6 +146,7 @@ func (ADTExporterService) ExportForConversion(ctx context.Context, params casc.A
 	if params.IncludeWMOSets != nil {
 		overrides["mapsIncludeWMOSets"] = *params.IncludeWMOSets
 	}
+	overrides["excludeWMOInteriors"] = params.ExcludeWMOInteriors
 	if params.IncludeGameObjects != nil {
 		overrides["mapsIncludeGameObjects"] = *params.IncludeGameObjects
 	}

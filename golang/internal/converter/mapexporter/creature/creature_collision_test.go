@@ -62,6 +62,48 @@ func TestCreatureCollisionSourcePriorityFallbackAndScale(t *testing.T) {
 	}
 }
 
+func TestCharacterNPCEnlargementChangesOnlyUnitObjectSizing(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "creature-1.mdx")
+	original := mdx.NewModel().SaveMdx()
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c := azerothcore.Creature{Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 1, DisplayScale: 1.5}}
+	for _, scale := range []float64{.5, 1, 2.5} {
+		var baseline map[string]interface{}
+		for _, isCharacter := range []bool{false, true} {
+			mm := extra.NewMapManager()
+			unit := mm.AddUnitType(false, "hfoo", creatureUnitFields(c, "creature-1.mdx", "Fixture", scale, 56, 56))
+			assets := character.CreatureAssets{fixtureCreatureAssetKey(): {ModelPath: "creature-1.mdx", CharacterModel: isCharacter, CollisionRadius: 12}}
+			if err := EnrichCreatureModelFields(context.Background(), root, mm, []PlacedUnit{{Creature: c, TypeCode: unit.Code}}, assets); err != nil {
+				t.Fatal(err)
+			}
+			fields := fieldValues(t, mm.UnitTypes[0].Data)
+			if !isCharacter {
+				baseline = fields
+				continue
+			}
+			if fields["usca"] != float32(scale*1.2) {
+				t.Fatalf("character scale = %v, want %v", fields["usca"], scale*1.2)
+			}
+			for key, value := range baseline {
+				if key == "ucol" || key == "ussc" {
+					want := float64(value.(float32)) * 1.2
+					if math.Abs(float64(fields[key].(float32))-want) > 1e-5 {
+						t.Fatalf("character %s = %v, want %v", key, fields[key], want)
+					}
+				} else if key != "usca" && fields[key] != value {
+					t.Fatalf("character multiplier changed %s", key)
+				}
+			}
+		}
+	}
+	if after, err := os.ReadFile(path); err != nil || string(after) != string(original) {
+		t.Fatal("character multiplier changed model bytes")
+	}
+}
+
 func TestLowerBodyCollisionHandlesEmptyAndInvalidGeometry(t *testing.T) {
 	if lowerBodyCollisionRadius(nil) != 0 {
 		t.Fatal("empty geometry has a footprint")

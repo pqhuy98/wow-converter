@@ -13,7 +13,7 @@ var generateWc3AllowedFields = map[string]struct{}{
 	"clampUpper": {}, "autoClampPercent": {}, "mapAngleDeg": {},
 	"unitScale": {}, "includeBuildingInteriors": {}, "freshExport": {},
 	"creatures": {}, "navigation": {}, "placePathBlockers": {},
-	"terrainAsWc3Tilesets": {}, "playerFaction": {},
+	"terrainAsWc3Tilesets": {}, "playerFaction": {}, "doodadMaxTextureSize": {},
 }
 
 var generateWc3AllowedQualities = map[int]struct{}{
@@ -72,6 +72,12 @@ func parseGenerateWc3Body(raw map[string]any) (generateWc3Body, []string) {
 	if body.UnitScale <= 0 {
 		issues = append(issues, "unitScale must be greater than 0")
 	}
+	if size := body.Creatures.MaxTextureSize; size != nil && *size != 0 && *size != 256 && *size != 512 && *size != 1024 {
+		issues = append(issues, "creatures.maxTextureSize must be 0, 256, 512 or 1024")
+	}
+	if size := body.DoodadMaxTextureSize; size != nil && *size != 0 && *size != 256 && *size != 512 && *size != 1024 {
+		issues = append(issues, "doodadMaxTextureSize must be 0, 256, 512 or 1024")
+	}
 	if body.Navigation != nil {
 		if err := body.Navigation.Validate(); err != nil {
 			issues = append(issues, err.Error())
@@ -117,7 +123,7 @@ func validateGenerateWc3Shape(raw map[string]any) []string {
 		}
 	}
 
-	for _, field := range []string{"quality", "clampLower", "clampUpper", "mapAngleDeg", "unitScale"} {
+	for _, field := range []string{"quality", "clampLower", "clampUpper", "mapAngleDeg", "unitScale", "doodadMaxTextureSize"} {
 		if value, exists := raw[field]; exists {
 			if _, ok := value.(float64); !ok {
 				issues = append(issues, fmt.Sprintf("%s must be a number", field))
@@ -166,6 +172,11 @@ func validateGenerateWc3Shape(raw map[string]any) []string {
 			issues = append(issues, "creatures must be an object")
 		}
 	} else {
+		if value, exists := creatures["maxTextureSize"]; exists {
+			if _, ok := value.(float64); !ok {
+				issues = append(issues, "creatures.maxTextureSize must be a number")
+			}
+		}
 		for _, field := range []string{"enable", "allAreDoodads"} {
 			value, exists := creatures[field]
 			if !exists {

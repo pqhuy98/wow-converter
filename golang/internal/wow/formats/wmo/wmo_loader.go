@@ -172,6 +172,7 @@ type Loader struct {
 	NumBatchesC   uint32
 	LiquidType    uint32
 	GroupID       uint32
+	DoodadRefs    []uint16 // MODR indices into the root MODD placements.
 	Indices       []uint16
 	Vertices      []float32
 	UVs           [][]float32
@@ -237,6 +238,7 @@ var wmoChunkHandlers = map[uint32]chunkHandler{
 	0x4D4F4449: handleMODI,
 	0x4D4F444E: handleMODN,
 	0x4D4F4444: handleMODD,
+	0x4D4F4452: handleMODR,
 	0x47464944: handleGFID,
 	0x4D4C4951: handleMLIQ,
 	0x4D4F4356: handleMOCV,
@@ -520,6 +522,8 @@ func dispatchWMOChunk(l *Loader, data *buffer.Buffer, chunkID uint32, chunkSize 
 		handleMODN(l, data, chunkSize)
 	case 0x4D4F4444:
 		handleMODD(l, data, chunkSize)
+	case 0x4D4F4452:
+		handleMODR(l, data, chunkSize)
 	case 0x47464944:
 		handleGFID(l, data, chunkSize)
 	case 0x4D4C4951:
@@ -545,6 +549,10 @@ func dispatchWMOChunk(l *Loader, data *buffer.Buffer, chunkID uint32, chunkSize 
 	case 0x4D4F5059:
 		handleMOPY(l, data, chunkSize)
 	}
+}
+
+func handleMODR(l *Loader, data *buffer.Buffer, chunkSize int) {
+	l.DoodadRefs = readUInt16Slice(data, chunkSize/2)
 }
 
 func handleMOVI(l *Loader, data *buffer.Buffer, chunkSize int) {

@@ -47,6 +47,11 @@ func TestParseGenerateWc3BodyRejectsInvalidContractValues(t *testing.T) {
 		mutate func(map[string]any)
 	}{
 		{"unknown field", func(body map[string]any) { body["extra"] = true }},
+		{"unsupported NPC texture cap", func(body map[string]any) { body["creatures"].(map[string]any)["maxTextureSize"] = float64(2048) }},
+		{"negative NPC texture cap", func(body map[string]any) { body["creatures"].(map[string]any)["maxTextureSize"] = float64(-1) }},
+		{"fractional NPC texture cap", func(body map[string]any) { body["creatures"].(map[string]any)["maxTextureSize"] = 512.5 }},
+		{"null NPC texture cap", func(body map[string]any) { body["creatures"].(map[string]any)["maxTextureSize"] = nil }},
+		{"string NPC texture cap", func(body map[string]any) { body["creatures"].(map[string]any)["maxTextureSize"] = "512" }},
 		{"unsupported quality", func(body map[string]any) { body["quality"] = float64(256) }},
 		{"zero unit scale", func(body map[string]any) { body["unitScale"] = float64(0) }},
 		{"out of range tile", func(body map[string]any) {
@@ -82,6 +87,42 @@ func TestParseGenerateWc3BodyRejectsInvalidContractValues(t *testing.T) {
 				t.Fatal("expected validation issue")
 			}
 		})
+	}
+}
+
+func TestGenerateWc3NPCTextureCap(t *testing.T) {
+	for _, size := range []int{0, 256, 512, 1024} {
+		raw := validGenerateWc3Body()
+		raw["creatures"].(map[string]any)["maxTextureSize"] = float64(size)
+		body, issues := parseGenerateWc3Body(raw)
+		if len(issues) != 0 || body.Creatures.MaxTextureSize == nil || *body.Creatures.MaxTextureSize != size {
+			t.Fatalf("NPC texture cap %d was lost: %+v, %v", size, body.Creatures, issues)
+		}
+	}
+}
+
+func TestGenerateWc3IndependentTextureCaps(t *testing.T) {
+	for _, tilesets := range []bool{false, true} {
+		for _, quality := range []int{1024, 2048, 4096} {
+			for _, size := range []int{0, 256, 512, 1024} {
+				raw := validGenerateWc3Body()
+				raw["terrainAsWc3Tilesets"] = tilesets
+				raw["quality"] = float64(quality)
+				raw["doodadMaxTextureSize"] = float64(size)
+				raw["creatures"].(map[string]any)["maxTextureSize"] = float64(256)
+				body, issues := parseGenerateWc3Body(raw)
+				if len(issues) != 0 || body.DoodadMaxTextureSize == nil || *body.DoodadMaxTextureSize != size || body.Quality != quality || *body.Creatures.MaxTextureSize != 256 {
+					t.Fatalf("independent limits were lost: %+v, %v", body, issues)
+				}
+			}
+		}
+	}
+	for _, invalid := range []any{nil, "256", -1.0, 128.0, 2048.0, 256.5} {
+		raw := validGenerateWc3Body()
+		raw["doodadMaxTextureSize"] = invalid
+		if _, issues := parseGenerateWc3Body(raw); len(issues) == 0 {
+			t.Fatalf("accepted invalid doodad cap: %v", invalid)
+		}
 	}
 }
 
