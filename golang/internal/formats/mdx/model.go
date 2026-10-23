@@ -7,33 +7,33 @@ import (
 
 // Model is a Warcraft 3 model supporting MDX and MDL formats.
 type Model struct {
-	Version                  int
-	Name                     string
-	AnimationFile            string
-	Extent                   *Extent
-	BlendTime                uint32
-	Sequences                []*Sequence
-	GlobalSequences          []uint32
-	Materials                []*Material
-	Textures                 []*Texture
-	TextureAnimations        []*TextureAnimation
-	Geosets                  []*Geoset
-	GeosetAnimations         []*GeosetAnimation
-	Bones                    []*Bone
-	Lights                   []*Light
-	Helpers                  []*Helper
-	Attachments              []*Attachment
-	PivotPoints              [][]float32
-	ParticleEmitters         []*ParticleEmitter
-	ParticleEmitters2        []*ParticleEmitter2
-	ParticleEmittersPopcorn  []*ParticleEmitterPopcorn
-	RibbonEmitters           []*RibbonEmitter
-	Cameras                  []*Camera
-	EventObjects             []*EventObject
-	CollisionShapes          []*CollisionShape
-	FaceEffects              []*FaceEffect
-	BindPose                 [][]float32
-	UnknownChunks            []*UnknownChunk
+	Version                 int
+	Name                    string
+	AnimationFile           string
+	Extent                  *Extent
+	BlendTime               uint32
+	Sequences               []*Sequence
+	GlobalSequences         []uint32
+	Materials               []*Material
+	Textures                []*Texture
+	TextureAnimations       []*TextureAnimation
+	Geosets                 []*Geoset
+	GeosetAnimations        []*GeosetAnimation
+	Bones                   []*Bone
+	Lights                  []*Light
+	Helpers                 []*Helper
+	Attachments             []*Attachment
+	PivotPoints             [][]float32
+	ParticleEmitters        []*ParticleEmitter
+	ParticleEmitters2       []*ParticleEmitter2
+	ParticleEmittersPopcorn []*ParticleEmitterPopcorn
+	RibbonEmitters          []*RibbonEmitter
+	Cameras                 []*Camera
+	EventObjects            []*EventObject
+	CollisionShapes         []*CollisionShape
+	FaceEffects             []*FaceEffect
+	BindPose                [][]float32
+	UnknownChunks           []*UnknownChunk
 }
 
 // NewModel creates an empty model with defaults.
@@ -406,10 +406,8 @@ func (m *Model) saveVersionChunk(stream *BinaryStream) {
 func (m *Model) saveModelChunk(stream *BinaryStream) {
 	stream.WriteBinary("MODL")
 	stream.WriteUint32(372)
-	written := stream.Write(m.Name)
-	stream.Skip(80 - written)
-	written = stream.Write(m.AnimationFile)
-	stream.Skip(260 - written)
+	stream.WriteFixedString(m.Name, 80)
+	stream.WriteFixedString(m.AnimationFile, 260)
 	m.Extent.WriteMdx(stream)
 	stream.WriteUint32(m.BlendTime)
 }

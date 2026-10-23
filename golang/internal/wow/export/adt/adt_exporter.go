@@ -164,12 +164,8 @@ func (e *Exporter) Export(ctx context.Context, source casc.Source, dir string, q
 					colCount = 8
 				}
 				for col := 0; col < colCount; col++ {
-					vx := chunkY - float32(col)*float32(unitSize)
+					vx, vz := terrainVertexXZ(firstChunkX, firstChunkY, chunkX, chunkY, row, col)
 					vy := chunk.Vertices[idx] + chunkZ
-					vz := chunkX - float32(row)*float32(unitHalf)
-					if isShort {
-						vx -= float32(unitHalf)
-					}
 					vIndex := midX * 3
 					vertices[vIndex] = vx
 					vertices[vIndex+1] = vy
@@ -353,11 +349,7 @@ func (e *Exporter) calculateUVBounds(rootAdt *adtfmt.ADTLoader, firstChunkX, fir
 					colCount = 8
 				}
 				for col := 0; col < colCount; col++ {
-					vx := chunkY - float32(col)*float32(unitSize)
-					vz := chunkX - float32(row)*float32(unitHalf)
-					if isShort {
-						vx -= float32(unitHalf)
-					}
+					vx, vz := terrainVertexXZ(firstChunkX, firstChunkY, chunkX, chunkY, row, col)
 					u := -float64(vx-firstChunkX) / tileSize
 					v := float64(vz-firstChunkY) / tileSize
 					minU, maxU = math.Min(minU, u), math.Max(maxU, u)
@@ -368,6 +360,18 @@ func (e *Exporter) calculateUVBounds(rootAdt *adtfmt.ADTLoader, firstChunkX, fir
 		}
 	}
 	return struct{ minU, maxU, minV, maxV float64 }{minU, maxU, minV, maxV}
+}
+
+func terrainVertexXZ(firstX, firstY, chunkX, chunkY float32, row, col int) (float32, float32) {
+	// MCNK origins are independently rounded float32 values. Subtracting local
+	// offsets from each one gives different positions for a shared edge. Use one
+	// global half-unit lattice and round only the final vertex, including across
+	// ADT tile boundaries. Header positions still determine the chunk indices.
+	colIndex := math.Round((float64(firstY)-float64(chunkY))/chunkSize)*16 + float64(2*col+row%2)
+	rowIndex := math.Round((float64(firstX)-float64(chunkX))/chunkSize)*16 + float64(row)
+	originX := math.Round(float64(firstY)/unitSize) * unitSize
+	originZ := math.Round(float64(firstX)/unitSize) * unitSize
+	return float32(originX - colIndex*unitHalf), float32(originZ - rowIndex*unitHalf)
 }
 
 func writePNG(path string, pixels []byte, width, height int) error {

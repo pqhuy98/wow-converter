@@ -9,8 +9,8 @@ import (
 
 // BinaryStream is a little-endian binary reader/writer over a byte slice.
 type BinaryStream struct {
-	data      []byte
-	index     int
+	data       []byte
+	index      int
 	byteLength int
 	remaining  int
 }
@@ -325,6 +325,14 @@ func (s *BinaryStream) Write(utf8 string) int {
 	n := copy(s.data[s.index:], []byte(utf8))
 	s.index += n
 	return n
+}
+
+// WriteFixedString cannot spill a long name into the following binary field.
+func (s *BinaryStream) WriteFixedString(value string, size int) {
+	field := s.data[s.index : s.index+size]
+	clear(field)
+	copy(field, value)
+	s.index += size
 }
 
 // WriteNull writes a UTF-8 string followed by a NULL byte.

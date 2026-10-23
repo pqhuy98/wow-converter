@@ -10,6 +10,7 @@ import (
 
 // TokenStream reads and writes MDL tokens.
 type TokenStream struct {
+	writer       *strings.Builder
 	Buffer       string
 	Index        int
 	Ident        int
@@ -28,6 +29,9 @@ func NewTokenStream(buffer string) *TokenStream {
 
 // Clear resets the stream.
 func (s *TokenStream) Clear() {
+	if s.writer != nil {
+		s.writer.Reset()
+	}
 	s.Buffer = ""
 	s.Index = 0
 	s.Ident = 0
@@ -282,6 +286,12 @@ func (s *TokenStream) ReadBlockIter(fn func(key string) error) error {
 }
 
 func (s *TokenStream) WriteLine(line string) {
+	if s.writer != nil {
+		s.writer.WriteString(strings.Repeat(" ", s.Ident*s.IndentSpaces))
+		s.writer.WriteString(line)
+		s.writer.WriteByte('\n')
+		return
+	}
 	s.Buffer += strings.Repeat(" ", s.Ident*s.IndentSpaces) + line + "\n"
 }
 
