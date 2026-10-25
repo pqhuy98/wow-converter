@@ -49,14 +49,18 @@ type creatureExport struct {
 	metadata   CharacterData
 	asset      *CreatureAsset
 	cachedPath string
+	standReady bool
 }
 
-// CreatureExportCallbacks observe completed files without blocking model workers.
+// CreatureExportCallbacks select map NPC idles and observe completed files.
 // ModelsDone drains readers before deduplication/cache cleanup removes files.
 type CreatureExportCallbacks struct {
 	Progress   func(completed, total int)
 	ModelReady func(model string)
 	ModelsDone func()
+	// UseStandReady selects the idle experiment before appearance deduplication.
+	// It is applied only to resolved character models.
+	UseStandReady func(azerothcore.Creature) bool
 }
 
 // ExportCreatureModels resolves appearances before conversion, and exports each once.
@@ -90,7 +94,7 @@ func ExportCreatureModels(ctx context.Context, creatures []azerothcore.Creature,
 		collisionRadius float64
 	}
 	models := map[int]modelInfo{}
-	jobs, inputs, err := planCreatureExports(ctx, creatures, cfg, build, func(c azerothcore.Creature) (CharacterData, error) {
+	jobs, inputs, err := planCreatureExports(ctx, creatures, cfg, build, callbacks.UseStandReady, func(c azerothcore.Creature) (CharacterData, error) {
 		ch := creatureCharacter(c)
 		ec := resolver.newExportContext("", ch, "")
 		ec.ctx = ctx
@@ -208,7 +212,7 @@ func ExportCreatureModels(ctx context.Context, creatures []azerothcore.Creature,
 	return inputs, nil
 }
 
-func planCreatureExports(ctx context.Context, creatures []azerothcore.Creature, cfg config.Config, build string, resolve func(azerothcore.Creature) (CharacterData, error)) ([]*creatureExport, CreatureAssets, error) {
+func planCreatureExports(ctx context.Context, creatures []azerothcore.Creature, cfg config.Config, build string, useStandReady func(azerothcore.Creature) bool, resolve func(azerothcore.Creature) (CharacterData, error)) ([]*creatureExport, CreatureAssets, error) {
 	ordered := append([]azerothcore.Creature(nil), creatures...)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		a, b := ordered[i], ordered[j]
@@ -250,9 +254,14 @@ func planCreatureExports(ctx context.Context, creatures []azerothcore.Creature, 
 		if err != nil {
 			return nil, nil, err
 		}
+		standReady := meta.Character != nil && useStandReady != nil && useStandReady(c)
+		if standReady {
+			// Keep ordinary and experimental idles separate, including cached exports.
+			key += "-stand-ready-v1"
+		}
 		job := byAppearance[key]
 		if job == nil {
-			job = &creatureExport{creature: c, character: ch, metadata: meta, asset: &CreatureAsset{ConfigKey: key, CharacterModel: meta.Character != nil}}
+			job = &creatureExport{creature: c, character: ch, metadata: meta, standReady: standReady, asset: &CreatureAsset{ConfigKey: key, CharacterModel: meta.Character != nil}}
 			if meta.Character != nil {
 				job.asset.WowRace = meta.Character.Race
 			}
@@ -324,7 +333,12 @@ func creatureAppearanceKey(meta CharacterData, ch Character, cfg config.Config, 
 }
 
 func creatureInputKey(c azerothcore.Creature) string {
-	raw, _ := json.Marshal(creatureCharacter(c))
+	// Identical displays/equipment can have different combat capability. Retain
+	// the source policy inputs here; appearance keys still share identical output.
+	raw, _ := json.Marshal(struct {
+		Character
+		Gameplay *azerothcore.CreatureGameplay `json:"gameplay,omitempty"`
+	}{creatureCharacter(c), c.Gameplay})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }

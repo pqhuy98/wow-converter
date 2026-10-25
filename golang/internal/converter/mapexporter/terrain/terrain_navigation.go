@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
@@ -151,22 +152,34 @@ func GenerateReachableTerrain(ctx context.Context, m *common.WowObjectManager, t
 		return nil, nil
 	}
 	log.Printf("Terrain navigation: rasterizing %d collision triangles into %dx%d cells", len(g.triangles), g.width, g.height)
+	stageStarted := time.Now()
 	if err := g.rasterize(ctx); err != nil {
 		return nil, err
 	}
+	log.Printf("Terrain navigation: rasterized %d walkable spans in %s", len(g.spans), time.Since(stageStarted).Round(time.Millisecond))
 	report := &TerrainNavigation{Width: g.width, Height: g.height, Triangles: len(g.triangles)}
+	log.Printf("Terrain navigation: grounding %d NPC seeds", len(seeds))
+	stageStarted = time.Now()
 	queue := g.seed(seeds, report)
+	log.Printf("Terrain navigation: grounded %d NPCs, %d unsupported, %d starting spans in %s", report.GroundNPCs, report.RejectedNPCs, len(queue), time.Since(stageStarted).Round(time.Millisecond))
 	if len(queue) == 0 {
 		log.Printf("Terrain navigation: no grounded NPCs (%d unsupported); retaining ADT terrain", report.RejectedNPCs)
 		return nil, nil
 	}
 	report.NPCHeightMedianBefore = navigationNPCError(terrain, report.seedPositions)
+	log.Printf("Terrain navigation: searching walking and jumping routes")
+	stageStarted = time.Now()
 	if err := g.search(ctx, queue); err != nil {
 		return nil, err
 	}
+	log.Printf("Terrain navigation: route search finished in %s; projecting %d jump links", time.Since(stageStarted).Round(time.Millisecond), len(g.jumps))
+	stageStarted = time.Now()
 	g.projectJumps()
+	log.Printf("Terrain navigation: jump links projected in %s; fitting terrain and classifying pathing", time.Since(stageStarted).Round(time.Millisecond))
 	report.JumpLinks = len(g.jumps)
+	stageStarted = time.Now()
 	g.project(terrain, report)
+	log.Printf("Terrain navigation: terrain and pathing projected in %s", time.Since(stageStarted).Round(time.Millisecond))
 	report.NPCHeightMedianAfter = navigationNPCError(terrain, report.seedPositions)
 	log.Printf("Terrain navigation: %d ground NPCs, %d reachable cells, %d ground blockers, %d air blockers, %d overlaps, %d jump links", report.GroundNPCs, report.Reachable, report.GroundBlocked, report.AirBlocked, report.Conflicts, report.JumpLinks)
 	return report, ctx.Err()
@@ -207,10 +220,16 @@ func (g *navigationGrid) point(cell int, z float64) imath.Vector3 {
 
 func (g *navigationGrid) rasterize(ctx context.Context) error {
 	tanSlope := math.Tan(g.limits.MaxSlopeDegrees * math.Pi / 180)
+	started := time.Now()
+	nextProgress := started.Add(5 * time.Second)
 	for cell, ids := range g.bins {
 		if cell%1024 == 0 {
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+			if now := time.Now(); !now.Before(nextProgress) {
+				log.Printf("Terrain navigation: rasterizing %d/%d cells (%.1f%%), %d walkable spans, elapsed %s", cell, len(g.bins), float64(cell)*100/float64(len(g.bins)), len(g.spans), now.Sub(started).Round(time.Millisecond))
+				nextProgress = now.Add(5 * time.Second)
 			}
 		}
 		p := g.point(cell, 0)
@@ -355,11 +374,17 @@ func (g *navigationGrid) join(a, b int) {
 }
 
 func (g *navigationGrid) search(ctx context.Context, queue []int) error {
+	started := time.Now()
+	nextProgress := started.Add(5 * time.Second)
 	directions := [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}}
 	for head := 0; head < len(queue); head++ {
 		if head%1024 == 0 {
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+			if now := time.Now(); !now.Before(nextProgress) {
+				log.Printf("Terrain navigation: route search processed %d spans, %d pending, %d jump links, elapsed %s", head, len(queue)-head, len(g.jumps), now.Sub(started).Round(time.Millisecond))
+				nextProgress = now.Add(5 * time.Second)
 			}
 		}
 		from := queue[head]

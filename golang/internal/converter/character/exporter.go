@@ -306,7 +306,9 @@ func concatenateAttackSequences(model *mdl.MDL) {
 				attacks = append(attacks, s)
 			}
 		}
-		if len(attacks) == 0 {
+		// A single ranged pose already is a complete attack. Rebuilding it
+		// discards its WoW source identity, breaking explicit source selections.
+		if len(attacks) <= 1 {
 			continue
 		}
 		sort.Slice(attacks, func(i, j int) bool {

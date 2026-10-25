@@ -21,6 +21,9 @@ type AssetExportResult struct {
 	IconError error
 }
 
+// Temporary experiment: combat-capable character NPCs idle in their ready pose.
+const combatCharacterStandReady = true
+
 // ExportCreatureAssets queues icons as complete models become available.
 // Optional icon errors are returned separately from fatal model/cancel errors.
 func ExportCreatureAssets(ctx context.Context, creatures []azerothcore.Creature, outputDir string, cfg config.Config, wowClient client.Client, workers int, destructibles bool, onProgress func(int, int)) (AssetExportResult, error) {
@@ -28,6 +31,9 @@ func ExportCreatureAssets(ctx context.Context, creatures []azerothcore.Creature,
 	cfg.AssetPrefix = path.Join(cfg.AssetPrefix, "npcs")
 	var result AssetExportResult
 	callbacks := character.CreatureExportCallbacks{Progress: onProgress}
+	if combatCharacterStandReady && !destructibles {
+		callbacks.UseStandReady = creatureCanAttack
+	}
 	var queue *reportshot.ModelIconQueue
 	if !destructibles {
 		queue = reportshot.NewModelIconQueue(ctx, outputDir, cfg.OverrideModels)

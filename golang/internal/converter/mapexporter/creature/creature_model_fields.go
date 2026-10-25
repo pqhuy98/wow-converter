@@ -18,6 +18,7 @@ import (
 
 type creatureModelFields struct {
 	LowerBodyRadius, HorizontalRadius float64
+	ShadowDiameter                    float64
 	Death, Attack, Release, WalkSpeed float64
 	Alternate, AttackSound            bool
 	Launch                            [3]float64
@@ -135,6 +136,7 @@ func readCreatureModelFields(ctx context.Context, path string) (creatureModelFie
 	}
 	out.LowerBodyRadius = lowerBodyCollisionRadius(geosets)
 	out.HorizontalRadius = horizontalModelRadius(geosets)
+	out.ShadowDiameter = creatureShadowDiameter(geosets)
 	hasStand, hasAlternate := false, false
 	for _, s := range sequences {
 		name := strings.ToLower(s.Name)
@@ -242,6 +244,21 @@ func EnrichCreatureModelFields(ctx context.Context, outputDir string, mm *extra.
 		if asset := assets.For(u.Creature); asset != nil && asset.CharacterModel {
 			sizeMultiplier = 1.2
 			set("usca", data.ModificationReal, float32(modelScale*sizeMultiplier))
+		}
+		// SD shadows are independent, non-rotating ground images in world units:
+		// [unitX-ushx, unitY-ushy] .. [+ushw, +ushh]. Use the model's body
+		// approximation and final scale, independently of collision/selection.
+		shadowSize := math.Min(2048, p.ShadowDiameter*modelScale*sizeMultiplier)
+		shadowImage := "Shadow"
+		if shadowSize <= 0 || math.IsNaN(shadowSize) || math.IsInf(shadowSize, 0) {
+			shadowSize, shadowImage = 0, ""
+		}
+		set("ushu", data.ModificationString, shadowImage)
+		for _, id := range []string{"ushw", "ushh"} {
+			set(id, data.ModificationReal, float32(shadowSize))
+		}
+		for _, id := range []string{"ushx", "ushy"} {
+			set(id, data.ModificationReal, float32(shadowSize/2))
 		}
 		// Both candidates are already in model units. The base scale includes map fit,
 		// source DisplayScale and export UnitScale; apply it exactly once.

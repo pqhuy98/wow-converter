@@ -88,7 +88,7 @@ func TestCharacterNPCEnlargementChangesOnlyUnitObjectSizing(t *testing.T) {
 				t.Fatalf("character scale = %v, want %v", fields["usca"], scale*1.2)
 			}
 			for key, value := range baseline {
-				if key == "ucol" || key == "ussc" {
+				if key == "ucol" || key == "ussc" || key == "ushw" || key == "ushh" || key == "ushx" || key == "ushy" {
 					want := float64(value.(float32)) * 1.2
 					if math.Abs(float64(fields[key].(float32))-want) > 1e-5 {
 						t.Fatalf("character %s = %v, want %v", key, fields[key], want)

@@ -40,7 +40,7 @@ func TestCreatureAssetKeepsResolvedCharacterClassification(t *testing.T) {
 	for _, isCharacter := range []bool{false, true} {
 		model := 123
 		c := azerothcore.Creature{Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 1}}
-		_, assets, err := planCreatureExports(context.Background(), []azerothcore.Creature{c}, config.DefaultConfig(), "build", func(azerothcore.Creature) (CharacterData, error) {
+		_, assets, err := planCreatureExports(context.Background(), []azerothcore.Creature{c}, config.DefaultConfig(), "build", nil, func(azerothcore.Creature) (CharacterData, error) {
 			meta := CharacterData{Model: &model}
 			if isCharacter {
 				meta.Character = &wowhead.CharacterMeta{}
@@ -61,7 +61,7 @@ func TestCreatureAppearanceDedupBeforeConversion(t *testing.T) {
 	}
 	creatures = append(creatures, creatures[0])
 	calls := 0
-	jobs, assets, err := planCreatureExports(context.Background(), creatures, config.DefaultConfig(), "build", func(c azerothcore.Creature) (CharacterData, error) {
+	jobs, assets, err := planCreatureExports(context.Background(), creatures, config.DefaultConfig(), "build", nil, func(c azerothcore.Creature) (CharacterData, error) {
 		calls++
 		return CharacterData{Model: &model, Textures: map[string]int{"1": 126498, "2": 126499}}, nil
 	})
@@ -81,7 +81,7 @@ func TestCreatureAppearanceDedupBeforeConversion(t *testing.T) {
 func TestCreatureNamesCollideOnlyForDifferentAppearances(t *testing.T) {
 	model := 1
 	creatures := []azerothcore.Creature{{Template: azerothcore.CreatureTemplate{Name: "Same! Name"}, Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 20}}, {Template: azerothcore.CreatureTemplate{Name: "same name"}, Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 30}}}
-	jobs, _, err := planCreatureExports(context.Background(), creatures, config.DefaultConfig(), "build", func(c azerothcore.Creature) (CharacterData, error) {
+	jobs, _, err := planCreatureExports(context.Background(), creatures, config.DefaultConfig(), "build", nil, func(c azerothcore.Creature) (CharacterData, error) {
 		return CharacterData{Model: &model, Textures: map[string]int{"1": c.Model.CreatureDisplayID}}, nil
 	})
 	if err != nil {
@@ -135,7 +135,7 @@ func TestCreatureAppearanceKeyIncludesVisualSettingsNotIdentity(t *testing.T) {
 func TestCreaturePlanRefreshesRaceFromResolvedMetadata(t *testing.T) {
 	id := 1
 	c := azerothcore.Creature{Model: azerothcore.CreatureTemplateModel{CreatureDisplayID: 1}}
-	jobs, assets, err := planCreatureExports(context.Background(), []azerothcore.Creature{c}, config.DefaultConfig(), "build", func(azerothcore.Creature) (CharacterData, error) {
+	jobs, assets, err := planCreatureExports(context.Background(), []azerothcore.Creature{c}, config.DefaultConfig(), "build", nil, func(azerothcore.Creature) (CharacterData, error) {
 		return CharacterData{Model: &id, Character: &wowhead.CharacterMeta{Race: 1}}, nil
 	})
 	if err != nil || len(jobs) != 1 || assets.For(c) == nil || assets.For(c).WowRace != 1 {

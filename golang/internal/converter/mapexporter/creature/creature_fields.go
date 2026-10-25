@@ -19,7 +19,8 @@ func sourceCreatureGameplay(c azerothcore.Creature) azerothcore.CreatureGameplay
 		DetectionRange: 20, RegenHealth: true, Health: 40 + level*20, DamageMin: level + 2, DamageMax: level + 4, AttackSeconds: 2, RangedSeconds: 2}
 }
 
-func creatureCanAttack(g azerothcore.CreatureGameplay) bool {
+func creatureCanAttack(c azerothcore.Creature) bool {
+	g := sourceCreatureGameplay(c)
 	// Critters, pacified actors and explicit noncombat pets do not inherit attacks.
 	// Vendor/gossip flags alone do not imply noncombat (guards can have those flags).
 	return g.Type != 8 && g.Type != 12 && g.UnitFlags&0x00020000 == 0 && (g.DamageMax > 0 || g.RangedMax > 0)
@@ -214,7 +215,7 @@ func creatureUnitFields(c azerothcore.Creature, model, name string, modelScale, 
 	str("utyp", classification)
 	str("utar", targetType)
 	attacks := 1
-	if !creatureCanAttack(g) {
+	if !creatureCanAttack(c) {
 		attacks = 0
 	}
 	integer("uaen", attacks)
@@ -225,7 +226,7 @@ func creatureUnitFields(c azerothcore.Creature, model, name string, modelScale, 
 	dice := 1
 	sides := maxDamage - minDamage + 1
 	base := minDamage - 1
-	if !creatureCanAttack(g) {
+	if !creatureCanAttack(c) {
 		base = 0
 		dice = 0
 		sides = 0
@@ -315,7 +316,7 @@ func creatureUnitFields(c azerothcore.Creature, model, name string, modelScale, 
 }
 
 // Creature type takes precedence over the character rig: a human-bodied zombie
-// still belongs to Undead. Commoner is an editor grouping for explicit civilians.
+// still belongs to Undead. Commoner is a fallback for civilians without a resolved race.
 func creatureRace(c azerothcore.Creature, wowRace int) string {
 	g := sourceCreatureGameplay(c)
 	switch g.Type {
@@ -332,7 +333,7 @@ func creatureRace(c azerothcore.Creature, wowRace int) string {
 	case 13:
 		return "naga"
 	}
-	if g.Type == 7 && c.Template.FlagsExtra&2 != 0 {
+	if wowRace <= 0 && g.Type == 7 && c.Template.FlagsExtra&2 != 0 {
 		return "commoner"
 	}
 	switch wowRace {
@@ -361,5 +362,6 @@ func creatureUnitKey(c azerothcore.Creature) string {
 	b.WriteString(fmt.Sprintf("%d/%d/%g", c.Template.Entry, c.Model.CreatureDisplayID, c.Model.DisplayScale))
 	b.WriteString("/")
 	b.WriteString(creatureMovement(g))
+	fmt.Fprintf(&b, "/%t", creatureCanAttack(c)) // Combat capability can select a different idle model.
 	return b.String()
 }

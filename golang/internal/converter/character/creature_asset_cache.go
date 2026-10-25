@@ -37,6 +37,9 @@ func exportCreatureAppearance(ctx context.Context, job *creatureExport, root str
 		return fmt.Errorf("export creature %s: %w", name, err)
 	}
 	ex.OptimizeModelsTextures(DefaultExportOptimization())
+	if job.standReady {
+		useNPCStandReady(model)
+	}
 	model.Modify.OptimizeNPCSequences()
 	model.Sync()
 	if _, err = ex.WriteAllTextures(ctx, root); err != nil {

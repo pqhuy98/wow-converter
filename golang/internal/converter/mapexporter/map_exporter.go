@@ -424,6 +424,9 @@ func (e *MapExporter) SaveWar3mapFiles(ctx context.Context, outputDir, mapName s
 	if err := e.MapManager.Save(outputDir); err != nil {
 		return err
 	}
+	if err := creature.RefreshShadowSkinOverrides(outputDir, e.MapManager); err != nil {
+		return err
+	}
 	factionsJSON, err := json.MarshalIndent(e.factions, "", "  ")
 	if err != nil {
 		return err

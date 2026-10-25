@@ -17,8 +17,15 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wc3/extra"
 )
 
-func fixtureCreatureAssetKey() string {
-	raw, _ := json.Marshal(character.Character{Base: character.DisplayRef(1), AttackTag: character.GuessAttackTag(0, 0), InGameMovespeed: 270})
+func fixtureCreatureAssetKey(gameplay ...*azerothcore.CreatureGameplay) string {
+	var source *azerothcore.CreatureGameplay
+	if len(gameplay) > 0 {
+		source = gameplay[0]
+	}
+	raw, _ := json.Marshal(struct {
+		character.Character
+		Gameplay *azerothcore.CreatureGameplay `json:"gameplay,omitempty"`
+	}{character.Character{Base: character.DisplayRef(1), AttackTag: character.GuessAttackTag(0, 0), InGameMovespeed: 270}, source})
 	hash := sha256.Sum256(raw)
 	return hex.EncodeToString(hash[:])
 }
@@ -89,6 +96,42 @@ func TestDestructibleNPCsSkipIconGeneration(t *testing.T) {
 	}
 }
 
+func TestStandReadyCombatEligibilityIgnoresFaction(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		gameplay *azerothcore.CreatureGameplay
+		want     bool
+	}{
+		{"Defias Thug", &azerothcore.CreatureGameplay{Type: 7, Faction: 7, DamageMax: 4.973}, true},
+		{"friendly guard", &azerothcore.CreatureGameplay{Type: 7, Faction: 12, DamageMax: 10}, true},
+		{"hostile fighter", &azerothcore.CreatureGameplay{Type: 7, Faction: 17, DamageMax: 10}, true},
+		{"vendor with attacks", &azerothcore.CreatureGameplay{Type: 7, NPCFlags: 128, DamageMax: 10}, true},
+		{"ranged fighter", &azerothcore.CreatureGameplay{Type: 7, RangedMax: 10}, true},
+		{"pacified", &azerothcore.CreatureGameplay{Type: 7, UnitFlags: 0x00020000, DamageMax: 10}, false},
+		{"critter", &azerothcore.CreatureGameplay{Type: 8, DamageMax: 10}, false},
+		{"noncombat pet", &azerothcore.CreatureGameplay{Type: 12, DamageMax: 10}, false},
+		{"zero damage", &azerothcore.CreatureGameplay{Type: 7}, false},
+		{"legacy gameplay fallback", nil, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := azerothcore.Creature{Gameplay: tc.gameplay}
+			if creatureCanAttack(c) != tc.want {
+				t.Fatal("wrong combat eligibility")
+			}
+			fields := fieldValues(t, creatureUnitFields(c, "fixture.mdx", tc.name, 1, 56, 56))
+			if (fields["uaen"] != 0) != tc.want {
+				t.Fatal("idle policy disagrees with exported attacks")
+			}
+		})
+	}
+	combat := azerothcore.Creature{Gameplay: &azerothcore.CreatureGameplay{Faction: 7, DamageMax: 5}}
+	noncombat := combat
+	noncombat.Gameplay = &azerothcore.CreatureGameplay{Faction: 7}
+	if creatureUnitKey(combat) == creatureUnitKey(noncombat) {
+		t.Fatal("combat/noncombat variants must not share a unit type")
+	}
+}
+
 func TestCreatureRaceUsesResolvedSourceWithoutChangingCampaignOrClassification(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
@@ -118,7 +161,7 @@ func TestCreatureRaceUsesResolvedSourceWithoutChangingCampaignOrClassification(t
 			mm := extra.NewMapManager()
 			u := mm.AddUnitType(false, "hfoo", creatureUnitFields(c, "x.mdx", tc.name, 1, 56, 56))
 			before := fieldValues(t, u.Data)
-			assets := character.CreatureAssets{fixtureCreatureAssetKey(): {ModelPath: "npcs/shared.mdx", WowRace: tc.race}}
+			assets := character.CreatureAssets{fixtureCreatureAssetKey(c.Gameplay): {ModelPath: "npcs/shared.mdx", WowRace: tc.race}}
 			ApplyCreatureAssets(mm, []PlacedUnit{{Creature: c, TypeCode: u.Code}}, assets, nil)
 			got := fieldValues(t, mm.UnitTypes[0].Data)
 			if got["urac"] != tc.want || got["ucam"] != 1 || got["utyp"] != before["utyp"] {
@@ -128,13 +171,17 @@ func TestCreatureRaceUsesResolvedSourceWithoutChangingCampaignOrClassification(t
 	}
 }
 
-func TestCreatureCommonerRequiresExplicitHumanoidCivilian(t *testing.T) {
+func TestCreatureCommonerFallbackRequiresExplicitHumanoidCivilian(t *testing.T) {
 	for _, tc := range []struct {
 		name                      string
 		race, creatureType, flags int
 		want                      string
 	}{
-		{"human civilian", 1, 7, 2, "commoner"},
+		{"human civilian", 1, 7, 2, "human"},
+		{"dwarf civilian", 3, 7, 2, "human"},
+		{"orc civilian", 2, 7, 2, "orc"},
+		{"night elf civilian", 4, 7, 2, "nightelf"},
+		{"draenei civilian", 11, 7, 2, "other"},
 		{"civilian without character race", 0, 7, 2, "commoner"},
 		{"unflagged human", 1, 7, 0, "human"},
 		{"civilian beast", 0, 1, 2, "creeps"},
