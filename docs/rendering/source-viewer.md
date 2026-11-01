@@ -59,6 +59,8 @@ The WC3 particle conversion preserves emitter type, angular ranges, scalar or
 compressed gravity, and source trail durations/rates. PRE2 cannot represent every
 M2 generator exactly: visible spherical shells and independent angular ranges
 use at most 32 deterministic sectors while conserving the total emission rate.
+Shells with static elevation ranges sample both angles and use tangent birth
+patches, so even zero-speed particles cover the shell instead of its equator.
 The M2 loader also reads EXP2 source-point overrides; static positive plane
 source points become downward fans. Compressed gravity's vertical component is
 retained; PRE2 has no lateral acceleration track. Drag, variable lifetimes and

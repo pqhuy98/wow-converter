@@ -80,7 +80,7 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 	}
 	unequal := horizontal > 1e-6 && vertical > 1e-6 && math.Abs(horizontal-vertical) > 1e-6
 	// PRE2 cannot couple a spherical spawn point to its outgoing direction.
-	// ponytail: sample at most 32 azimuth sectors for visible shells or unequal
+	// ponytail: sample at most 32 sectors for visible shells or unequal
 	// angular ranges; retain total emission rate and each source animation track.
 	if plane && (!node.Width.Static || !node.Length.Static || math.Max(node.Width.Value, node.Length.Value) > 0.2) {
 		return []*components.ParticleEmitter2{node}
@@ -119,9 +119,17 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 		weights[i] = 0.5 + math.Mod(float64(i)*0.61803398875, 1)
 		weightSum += weights[i]
 	}
+	circle := !plane && (particleTrackZero(p.VerticalRange) || elevationCircle)
+	// Static elevation ranges need surface samples as well as azimuth.
+	// In particular, zero-speed stars cannot leave an equatorial birth ring.
+	shell := !plane && !circle && radius > 0 && trackIsStatic(p.VerticalRange)
 	for i := 0; i < count; i++ {
 		fraction := -1 + 2*(float64(i)+0.5)/float64(count)
 		phi := angularRange * fraction
+		theta := 0.0
+		if shell {
+			theta = math.Min(math.Pi, vertical) * (-1 + 2*math.Mod((float64(i)+0.5)*0.61803398875, 1))
+		}
 		variant := mdl.CloneParticleEmitter2(node)
 		variant.Name += "_direction_" + itoa(i)
 		variant.Flags2 = append([]components.ParticleEmitter2Flag(nil), node.Flags2...)
@@ -133,7 +141,10 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 			variant.Flags2 = append(variant.Flags2, components.PE2LineEmitter)
 		}
 		variant.Latitude = f.m2trackToAnimationOrStaticFloat(p.VerticalRange, components.AnimTypeOthers, degrees)
-		circle := !plane && (particleTrackZero(p.VerticalRange) || elevationCircle)
+		if shell {
+			// Each patch's local +Z already points along its sampled radius.
+			variant.Latitude = components.AnimatedOrStatic[float64]{Static: true}
+		}
 		if circle {
 			variant.Latitude = f.m2trackToAnimationOrStaticFloat(angularTrack, components.AnimTypeOthers, func(v []float64) any {
 				if len(v) == 0 {
@@ -147,7 +158,7 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 			if len(v) > 0 {
 				angle = math.Min(math.Pi, math.Abs(v[0])) * fraction
 			}
-			roll := -math.Pi / 2
+			roll := -math.Pi/2 - theta
 			if plane {
 				roll = 0
 			}
@@ -175,7 +186,7 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 				if elevationCircle {
 					return imath.Vector3{0, math.Cos(phi) * r, -math.Sin(phi) * r}
 				}
-				return imath.Vector3{-math.Sin(phi) * r, math.Cos(phi) * r, 0}
+				return imath.Vector3{-math.Sin(phi) * math.Cos(theta) * r, math.Cos(phi) * math.Cos(theta) * r, -math.Sin(theta) * r}
 			}
 			variant.Translation = &components.Animation{Type: components.AnimTypeTranslation, Interpolation: components.InterpDontInterp, GlobalSeq: global, KeyFrames: map[int]any{0: offset(radius)}}
 			if radiusTrack.Anim != nil {
@@ -193,27 +204,37 @@ func (f *File) particleDirectionVariants(node *components.ParticleEmitter2, p m2
 				}
 				variant.Translation = &anim
 			}
-			if circle {
-				// Jitter births along each arc instead of stacking every particle on its center ray.
-				arc := 2 * math.Sin(angularRange/float64(count))
-				variant.Length = radiusTrack
-				if radiusTrack.Anim != nil {
-					cloned := *radiusTrack.Anim
-					cloned.KeyFrames = map[int]any{}
-					for time, value := range radiusTrack.Anim.KeyFrames {
-						cloned.KeyFrames[time] = value
-					}
-					if radiusTrack.Anim.InOutTans != nil {
-						cloned.InOutTans = map[int]components.InOutTan{}
-						for time, tan := range radiusTrack.Anim.InOutTans {
-							tan.InTan[0] *= arc
-							tan.OutTan[0] *= arc
-							cloned.InOutTans[time] = tan
-						}
-					}
-					variant.Length.Anim = &cloned
+			if circle || shell {
+				// Jitter births over arcs/patches instead of stacking on center rays.
+				arcs := []float64{2 * math.Sin(angularRange/float64(count))}
+				dimensions := []*components.AnimatedOrStatic[float64]{&variant.Length}
+				if shell {
+					patchAngle := math.Sqrt(horizontal * math.Min(math.Pi/2, vertical) / float64(count))
+					arcs[0] = 2 * math.Sin(math.Min(vertical, patchAngle))
+					arcs = append(arcs, 2*math.Sin(math.Min(horizontal, patchAngle))*math.Abs(math.Cos(theta)))
+					dimensions = append(dimensions, &variant.Width)
 				}
-				applyAnimatedOrStaticFloat(&variant.Length, func(r float64) float64 { return r * arc })
+				for dimension, value := range dimensions {
+					arc := arcs[dimension]
+					*value = radiusTrack
+					if radiusTrack.Anim != nil {
+						cloned := *radiusTrack.Anim
+						cloned.KeyFrames = map[int]any{}
+						for time, value := range radiusTrack.Anim.KeyFrames {
+							cloned.KeyFrames[time] = value
+						}
+						if radiusTrack.Anim.InOutTans != nil {
+							cloned.InOutTans = map[int]components.InOutTan{}
+							for time, tan := range radiusTrack.Anim.InOutTans {
+								tan.InTan[0] *= arc
+								tan.OutTan[0] *= arc
+								cloned.InOutTans[time] = tan
+							}
+						}
+						value.Anim = &cloned
+					}
+					applyAnimatedOrStaticFloat(value, func(r float64) float64 { return r * arc })
+				}
 			}
 		}
 		// Equal fractional rates synchronize every sector into artificial rings.

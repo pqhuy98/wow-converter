@@ -273,3 +273,53 @@ func TestAnimatedSphereShellStaysCircularAndPreservesRadiusKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestSphereShellBirthsCoverVolume(t *testing.T) {
+	track := func(v float64) m2.Track {
+		return m2.Track{GlobalSeq: config.BlizzardNull, Timestamps: [][]uint32{{0}}, Values: [][][]float64{{{v}}}}
+	}
+	f := &File{mdl: mdl.New(mdl.NewMDLOptions{Name: "Holy Bomb shell"})}
+	node := components.NewParticleEmitter2("stationary stars")
+	node.LifeSpan = 1
+	node.Speed = components.AnimatedOrStatic[float64]{Static: true}
+	node.Width = components.AnimatedOrStatic[float64]{Anim: &components.Animation{Interpolation: components.InterpLinear, KeyFrames: map[int]any{0: float64(1), 600: float64(2.222222)}}}
+	node.Length = node.Width
+	node.EmissionRate = components.AnimatedOrStatic[float64]{Static: true, Value: 200}
+	variants := f.particleDirectionVariants(node, m2.ParticleEmitterEntry{
+		EmitterType: 2, HorizontalRange: track(math.Pi), VerticalRange: track(math.Pi), EmissionRate: track(200),
+	})
+	if len(variants) > 32 {
+		t.Fatal("shell exceeded the sector budget")
+	}
+	total := 0.0
+	var lower, upper bool
+	for _, variant := range variants {
+		total += variant.EmissionRate.Value
+		for time, radius := range map[int]float64{0: 1, 600: 2.222222} {
+			offset := variant.Translation.KeyFrames[time].(imath.Vector3)
+			if math.Abs(math.Sqrt(offset[0]*offset[0]+offset[1]*offset[1]+offset[2]*offset[2])-radius) > 1e-6 {
+				t.Fatalf("shell radius key %d lost: %v", time, offset)
+			}
+			lower = lower || offset[2] < -radius/2
+			upper = upper || offset[2] > radius/2
+			direction := rotateParticleTest(variant.Rotation.KeyFrames[0].(imath.QuaternionRotation), imath.Vector3{0, 0, 1})
+			for axis := range direction {
+				if math.Abs(direction[axis]-offset[axis]/radius) > 1e-6 {
+					t.Fatal("shell velocity no longer follows its birth radius")
+				}
+			}
+			if variant.Width.Anim == nil || variant.Length.Anim == nil || variant.Width.Anim.KeyFrames[time].(float64) <= 0 || variant.Length.Anim.KeyFrames[time].(float64) <= 0 {
+				t.Fatal("stationary shell births stack on fixed points instead of surface patches")
+			}
+		}
+		if variant.Speed.Value != 0 {
+			t.Fatal("stationary source stars gained velocity")
+		}
+	}
+	if !lower || !upper {
+		t.Fatal("spherical births collapsed onto the equator")
+	}
+	if math.Abs(total-200) > 1e-6 || node.Width.Anim.KeyFrames[600] != float64(2.222222) {
+		t.Fatal("source emission budget or radius track mutated")
+	}
+}
