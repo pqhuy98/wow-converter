@@ -312,6 +312,16 @@ func (mod *Modify) AddDoodadDeathAnimation() *Modify {
 	}
 	mod.MDL.Sequences = append(mod.MDL.Sequences, deathSequence)
 
+	// Scaling bones hides meshes, but does not stop WC3 emitters. Give the
+	// synthetic Death its own off keys instead of inheriting an enabled default
+	// when the renderer finds no visibility keys in that sequence.
+	for _, p := range mod.MDL.ParticleEmitter2s {
+		p.Visibility = mod.hideEmitterInSequence(p.Visibility, deathSequence)
+	}
+	for _, r := range mod.MDL.RibbonEmitters {
+		r.Visibility = mod.hideEmitterInSequence(r.Visibility, deathSequence)
+	}
+
 	for _, bone := range mod.MDL.Bones {
 		if bone.ParentBone != nil || bone.Parent != nil {
 			continue
@@ -332,6 +342,34 @@ func (mod *Modify) AddDoodadDeathAnimation() *Modify {
 		bone.Scaling.KeyFrames[deathSequence.Interval[1]] = imath.Vector3{0, 0, 0}
 	}
 	return mod
+}
+
+func (mod *Modify) hideEmitterInSequence(visibility *components.Animation, hidden components.Sequence) *components.Animation {
+	if visibility != nil && visibility.GlobalSeq != nil {
+		return visibility
+	}
+	if visibility == nil {
+		visibility = &components.Animation{Interpolation: components.InterpDontInterp, Type: components.AnimTypeOthers}
+	}
+	if visibility.KeyFrames == nil {
+		visibility.KeyFrames = map[int]any{}
+	}
+	for _, seq := range mod.MDL.Sequences {
+		hasKeys := false
+		for timestamp := range visibility.KeyFrames {
+			if seq.Interval[0] <= timestamp && timestamp <= seq.Interval[1] {
+				hasKeys = true
+				break
+			}
+		}
+		if !hasKeys {
+			visibility.KeyFrames[seq.Interval[0]] = float64(1)
+			visibility.KeyFrames[seq.Interval[1]] = float64(1)
+		}
+	}
+	visibility.KeyFrames[hidden.Interval[0]] = float64(0)
+	visibility.KeyFrames[hidden.Interval[1]] = float64(0)
+	return visibility
 }
 
 func (mod *Modify) CloneSequence(sequence *components.Sequence, newWc3Name string) *Modify {
