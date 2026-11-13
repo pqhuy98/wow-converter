@@ -35,11 +35,14 @@ type InOutTan struct {
 }
 
 type Animation struct {
-	GlobalSeq     *GlobalSequence
-	Interpolation Interpolation
-	KeyFrames     map[int]any
-	InOutTans     map[int]InOutTan
-	Type          AnimationType
+	// ReductionTolerance overrides the conservative reducer for generated tracks.
+	// Conversion-only: not serialized; translation uses final exported units.
+	ReductionTolerance float64
+	GlobalSeq          *GlobalSequence
+	Interpolation      Interpolation
+	KeyFrames          map[int]any
+	InOutTans          map[int]InOutTan
+	Type               AnimationType
 }
 
 type AnimatedOrStatic[T any] struct {

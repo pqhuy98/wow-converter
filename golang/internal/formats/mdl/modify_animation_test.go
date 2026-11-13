@@ -17,6 +17,20 @@ func translationCurve(times ...int) *components.Animation {
 	return a
 }
 
+func TestGeneratedTrackReductionLeavesAuthoredPrecisionUnchanged(t *testing.T) {
+	m := New(NewMDLOptions{})
+	m.Sequences = []components.Sequence{{Name: "Stand", Interval: [2]int{0, 100}}}
+	for _, tolerance := range []float64{0, 0.5} {
+		b := components.NewBone("track")
+		b.Translation = &components.Animation{Type: components.AnimTypeTranslation, Interpolation: components.InterpLinear, ReductionTolerance: tolerance, KeyFrames: map[int]any{0: imath.Vector3{}, 50: imath.Vector3{0.3, 0, 0}, 100: imath.Vector3{}}}
+		m.Bones = append(m.Bones, b)
+	}
+	m.Modify.ReduceKeyFramesConservative()
+	if len(m.Bones[0].Translation.KeyFrames) != 3 || len(m.Bones[1].Translation.KeyFrames) != 2 {
+		t.Fatal("generated-track tolerance did not reduce only the generated track")
+	}
+}
+
 func TestFreezeHeadPreservesHeadBodyPortraitAndIndependentTracks(t *testing.T) {
 	m := New(NewMDLOptions{})
 	m.Sequences = []components.Sequence{{Name: "Stand", Interval: [2]int{0, 100}}, {Name: "Portrait Talk", Interval: [2]int{200, 300}}}

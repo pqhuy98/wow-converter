@@ -324,7 +324,7 @@ func creatureAppearanceKey(meta CharacterData, ch Character, cfg config.Config, 
 		Metadata  CharacterData
 		Character Character
 		Config    config.Config
-	}{4, build, meta, ch, cfg})
+	}{6, build, meta, ch, cfg}) // Invalidate appearances before compact physics tracks.
 	if err != nil {
 		return "", err
 	}

@@ -52,25 +52,27 @@ type NodeBase struct {
 	Type        string
 }
 
-func (n *NodeBase) NodeName() string                   { return n.Name }
-func (n *NodeBase) NodeObjectID() int                  { return n.ObjectID }
-func (n *NodeBase) SetNodeObjectID(id int)             { n.ObjectID = id }
-func (n *NodeBase) NodePivotPoint() math.Vector3       { return n.PivotPoint }
-func (n *NodeBase) SetNodePivotPoint(p math.Vector3)   { n.PivotPoint = p }
-func (n *NodeBase) NodeParent() Node                   { return n.Parent }
-func (n *NodeBase) SetNodeParent(p Node)               { n.Parent = p }
-func (n *NodeBase) NodeFlags() []NodeFlag              { return n.Flags }
-func (n *NodeBase) NodeTranslation() *Animation        { return n.Translation }
-func (n *NodeBase) NodeRotation() *Animation           { return n.Rotation }
-func (n *NodeBase) NodeScaling() *Animation            { return n.Scaling }
-func (n *NodeBase) NodeType() string                   { return n.Type }
+func (n *NodeBase) NodeName() string                 { return n.Name }
+func (n *NodeBase) NodeObjectID() int                { return n.ObjectID }
+func (n *NodeBase) SetNodeObjectID(id int)           { n.ObjectID = id }
+func (n *NodeBase) NodePivotPoint() math.Vector3     { return n.PivotPoint }
+func (n *NodeBase) SetNodePivotPoint(p math.Vector3) { n.PivotPoint = p }
+func (n *NodeBase) NodeParent() Node                 { return n.Parent }
+func (n *NodeBase) SetNodeParent(p Node)             { n.Parent = p }
+func (n *NodeBase) NodeFlags() []NodeFlag            { return n.Flags }
+func (n *NodeBase) NodeTranslation() *Animation      { return n.Translation }
+func (n *NodeBase) NodeRotation() *Animation         { return n.Rotation }
+func (n *NodeBase) NodeScaling() *Animation          { return n.Scaling }
+func (n *NodeBase) NodeType() string                 { return n.Type }
 
 type Bone struct {
 	NodeBase
-	ParentBone  *Bone
-	Geoset      *Geoset
-	GeosetMulti bool
-	GeosetAnim  *GeosetAnim
+	// PhysicsDriven is conversion-only metadata; never serialized into MDX.
+	PhysicsDriven bool
+	ParentBone    *Bone
+	Geoset        *Geoset
+	GeosetMulti   bool
+	GeosetAnim    *GeosetAnim
 }
 
 func NewBone(name string) *Bone {

@@ -2,7 +2,9 @@ package directm2
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -183,6 +185,12 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 		Metadata:    meta,
 	}, cfg)
 	result := ConvertResult{MDL: assembled.MDL, TexturePaths: assembled.TexturePaths, BakeStem: BakeStemFromListfile(fileName)}
+	if err := bakePhysics(ctx, result.MDL, loader.Physics, cfg.RawModelScaleUp); err != nil {
+		if !errors.Is(err, m2.ErrUnsupportedPhysics) {
+			return ConvertResult{}, fmt.Errorf("bake physics for %s: %w", fileName, err)
+		}
+		log.Printf("Skipping physics for %s: %v", fileName, err)
+	}
 	if cfg.IsBulkExport {
 		for i := 0; i+2 < len(loader.CollisionIndices); i += 3 {
 			var triangle [3]imath.Vector3

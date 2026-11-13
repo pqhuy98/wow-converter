@@ -1,5 +1,11 @@
 # Animation export
 
+## Physics baking
+
+The Go converter automatically bakes supported M2 `PFDC` / `PFID` physics rigs into ordinary bone animation. It uses a deterministic 60 Hz articulated-pendulum simulation and writes 15 Hz keys. Generated physics tracks allow 2 degrees of rotation error and 0.5 exported units of translation error during key reduction; authored tracks retain their conservative tolerances. Source gravity, damping, joint anchors, shoulder/hinge limits, capsule/convex body colliders and a local ground plane drive the motion. Idle clips start settled, and looping tracks close at their endpoints. Physics bones and their animated anchors survive head freezing.
+
+Lady Liadrin (`creature/liadrin`) and Lor'themar (`creature/lorthemar`) are covered by real-source integration tests. The bake runs during conversion; WC3 plays the resulting keys without a physics solver. It approximates WoW secondary motion rather than porting Domino: constraints form an acyclic articulated rig, collisions use animation-driven bodies, and it does not reproduce dynamic body-to-body contacts or joint motors. Unsupported rigs retain ordinary animation and log a warning. Baked motion cannot respond to arbitrary gameplay movement or the previous animation's physical state.
+
 ## Optimization
 
 `POST /api/export/character` accepts `optimization.freezeHead`. It defaults to true in the API, Character Export and Browse UI. **Freeze head outside portraits** can be disabled independently of other export settings.

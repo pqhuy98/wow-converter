@@ -20,6 +20,9 @@ func (mod *Modify) FreezeHeadOutsidePortrait() *Modify {
 		}
 	}
 	for _, bone := range mod.MDL.Bones {
+		if bone.PhysicsDriven {
+			continue
+		}
 		headChild := false
 		seen := map[components.Node]bool{}
 		for parent := bone.Parent; parent != nil && !seen[parent]; parent = parent.NodeParent() {
@@ -86,6 +89,9 @@ func (mod *Modify) ReduceKeyFramesConservative() *Modify {
 			continue
 		}
 		curve := newAnimationCurve(anim)
+		if anim.ReductionTolerance > 0 {
+			tolerance = anim.ReductionTolerance
+		}
 		var windows [][2]int
 		if anim.GlobalSeq != nil {
 			windows = append(windows, [2]int{0, anim.GlobalSeq.Duration})

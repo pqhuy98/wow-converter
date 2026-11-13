@@ -2,7 +2,9 @@ package m2
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
@@ -74,6 +76,7 @@ type Loader struct {
 	Colors                  []ColorEntry
 	TextureWeights          []Track
 	GlobalLoops             []uint32
+	Physics                 *PhysicsData
 
 	getFile func(ctx context.Context, fileDataID uint32) ([]byte, error)
 }
@@ -94,9 +97,17 @@ func (l *Loader) Load(ctx context.Context) error {
 		return nil
 	}
 	var sourceOverrides []float32
+	var physicsBytes []byte
+	var physicsFileID uint32
 	for l.Data.RemainingBytes() > 0 {
+		if l.Data.RemainingBytes() < 8 {
+			return fmt.Errorf("truncated M2 chunk header")
+		}
 		chunkID := readU32(l.Data)
 		chunkSize := int(readU32(l.Data))
+		if chunkSize < 0 || chunkSize > l.Data.RemainingBytes() {
+			return fmt.Errorf("invalid M2 chunk size")
+		}
 		nextChunkPos := l.Data.Offset() + chunkSize
 		switch chunkID {
 		case constants.MagicMD21:
@@ -113,6 +124,13 @@ func (l *Loader) Load(ctx context.Context) error {
 			l.BoneFileIDs = readU32Slice(l.Data, chunkSize/4)
 		case chunkAFID:
 			l.parseChunkAFID(chunkSize)
+		case 0x43444650: // PFDC: inline PHYS, in native Z-up coordinates.
+			physicsBytes = l.Data.Raw()[l.Data.Offset():nextChunkPos]
+		case 0x44494650: // PFID
+			if chunkSize != 4 {
+				return fmt.Errorf("invalid PFID chunk size")
+			}
+			physicsFileID = readU32(l.Data)
 		case chunkEXP2:
 			var err error
 			sourceOverrides, err = l.parseChunkEXP2(chunkSize)
@@ -121,6 +139,24 @@ func (l *Loader) Load(ctx context.Context) error {
 			}
 		}
 		l.Data.Seek(nextChunkPos)
+	}
+	if len(physicsBytes) == 0 && physicsFileID != 0 && l.getFile != nil {
+		var err error
+		physicsBytes, err = l.GetFile(ctx, physicsFileID)
+		if err != nil {
+			return fmt.Errorf("load M2 physics %d: %w", physicsFileID, err)
+		}
+	}
+	if len(physicsBytes) > 0 {
+		var err error
+		l.Physics, err = parsePhysics(physicsBytes)
+		if errors.Is(err, ErrUnsupportedPhysics) {
+			log.Printf("Skipping M2 physics: %v", err)
+			err = nil
+		}
+		if err != nil {
+			return fmt.Errorf("M2 physics: %w", err)
+		}
 	}
 	if sourceOverrides != nil {
 		if len(sourceOverrides) != len(l.ParticleEmitters) {
