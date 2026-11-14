@@ -153,18 +153,30 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		return err
 	}
 	e.navigation = navigation
+	stageStarted := time.Now()
+	log.Printf("Terrain preparation: projecting water")
 	if err := water.Project(ctx, terrain); err != nil {
 		return err
 	}
+	log.Printf("Terrain preparation: water projected in %s", time.Since(stageStarted).Round(time.Millisecond))
 	if wc3.Tileset != nil {
+		stageStarted = time.Now()
+		log.Printf("Terrain preparation: finishing tileset seams")
 		if err := wc3.FinishTilesetModels(ctx, e.WowObjectManager, terrain, wc3.Tileset, e.Config); err != nil {
 			return err
 		}
+		log.Printf("Terrain preparation: tileset seams finished in %s", time.Since(stageStarted).Round(time.Millisecond))
+		stageStarted = time.Now()
+		log.Printf("Terrain preparation: applying model-cell pathing")
 		wc3.BlockModelCells(navigation)
+		log.Printf("Terrain preparation: model-cell pathing applied in %s", time.Since(stageStarted).Round(time.Millisecond))
 	}
+	stageStarted = time.Now()
+	log.Printf("Terrain preparation: preparing ADT chunks")
 	if err := wc3.PrepareAdtChunks(ctx, e.WowObjectManager, e.Config.AssetPrefix); err != nil {
 		return err
 	}
+	log.Printf("Terrain preparation: ADT chunks prepared in %s", time.Since(stageStarted).Round(time.Millisecond))
 	e.MapManager.SetTerrain(terrain)
 	if navigation != nil {
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
@@ -180,17 +192,27 @@ func (e *MapExporter) ExportTerrainsDoodads(ctx context.Context, outputDir strin
 		}
 	}
 
+	stageStarted = time.Now()
 	tiltedDoodads, _ := wc3.PlaceDoodads(e.MapManager, e.WowObjectManager, func(obj *common.WowObject) bool {
 		return e.filterDoodads(obj.ID, obj.Type)
 	})
+	log.Printf("Doodads placed in %s", time.Since(stageStarted).Round(time.Millisecond))
 	e.preloadLocations = wc3.PreloadLocations
 	if navigation != nil {
 		if e.MapExportConfig.PlacePathBlockers {
+			stageStarted = time.Now()
+			log.Printf("Terrain navigation: packing and placing path blockers")
 			if err := navigation.PlaceBlockers(e.MapManager, outputDir); err != nil {
 				return err
 			}
-		} else if err := navigation.Write(outputDir, false); err != nil {
-			return err
+			log.Printf("Terrain navigation: placed %d path blockers of %d types and wrote diagnostics in %s", navigation.BlockerInstances, navigation.BlockerTypes, time.Since(stageStarted).Round(time.Millisecond))
+		} else {
+			stageStarted = time.Now()
+			log.Printf("Terrain navigation: writing diagnostics")
+			if err := navigation.Write(outputDir, false); err != nil {
+				return err
+			}
+			log.Printf("Terrain navigation: diagnostics written in %s", time.Since(stageStarted).Round(time.Millisecond))
 		}
 	}
 	log.Printf("Total doodads: %d", len(e.MapManager.Doodads))

@@ -277,8 +277,18 @@ func (r *WDCReader) buildSchemaFromDBDStructure(structure *DBDEntry) {
 	}
 }
 
-// Parse loads and parses the DB2 file.
-func (r *WDCReader) Parse(ctx context.Context, input []byte) error {
+// Parse loads and parses the DB2 file. Optional fields limit retained columns;
+// record IDs are always retained. All fields are still decoded for sparse-record
+// cursor positioning and validation.
+func (r *WDCReader) Parse(ctx context.Context, input []byte, retainedFields ...string) error {
+	var keepFields map[string]bool
+	if len(retainedFields) > 0 {
+		keepFields = make(map[string]bool, len(retainedFields)+1)
+		keepFields["ID"] = true
+		for _, field := range retainedFields {
+			keepFields[field] = true
+		}
+	}
 	log.Write("Loading DB file %s from CASC", r.FileName)
 	var data *buffer.Buffer
 	if input != nil {
@@ -596,6 +606,9 @@ func (r *WDCReader) Parse(ctx context.Context, input []byte) error {
 			for _, prop := range r.schemaOrder {
 				schemaEntry := r.schema[prop]
 				if schemaEntry.Type == FieldTypeRelation {
+					if keepFields != nil && !keepFields[prop] {
+						continue
+					}
 					if sec.relationshipMap != nil {
 						if v, ok := sec.relationshipMap[uint32(i)]; ok {
 							out[prop] = v
@@ -781,6 +794,11 @@ func (r *WDCReader) Parse(ctx context.Context, input []byte) error {
 				if !hasIDMap && fieldIndex == idIndex {
 					recordID = uint32(toUint64(out[prop]))
 					r.idField = prop
+				}
+				if keepFields != nil && !keepFields[prop] && prop != r.idField {
+					// Delete before the next field: projected rows never grow a
+					// full-width map just to discard most columns afterwards.
+					delete(out, prop)
 				}
 				fieldIndex++
 			}

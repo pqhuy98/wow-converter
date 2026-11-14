@@ -2,6 +2,7 @@ package casc
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -247,7 +248,10 @@ func (b *BaseCASC) PrepareListfile() error {
 	if err := b.ProgressTracker.Step("Preparing listfiles..."); err != nil {
 		return err
 	}
-	_, err := PrepareListfile()
+	// Encoding and root decoding have finished. Reclaim their large temporary
+	// buffers before allocating the selected build's filename maps.
+	debug.FreeOSMemory()
+	_, err := PrepareListfile(b.RootEntriesMap)
 	return err
 }
 
@@ -370,20 +374,18 @@ func (b *BaseCASC) ParseEncodingFile(data *buffer.Buffer, hash string) error {
 	encoding.Move(4 + 1)
 	specBlockSize := int(encoding.ReadInt32BE().(int64))
 	encoding.Move(specBlockSize + (cKeyPageCount * (hashSizeCKey + 16)))
-	pagesStart := encoding.Offset()
+	if hashSizeCKey < 1 || hashSizeCKey > 16 || hashSizeEKey < 1 || hashSizeEKey > 16 || cKeyPageSize < 1 {
+		return fmt.Errorf("invalid encoding page dimensions")
+	}
+	b.EncodingTable.entries = nil
+	b.EncodingTable.pages = []encodingPage{}
 	for i := 0; i < cKeyPageCount; i++ {
-		pageStart := pagesStart + (cKeyPageSize * i)
-		encoding.Seek(pageStart)
-		for encoding.Offset() < (pageStart + pagesStart) {
-			keysCount := int(encoding.ReadUInt8().(int64))
-			if keysCount == 0 {
-				break
-			}
-			size := int(encoding.ReadInt40BE().(int64))
-			cKey := CascKey(encoding.ReadBinaryKey(hashSizeCKey))
-			eKey := CascKey(encoding.ReadBinaryKey(hashSizeEKey))
-			b.EncodingTable.set(cKey, eKey, size)
-			encoding.Move(hashSizeEKey * (keysCount - 1))
+		encoding.CheckBounds(cKeyPageSize)
+		start := encoding.Offset()
+		page := append([]byte(nil), encoding.Raw()[start:start+cKeyPageSize]...)
+		encoding.Move(cKeyPageSize)
+		if err := b.EncodingTable.addPage(page); err != nil {
+			return err
 		}
 	}
 	return nil

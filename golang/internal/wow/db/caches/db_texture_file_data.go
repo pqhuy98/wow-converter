@@ -20,7 +20,7 @@ func InitializeTextureFileData(ctx context.Context) error {
 	textureFileDataOnce.Do(func() {
 		log.Write("Loading texture mapping...")
 		reader := db.NewWDCReader("DBFilesClient/TextureFileData.db2", nil)
-		if err := reader.Parse(ctx, nil); err != nil {
+		if err := reader.Parse(ctx, nil, "UsageType", "MaterialResourcesID"); err != nil {
 			textureFileDataErr = err
 			return
 		}

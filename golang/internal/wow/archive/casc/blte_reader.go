@@ -1,15 +1,18 @@
 package casc
 
 import (
+	"bytes"
+	"compress/zlib"
 	"fmt"
+	"io"
 
 	"github.com/pqhuy98/wow-converter/internal/buffer"
 )
 
 const (
-	blteMagic        = 0x45544C42
-	encTypeSalsa20   = 0x53
-	emptyHash        = "00000000000000000000000000000000"
+	blteMagic      = 0x45544C42
+	encTypeSalsa20 = 0x53
+	emptyHash      = "00000000000000000000000000000000"
 )
 
 // EncryptionError indicates a missing decryption key.
@@ -41,11 +44,11 @@ type BLTEBlock struct {
 // BLTEReader decodes BLTE-compressed CASC data lazily.
 type BLTEReader struct {
 	*buffer.Buffer
-	blte           *buffer.Buffer
-	blockIndex     int
+	blte            *buffer.Buffer
+	blockIndex      int
 	blockWriteIndex int
-	partialDecrypt bool
-	blocks         []BLTEBlock
+	partialDecrypt  bool
+	blocks          []BLTEBlock
 }
 
 // CheckBLTE reports whether data is a BLTE file.
@@ -186,24 +189,44 @@ func (r *BLTEReader) handleBlock(block *buffer.Buffer, blockEnd int, index int) 
 		r.writeBufferBLTE(block, blockEnd)
 		return nil
 	case 0x5A:
-		r.decompressBlock(block, blockEnd, index)
-		return nil
+		return r.decompressBlock(block, blockEnd, index)
 	default:
 		return fmt.Errorf("Unknown block: %d", flag)
 	}
 }
 
-func (r *BLTEReader) decompressBlock(data *buffer.Buffer, blockEnd int, index int) {
-	decomp := data.ReadBuffer(buffer.ReadBufferOptions{
-		Length:  blockEnd - data.Offset(),
-		Wrap:    true,
-		Inflate: true,
-	}).(*buffer.Buffer)
-	expectedSize := r.blocks[index].DecompSize
-	if decomp.ByteLength() > expectedSize {
-		r.SetCapacity(r.ByteLength()+(decomp.ByteLength()-expectedSize), false)
+func (r *BLTEReader) decompressBlock(data *buffer.Buffer, blockEnd int, index int) error {
+	inflater, err := zlib.NewReader(bytes.NewReader(data.Raw()[data.Offset():blockEnd]))
+	if err != nil {
+		return err
 	}
-	r.writeBufferBLTE(decomp, decomp.ByteLength())
+	defer inflater.Close()
+	if r.blocks[index].Hash == emptyHash {
+		// Headerless BLTE has no decoded length. Preserve its grow-to-fit path.
+		decoded, err := io.ReadAll(inflater)
+		if err != nil {
+			return err
+		}
+		if len(decoded) > r.blocks[index].DecompSize {
+			r.SetCapacity(r.ByteLength()+len(decoded)-r.blocks[index].DecompSize, false)
+		}
+		copy(r.Raw()[r.Offset():], decoded)
+		r.SetOffset(r.Offset() + len(decoded))
+		return nil
+	}
+	// Framed BLTE declares the exact decoded size. Inflate directly into the
+	// final destination instead of io.ReadAll's growing buffer and another copy.
+	start := r.Offset()
+	size := r.blocks[index].DecompSize
+	if _, err := io.ReadFull(inflater, r.Raw()[start:start+size]); err != nil {
+		return fmt.Errorf("[BLTE] Decoding block %d: %w", index, err)
+	}
+	var extra [1]byte
+	if n, err := inflater.Read(extra[:]); n != 0 || err != io.EOF {
+		return fmt.Errorf("[BLTE] Invalid decoded size or checksum in block %d: %v", index, err)
+	}
+	r.SetOffset(start + size)
+	return nil
 }
 
 func (r *BLTEReader) decryptBlock(data *buffer.Buffer, blockEnd int, index int) (*buffer.Buffer, error) {

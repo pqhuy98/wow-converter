@@ -1,9 +1,26 @@
 package stringsort
 
 import (
+	"fmt"
+	"math/rand"
+	"reflect"
 	"sync"
 	"testing"
 )
+
+func TestChunkedSortMatchesCollator(t *testing.T) {
+	rng := rand.New(rand.NewSource(7))
+	input := []string{"a", "A", "á", "ä", "ß", "ss", "中", "", "x_1", "x.1", "é", "e\u0301"}
+	for i := 0; i < 12000; i++ {
+		input = append(input, fmt.Sprintf("world/textures/zone_%d/path_%d_ä.blp", rng.Intn(700), i))
+	}
+	want := append([]string(nil), input...)
+	NewEnglishCollator().SortStrings(want)
+	Sort(input)
+	if !reflect.DeepEqual(input, want) {
+		t.Fatal("collation order changed")
+	}
+}
 
 func TestLessMatchesLocaleCompareCaseSensitivity(t *testing.T) {
 	// localeCompare puts lowercase before uppercase at the same prefix.

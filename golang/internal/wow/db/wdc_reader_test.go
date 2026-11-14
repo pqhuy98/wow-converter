@@ -73,6 +73,14 @@ func TestNormalInlineArrayAfterPackedFieldUsesOffset(t *testing.T) {
 	if !reflect.DeepEqual(row["DoodadID"], []int64{100, 200, 300, 400}) || row["Sound"] != int64(9) {
 		t.Fatalf("inline fields read from stale cursor: %+v", row)
 	}
+	projected := NewWDCReader("InlineFixture.db2", inlineFieldTestSource{})
+	if err := projected.Parse(context.Background(), b.Bytes(), "DoodadID"); err != nil {
+		t.Fatal(err)
+	}
+	got := projected.GetRow(7)
+	if !reflect.DeepEqual(got["DoodadID"], row["DoodadID"]) || got["ID"] != row["ID"] || len(got) != 2 {
+		t.Fatalf("projected fields or ID changed: %+v", got)
+	}
 }
 
 func TestConvertDBDToSchemaTypePreservesFloatArrayLength(t *testing.T) {

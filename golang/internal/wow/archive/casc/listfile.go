@@ -1,6 +1,9 @@
 package casc
 
 import (
+	"bufio"
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,29 +13,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pqhuy98/wow-converter/internal/buffer"
 	"github.com/pqhuy98/wow-converter/internal/stringsort"
-	"github.com/pqhuy98/wow-converter/internal/wow/server"
 	"github.com/pqhuy98/wow-converter/internal/wow/constants"
 	"github.com/pqhuy98/wow-converter/internal/wow/formats"
 	"github.com/pqhuy98/wow-converter/internal/wow/log"
+	"github.com/pqhuy98/wow-converter/internal/wow/server"
 )
 
 var (
-	nameLookup          = map[string]int{}
-	idLookup            = map[int]string{}
-	listfileLoaded      bool
-	preloadedIDLookup   = map[int]string{}
-	preloadedNameLookup = map[string]int{}
-	isPreloaded         bool
-	preloadMu           sync.Mutex
-	preloadPromise      chan preloadResult
+	nameLookup        = map[string]int{}
+	idLookup          = map[int]string{}
+	listfileLoaded    bool
+	preloadedIDLookup = map[int]string{}
+	isPreloaded       bool
+	preloadMu         sync.Mutex
 )
-
-type preloadResult struct {
-	ok  bool
-	err error
-}
 
 type unknownIDProvider func() ([]int, error)
 
@@ -45,7 +40,7 @@ func replaceExtension(file, ext string) string {
 	return filepath.Join(filepath.Dir(file), strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))+ext)
 }
 
-func doPreload() (bool, error) {
+func doPreload(rootEntries map[int]RootEntry) (bool, error) {
 	log.Write("Preloading master listfile...")
 	url := server.GetConfig().ListfileURL
 	if url == "" {
@@ -55,80 +50,38 @@ func doPreload() (bool, error) {
 		return false, err
 	}
 	cacheFile := filepath.Join(constants.Cache.DirListfile, constants.Cache.ListfileData)
-	preloadedIDLookup = map[int]string{}
-	preloadedNameLookup = map[string]int{}
+	preloadedIDLookup = make(map[int]string, len(rootEntries))
 	isPreloaded = false
 
-	var data *buffer.Buffer
+	file := url
 	if strings.HasPrefix(url, "http") {
-		requireDownload := false
-		var cached *buffer.Buffer
-		lastModified := int64(0)
-		if c, err := buffer.ReadFile(cacheFile); err == nil {
-			cached = c
-			if st, err := os.Stat(cacheFile); err == nil {
-				lastModified = st.ModTime().UnixMilli()
-			}
-		}
-		if lastModified > 0 {
-			ttl := int64(server.GetConfig().ListfileCacheRefresh) * 24 * 60 * 60 * 1000
-			if ttl == 0 || (time.Now().UnixMilli()-lastModified) > ttl {
-				log.Write("Cached listfile is out-of-date (> %d).", ttl)
-				requireDownload = true
-			} else if cached == nil {
-				log.Write("Listfile is missing despite file stats. User tamper?")
-				requireDownload = true
-			} else {
-				log.Write("Listfile is cached locally.")
-			}
-		} else {
-			requireDownload = true
-			log.Write("Listfile is not cached, downloading fresh.")
-		}
+		file = cacheFile
+		cached, statErr := os.Stat(cacheFile)
+		ttl := time.Duration(server.GetConfig().ListfileCacheRefresh) * 24 * time.Hour
+		requireDownload := statErr != nil || ttl == 0 || time.Since(cached.ModTime()) > ttl
 		if requireDownload {
 			fallbackURL := strings.ReplaceAll(server.GetConfig().ListfileFallbackURL, "%s", "")
-			downloaded, err := formats.DownloadFile([]string{url, fallbackURL}, "", -1, -1, false)
+			err := formats.DownloadFileToDisk([]string{url, fallbackURL}, cacheFile)
 			if err != nil {
-				if cached == nil {
+				if statErr != nil {
 					log.Write("Failed to download listfile during preload, no cached version for fallback: %s", err.Error())
 					return false, nil
 				}
 				log.Write("Failed to download listfile during preload, using cached version: %s", err.Error())
-				data = cached
-			} else {
-				data = downloaded
-				_ = os.WriteFile(cacheFile, data.Raw(), 0o644)
 			}
 		} else {
-			data = cached
+			log.Write("Listfile is cached locally.")
 		}
 	} else {
 		log.Write("Preloading user-defined local listfile: %s", url)
-		var err error
-		data, err = buffer.ReadFile(url)
-		if err != nil {
-			return false, err
-		}
 	}
-	lines := data.ReadLines("utf8")
-	log.Write("Processing %d listfile lines...", len(lines))
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		tokens := strings.Split(line, ";")
-		if len(tokens) != 2 {
-			log.Write("Invalid listfile line (token count): %s", line)
-			continue
-		}
-		fileDataID, err := strconv.Atoi(tokens[0])
-		if err != nil {
-			log.Write("Invalid listfile line (non-numerical ID): %s", line)
-			continue
-		}
-		fileName := strings.ToLower(tokens[1])
-		preloadedIDLookup[fileDataID] = fileName
-		preloadedNameLookup[fileName] = fileDataID
+	reader, err := os.Open(file)
+	if err != nil {
+		return false, err
+	}
+	defer reader.Close()
+	if err := parseMasterListfileReader(reader, rootEntries); err != nil {
+		return false, err
 	}
 	if len(preloadedIDLookup) == 0 {
 		log.Write("No entries found in preloaded listfile")
@@ -139,44 +92,55 @@ func doPreload() (bool, error) {
 	return true, nil
 }
 
-// Preload preloads the master listfile.
-func Preload() (bool, error) {
-	preloadMu.Lock()
-	defer preloadMu.Unlock()
-	if preloadPromise != nil {
-		res := <-preloadPromise
-		return res.ok, res.err
+func splitListfileLines(data []byte, atEOF bool) (int, []byte, error) {
+	if end := bytes.IndexAny(data, "\r\n"); end >= 0 {
+		return end + 1, data[:end], nil
 	}
-	if isPreloaded {
-		return true, nil
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
 	}
-	ch := make(chan preloadResult, 1)
-	preloadPromise = ch
-	go func() {
-		ok, err := doPreload()
-		ch <- preloadResult{ok: ok, err: err}
-	}()
-	res := <-ch
-	preloadPromise = nil
-	return res.ok, res.err
+	return 0, nil, nil
 }
 
-// PrepareListfile ensures listfile is preloaded.
-func PrepareListfile() (bool, error) {
+func parseMasterListfileReader(reader io.Reader, rootEntries map[int]RootEntry) error {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	scanner.Split(splitListfileLines)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		id, name, found := bytes.Cut(line, []byte(";"))
+		if !found || bytes.ContainsRune(name, ';') {
+			log.Write("Invalid listfile line (token count): %s", line)
+			continue
+		}
+		fileDataID, err := strconv.Atoi(string(id))
+		if err != nil {
+			log.Write("Invalid listfile line (non-numerical ID): %s", line)
+			continue
+		}
+		if rootEntries != nil {
+			if _, ok := rootEntries[fileDataID]; !ok {
+				continue
+			}
+		}
+		fileName := strings.ToLower(string(name))
+		preloadedIDLookup[fileDataID] = fileName
+	}
+	return scanner.Err()
+}
+
+// PrepareListfile reads only names belonging to the selected build. Loading it
+// after the root avoids holding a master map throughout encoding/root decoding.
+func PrepareListfile(rootEntries map[int]RootEntry) (bool, error) {
+	preloadMu.Lock()
+	defer preloadMu.Unlock()
 	if isPreloaded {
 		return true, nil
 	}
-	preloadMu.Lock()
-	if preloadPromise != nil {
-		ch := preloadPromise
-		preloadMu.Unlock()
-		log.Write("Waiting for listfile preload to complete...")
-		res := <-ch
-		return res.ok, res.err
-	}
-	preloadMu.Unlock()
-	log.Write("Starting listfile preload...")
-	return Preload()
+	return doPreload(rootEntries)
 }
 
 // ApplyPreload applies preloaded listfile data filtered by rootEntries.
@@ -186,26 +150,26 @@ func ApplyPreload(rootEntries map[int]RootEntry) int {
 		return 0
 	}
 	log.Write("Applying preloaded listfile data...")
-	idLookup = map[int]string{}
-	nameLookup = map[string]int{}
-	appliedCount := 0
-	for fileDataID, fileName := range preloadedIDLookup {
-		if _, ok := rootEntries[fileDataID]; ok {
-			idLookup[fileDataID] = fileName
-			nameLookup[fileName] = fileDataID
-			appliedCount++
+	// Transfer ownership rather than copy millions of entries into another map.
+	for fileDataID := range preloadedIDLookup {
+		if _, ok := rootEntries[fileDataID]; !ok {
+			delete(preloadedIDLookup, fileDataID)
 		}
 	}
+	appliedCount := len(preloadedIDLookup)
 	if appliedCount == 0 {
 		log.Write("No preloaded entries matched rootEntries")
 		return 0
 	}
+	idLookup = preloadedIDLookup
+	nameLookup = make(map[string]int, appliedCount)
+	for fileDataID, fileName := range idLookup {
+		nameLookup[fileName] = fileDataID
+	}
 	listfileLoaded = true
 	log.Write("Applied %d preloaded listfile entries", appliedCount)
 	preloadedIDLookup = map[int]string{}
-	preloadedNameLookup = map[string]int{}
 	isPreloaded = false
-	preloadPromise = nil
 	return appliedCount
 }
 
@@ -425,7 +389,7 @@ func GetMemoryStats() ListfileMemoryStats {
 		IDLookup:            len(idLookup),
 		NameLookup:          len(nameLookup),
 		PreloadedIDLookup:   len(preloadedIDLookup),
-		PreloadedNameLookup: len(preloadedNameLookup),
+		PreloadedNameLookup: 0, // No reverse map is needed before build selection.
 		IsPreloaded:         isPreloaded,
 		Loaded:              listfileLoaded,
 	}
@@ -433,11 +397,11 @@ func GetMemoryStats() ListfileMemoryStats {
 
 // IndexMemoryStats reports built browse/map tile indexes held in RAM.
 type IndexMemoryStats struct {
-	BrowseBuilt      bool
-	BrowseModels     int
-	BrowseTextures   int
-	MapTileBuilt     bool
-	MapTileEntries   int
+	BrowseBuilt    bool
+	BrowseModels   int
+	BrowseTextures int
+	MapTileBuilt   bool
+	MapTileEntries int
 }
 
 // GetIndexMemoryStats returns browse and map-tile index sizes.
@@ -476,11 +440,9 @@ func AddEntry(fileDataID int, fileName string) {
 func ResetForCascUnload() {
 	listfileLoaded = false
 	isPreloaded = false
-	preloadPromise = nil
 	idLookup = map[int]string{}
 	nameLookup = map[string]int{}
 	preloadedIDLookup = map[int]string{}
-	preloadedNameLookup = map[string]int{}
 	resetFileIndexes()
 }
 

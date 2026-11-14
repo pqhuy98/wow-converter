@@ -1,6 +1,8 @@
 package casc
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +16,9 @@ import (
 )
 
 type localIndexEntry struct {
-	index  int
-	offset int
-	size   int
+	offset uint32
+	size   uint32
+	index  uint16
 }
 
 // CASCLocal is a local installation CASC source.
@@ -25,7 +27,7 @@ type CASCLocal struct {
 	Dir          string
 	DataDir      string
 	StorageDir   string
-	LocalIndexes map[string]localIndexEntry
+	LocalIndexes map[[9]byte]localIndexEntry
 	Remote       *CASCRemote
 }
 
@@ -38,7 +40,7 @@ func NewCASCLocal(dir string) *CASCLocal {
 		Dir:          dir,
 		DataDir:      dataDir,
 		StorageDir:   filepath.Join(dataDir, "data"),
-		LocalIndexes: map[string]localIndexEntry{},
+		LocalIndexes: map[[9]byte]localIndexEntry{},
 	}
 }
 
@@ -108,7 +110,7 @@ func (c *CASCLocal) GetProductList() []string {
 // Load loads the CASC interface with the given build.
 func (c *CASCLocal) Load(buildIndex int) error {
 	c.ResetForLoad()
-	c.LocalIndexes = map[string]localIndexEntry{}
+	c.LocalIndexes = map[[9]byte]localIndexEntry{}
 	c.CurrentBuild = c.BuildsList[buildIndex]
 	log.Write("Loading local CASC build: %v", c.CurrentBuild)
 	c.CacheStore = NewBuildCache(c.CurrentBuild["BuildKey"])
@@ -235,18 +237,22 @@ func (c *CASCLocal) ParseIndex(file string) error {
 	dataLength := int(index.ReadInt32LE().(int64))
 	index.Move(4)
 	nBlocks := dataLength / 18
+	start := index.Offset()
+	if dataLength < 0 || dataLength > index.ByteLength()-start {
+		return fmt.Errorf("invalid local index data length: %d", dataLength)
+	}
 	for i := 0; i < nBlocks; i++ {
-		key := index.ReadHexString(9)
+		record := index.Raw()[start+i*18 : start+(i+1)*18]
+		var key [9]byte
+		copy(key[:], record[:9])
 		if _, exists := c.LocalIndexes[key]; exists {
-			index.Move(1 + 4 + 4)
 			continue
 		}
-		idxHigh := int(index.ReadUInt8().(int64))
-		idxLow := int(index.ReadInt32BE().(int64))
+		idxLow := binary.BigEndian.Uint32(record[10:14])
 		c.LocalIndexes[key] = localIndexEntry{
-			index:  (idxHigh << 2) | ((idxLow & 0xC0000000) >> 30),
+			index:  uint16(record[9])<<2 | uint16(idxLow>>30),
 			offset: idxLow & 0x3FFFFFFF,
-			size:   int(index.ReadInt32LE().(int64)),
+			size:   binary.LittleEndian.Uint32(record[14:18]),
 		}
 	}
 	return nil
@@ -347,7 +353,7 @@ func (c *CASCLocal) GetDataFileWithRemoteFallback(key string, forceFallback bool
 		}
 	}
 	remote := c.Remote
-	archive, ok := remote.Archives[key]
+	archive, ok := remote.lookupArchive(key)
 	var data *buffer.Buffer
 	if ok {
 		log.Write("Local data file %s has archive, attempt partial download...", key)
@@ -365,11 +371,21 @@ func (c *CASCLocal) GetDataFileWithRemoteFallback(key string, forceFallback bool
 
 // GetDataFile obtains a data file from local archives.
 func (c *CASCLocal) GetDataFile(key string) (*buffer.Buffer, error) {
-	entry, ok := c.LocalIndexes[key[:18]]
+	var prefix [9]byte
+	if len(key) < 18 {
+		return nil, fmt.Errorf("invalid local data key: %s", key)
+	}
+	if _, err := hex.Decode(prefix[:], []byte(key[:18])); err != nil {
+		return nil, err
+	}
+	entry, ok := c.LocalIndexes[prefix]
 	if !ok {
 		return nil, fmt.Errorf("requested file does not exist in local data: %s", key)
 	}
-	data, err := formats.ReadFile(c.FormatDataPath(entry.index), entry.offset+0x1E, entry.size-0x1E)
+	if entry.size < 0x1E {
+		return nil, fmt.Errorf("invalid local data size: %d", entry.size)
+	}
+	data, err := formats.ReadFile(c.FormatDataPath(int(entry.index)), int(entry.offset)+0x1E, int(entry.size)-0x1E)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 	"sync"
 
 	"github.com/pqhuy98/wow-converter/internal/ansi"
@@ -46,6 +47,9 @@ func (a *startupAnnouncer) maybeAnnounceLocked() {
 		return
 	}
 	a.announced = true
+	// Startup sorting and index construction leave large temporary allocations.
+	// Return them now, rather than waiting for the first character export's GC.
+	debug.FreeOSMemory()
 	clearTerminal()
 	url := fmt.Sprintf("http://127.0.0.1:%d", a.port)
 	log.Printf("%s indexed %s models and %s textures",

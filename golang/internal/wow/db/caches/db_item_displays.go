@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	itemDisplays   = make(map[uint32][]ModelDisplay)
-	itemOnce       sync.Once
-	itemErr        error
+	itemDisplays = make(map[uint32][]ModelDisplay)
+	itemOnce     sync.Once
+	itemErr      error
 )
 
 // InitializeItemDisplays loads ItemDisplayInfo.db2.
@@ -31,7 +31,7 @@ func InitializeItemDisplays(ctx context.Context) error {
 
 		log.Write("Loading item textures...")
 		reader := db.NewWDCReader("DBFilesClient/ItemDisplayInfo.db2", nil)
-		if err := reader.Parse(ctx, nil); err != nil {
+		if err := reader.Parse(ctx, nil, "ModelResourcesID", "ModelMaterialResourcesID"); err != nil {
 			itemErr = err
 			return
 		}

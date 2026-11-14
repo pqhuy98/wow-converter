@@ -23,8 +23,9 @@ type archiveEntry struct {
 // CASCRemote is a remote CDN CASC source.
 type CASCRemote struct {
 	*BaseCASC
-	Archives     map[string]archiveEntry
-	archivesMu   sync.Mutex
+	archives     map[Key16]archiveLocation
+	archiveKeys  []string
+	archivesMu   sync.RWMutex
 	Region       string
 	Host         string
 	ServerConfig VersionConfigEntry
@@ -37,7 +38,7 @@ type CASCRemote struct {
 func NewCASCRemote(region string) *CASCRemote {
 	return &CASCRemote{
 		BaseCASC:   NewBaseCASC(true),
-		Archives:   map[string]archiveEntry{},
+		archives:   map[Key16]archiveLocation{},
 		Region:     region,
 		cdnRetryAt: map[string]time.Time{},
 	}
@@ -147,7 +148,7 @@ func (c *CASCRemote) GetFile(fileDataID int, partialDecrypt, suppressLog, _, _ b
 	encodingKeyHex := CascKeyToHex(encodingKey)
 	data, _ := c.CacheStore.GetFile(encodingKeyHex, constants.Cache.DirData)
 	if data == nil {
-		archive, ok := c.Archives[encodingKeyHex]
+		archive, ok := c.lookupArchiveKey(key16FromCascKey(encodingKey, 16))
 		if ok {
 			data, err = c.GetDataFilePartial(c.FormatCDNKey(archive.Key), archive.Offset, archive.Size)
 			if !suppressLog {
@@ -309,6 +310,10 @@ func (c *CASCRemote) LoadRoot() error {
 func (c *CASCRemote) LoadArchives() error {
 	archiveKeys := strings.Fields(c.CDNConfigData["archives"])
 	archiveCount := len(archiveKeys)
+	c.archivesMu.Lock()
+	c.archiveKeys = archiveKeys
+	c.archives = make(map[Key16]archiveLocation)
+	c.archivesMu.Unlock()
 	log.TimeLog()
 	if c.ProgressTracker != nil {
 		if err := c.ProgressTracker.Step("Loading archives"); err != nil {
@@ -325,7 +330,7 @@ func (c *CASCRemote) LoadArchives() error {
 		n, _ := strconv.Atoi(e)
 		archiveTotalSize += n
 	}
-	log.TimeEnd("Loaded %d archives (%d entries, %s)", archiveCount, len(c.Archives), formats.Filesize(archiveTotalSize))
+	log.TimeEnd("Loaded %d archives (%d entries, %s)", archiveCount, len(c.archives), formats.Filesize(archiveTotalSize))
 	return nil
 }
 
@@ -363,29 +368,21 @@ func (c *CASCRemote) ParseArchiveIndex(key string) error {
 		}
 		go c.CacheStore.StoreFile(fileName, data, constants.Cache.DirIndexes)
 	}
-	data.Seek(-12)
-	count := int(data.ReadInt32LE().(int64))
-	if count*24 > data.ByteLength() {
-		return fmt.Errorf("unable to parse archive, unexpected size: %d", data.ByteLength())
-	}
-	data.Seek(0)
-	entries := make(map[string]archiveEntry, count)
-	for i := 0; i < count; i++ {
-		hash := data.ReadHexString(16)
-		if hash == emptyHash {
-			hash = data.ReadHexString(16)
-		}
-		entries[hash] = archiveEntry{
-			Key:    key,
-			Size:   int(data.ReadInt32BE().(int64)),
-			Offset: int(data.ReadInt32BE().(int64)),
-		}
+	entries, err := decodeArchiveIndex(data.Raw())
+	if err != nil {
+		return err
 	}
 	c.archivesMu.Lock()
-	for hash, entry := range entries {
-		c.Archives[hash] = entry
+	defer c.archivesMu.Unlock()
+	archiveID := c.archiveID(key)
+	for _, entry := range entries {
+		old, exists := c.archives[entry.key]
+		// Duplicate CDN objects may occur in multiple archives. Select by config order,
+		// not download completion order.
+		if !exists || archiveID < old.archiveID {
+			c.archives[entry.key] = archiveLocation{archiveID: archiveID, size: entry.size, offset: entry.offset}
+		}
 	}
-	c.archivesMu.Unlock()
 	return nil
 }
 

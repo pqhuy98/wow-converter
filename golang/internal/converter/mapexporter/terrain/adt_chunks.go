@@ -3,8 +3,10 @@ package terrain
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
 	"github.com/pqhuy98/wow-converter/internal/formats/mdl"
@@ -25,7 +27,10 @@ type adtChunk struct {
 func (w *Wc3Converter) PrepareAdtChunks(ctx context.Context, manager *common.WowObjectManager, assetPrefix string) error {
 	w.adtChunks = map[*common.WowObject][]adtChunk{}
 	// Smooth the original full tiles before cloning their normals into parts.
+	started := time.Now()
+	log.Printf("Terrain preparation: smoothing ADT tile borders")
 	manager.AssetManager.SmoothAdtTileBorders()
+	log.Printf("Terrain preparation: ADT tile borders smoothed in %s", time.Since(started).Round(time.Millisecond))
 	for _, root := range manager.Roots {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -41,12 +46,15 @@ func (w *Wc3Converter) PrepareAdtChunks(ctx context.Context, manager *common.Wow
 		if visual == nil {
 			continue
 		}
+		started = time.Now()
+		log.Printf("Terrain preparation: splitting %s into %dx%d chunks", visual.RelativePath, adtChunksPerSide, adtChunksPerSide)
 		chunks := splitAdtModel(root.Model, visual, adtChunksPerSide)
 		w.adtChunks[root] = chunks
 		for _, chunk := range chunks {
 			key := strings.TrimPrefix(chunk.model.RelativePath, strings.TrimRight(assetPrefix, "/\\")+"/")
 			manager.AssetManager.Models()[key] = chunk.model
 		}
+		log.Printf("Terrain preparation: %s split into %d chunks in %s", visual.RelativePath, len(chunks), time.Since(started).Round(time.Millisecond))
 	}
 	return nil
 }

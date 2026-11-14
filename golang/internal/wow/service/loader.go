@@ -107,9 +107,6 @@ func (l *Loader) finalizeLoad(casc archivecasc.CASC, buildIndex int) (apicasc.So
 	if err := archivecasc.LoadTactKeys(); err != nil {
 		return nil, err
 	}
-	if _, err := archivecasc.Preload(); err != nil {
-		return nil, err
-	}
 	if err := casc.Load(buildIndex); err != nil {
 		return nil, err
 	}

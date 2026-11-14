@@ -32,18 +32,10 @@ func InitializeCreatureData(ctx context.Context) error {
 		}
 		log.Write("Loading creature textures...")
 
-		displayInfo := db.NewWDCReader("DBFilesClient/CreatureDisplayInfo.db2", nil)
-		if err := displayInfo.Parse(ctx, nil); err != nil {
-			creatureErr = err
-			return
-		}
-		modelData := db.NewWDCReader("DBFilesClient/CreatureModelData.db2", nil)
-		if err := modelData.Parse(ctx, nil); err != nil {
-			creatureErr = err
-			return
-		}
+		// Reduce each table to the fields needed by the cache before loading the
+		// next one, instead of retaining three complete DB2 row maps together.
 		geosetData := db.NewWDCReader("DBFilesClient/CreatureDisplayInfoGeosetData.db2", nil)
-		if err := geosetData.Parse(ctx, nil); err != nil {
+		if err := geosetData.Parse(ctx, nil, "CreatureDisplayInfoID", "GeosetIndex", "GeosetValue"); err != nil {
 			creatureErr = err
 			return
 		}
@@ -55,6 +47,11 @@ func InitializeCreatureData(ctx context.Context) error {
 			creatureGeosetMap[displayInfoID] = append(creatureGeosetMap[displayInfoID], geoset)
 		}
 
+		displayInfo := db.NewWDCReader("DBFilesClient/CreatureDisplayInfo.db2", nil)
+		if err := displayInfo.Parse(ctx, nil, "ModelID", "TextureVariationFileDataID"); err != nil {
+			creatureErr = err
+			return
+		}
 		creatureDisplayInfoMap := make(map[uint32]ModelDisplay)
 		modelIDToDisplayInfoMap := make(map[uint32][]uint32)
 
@@ -67,6 +64,11 @@ func InitializeCreatureData(ctx context.Context) error {
 			modelIDToDisplayInfoMap[modelID] = append(modelIDToDisplayInfoMap[modelID], displayID)
 		}
 
+		modelData := db.NewWDCReader("DBFilesClient/CreatureModelData.db2", nil)
+		if err := modelData.Parse(ctx, nil, "FileDataID", "CreatureGeosetDataID"); err != nil {
+			creatureErr = err
+			return
+		}
 		for modelID, modelRow := range modelData.GetAllRows() {
 			displayIDs, ok := modelIDToDisplayInfoMap[modelID]
 			if !ok {

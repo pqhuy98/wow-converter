@@ -23,7 +23,7 @@ func InitializeModelFileData(ctx context.Context) error {
 		}
 		log.Write("Loading model mapping...")
 		reader := db.NewWDCReader("DBFilesClient/ModelFileData.db2", nil)
-		if err := reader.Parse(ctx, nil); err != nil {
+		if err := reader.Parse(ctx, nil, "ModelResourcesID"); err != nil {
 			modelFileDataErr = err
 			return
 		}

@@ -7,10 +7,12 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pqhuy98/wow-converter/internal/config"
 	"github.com/pqhuy98/wow-converter/internal/converter/common"
@@ -34,6 +36,10 @@ func (w *Wc3Converter) FinishTilesetModels(ctx context.Context, m *common.WowObj
 		if model == nil {
 			continue
 		}
+		tileStarted := time.Now()
+		lastProgress := tileStarted
+		patchCount := 0
+		log.Printf("Terrain preparation: baking seams for %s (%d geosets)", model.RelativePath, len(model.MDL.Geosets))
 		toGrid := func(p imath.Vector3) imath.Vector3 {
 			p = imath.V3Sum(root.Position, imath.V3Rotate(imath.V3Scale(p, root.ScaleFactor), root.Rotation))
 			return imath.Vector3{(p[0] - ext.Min[0]) / size[0] * float64(width), (p[1] - ext.Min[1]) / size[1] * float64(height), p[2]}
@@ -141,6 +147,11 @@ func (w *Wc3Converter) FinishTilesetModels(ctx context.Context, m *common.WowObj
 					if err := bakeBoundaryPatch(ctx, patch, x, y, img, origin, du, dv, w.modelCells, fitted); err != nil {
 						return err
 					}
+					patchCount++
+					if now := time.Now(); now.Sub(lastProgress) >= 5*time.Second {
+						log.Printf("Terrain preparation: %s baked %d seam patches into %d atlases, elapsed %s", model.RelativePath, patchCount, len(atlases), now.Sub(tileStarted).Round(time.Millisecond))
+						lastProgress = now
+					}
 				}
 				out := patched[patch.atlas]
 				if out == nil {
@@ -186,6 +197,9 @@ func (w *Wc3Converter) FinishTilesetModels(ctx context.Context, m *common.WowObj
 			}
 			g.Vertices = vertices
 		}
+		if len(atlases) > 0 {
+			log.Printf("Terrain preparation: encoding %d seam atlases for %s", len(atlases), model.RelativePath)
+		}
 		for _, atlas := range atlases {
 			var encoded bytes.Buffer
 			if err := png.Encode(&encoded, atlas.image); err != nil {
@@ -203,6 +217,7 @@ func (w *Wc3Converter) FinishTilesetModels(ctx context.Context, m *common.WowObj
 		}
 		model.MDL.Geosets = nonempty
 		model.MDL.Modify.RemoveUnusedMaterialsTextures()
+		log.Printf("Terrain preparation: seams finished for %s in %s (%d patches, %d atlases)", model.RelativePath, time.Since(tileStarted).Round(time.Millisecond), patchCount, len(atlases))
 	}
 	return nil
 }
