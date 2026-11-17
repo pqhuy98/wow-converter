@@ -18,7 +18,10 @@ import (
 )
 
 func registerWowSource(api Router, root Router, d *Deps) {
-	root.Handle("/wow-source/*", http.StripPrefix("/wow-source/", wowsource.Handler()))
+	root.Get("/wow-source", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/wow-source/index.html?"+req.URL.RawQuery, http.StatusTemporaryRedirect)
+	})
+	root.Handle("/wow-source/*", http.StripPrefix("/wow-source", wowsource.Handler()))
 	resolve := func(req *http.Request) (int, error) {
 		if id, err := strconv.Atoi(req.URL.Query().Get("id")); err == nil && id > 0 {
 			return id, nil

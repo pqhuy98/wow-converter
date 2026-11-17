@@ -210,6 +210,9 @@ func ConvertM2ToMdl(ctx context.Context, cfg config.Config, src FileSource, opts
 			return ConvertResult{}, err
 		}
 	}
+	if err := orientM2ParticleHeads(ctx, cfg, &result, loader, m2BakeTextureLoader(ctx, cfg, src, loader, resolved)); err != nil {
+		return ConvertResult{}, err
+	}
 	return result, nil
 }
 

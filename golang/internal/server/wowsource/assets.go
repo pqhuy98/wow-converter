@@ -12,5 +12,12 @@ var assets embed.FS
 
 func Handler() http.Handler {
 	sub, _ := fs.Sub(assets, "assets")
-	return http.FileServer(http.FS(sub))
+	files := http.FileServer(http.FS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Keep the entry URL: Next dev removes the directory redirect's slash.
+		if r.URL.Path == "/index.html" {
+			r.URL.Path = "/"
+		}
+		files.ServeHTTP(w, r)
+	})
 }
