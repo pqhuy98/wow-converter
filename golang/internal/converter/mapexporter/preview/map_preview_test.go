@@ -112,6 +112,92 @@ func TestPreviewTerrainBoundsExcludeHoleOnlyVertices(t *testing.T) {
 	}
 }
 
+type previewHoledTileClient struct {
+	client.Client
+	files map[int][]byte
+}
+
+func (c *previewHoledTileClient) GetFileByName(_ context.Context, name string) (casc.ListfileEntry, error) {
+	switch name {
+	case "world/maps/icc/icc.wdt":
+		return casc.ListfileEntry{FileDataID: 1}, nil
+	case "world/maps/icc/icc_35_30.adt":
+		return casc.ListfileEntry{FileDataID: 2}, nil
+	default:
+		return casc.ListfileEntry{}, errors.New("file not found")
+	}
+}
+
+func (c *previewHoledTileClient) GetFileByID(_ context.Context, id int) (casc.ListfileEntry, error) {
+	return casc.ListfileEntry{FileDataID: id, FileName: "floor.wmo"}, nil
+}
+
+func (c *previewHoledTileClient) DownloadCascFile(_ context.Context, id int) ([]byte, error) {
+	raw, ok := c.files[id]
+	if !ok {
+		return nil, errors.New("file not found")
+	}
+	return raw, nil
+}
+
+func TestPreviewFullyHoledADTUsesWMOTerrainBounds(t *testing.T) {
+	chunk := func(id uint32, data []byte) []byte {
+		raw := binary.LittleEndian.AppendUint32(nil, id)
+		raw = binary.LittleEndian.AppendUint32(raw, uint32(len(data)))
+		return append(raw, data...)
+	}
+	header := make([]byte, 128)
+	binary.LittleEndian.PutUint16(header[60:], 0xffff) // All low-resolution hole bits.
+	vertexChunk := chunk(0x4d435654, make([]byte, 145*4))
+	model := make([]byte, 64)
+	binary.LittleEndian.PutUint32(model, 7) // WMO file ID.
+	tile := append(chunk(0x4d434e4b, append(header, vertexChunk...)), chunk(0x4d4f4446, model)...)
+
+	rootHeader := make([]byte, 64)
+	binary.LittleEndian.PutUint32(rootHeader[4:], 1) // One group.
+	root := append(chunk(0x4d4f4844, rootHeader), chunk(0x47464944, binary.LittleEndian.AppendUint32(nil, 8))...)
+	var vertices []byte
+	for _, v := range []float32{-100, -50, 20, 100, -50, 20, 0, 50, 120} {
+		vertices = binary.LittleEndian.AppendUint32(vertices, math.Float32bits(v))
+	}
+	batch := make([]byte, 24)
+	binary.LittleEndian.PutUint16(batch[16:], 3) // Three indices.
+	group := append(chunk(0x4d4f5654, vertices), chunk(0x4d4f5649, []byte{0, 0, 1, 0, 2, 0})...)
+	group = append(group, chunk(0x4d4f4241, batch)...)
+
+	ctx := context.Background()
+	c := &previewHoledTileClient{files: map[int][]byte{1: {}, 2: tile, 7: root, 8: group}}
+	opts := PreviewOptions{
+		Client: c, CacheDir: t.TempDir(),
+		MapDir: "icc", Tiles: []settings.TileCoord{{X: 35, Y: 30}}, SuggestOnly: true,
+	}
+	suggest, err := BuildMapPreview(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	position := imath.Vector3{-51200. / 3, 51200. / 3, 0}
+	wantMin := imath.V3Sum(position, imath.Vector3{-50, -100, 20})
+	wantMax := imath.V3Sum(position, imath.Vector3{50, 100, 120})
+	if len(suggest.Instances) != 0 || suggest.Min != wantMin || suggest.Max != wantMax {
+		t.Fatalf("want WMO bounds without a phantom terrain mesh, got %+v", suggest)
+	}
+	var progress []PreviewProgress
+	opts.Progress = func(p PreviewProgress) { progress = append(progress, p) }
+	if _, err := BuildMapPreview(ctx, opts); err != nil || len(progress) != 2 || progress[1].Message != "Preview ready" {
+		t.Fatalf("warm WMO-only suggestion should reuse its scene, err=%v, progress=%+v", err, progress)
+	}
+	opts.SuggestOnly = false
+	opts.Progress = nil
+	preview, err := BuildMapPreview(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Instances) != 1 || preview.Instances[0].Kind != "wmo" || !preview.Instances[0].Root ||
+		preview.Min != suggest.Min || preview.Max != suggest.Max {
+		t.Fatalf("preview should contain only the WMO root and match suggestion bounds, got %+v", preview)
+	}
+}
+
 func TestSuggestTerrainClamp(t *testing.T) {
 	min, max := imath.Vector3{}, imath.Vector3{1000, 1000, 15360}
 	heights := []float64{.05 * 15360, .6 * 15360, .62 * 15360, .65 * 15360}

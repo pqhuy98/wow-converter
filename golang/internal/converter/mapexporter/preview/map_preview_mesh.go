@@ -171,6 +171,82 @@ func (b *previewBuilder) wmoRoot(id int) (*wmo.Loader, error) {
 	return root, nil
 }
 
+func (b *previewBuilder) wmoTerrainBounds(id int, rotation imath.Vector3) (*[2]imath.Vector3, error) {
+	var bounds *[2]imath.Vector3
+	path := fmt.Sprintf("%s/wmo-terrain-bounds-%s.json", b.prefix, previewHash(fmt.Sprintf("%d:%v", id, rotation)))
+	err := b.cached(path, &bounds, func() error {
+		bounds = nil
+		root, err := b.wmoRoot(id)
+		if err != nil {
+			return err
+		}
+		// Match export's root bounds from rendered vertices before LOD or textures.
+		// Export measures the unscaled model; placement scaling is applied later.
+		matrix := previewWMOTransform(imath.Vector3{}, rotation, 1)
+		for i := 0; i < int(root.GroupCount); i++ {
+			group, err := b.wmoGroup(root, i, false)
+			if err != nil {
+				return err
+			}
+			for _, batch := range group.RenderBatches {
+				if batch.NumFaces == 0 {
+					continue
+				}
+				end := int(batch.FirstFace) + int(batch.NumFaces)
+				if end > len(group.Indices) {
+					return fmt.Errorf("WMO render face outside buffer")
+				}
+				for _, index := range group.Indices[int(batch.FirstFace):end] {
+					point, err := previewWMOVertex(group, int(index))
+					if err != nil {
+						return err
+					}
+					point = previewApply(matrix, point)
+					if bounds == nil {
+						bounds = &[2]imath.Vector3{point, point}
+					}
+					bounds[0] = imath.V3Min(bounds[0], point)
+					bounds[1] = imath.V3Max(bounds[1], point)
+				}
+			}
+		}
+		return nil
+	})
+	return bounds, err
+}
+
+func previewWMOTransform(position, rotation imath.Vector3, scale float64) [16]float64 {
+	matrix := previewTransform(position, rotation, scale)
+	// ADT placement axes contain a 180-degree root rotation at map angle 0.
+	for _, i := range []int{0, 1, 4, 5, 8, 9} {
+		matrix[i] = -matrix[i]
+	}
+	return matrix
+}
+
+func (b *previewBuilder) wmoGroup(root *wmo.Loader, index int, includeLiquid bool) (*wmo.Loader, error) {
+	var id uint32
+	if index < len(root.GroupIDs) {
+		id = root.GroupIDs[index]
+	}
+	name := fmt.Sprintf("%s_%03d.wmo", strings.TrimSuffix(root.FileName, ".wmo"), index)
+	raw, err := b.file(id, name)
+	if err != nil {
+		return nil, err
+	}
+	group := wmo.NewLoader(buffer.From(raw), int(id), name, true)
+	group.IncludeLiquid = includeLiquid
+	return group, group.Load()
+}
+
+func previewWMOVertex(group *wmo.Loader, index int) (imath.Vector3, error) {
+	i := index * 3
+	if i+2 >= len(group.Vertices) {
+		return imath.Vector3{}, fmt.Errorf("WMO vertex index outside buffer")
+	}
+	return imath.Vector3{float64(group.Vertices[i]), -float64(group.Vertices[i+2]), float64(group.Vertices[i+1])}, nil
+}
+
 func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 	stem := fmt.Sprintf("%s/wmo-%d", b.prefix, id)
 	var result previewWMO
@@ -194,18 +270,8 @@ func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 			if err := b.progress("Preparing WMO groups", b.wmoGroupsCompleted+groupIndex, b.wmoGroupsTotal); err != nil {
 				return err
 			}
-			groupID := uint32(0)
-			if groupIndex < len(root.GroupIDs) {
-				groupID = root.GroupIDs[groupIndex]
-			}
-			name := fmt.Sprintf("%s_%03d.wmo", strings.TrimSuffix(root.FileName, ".wmo"), groupIndex)
-			raw, err := b.file(groupID, name)
+			g, err := b.wmoGroup(root, groupIndex, true)
 			if err != nil {
-				return err
-			}
-			g := wmo.NewLoader(buffer.From(raw), int(groupID), name, true)
-			g.IncludeLiquid = true
-			if err = g.Load(); err != nil {
 				return err
 			}
 			surfaces, err := g.LiquidSurfaces(root.Flags)
@@ -215,13 +281,6 @@ func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 			// WMO liquids already use native local XYZ, like our display mesh;
 			// the scene instance applies the placement transform exactly once.
 			liquids = append(liquids, surfaces...)
-			point := func(index int) (imath.Vector3, error) {
-				i := index * 3
-				if i+2 >= len(g.Vertices) {
-					return imath.Vector3{}, fmt.Errorf("WMO vertex index outside buffer")
-				}
-				return imath.Vector3{float64(g.Vertices[i]), -float64(g.Vertices[i+2]), float64(g.Vertices[i+1])}, nil
-			}
 			// Full source collision floors are cheap metadata; display LOD never
 			// determines whether a marker is standing on a WMO road/bridge.
 			for face, info := range g.MaterialInfo {
@@ -233,7 +292,7 @@ func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 				}
 				var v [3]imath.Vector3
 				for k := range v {
-					p, err := point(int(g.Indices[face*3+k]))
+					p, err := previewWMOVertex(g, int(g.Indices[face*3+k]))
 					if err != nil {
 						return err
 					}
@@ -243,7 +302,7 @@ func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 			}
 			lo, hi := imath.V3All(math.Inf(1)), imath.V3All(math.Inf(-1))
 			for i := 0; i < len(g.Vertices)/3; i++ {
-				p, err := point(i)
+				p, err := previewWMOVertex(g, i)
 				if err != nil {
 					return err
 				}
@@ -267,7 +326,7 @@ func (b *previewBuilder) wmo(id int) (previewWMO, error) {
 					}
 					var p [3]imath.Vector3
 					for k := range p {
-						pt, err := point(int(g.Indices[i+k]))
+						pt, err := previewWMOVertex(g, int(g.Indices[i+k]))
 						if err != nil {
 							return err
 						}

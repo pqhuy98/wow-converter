@@ -8,7 +8,7 @@ Opening starts in compact mode. Expand fills the viewport without resetting the 
 
 Terrain clamps persist in the separate `wow-converter.map-clamps` localStorage key, shared across WoW products and builds. It retains the 100 most recently used areas, keyed by map ID and a sorted, deduplicated cell set. Opening a saved area restores its range and refreshes its LRU position. Slider edits, successful suggestions and export update the entry; least recently used areas are evicted when full. Invalid entries are ignored, and unavailable browser storage leaves in-memory editing functional.
 
-The clamp slider enforces a selection-dependent minimum gap, rounded up to its 0.1 percentage-point step, to keep both terrain dimensions within 480 tiles. Generate waits for bounds; impossible selections require fewer cells. Bounds exclude vertices used only by terrain holes. Export validates dimensions again before allocating the height grid or deleting Fresh export output.
+The clamp slider enforces a selection-dependent minimum gap, rounded up to its 0.1 percentage-point step, to keep both terrain dimensions within 480 tiles. Generate waits for bounds; impossible selections require fewer cells. Bounds exclude vertices used only by terrain holes and include WMOs promoted to terrain roots by empty or flat ADTs. Export validates dimensions again before allocating the height grid or deleting Fresh export output.
 
 NPC-supported selections without saved clamps automatically apply Suggest only on their first opening, once availability is known. Restored clamps take priority over automatic suggestions and are still repaired to the current selection's minimum safe gap after preview bounds load. Manual edits cancel pending suggestions and take precedence; the Suggest button remains available to replace the remembered range. The dialog sends `autoClampPercent: false` to preserve the chosen range. NPC availability checks run alongside geometry loading. NPC-dependent controls are unavailable when the selection has no supported NPC data.
 
@@ -20,7 +20,7 @@ The faction panel appears only with predicted unit placements. It sends faction-
 
 `POST /api/maps/{map}/preview` caches ADT meshes sampled every two corner vertices, clustered WMO meshes, 512-pixel texture mipmaps, binary floor samples, masked liquids and scene manifests under `exported-assets-browse/_map-preview-v5/<build-hash>/`. Per-asset caches survive cell/map changes and normal server startup. Settings update the renderer without full model conversion, texture baking or NPC asset export. Missing/truncated assets rebuild; explicit browse-cache cleanup removes preview caches too. Scene metadata includes NPC database/name revisions while retaining reusable geometry.
 
-`POST /api/maps/{map}/suggest-clamp` uses a separate ADT/NPC metadata manifest, skips WMO work and calls the same `SuggestTerrainClamp` as production export.
+`POST /api/maps/{map}/suggest-clamp` uses a separate bounds and NPC metadata manifest and calls the same `SuggestTerrainClamp` as production export. It reads cached render bounds for root WMOs without building WMO thumbnails.
 
 `preview?progress=1` streams NDJSON stages/counts followed by the result or error; ordinary requests return JSON. Closing the dialog or changing selection/build aborts the request and preparation, retaining completed per-asset caches. The renderer reports loaded/uploaded counts including cache hits. No detached job or polling is involved.
 
@@ -30,7 +30,7 @@ WMO preparation first counts groups across unique WMO models, then reports **Pre
 
 ## Display and picking
 
-Flattened root ground is dirt-colored; removed root geometry stays at source height as wireframe. Child WMOs retain their geometry/materials. Only ADTs or explicitly marked roots are clamped; the current cell selector exports ADT roots.
+Flattened root ground is dirt-colored; removed root geometry stays at source height as wireframe. Child WMOs retain their geometry and materials. The clamp applies to ADTs and WMOs promoted to roots.
 
 Liquids reuse source surfaces and cached type classification. Blue water follows source depth/masks; orange guides indicate excluded clamp/height ranges. WMO water receives its instance transform once. Export rounds shores to native corners, so this display does not promise identical shoreline coverage.
 

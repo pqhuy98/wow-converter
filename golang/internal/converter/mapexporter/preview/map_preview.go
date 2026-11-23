@@ -87,7 +87,7 @@ type PreviewOptions struct {
 	MapID                      int
 	Tiles                      []settings.TileCoord
 	NPCsSupported              bool
-	SuggestOnly                bool // ADT bounds and NPC elevations; skip WMO work.
+	SuggestOnly                bool // Bounds and NPC elevations only.
 	Progress                   func(PreviewProgress)
 }
 
@@ -110,6 +110,7 @@ type previewPlacement struct {
 	UID                uint32
 	Position, Rotation [3]float32
 	Scale              float64
+	root               bool
 }
 
 type previewTile struct {
@@ -118,6 +119,10 @@ type previewTile struct {
 	Chunks     []previewChunk
 	Placements []previewPlacement
 	Asset      PreviewAsset
+}
+
+func (t previewTile) hasTerrain() bool {
+	return t.Max[0] > t.Min[0]
 }
 
 type previewBuilder struct {
@@ -140,7 +145,7 @@ func BuildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 	settings.SortTileCoords(ordered)
 	options.Tiles = ordered
 	b := previewBuilder{ctx: ctx, options: options, prefix: filepath.ToSlash(filepath.Join(MapPreviewCacheDirectory, previewHash(options.BuildKey)))}
-	key := fmt.Sprintf("terrain-bounds-v3:%s:%v:%t:%t:%s", options.MapDir, ordered, options.NPCsSupported, options.SuggestOnly, azerothcore.CreatureDataRevision())
+	key := fmt.Sprintf("terrain-bounds-v4:%s:%v:%t:%t:%s", options.MapDir, ordered, options.NPCsSupported, options.SuggestOnly, azerothcore.CreatureDataRevision())
 	var result MapPreview
 	if err := b.progress("Checking preview cache", 0, 1); err != nil {
 		return result, err
@@ -173,10 +178,15 @@ func buildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 	result.GroundMinZ = config.DataHeightToGameZ(float64(config.DataHeightMin()))
 	result.WaterHeightRange = [2]float64{config.WaterHeightToGameZ(0), config.WaterHeightToGameZ(0x3fff)}
 	result.LiquidTypes = map[uint16]int{}
+	// Export attaches repeated placements to the first ADT by object path.
 	ordered := append([]settings.TileCoord(nil), options.Tiles...)
-	settings.SortTileCoords(ordered)
+	sort.Slice(ordered, func(i, j int) bool {
+		a, b := ordered[i], ordered[j]
+		return fmt.Sprintf("%d_%d", a.X, a.Y) < fmt.Sprintf("%d_%d", b.X, b.Y)
+	})
 	var tiles []previewTile
 	placements := map[uint32]bool{}
+	var models []previewPlacement
 	assetIndex := map[string]bool{}
 	var floors []previewFloor
 	for tileIndex, tile := range ordered {
@@ -188,35 +198,33 @@ func buildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 			return result, fmt.Errorf("preview tile %d,%d: %w", tile.X, tile.Y, err)
 		}
 		tiles = append(tiles, t)
-		result.Min = imath.V3Min(result.Min, t.Min)
-		result.Max = imath.V3Max(result.Max, t.Max)
-		if t.Asset.ID != "" {
+		if t.hasTerrain() {
+			result.Min = imath.V3Min(result.Min, t.Min)
+			result.Max = imath.V3Max(result.Max, t.Max)
+		}
+		if len(t.Asset.Parts) > 0 {
 			result.Assets = append(result.Assets, t.Asset)
 			result.Instances = append(result.Instances, PreviewInstance{Asset: t.Asset.ID, Kind: "adt", Transform: previewTransform(t.Origin, imath.Vector3{}, 1)})
-		}
-	}
-	if err := b.progress("Preparing terrain", len(ordered), len(ordered)); err != nil {
-		return result, err
-	}
-	var models []previewPlacement
-	for _, t := range tiles {
-		if options.SuggestOnly {
-			break
 		}
 		for _, p := range t.Placements {
 			if placements[p.UID] {
 				continue
 			}
 			placements[p.UID] = true
+			// The exporter promotes children of empty or flat ADTs to roots.
+			p.root = !t.hasTerrain() || t.Max[2] == t.Min[2]
 			models = append(models, p)
 		}
+	}
+	if err := b.progress("Preparing terrain", len(ordered), len(ordered)); err != nil {
+		return result, err
 	}
 	// Count unique source groups before processing so the denominator stays fixed
 	// across WMOs, repeated placements and per-asset cache hits.
 	var wmoIDs []int
 	seenWMO := map[int]bool{}
 	for _, p := range models {
-		if !seenWMO[p.ID] {
+		if !options.SuggestOnly && !seenWMO[p.ID] {
 			seenWMO[p.ID] = true
 			wmoIDs = append(wmoIDs, p.ID)
 		}
@@ -237,6 +245,24 @@ func buildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 		}
 	}
 	for _, p := range models {
+		if options.SuggestOnly && !p.root {
+			continue
+		}
+		position := imath.Vector3{float64(p.Position[0]) - 51200./3, 51200./3 - float64(p.Position[2]), float64(p.Position[1])}
+		rotation := imath.Vector3{imath.Radians(float64(p.Rotation[2])), imath.Radians(float64(p.Rotation[0])), imath.Radians(float64(p.Rotation[1]) + 90)}
+		if p.root {
+			bounds, err := b.wmoTerrainBounds(p.ID, rotation)
+			if err != nil {
+				return result, fmt.Errorf("preview WMO %d terrain bounds: %w", p.ID, err)
+			}
+			if bounds != nil {
+				result.Min = imath.V3Min(result.Min, imath.V3Sum(position, bounds[0]))
+				result.Max = imath.V3Max(result.Max, imath.V3Sum(position, bounds[1]))
+			}
+		}
+		if options.SuggestOnly {
+			continue
+		}
 		a, err := b.wmo(p.ID)
 		if err != nil {
 			return result, fmt.Errorf("preview WMO %d: %w", p.ID, err)
@@ -249,14 +275,8 @@ func buildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 			assetIndex[a.Asset.ID] = true
 			result.Assets = append(result.Assets, a.Asset)
 		}
-		position := imath.Vector3{float64(p.Position[0]) - 51200./3, 51200./3 - float64(p.Position[2]), float64(p.Position[1])}
-		rotation := imath.Vector3{imath.Radians(float64(p.Rotation[2])), imath.Radians(float64(p.Rotation[0])), imath.Radians(float64(p.Rotation[1]) + 90)}
-		matrix := previewTransform(position, rotation, p.Scale)
-		// ADT placement axes contain a 180-degree root rotation at map angle 0.
-		for _, i := range []int{0, 1, 4, 5, 8, 9} {
-			matrix[i] = -matrix[i]
-		}
-		result.Instances = append(result.Instances, PreviewInstance{Asset: a.Asset.ID, Kind: "wmo", Transform: matrix})
+		matrix := previewWMOTransform(position, rotation, p.Scale)
+		result.Instances = append(result.Instances, PreviewInstance{Asset: a.Asset.ID, Kind: "wmo", Root: p.root, Transform: matrix})
 		for _, f := range a.Floors {
 			for i, p := range f.V {
 				f.V[i] = previewApply(matrix, p)
@@ -264,11 +284,10 @@ func buildMapPreview(ctx context.Context, options PreviewOptions) (MapPreview, e
 			floors = append(floors, f)
 		}
 	}
-	if len(tiles) == 0 || math.IsInf(result.Min[0], 1) {
-		return result, fmt.Errorf("no preview terrain found")
+	if math.IsInf(result.Min[0], 1) {
+		return result, fmt.Errorf("selected cells contain no ADT terrain or WMO geometry")
 	}
-	// Resolve types once per build, only when the scene contains liquids. The
-	// suggestion path never needs another client table or WMO processing.
+	// Resolve types once per build, only when the scene contains liquids.
 	if !options.SuggestOnly {
 		if err := b.progress("Preparing water", 0, 1); err != nil {
 			return result, err
@@ -421,7 +440,7 @@ func (b *previewBuilder) assetsPresent(out any) bool {
 	var assets []PreviewAsset
 	switch value := out.(type) {
 	case *MapPreview:
-		if len(value.Instances) == 0 {
+		if len(value.Instances) == 0 && (!b.options.SuggestOnly || value.Max[0] <= value.Min[0] || value.Max[1] <= value.Min[1]) {
 			return false
 		}
 		assets = value.Assets
@@ -579,12 +598,22 @@ func (b *previewBuilder) tile(tile settings.TileCoord) (previewTile, error) {
 		if len(t.Chunks) == 0 {
 			return fmt.Errorf("ADT contains no terrain vertices")
 		}
-		t.Origin = imath.V3Mean(t.Min, t.Max)
-		t.Asset = PreviewAsset{ID: stem, Parts: []PreviewPart{{Mesh: stem + ".bin", Vertices: 0}}}
-		vertices := previewTerrainMesh(t)
-		t.Asset.Parts[0].Vertices = len(vertices) / 8
-		if err := b.write(stem+".bin", previewVertexBytes(vertices)); err != nil {
-			return err
+		t.Asset.ID = stem
+		if math.IsInf(t.Min[0], 1) {
+			// Fully holed ADTs still supply object placements and can have water.
+			t.Min, t.Max = imath.Vector3{}, imath.Vector3{}
+		} else {
+			t.Origin = imath.V3Mean(t.Min, t.Max)
+			vertices := previewTerrainMesh(t)
+			part := PreviewPart{Mesh: stem + ".bin", Vertices: len(vertices) / 8}
+			if err := b.write(part.Mesh, previewVertexBytes(vertices)); err != nil {
+				return err
+			}
+			part.Texture, err = b.texture(entry.MinimapTexture, fmt.Sprintf("world/minimaps/%s/map%02d_%02d.blp", b.options.MapDir, tile.X, tile.Y), stem+".png")
+			if err != nil {
+				b.warnings = append(b.warnings, "Minimap texture unavailable; showing terrain geometry")
+			}
+			t.Asset.Parts = append(t.Asset.Parts, part)
 		}
 		surfaces, err := root.LiquidSurfaces()
 		if err != nil {
@@ -596,12 +625,6 @@ func (b *previewBuilder) tile(tile settings.TileCoord) (previewTile, error) {
 		})
 		if err := b.addLiquids(&t.Asset, surfaces); err != nil {
 			return err
-		}
-		texture, err := b.texture(entry.MinimapTexture, fmt.Sprintf("world/minimaps/%s/map%02d_%02d.blp", b.options.MapDir, tile.X, tile.Y), stem+".png")
-		if err == nil {
-			t.Asset.Parts[0].Texture = texture
-		} else {
-			b.warnings = append(b.warnings, "Minimap texture unavailable; showing terrain geometry")
 		}
 		objRaw := raw
 		if entry.Obj0ADT != 0 {
