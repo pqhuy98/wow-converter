@@ -1,0 +1,8 @@
+**
+!dist/extension.cjs
+!dist/viewer.js
+!dist/viewer.css
+!dist/NOTICES.txt
+!LICENSE
+!README.md
+!package.json

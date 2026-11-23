@@ -1,0 +1,55 @@
+{
+  "name": "wow-converter-model-viewer",
+  "displayName": "WoW Converter Model Viewer",
+  "description": "Preview Warcraft III MDX and MDL models with the wow-converter viewer.",
+  "version": "0.1.0",
+  "publisher": "pqhuy98",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pqhuy98/wow-converter.git",
+    "directory": "vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Visualizations"],
+  "main": "./dist/extension.cjs",
+  "activationEvents": ["onUri"],
+  "capabilities": {
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "wowConverter.modelViewer",
+        "displayName": "WoW Converter Model Viewer",
+        "selector": [
+          { "filenamePattern": "*.[mM][dD][xX]" },
+          { "filenamePattern": "*.[mM][dD][lL]" }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "wowConverter.openModel",
+        "title": "Open in WoW Converter Model Viewer"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "wowConverter.openModel",
+          "when": "resourceExtname =~ /^\\.md[xl]$/i && !explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "check": "bun test src",
+    "package": "bun run build && bunx @vscode/vsce package --no-dependencies"
+  }
+}

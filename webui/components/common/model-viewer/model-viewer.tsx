@@ -52,6 +52,12 @@ interface ModelViewerProps {
   shot?: boolean
   /** Sequence name for shot mode. Defaults to Stand. */
   shotSequence?: string
+  localFiles?: {
+    read(path: string): Promise<ArrayBuffer>
+    copyText(text: string): Promise<void>
+    link: string
+    onError(message: string): void
+  }
 }
 
 // Normalises backslashes to forward slashes for safe URL usage
@@ -70,7 +76,7 @@ const MAX_DISTANCE = 2000000;
 const FAR_CLIP_PLANE = 100_000_000;
 
 export default function ModelViewerUi({
-  modelPath, wowModelPath, wowSkinId, modelRevision, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence, onSequenceChange, animationHeaderAction, animationList, canvasOverlay, playbackSelection,
+  modelPath, wowModelPath, wowSkinId, modelRevision, cameraSessionKey, alwaysFullscreen, source, shot, shotSequence, onSequenceChange, animationHeaderAction, animationList, canvasOverlay, playbackSelection, localFiles,
 }: ModelViewerProps) {
   const serverConfig = useServerConfig();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -321,11 +327,16 @@ export default function ModelViewerUi({
           // ignore
         }
       }
-      // Path solver so the viewer fetches every dependant file via our assets route.
-      // Fetch here so each unique path is counted once, even if React Strict Mode
-      // remounts or the viewer asks for the same texture twice.
+      // Deduplicate asset requests and count each path once per model load.
       const base = baseUrlRef.current;
-      const inflight = new Map<string, Promise<ArrayBuffer>>();
+      const readAsset = localFiles?.read ?? (async (path: string, fresh?: boolean) => {
+        const url = `${base}/${path}`;
+        const response = await fetch(url, fresh ? { cache: 'no-store' } : undefined);
+        if (!response.ok) throw new Error(`${response.status} ${url}`);
+        return response.arrayBuffer();
+      });
+      const modelAsset = normalizePath(modelPath);
+      const inflight = new Map<string, Promise<ArrayBuffer | undefined>>();
       let pendingPathRequests = 0;
       let releasePendingPathRequests: (() => void) | undefined;
       const releasePathRequest = () => {
@@ -335,14 +346,12 @@ export default function ModelViewerUi({
           releasePendingPathRequests = undefined;
         }
       };
-      const pathSolver = (src: unknown): Promise<ArrayBuffer> => {
+      const pathSolver = (src: unknown) => {
         const rel = normalizePath(String(src));
-        const url = `${base}/${rel}`;
-        let pending = inflight.get(url);
+        if (localFiles && !rel) return undefined;
+        let pending = inflight.get(rel);
         if (!pending) {
-          pending = fetch(url, rel === normalizePath(modelPath) ? { cache: 'no-store' } : undefined).then(async (res) => {
-            if (!res.ok) throw new Error(`${res.status} ${url}`);
-            const buf = await res.arrayBuffer();
+          pending = readAsset(rel, rel === modelAsset).then((buf) => {
             if (!cancelled && loadRequestIdRef.current === requestId) {
               const files = loadedFilesRef.current;
               if (!files.has(rel)) {
@@ -354,8 +363,13 @@ export default function ModelViewerUi({
               }
             }
             return buf;
+          }, (error: unknown) => {
+            if (!localFiles || rel === modelAsset) throw error;
+            // The MDX library treats an absent resource as optional but does not catch rejected texture loads.
+            console.warn(`Could not load model dependency: ${rel}`, error);
+            return undefined;
           });
-          inflight.set(url, pending);
+          inflight.set(rel, pending);
         }
         // viewer.load() awaits this solver promise before registering its own
         // promiseMap entry, so hold the viewer's idle gate across that gap.
@@ -367,18 +381,18 @@ export default function ModelViewerUi({
       if (shot) {
         shotExtentsRef.current = null;
         try {
-          const res = await fetch(`${base}/${normalizePath(modelPath)}`);
-          if (res.ok) shotExtentsRef.current = readMdxExtents(await res.arrayBuffer());
+          shotExtentsRef.current = readMdxExtents(await readAsset(modelAsset));
         } catch {
           shotExtentsRef.current = null;
         }
       }
 
       // Load the model (assumed to be in MDX|MDL format)
-      const model = await viewer.load(`${normalizePath(modelPath)}`, pathSolver);
+      const model = await viewer.load(modelAsset, pathSolver);
       if (cancelled || loadRequestIdRef.current !== requestId) return;
       if (!(model instanceof MdxModel)) {
         if (shot) document.documentElement.dataset.viewerError = 'not an mdx model';
+        localFiles?.onError('Could not parse this MDX or MDL model.');
         return;
       }
       modelInstance = model.addInstance();
@@ -682,8 +696,10 @@ export default function ModelViewerUi({
       window.addEventListener('mousemove', onMouseMove!);
       window.addEventListener('mouseup', onMouseUp!);
     })().catch((err: unknown) => {
-      if (!shot || cancelled) return;
-      document.documentElement.dataset.viewerError = err instanceof Error ? err.message : 'load failed';
+      if (cancelled) return;
+      const message = err instanceof Error ? err.message : 'load failed';
+      if (shot) document.documentElement.dataset.viewerError = message;
+      localFiles?.onError(message);
     });
 
     return () => {
@@ -716,7 +732,7 @@ export default function ModelViewerUi({
         setCurrentCamera(null);
       }
     };
-  }, [modelPath, modelRevision, cameraSessionKey, canvasRef.current, viewer, shot, shotSequence]);
+  }, [modelPath, modelRevision, cameraSessionKey, canvasRef.current, viewer, shot, shotSequence, localFiles]);
 
   const [progress, setProgress] = useState(0);
 
@@ -849,7 +865,8 @@ export default function ModelViewerUi({
   const handleCopyLink = async () => {
     const viewerUrl = `${window.location.origin}/viewer?${source === 'browse' ? 'source=browse&' : ''}model=${encodeURIComponent(modelPath || '')}`;
     try {
-      await navigator.clipboard.writeText(viewerUrl);
+      if (localFiles) await localFiles.copyText(localFiles.link);
+      else await navigator.clipboard.writeText(viewerUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -972,7 +989,8 @@ export default function ModelViewerUi({
 
   const handleCopyCutBoxCode = async () => {
     try {
-      await navigator.clipboard.writeText(cutBoxCode);
+      if (localFiles) await localFiles.copyText(cutBoxCode);
+      else await navigator.clipboard.writeText(cutBoxCode);
       setCutBoxCopied(true);
       setTimeout(() => setCutBoxCopied(false), 2000);
     } catch (err) {
@@ -1100,7 +1118,7 @@ export default function ModelViewerUi({
               tooltips={loadedCount === 0 ? 'No model loaded' : 'Download model'} asChild
             />
           </Button>}
-          {serverConfig.isDev && <Button
+          {(serverConfig.isDev || localFiles) && <Button
             variant="secondary"
             size="sm"
             onClick={() => setCutBoxEnabled((v) => !v)}
