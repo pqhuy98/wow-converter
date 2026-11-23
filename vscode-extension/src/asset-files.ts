@@ -5,7 +5,11 @@ const extensions = new Set(['.mdx', '.mdl', '.blp', '.dds', '.tga', '.png', '.jp
 const converterFolders = new Set(['exported-assets', 'exported-assets-browse']);
 const windowsDevice = /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?: *\.|$)/i;
 
-export function createAssetReader(modelFile: string, workspaceFolder?: string) {
+export function createAssetReader(
+  modelFile: string,
+  workspaceFolder?: string,
+  readRevision?: (file: string) => Promise<Uint8Array | undefined>,
+) {
   const modelFolder = dirname(modelFile);
   const modelName = basename(modelFile);
   const ancestors = [modelFolder];
@@ -19,6 +23,11 @@ export function createAssetReader(modelFile: string, workspaceFolder?: string) {
 
   return async (asset: string): Promise<ArrayBuffer> => {
     if (asset === modelName) {
+      if (readRevision) {
+        const bytes = await readRevision(modelFile);
+        if (!bytes) throw new Error('The model is not present in this Git revision.');
+        return toArrayBuffer(bytes);
+      }
       if (!(await stat(modelFile)).isFile()) throw new Error('The model path does not point to a file.');
       return toArrayBuffer(await readFile(modelFile));
     }
@@ -32,10 +41,18 @@ export function createAssetReader(modelFile: string, workspaceFolder?: string) {
       throw new Error('Invalid model asset path.');
     }
 
+    const candidates = folders.map((folder) => join(folder, ...parts));
+    if (readRevision) {
+      for (const candidate of candidates) {
+        const bytes = await readRevision(candidate);
+        if (bytes) return toArrayBuffer(bytes);
+      }
+    }
+
     const physicalScope = await realpath(scope);
-    for (const folder of folders) {
+    for (const candidate of candidates) {
       try {
-        const file = await realpath(join(folder, ...parts));
+        const file = await realpath(candidate);
         if (contains(physicalScope, file) && extensions.has(extname(file).toLowerCase()) && (await stat(file)).isFile()) {
           return toArrayBuffer(await readFile(file));
         }

@@ -1,9 +1,16 @@
 import { randomBytes } from 'node:crypto';
-import { basename } from 'node:path';
+import { basename, isAbsolute } from 'node:path';
 import * as vscode from 'vscode';
 import { createAssetReader } from './asset-files';
 
 const viewType = 'wowConverter.modelViewer';
+
+interface GitExtension {
+  getAPI(version: 1): {
+    getRepository(uri: vscode.Uri): { rootUri: vscode.Uri } | null
+    toGitUri(uri: vscode.Uri, ref: string): vscode.Uri
+  }
+}
 
 export function activate(context: vscode.ExtensionContext) {
   const dist = vscode.Uri.joinPath(context.extensionUri, 'dist');
@@ -14,8 +21,9 @@ export function activate(context: vscode.ExtensionContext) {
       filters: { 'Warcraft III models': ['mdx', 'mdl'] },
     }))?.[0];
     if (!model) return;
-    if (model.scheme !== 'file' || !/\.md[xl]$/i.test(model.path)) {
-      void vscode.window.showErrorMessage('Select a local Warcraft III MDX or MDL model.');
+    const source = modelSource(model);
+    if (!source || !/\.md[xl]$/i.test(source.file.path)) {
+      void vscode.window.showErrorMessage('Select a Warcraft III MDX or MDL file or Git revision.');
       return;
     }
     await vscode.commands.executeCommand('vscode.openWith', model, viewType);
@@ -35,9 +43,11 @@ export function activate(context: vscode.ExtensionContext) {
       },
       resolveCustomEditor(document, panel) {
         const { uri } = document;
-        if (uri.scheme !== 'file') throw new Error('This viewer opens local models.');
+        const source = modelSource(uri);
+        if (!source) throw new Error('This viewer opens local models and Git revisions.');
 
-        const readAsset = createAssetReader(uri.fsPath, vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath);
+        const { file, readRevision } = source;
+        const readAsset = createAssetReader(file.fsPath, vscode.workspace.getWorkspaceFolder(file)?.uri.fsPath, readRevision);
         const link = vscode.Uri.from({
           scheme: vscode.env.uriScheme,
           authority: context.extension.id,
@@ -69,10 +79,49 @@ export function activate(context: vscode.ExtensionContext) {
           disposed = true;
           messages.dispose();
         });
-        webview.html = viewerHtml(webview, dist, basename(uri.fsPath), link.toString());
+        webview.html = viewerHtml(webview, dist, basename(file.fsPath), link.toString());
       },
     }, { supportsMultipleEditorsPerDocument: true, webviewOptions: { retainContextWhenHidden: true } }),
   );
+}
+
+function modelSource(uri: vscode.Uri): { file: vscode.Uri; readRevision?: (file: string) => Promise<Uint8Array | undefined> } | undefined {
+  if (uri.scheme === 'file') return { file: uri };
+  if (uri.scheme !== 'git') return undefined;
+
+  // VS Code's Git provider stores the underlying path and the revision in the URI query.
+  let query: unknown;
+  try {
+    query = JSON.parse(uri.query);
+  } catch {
+    return undefined;
+  }
+  if (!query || typeof query !== 'object'
+    || !('path' in query) || typeof query.path !== 'string' || !isAbsolute(query.path)
+    || !('ref' in query) || typeof query.ref !== 'string') return undefined;
+
+  const file = vscode.Uri.file(query.path);
+  const { ref } = query;
+  return {
+    file,
+    async readRevision(path) {
+      let resource = uri;
+      if (path !== file.fsPath) {
+        const git = vscode.extensions.getExtension<GitExtension>('vscode.git')?.exports?.getAPI(1);
+        const modelRepository = git?.getRepository(file);
+        const asset = vscode.Uri.file(path);
+        const assetRepository = git?.getRepository(asset);
+        if (!git || !modelRepository || assetRepository?.rootUri.toString() !== modelRepository.rootUri.toString()) return undefined;
+        resource = git.toGitUri(asset, ref);
+      }
+      try {
+        return await vscode.workspace.fs.readFile(resource);
+      } catch (error) {
+        if (error instanceof vscode.FileSystemError && error.code === 'FileNotFound') return undefined;
+        throw error;
+      }
+    },
+  };
 }
 
 function viewerHtml(webview: vscode.Webview, dist: vscode.Uri, model: string, link: string) {

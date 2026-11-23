@@ -29,6 +29,18 @@ test('reads an export and resolves its asset paths inside the export root', asyn
     await expect(read('C:\\outside.blp')).rejects.toThrow('Invalid');
     await expect(read('outside/outside.blp')).rejects.toThrow('Asset not found');
     await expect(read('textures/directory.blp')).rejects.toThrow('Asset not found');
+
+    const encoder = new TextEncoder();
+    const readRevision = createAssetReader(model, undefined, async (path) => {
+      if (path === model) return encoder.encode('previous model');
+      if (path === join(textures, 'skin.blp')) return encoder.encode('previous texture');
+    });
+    expect(decoder.decode(await readRevision('Model #1.MDX'))).toBe('previous model');
+    expect(decoder.decode(await readRevision('textures/skin.blp'))).toBe('previous texture');
+
+    const readEmptyRevision = createAssetReader(model, undefined, async () => undefined);
+    await expect(readEmptyRevision('Model #1.MDX')).rejects.toThrow('not present in this Git revision');
+    expect(decoder.decode(await readEmptyRevision('textures/skin.blp'))).toBe('texture');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

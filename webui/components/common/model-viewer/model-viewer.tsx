@@ -1161,8 +1161,8 @@ export default function ModelViewerUi({
         />
         {canvasOverlay}
       </div>
-      {!shot && <div className="flex lg:flex-row flex-col lg:h-full lg:min-h-0 h-[420px] min-h-[420px] lg:border-l border-t lg:border-t-0 border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))]">
-        <div className={`${animationList ? 'lg:w-80' : 'lg:w-60'} w-full lg:h-full lg:min-h-0 ${animationList ? 'h-full min-h-0' : 'h-[200px] min-h-[200px]'} lg:border-r border-b lg:border-b-0 border-[hsl(var(--viewer-divider))] flex flex-col`}>
+      {!shot && <div className={`flex lg:flex-row flex-col lg:h-full lg:max-h-none min-h-0 ${animationList || cutBoxEnabled ? 'h-[420px] max-h-[65%]' : 'max-h-[50%]'} lg:border-l border-t lg:border-t-0 border-[hsl(var(--viewer-divider))] flex-shrink-0 relative z-10 bg-[hsl(var(--viewer-sidebar-bg))] text-[hsl(var(--viewer-sidebar-fg))]`}>
+        <div className={`${animationList ? 'h-full lg:w-80' : 'lg:w-60'} ${cutBoxEnabled ? 'max-h-[45%] lg:max-h-none' : ''} w-full lg:h-full min-h-0 lg:border-r border-b lg:border-b-0 border-[hsl(var(--viewer-divider))] flex flex-col`}>
           <div className={`flex-1 min-h-0 lg:flex lg:flex-col lg:overflow-hidden viewer-scroll ${animationList ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
             {!animationList && <>
             <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] text-[hsl(var(--viewer-sidebar-fg))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-0 lg:z-10">
@@ -1221,12 +1221,11 @@ export default function ModelViewerUi({
               </ul>
               )}
             </div>
-            {!animationList && <div className="h-6" />}
           </div>
         </div>
 
         {cutBoxEnabled ? (
-        <div className="lg:w-[540px] w-full lg:h-full flex flex-col min-h-0">
+        <div className="lg:w-[540px] w-full lg:h-full flex flex-col flex-1 lg:flex-none min-h-0">
           <div className="px-3 py-2 font-semibold bg-[hsl(var(--viewer-item-active))] border-b border-[hsl(var(--viewer-divider))] lg:sticky lg:top-0 lg:z-10 flex items-center justify-between">
             <div className="flex items-center gap-2">
               Cut Box

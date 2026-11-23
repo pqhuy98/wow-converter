@@ -2,7 +2,7 @@
   "name": "wow-converter-model-viewer",
   "displayName": "WoW Converter Model Viewer",
   "description": "Preview Warcraft III MDX and MDL models with the wow-converter viewer.",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "publisher": "pqhuy98",
   "license": "MIT",
   "repository": {
@@ -11,7 +11,7 @@
     "directory": "vscode-extension"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.133.0"
   },
   "categories": ["Visualizations"],
   "main": "./dist/extension.cjs",
@@ -28,7 +28,10 @@
           { "filenamePattern": "*.[mM][dD][xX]" },
           { "filenamePattern": "*.[mM][dD][lL]" }
         ],
-        "priority": "option"
+        "priority": {
+          "textEditor": "option",
+          "diffEditor": "option"
+        }
       }
     ],
     "commands": [
