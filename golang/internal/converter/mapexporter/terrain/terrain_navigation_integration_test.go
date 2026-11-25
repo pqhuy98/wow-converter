@@ -88,28 +88,72 @@ func TestStormwindCollisionTerrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	terrain.AssertSavedBlockers(t, result.OutputDir, mapData, wpm[16:], r.Width, r.Height)
-	npcTypes := map[string]bool{}
-	for _, typ := range mapData.DestructibleTypes {
-		for _, field := range typ.Data {
-			if field.ID == "bfil" {
-				if model, ok := field.Value.(string); ok && strings.HasPrefix(model, "creature-") {
-					npcTypes[typ.Code] = true
-					if _, err := os.Stat(filepath.Join(result.OutputDir, model)); err != nil {
-						t.Fatal(err)
-					}
-				}
-			}
+	unitsJSON, err := os.ReadFile(filepath.Join(result.OutputDir, "units.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report struct {
+		Units []struct {
+			TypeCode string `json:"typeCode"`
+			Model    string `json:"model"`
+		} `json:"units"`
+	}
+	if err := json.Unmarshal(unitsJSON, &report); err != nil {
+		t.Fatal(err)
+	}
+	type npcDestructible struct {
+		model      string
+		placements int
+	}
+	expected := map[string]npcDestructible{}
+	for _, unit := range report.Units {
+		if unit.TypeCode == "" {
+			continue
 		}
+		if unit.Model == "" {
+			t.Fatalf("NPC destructible %s has no exported model", unit.TypeCode)
+		}
+		npc := expected[unit.TypeCode]
+		npc.model = unit.Model
+		npc.placements++
+		expected[unit.TypeCode] = npc
+	}
+	if len(expected) == 0 {
+		t.Fatal("generated map must contain NPC destructibles")
+	}
+	savedTypes := map[string]bool{}
+	for _, typ := range mapData.DestructibleTypes {
+		npc, ok := expected[typ.Code]
+		if !ok {
+			continue
+		}
+		for _, field := range typ.Data {
+			if field.ID != "bfil" {
+				continue
+			}
+			if field.Value != strings.ReplaceAll(npc.model, "/", `\`) {
+				t.Fatalf("NPC destructible %s uses model %v, want %s", typ.Code, field.Value, npc.model)
+			}
+			if _, err := os.Stat(filepath.Join(result.OutputDir, filepath.FromSlash(npc.model))); err != nil {
+				t.Fatal(err)
+			}
+			savedTypes[typ.Code] = true
+		}
+	}
+	placements := map[string]int{}
+	for _, placed := range mapData.Doodads {
+		placements[placed.Doodad.Type]++
 	}
 	npcs := 0
-	for _, placed := range mapData.Doodads {
-		if npcTypes[placed.Doodad.Type] {
-			npcs++
+	for code, npc := range expected {
+		if !savedTypes[code] {
+			t.Fatalf("missing NPC destructible definition or model field for %s", code)
 		}
+		if got := placements[code]; got != npc.placements {
+			t.Fatalf("NPC destructible %s has %d placements, want %d", code, got, npc.placements)
+		}
+		npcs += npc.placements
 	}
-	if npcs == 0 {
-		t.Fatal("generated map must contain actual NPC destructible definitions, placements and model assets")
-	}
-	t.Logf("verified %d NPC destructible placements across %d types", npcs, len(npcTypes))
+	t.Logf("verified %d NPC destructible placements across %d types", npcs, len(expected))
 	t.Logf("Stormwind map: %s\n%s", filepath.Join(workspace.FindRepoRoot(), "maps", "navigation-stormwind.w3x"), b)
 }
