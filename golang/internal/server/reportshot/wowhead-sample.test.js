@@ -53,6 +53,44 @@ for (const classic of [false, true]) {
   });
 }
 
+test('Wrath selects the exact variant, freezes its midpoint, and reads camera geometry', () => {
+  const rows = [{ i: 'Stand', j: 0, h: 4000 }, { i: 'Stand', j: 1, h: 4500 }, { i: 'Death', j: 0, h: 2000 }];
+  const initialClock = { e: rows[2], d: 2, c: 300 };
+  const group = { c: initialClock, e: 0.3, d: 0.8 };
+  const matrix = Float32Array.from({ length: 16 }, (_, i) => i);
+  const model = {
+    bk: { J: rows, c: [{ b: [0, 0, -2] }, { b: [0, 0, 3] }], f: () => false },
+    B: group, A: matrix,
+    at: (state, dt) => { state.c.c += dt; },
+  };
+  const actor = {
+    d: model, a: false,
+    setAnimation(name) {
+      assert.equal(name, 'Stand');
+      group.c = { e: rows[0], d: 0, c: 0 };
+    },
+  };
+  const renderer = {
+    actors: [actor], canvas: {}, clearBackground() {}, onResize() {}, updateCamera() {},
+    options: {}, clearColor: [0, 0, 0], zoom: { current: 0, target: 0 },
+  };
+  const context = { window: { __whViewer: { renderer }, __whWantSeq: 'Stand', __whWantVariant: 1 } };
+  assert.equal(runInNewContext(script, context).phase, 'init');
+  assert.equal(runInNewContext(script, context).phase, 'pending');
+  const clock = group.c;
+  assert.notEqual(clock, initialClock);
+  assert.equal(clock.e, rows[1]);
+  assert.equal(clock.d, 1);
+  assert.equal(clock.c, 2250);
+  assert.equal(group.e, 1);
+  assert.equal(group.d, 0);
+  model.at(group, 500);
+  assert.equal(clock.c, 2250);
+  const geometry = context.window.__whCameraGeometry();
+  assert.equal(geometry.height, 5);
+  assert.deepEqual([...geometry.modelMatrix], [...matrix]);
+});
+
 for (const refined of [false, true]) {
   test(`visible small side shot ${refined ? 'finishes after refinement' : 'can refine its camera'}`, () => {
     const context = smallShotContext(false, refined);
@@ -82,7 +120,7 @@ test('small-shot acceptance still rejects an empty canvas', () => {
 
 function smallShotContext(blank, refined) {
   const row = { f: 'Stand', a: 0, l: 1000 };
-  const model = { bf: { B: [row] }, C: { d: { e: row, c: 500 }, a: 1, b: 0 } };
+  const model = { bf: { B: [row] }, C: { d: { e: row, c: 500 }, a: 1, b: 0 }, aX() {} };
   const renderer = { actors: [{ a: model }], canvas: {}, zoom: { current: 0, target: 0 } };
   const pixels = new Uint8ClampedArray(100 * 100 * 4);
   for (let y = 0; y < 100; y++) {

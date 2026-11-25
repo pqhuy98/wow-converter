@@ -1,19 +1,15 @@
 # Build production Go wow-converter bundle to dist-go/.
-# Run from repo root: npm run build
+# Run from repo root: bun run build
 #
 # Includes: Go binary, webui, native bin/, resources/ (incl. map template).
 # Excludes: Node deps, blp-preview bindings, MSVC link artifacts, debug DLLs.
-
-param(
-    [switch]$SkipWebUI
-)
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $distGo = Join-Path $root "dist-go"
-$isWindows = ($IsWindows -or $env:OS -match "Windows")
+$buildingOnWindows = ($IsWindows -or $env:OS -match "Windows")
 
 function Ensure-Dir([string]$Path) {
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
@@ -29,10 +25,8 @@ function Copy-IfExists([string]$Source, [string]$Destination) {
     Copy-Item -Force $Source $Destination
 }
 
-if (-not $SkipWebUI) {
-    if (-not (Test-Path "webui/out/index.html")) {
-        throw "webui/out is missing. Run 'npm run build:webui' first, or run 'npm run build' from package.json."
-    }
+if (-not (Test-Path -LiteralPath "webui/out/index.html" -PathType Leaf)) {
+    throw "webui/out/index.html is missing. Run 'bun run build' from the repository root."
 }
 
 Write-Host "Preparing dist-go..."
@@ -41,7 +35,7 @@ if (Test-Path $distGo) {
 }
 Ensure-Dir $distGo
 
-$exeName = if ($isWindows) { "wow-converter.exe" } else { "wow-converter" }
+$exeName = if ($buildingOnWindows) { "wow-converter.exe" } else { "wow-converter" }
 Write-Host "Building wow-converter (Go) -> dist-go/$exeName"
 Push-Location golang
 $reportBuildSHA = git -c "safe.directory=$root" rev-parse HEAD
@@ -56,7 +50,7 @@ Copy-Item -Recurse -Force "webui/out" (Join-Path $distGo "webui/out")
 Write-Host "Copying bin/ (runtime only)..."
 $binDest = Join-Path $distGo "bin"
 Ensure-Dir (Join-Path $binDest "blp-native")
-if ($isWindows) {
+if ($buildingOnWindows) {
     Copy-IfExists "bin/blp-native/blpencode.dll" (Join-Path $binDest "blp-native/blpencode.dll")
 } else {
     Copy-IfExists "bin/blp-native/libblpencode.so" (Join-Path $binDest "blp-native/libblpencode.so")
@@ -65,7 +59,7 @@ Copy-IfExists "bin/azerothcore-world.sqlite" (Join-Path $binDest "azerothcore-wo
 
 Ensure-Dir (Join-Path $binDest "upscayl/models")
 Copy-Item -Force "bin/upscayl/models/*" (Join-Path $binDest "upscayl/models")
-if ($isWindows) {
+if ($buildingOnWindows) {
     Ensure-Dir (Join-Path $binDest "upscayl/win")
     Copy-IfExists "bin/upscayl/win/upscayl-bin.exe" (Join-Path $binDest "upscayl/win/upscayl-bin.exe")
     Copy-IfExists "bin/upscayl/win/vcomp140.dll" (Join-Path $binDest "upscayl/win/vcomp140.dll")

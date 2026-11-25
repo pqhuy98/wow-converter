@@ -6,7 +6,6 @@
     "lib": [
       "es2022"
     ],
-    "outDir": "./build",
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -19,10 +18,6 @@
       ]
     }
   },
-  "tsc-alias": {
-    "resolveFullPaths": true,
-    "verbose": false
-  },
-  "include": ["src", "examples", "bin", "tests", "scripts", "bun-env.d.ts"],
+  "include": ["src", "tests", "scripts", "bun-env.d.ts"],
   "exclude": ["webui"]
 }

@@ -6,7 +6,7 @@ SRC="$ROOT/node_modules/upscayl-node/dist/upscaler/sub-classes"
 OUT="$ROOT/bin/upscayl"
 
 if [[ ! -d "$SRC/model-manager/models" ]]; then
-  echo "upscayl-node models not found. Run npm install first." >&2
+  echo "upscayl-node models not found. Run bun install first." >&2
   exit 1
 fi
 

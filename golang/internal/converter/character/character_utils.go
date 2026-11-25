@@ -636,7 +636,7 @@ type LocalModelSkinOption struct {
 	LocalRef string `json:"localRef"`
 }
 
-// GetModelSkinOptions returns skin variants for the browse UI, matching TS getModelSkinOptions.
+// GetModelSkinOptions returns skin variants for the browse UI.
 func GetModelSkinOptions(listfilePath string, skins []casc.ModelSkin) []LocalModelSkinOption {
 	baseRef := common.NormalizeLocalModelRef(listfilePath)
 	dir := filepath.Dir(strings.ReplaceAll(baseRef, "\\", "/"))

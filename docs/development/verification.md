@@ -1,9 +1,10 @@
 # Verification
 
-Commands run from the repository root unless stated otherwise. These are current entry points, not newly introduced verification tiers.
+Run the commands from the repository root unless stated otherwise.
 
 | Change or purpose | Check |
 |---|---|
+| Unit tests for Go, the web UI, shared tools, and the Wowhead sampler | `bun run test:unit` |
 | Go logic or contracts | `go -C golang test ./internal/<changed-package>/...`; widen to `go -C golang test ./...` for shared contracts |
 | Queue concurrency/lifecycle | `go -C golang test -race ./internal/server/util`; test affected API callers too |
 | WoW-reader/conversion integration | Running converter/data server, then `bun run test:golang-integration`; narrow tagged Go tests with `-run` while iterating |
@@ -11,7 +12,9 @@ Commands run from the repository root unless stated otherwise. These are current
 | M2 effects without Wowhead support | Embedded original renderer and warmed export pairs: [WoW source shots](../rendering/source-viewer.md) |
 | API contract | Running converter, then `bun run test:api` |
 | Map export | Running converter, then `bun run test:regression-maps` for asset-import/file-presence smoke coverage; verify terrain and gameplay in WC3 separately |
-| Release package | `bun run verify`: Go units → UI/desktop build → boot bundled app → Go integration → API → full snapshots |
+| Release package | `bun run verify` runs unit tests, builds and boots the bundle, then runs Go integration, API tests, and snapshots. |
+
+To exercise the live Lich King screenshot comparison, set `WOW_CONVERTER_CAPTURE_TEST_URL` to an isolated converter with WoW data loaded and run `go -C golang test ./internal/server/reportshot -run '^TestLocalLichKingCapture$' -v -count=1`. The test exports to `capture-tests/the-lich-king` and captures the matching Stand sequence in the converter and on Wowhead.
 
 For a selected snapshot in PowerShell:
 

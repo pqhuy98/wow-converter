@@ -5,7 +5,7 @@ import (
 	"runtime"
 )
 
-// Map generation constants from src/lib/constants.ts.
+// Warcraft III map generation constants.
 
 const (
 	DefaultLayer    = 7

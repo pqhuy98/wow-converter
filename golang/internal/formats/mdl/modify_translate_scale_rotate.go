@@ -161,8 +161,8 @@ func (mod *Modify) ScaleSequenceDuration(sequence *components.Sequence, scalingF
 		return int(math.Floor(value))
 	}
 	floorKey := func(value float64) int {
-		// Match TS parity for scaled in-sequence timestamps that should land exactly
-		// on an integer boundary but can arrive infinitesimally below it in Go.
+		// Compensate for rounding error when a scaled timestamp falls
+		// just below its intended integer boundary.
 		return int(math.Floor(value + 1e-9))
 	}
 

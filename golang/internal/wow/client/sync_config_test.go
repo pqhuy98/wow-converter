@@ -2,7 +2,7 @@ package client
 
 import "testing"
 
-func TestDesiredConfigMatchesTypeScript(t *testing.T) {
+func TestDesiredConfigForExport(t *testing.T) {
 	if DesiredConfig["copyMode"] != "FULL" {
 		t.Fatalf("unexpected copyMode: %v", DesiredConfig["copyMode"])
 	}

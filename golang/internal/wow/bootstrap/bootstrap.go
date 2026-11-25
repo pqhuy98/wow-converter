@@ -13,7 +13,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/wow/wowconfig"
 )
 
-// AutoLoadResult mirrors TS autoLoadCascFromEnv result.
+// AutoLoadResult describes the data source selected by startup configuration.
 type AutoLoadResult struct {
 	Loaded    bool
 	BuildName string

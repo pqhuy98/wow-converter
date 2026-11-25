@@ -24,7 +24,7 @@ type Server struct {
 	listenErr  error
 }
 
-// NewServer builds a chi router with all REST routes from rest-server.ts.
+// NewServer serves the WoW data REST API.
 func NewServer(handler *Handler, port int) *Server {
 	return newServer(handler, ServerListenOptions{Port: port})
 }

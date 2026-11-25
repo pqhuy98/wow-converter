@@ -1,8 +1,5 @@
 /* eslint-disable import/no-dynamic-require */
-/**
- * PNG -> BLP conversion logic, shared by the worker-thread pool (blp.worker.ts)
- * and the inline fallback path (BLP_WORKERS=0). Extracted from blp.worker.ts.
- */
+/** Local texture encoding utilities for Warcraft III tools. */
 import { writeFile } from 'fs/promises';
 import { ensureDir } from 'fs-extra';
 import * as IQ from 'image-q';
@@ -10,8 +7,6 @@ import { createRequire } from 'module';
 import path from 'path';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
-
-import { bundledAppRoot } from '@/lib/wow-data-server/transport';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -27,20 +22,11 @@ export function loadBlpNativeBinding(): any {
   bindingLoadAttempted = true;
 
   try {
-    const candidateDirs: string[] = [];
-
-    candidateDirs.push(path.join(process.cwd(), 'bin/blp-preview'));
-    candidateDirs.push(path.join(bundledAppRoot(), 'bin/blp-preview'));
-    candidateDirs.push(path.join(__dirname, 'bin/blp-preview'));
-    candidateDirs.push(path.resolve(__dirname, '../../../../bin/blp-preview'));
-
-    // 4) Installed as dependency: resolve package root via its own package.json
-    try {
-      const pkgRoot = path.dirname(require.resolve('@pqhuy98/wow-converter/package.json'));
-      candidateDirs.push(path.join(pkgRoot, 'bin/blp-preview'));
-    } catch {
-      // ignore if package root cannot be resolved (e.g. compiled exe)
-    }
+    const candidateDirs = [
+      path.join(process.cwd(), 'bin/blp-preview'),
+      path.join(__dirname, 'bin/blp-preview'),
+      path.resolve(__dirname, '../../../../bin/blp-preview'),
+    ];
 
     for (const binDir of candidateDirs) {
       try {
@@ -67,7 +53,7 @@ export function loadBlpNativeBinding(): any {
 
 /** Input for a single BLP1 encode task. Exactly one of png/blp2 must be set. */
 export interface BlpEncodeInput {
-  /** PNG bytes (legacy path / composited character textures). */
+  /** PNG bytes. */
   png?: Buffer;
   /** Raw WoW BLP2 bytes; decoded to PNG in-process (in-memory PNG bridge). */
   blp2?: Buffer;
@@ -77,19 +63,13 @@ export interface BlpEncodeInput {
   opaque?: boolean;
 }
 
-/**
- * Unified texture -> WC3 BLP1 conversion. Decodes raw BLP2 with the same
- * decoder + PNG writer the legacy server export used, optionally resizes with
- * the same sharp settings, then runs the existing PNG->BLP1 encoder, so the
- * output bytes are identical to the legacy PNG-file pipeline.
- */
+/** Convert PNG or BLP2 bytes to Warcraft III BLP1 with optional resizing. */
 export async function convertTextureToBlp(input: BlpEncodeInput, blpPath: string): Promise<void> {
-  // Lazy imports keep worker startup light when only PNG inputs are used.
   let png = input.png;
   if (!png) {
     if (!input.blp2) throw new Error('convertTextureToBlp: either png or blp2 input is required');
-    const { BLPImage } = await import('@/lib/wow/formats/blp/blp');
-    const { BufferWrapper } = await import('@/lib/wow/formats/buffer');
+    const { BLPImage } = await import('../../wow/formats/blp/blp');
+    const { BufferWrapper } = await import('../../wow/formats/buffer');
     const mask = input.opaque ? 0b0111 : 0b1111;
     png = new BLPImage(new BufferWrapper(input.blp2)).toPNG(mask).raw;
   }
@@ -98,7 +78,6 @@ export async function convertTextureToBlp(input: BlpEncodeInput, blpPath: string
     try {
       png = await resizePng(png, input.resizeTo.width, input.resizeTo.height);
     } catch (err) {
-      // Match the legacy main-thread behavior: warn and encode at source size.
       console.warn('Failed to resize PNG, proceeding without resize:', blpPath, err);
     }
   }

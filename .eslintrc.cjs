@@ -21,7 +21,7 @@ module.exports = {
     'unused-imports',
     'simple-import-sort'
   ],
-  ignorePatterns: ["**/bin/**/*", "**/dist/**/*", "**/maps/**/*", '**/.eslintrc.cjs', "rollup.config.cjs", "build/**", "wow.export/**/*"],
+  ignorePatterns: ["**/bin/**/*", "**/dist/**/*", "**/maps/**/*", '**/.eslintrc.cjs', "wow.export/**/*"],
   overrides: [
     {
       files: ['*.ts'],

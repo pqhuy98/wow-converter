@@ -1,4 +1,4 @@
-// Package formats provides network and file helpers ported from generics.ts.
+// Package formats provides network and file helpers for WoW data.
 package formats
 
 import (
@@ -27,7 +27,7 @@ import (
 
 var blizzardHostPattern = regexp.MustCompile(`(?i)\.(blizzard\.com|battle\.net)$`)
 
-// HTTPResponse mirrors fetch Response fields used by the TS port.
+// HTTPResponse contains the status and body of a download response.
 type HTTPResponse struct {
 	Status int
 	Body   []byte

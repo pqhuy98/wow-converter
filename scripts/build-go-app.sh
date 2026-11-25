@@ -6,7 +6,7 @@ DIST="${ROOT}/dist-go"
 
 cd "${ROOT}"
 [[ -f webui/out/index.html ]] || {
-  echo "webui/out is missing; run 'bun run build:webui' first" >&2
+  echo "webui/out is missing; run 'bun run build:linux' from the repository root" >&2
   exit 1
 }
 

@@ -14,7 +14,6 @@ let cleanupInstalled = false;
 
 const baseEnv: NodeJS.ProcessEnv = { ...process.env };
 delete baseEnv.WOW_CONVERTER_BUNDLED;
-delete baseEnv.WOW_CONVERTER_BUNDLE;
 baseEnv.IS_SHARED_HOSTING = 'false';
 baseEnv.NODE_ENV = 'production';
 

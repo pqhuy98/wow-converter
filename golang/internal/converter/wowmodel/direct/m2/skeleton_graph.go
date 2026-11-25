@@ -202,7 +202,7 @@ func copyTrackSlice(dst *m2.Track, src *m2.Track, srcIdx, dstIdx int) {
 	if dstIdx >= len(dst.Timestamps) || dstIdx >= len(dst.Values) {
 		return
 	}
-	// Match the TS path exactly: if the child skeleton has an entry for this
+	// If the child skeleton has an entry for this
 	// animation slot, it overrides the parent even when the child arrays are
 	// empty. That clears inherited parent keys instead of keeping stale data.
 	dst.Timestamps[dstIdx] = append([]uint32(nil), src.Timestamps[srcIdx]...)

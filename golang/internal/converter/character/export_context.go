@@ -128,7 +128,7 @@ func (ctx *ExportContext) IsClassicCASC(c context.Context) bool {
 
 // ResolveMetaExpansion picks the wowhead/zam expansion for meta fetches.
 // Retail CASC installs cannot resolve classic-era assets, so URL expansion is
-// ignored unless the loaded product is a Classic variant (TS parity).
+// ignored unless the loaded product is a Classic variant.
 func (ctx *ExportContext) ResolveMetaExpansion(urlExpansion wowhead.Expansion) wowhead.Expansion {
 	if ctx.WowClient == nil {
 		return urlExpansion

@@ -245,10 +245,14 @@ func captureConverter(ctx context.Context, b *browser, request Request, indices 
 			Ready    string `json:"ready"`
 			Error    string `json:"error"`
 			Sequence string `json:"sequence"`
+			Status   int    `json:"status"`
 		}
-		err := b.evaluate(ctx, `({ready:document.documentElement?.dataset.viewerReady||'',error:document.documentElement?.dataset.viewerError||'',sequence:document.documentElement?.dataset.viewerSequence||''})`, &state)
+		err := b.evaluate(ctx, `({ready:document.documentElement?.dataset.viewerReady||'',error:document.documentElement?.dataset.viewerError||'',sequence:document.documentElement?.dataset.viewerSequence||'',status:performance.getEntriesByType('navigation')[0]?.responseStatus||0})`, &state)
 		if err != nil {
 			return false, err
+		}
+		if state.Status >= 400 {
+			return false, fmt.Errorf("the viewer page returned HTTP %d", state.Status)
 		}
 		if state.Error != "" {
 			log.Printf("report screenshot: converter viewer error: %s", state.Error)
@@ -447,21 +451,10 @@ func shootWowheadViews(ctx context.Context, b *browser, request Request, indices
 		}
 		var reference cameraReference
 		if err := b.evaluate(ctx, `(() => {
-			const actor = window.__whViewer.renderer.actors[0];
-			const classic = !!(actor.b && actor.b.aq);
-			const model = classic ? actor.b : actor.a;
-			const vertices = classic ? model.aq.l : model.bf.Q;
-			const matrix = classic ? model.al : model.j;
-			if (!vertices || !vertices.length || !matrix || matrix.length !== 16) throw new Error('Missing camera geometry');
-			let minZ = Infinity, maxZ = -Infinity;
-			for (const vertex of vertices) {
-				const z = (classic ? vertex.f : vertex.a)[2];
-				minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
-			}
 			const camera = window.__whPlaced;
 			const eye = Array.from(window.__whViewer.renderer.eye);
 			const up = camera.view === 'top' || camera.view === 'bottom' ? [0, 1, 0] : [0, 0, 1];
-			return {target: camera.target, eye, up, modelMatrix: Array.from(matrix), height: maxZ - minZ};
+			return {target: camera.target, eye, up, ...window.__whCameraGeometry()};
 		})()`, &reference); err != nil {
 			return nil, nil, err
 		}
@@ -499,7 +492,7 @@ func wowheadBlocked(ctx context.Context, b *browser) error {
 	return nil
 }
 
-// Match the TypeScript skill's silhouette center/size measurements, before sheet labels/resizing.
+// Measure the silhouette before adding labels or resizing the sheet.
 func measureFrame(frame []byte) (frameAim, error) {
 	img, err := png.Decode(bytes.NewReader(frame))
 	if err != nil {

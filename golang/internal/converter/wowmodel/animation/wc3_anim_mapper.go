@@ -1,7 +1,6 @@
 package animation
 
-// Code generated from animation-mapper.ts; DO NOT EDIT.
-
+// getWc3AnimName selects the sequence name, weapon tag and loop rule for a WoW animation.
 func getWc3AnimName(wowAnimName string) wc3AnimInfo {
 	loopTrue := true
 	switch wowAnimName {

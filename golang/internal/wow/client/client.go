@@ -25,7 +25,7 @@ type CascLoadProgress struct {
 	Message string `json:"message"`
 }
 
-// Client is the Go counterpart of src/lib/wow-data-client/wow-data-client.ts.
+// Client provides access to WoW data over HTTP or in-process.
 type Client interface {
 	WaitUntilReady(ctx context.Context) error
 

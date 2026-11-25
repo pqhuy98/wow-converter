@@ -38,7 +38,7 @@ type cpuTexture struct {
 	Height int
 }
 
-// InitMaterialRenderer is a no-op mirroring the TS init hook.
+// InitMaterialRenderer is a no-op because the renderer needs no global initialization.
 func InitMaterialRenderer() {}
 
 // NewMaterialRenderer creates a renderer for one texture type canvas.

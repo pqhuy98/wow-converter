@@ -151,7 +151,7 @@ func (r *WDCReader) GetAllRows() map[uint32]DB2Row {
 	return r.rows
 }
 
-// RowIDsInOrder returns row IDs in DB2 parse order, matching TS Map insertion order.
+// RowIDsInOrder returns row IDs in DB2 parse order.
 func (r *WDCReader) RowIDsInOrder() []uint32 {
 	_ = r.GetAllRows()
 	ids := make([]uint32, len(r.rowOrder))

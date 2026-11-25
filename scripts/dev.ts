@@ -1,9 +1,9 @@
-/** Starts the selected converter development stack and stops all children on exit. */
+/** Starts the converter and web UI and stops both on exit. */
 import { type ChildProcess, spawn, spawnSync } from 'child_process';
 import path from 'path';
 
 const repoRoot = path.resolve(import.meta.dir, '..');
-const legacyTS = process.argv.includes('--ts');
+const apiPort = process.env.PORT || '3001';
 const children: ChildProcess[] = [];
 
 const kill = spawnSync('bun', ['scripts/kill-dev-ports.ts'], {
@@ -13,18 +13,13 @@ const kill = spawnSync('bun', ['scripts/kill-dev-ports.ts'], {
 });
 if (kill.status !== 0) process.exit(kill.status ?? 1);
 
-if (legacyTS) {
-  start('TS converter', 'bun', ['--watch', 'src/server/index.ts'], repoRoot, {
-    NODE_ENV: 'development',
-  });
-  start('TS wow-data-server', 'bun', ['--watch', 'src/wow-data-server/index.ts'], repoRoot);
-} else {
-  start('Go bundled converter', 'go', ['tool', 'air'], path.join(repoRoot, 'golang'), {
-    NODE_ENV: 'development',
-    WOW_CONVERTER_BUNDLED: '1',
-  });
-}
-start('Web UI', 'bun', ['run', 'dev'], path.join(repoRoot, 'webui'));
+start('WoW Converter', 'go', ['tool', 'air'], path.join(repoRoot, 'golang'), {
+  NODE_ENV: 'development',
+  WOW_CONVERTER_BUNDLED: '1',
+});
+start('Web UI', 'bun', ['run', 'dev', '--port', '3000'], path.join(repoRoot, 'webui'), {
+  API_PORT: apiPort,
+});
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {

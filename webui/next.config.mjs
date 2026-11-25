@@ -1,15 +1,16 @@
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
-// Express API port — do not use PORT (Next.js sets that to 3000 in dev).
-const apiPort = process.env.API_PORT || process.env.EXPRESS_PORT || '3001';
+// Next.js sets PORT to its own development port.
+const apiPort = process.env.API_PORT || '3001';
 const isDev = process.env.NODE_ENV === 'development';
 
-function lanDevOrigins(port) {
+function lanDevOrigins() {
   const origins = [];
   for (const addrs of Object.values(os.networkInterfaces())) {
     for (const a of addrs ?? []) {
       if ((a.family === 'IPv4' || a.family === 4) && !a.internal) {
-        origins.push(`${a.address}:${port}`);
+        origins.push(a.address);
       }
     }
   }
@@ -19,22 +20,23 @@ function lanDevOrigins(port) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   devIndicators: false,
-  allowedDevOrigins: ['localhost:3001', '127.0.0.1:3001', ...lanDevOrigins(apiPort)],
-  // Static export for production builds only — dev needs rewrites to proxy /api to Express.
-  ...(isDev ? {} : { output: 'export' }),
-  async rewrites() {
-    if (!isDev) return [];
-    return [
-      {
-        source: '/wow-source/:path*',
-        destination: `http://127.0.0.1:${apiPort}/wow-source/:path*`,
-      },
-      {
-        source: '/api/:path*',
-        destination: `http://127.0.0.1:${apiPort}/api/:path*`,
-      },
-    ];
-  },
+  // Development requests use rewrites to reach the converter API.
+  ...(isDev ? {
+    distDir: '.next-dev',
+    allowedDevOrigins: ['localhost', '127.0.0.1', ...lanDevOrigins()],
+    async rewrites() {
+      return [
+        {
+          source: '/wow-source/:path*',
+          destination: `http://127.0.0.1:${apiPort}/wow-source/:path*`,
+        },
+        {
+          source: '/api/:path*',
+          destination: `http://127.0.0.1:${apiPort}/api/:path*`,
+        },
+      ];
+    },
+  } : { output: 'export' }),
   reactStrictMode: false,
   eslint: {
     ignoreDuringBuilds: true,
@@ -46,7 +48,7 @@ const nextConfig = {
     unoptimized: true,
   },
   turbopack: {
-    root: './',
+    root: fileURLToPath(new URL('.', import.meta.url)),
   },
 };
 

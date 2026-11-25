@@ -63,7 +63,7 @@ Verify: `curl -sf http://127.0.0.1:3001/` and confirm `cascLoaded: true` from `c
 
 1. `git fetch` + `reset --hard origin/${WOW_DEPLOY_BRANCH:-golang-port}`
 2. `bun install` + `bun run build:linux` (Next.js static UI + Linux Go bundle)
-3. `sync-from-repo.sh` installs the bundled Go systemd unit and disables the obsolete split `wow-data-server` unit
+3. `sync-from-repo.sh` installs the bundled converter's systemd unit and timers and disables any separately installed `wow-data-server` unit on this host
 4. Restart `wow-converter`, then wait for HTTP and in-process CASC readiness
 
 ## Troubleshooting

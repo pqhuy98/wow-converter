@@ -119,7 +119,7 @@ func testMapGenerateJob(mapDir string) *util.Job[mapGenerateJobRequest, mapGener
 	body := generateWc3Body{
 		Tiles:                    []exportAdtTile{{X: 21, Y: 27}, {X: 22, Y: 27}},
 		Quality:                  4096,
-		MapSaveName:              "parity.w3x",
+		MapSaveName:              "test-map.w3x",
 		ClampLower:               0,
 		ClampUpper:               1,
 		AutoClampPercent:         true,

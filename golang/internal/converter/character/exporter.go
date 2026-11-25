@@ -637,7 +637,7 @@ func DefaultExportOptimization() ExportOptimization {
 	}
 }
 
-// OptimizeModels applies per-request optimizations like the TypeScript server.
+// OptimizeModels applies the requested optimizations to each exported model.
 func (e *CharacterExporter) OptimizeModels(opt ExportOptimization) {
 	for _, pair := range e.Models {
 		m, ok := pair[0].(*mdl.MDL)

@@ -42,7 +42,7 @@ func encodeNative(png []byte, blpPath string, ignoreAlpha bool) error {
 		return err
 	}
 	if err := os.MkdirAll(dirOf(blpPath), 0o755); err != nil {
-		// Match TS: ignore mkdir errors.
+		// Report destination errors from the write below.
 	}
 	if err := os.WriteFile(blpPath, blpData, 0o644); err != nil {
 		return err

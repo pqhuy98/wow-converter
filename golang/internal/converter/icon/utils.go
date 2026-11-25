@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// MergeOptions applies TS-equivalent defaults.
+// MergeOptions fills in omitted icon conversion options.
 func MergeOptions(opts ConversionOptions) MergedOptions {
 	out := MergedOptions{
 		Size:       opts.Size,

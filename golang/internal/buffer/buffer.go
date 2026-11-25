@@ -628,7 +628,7 @@ func (b *Buffer) ReadLines(encoding string) []string {
 	b.Seek(0)
 	str := b.ReadString(b.RemainingBytes(), encoding)
 	b.Seek(ofs)
-	// Preserve empty lines — DBD chunk separators depend on blank lines (matches TS split).
+	// Preserve empty lines — DBD chunk separators depend on blank lines.
 	return lineBreakPattern.Split(str, -1)
 }
 

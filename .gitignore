@@ -112,6 +112,7 @@ typings/
 
 # next.js build output
 .next
+/webui/.next-dev/
 
 # nuxt.js build output
 .nuxt
@@ -127,5 +128,3 @@ typings/
 
 # DynamoDB Local files
 .dynamodb/
-
-/generated/prisma

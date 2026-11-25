@@ -65,8 +65,6 @@ For development, run the bundled Go server and Next.js UI:
 bun run dev
 ```
 
-The legacy TS server remains available as `bun run dev:ts` for wrapper-library compatibility work.
-
 Use the [documentation index](docs/README.md) for map generation, animation optimization, texture baking, and development checks. [Architecture](docs/architecture.md) describes module ownership and conversion boundaries. Read [AGENTS.md](AGENTS.md) before agent-assisted changes.
 
 ### API checks
@@ -85,7 +83,7 @@ Map exports use a bundled SQLite copy of AzerothCore world data (`bin/azerothcor
 bun run generate:acore-sqlite   # reads ACORE_SOURCE_DATABASE_URL, writes bin/azerothcore-world.sqlite
 ```
 
-Table list for the export lives in `scripts/acore-sqlite-tables.ts`. After adding tables there, rerun the command above and `bunx prisma generate` if the Prisma schema changed.
+The export table list lives in `scripts/acore-sqlite-tables.ts`. Rerun the command after changing the list or schema.
 
 The release binary runs wow-data-server in-process through `InProcessClient`. A local unix socket exposes the data-server REST interface to tools and integration tests. Only the web UI/API listens on `:3001`.
 
@@ -104,4 +102,4 @@ The release binary runs wow-data-server in-process through `InProcessClient`. A 
 - https://github.com/ilimei/vscode-plugin-blp-preview
 - https://github.com/azerothcore/azerothcore-wotlk
 - Retera Model Studios and Twilac's Retera Model Studios
-- Built with NodeJS, NextJS, v0.dev, Cursor AI, OpenAI LLMs.
+- Built with Go, Next.js, Bun, v0.dev, Cursor, and OpenAI models.

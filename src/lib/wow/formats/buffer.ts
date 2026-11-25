@@ -1,9 +1,5 @@
 /**
- * Faithful TypeScript port of wow.export's BufferWrapper (src/js/buffer.js).
- * A streamlined reader/writer around the Node Buffer class.
- *
- * DOM-specific helpers (canvas, audio, data URLs) are intentionally omitted;
- * this port only covers the headless read/write surface.
+ * Binary read and write helpers for Node buffers, based on wow.export's BufferWrapper.
  */
 import { createHash } from 'crypto';
 import { promises as fsp } from 'fs';

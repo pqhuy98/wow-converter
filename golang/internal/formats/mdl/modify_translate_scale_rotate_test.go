@@ -7,8 +7,8 @@ import (
 	imath "github.com/pqhuy98/wow-converter/internal/math"
 )
 
-func TestScaleSequenceDurationMatchesTSFlooring(t *testing.T) {
-	m := New(NewMDLOptions{Name: "parity"})
+func TestScaleSequenceDurationFloorsTimestamps(t *testing.T) {
+	m := New(NewMDLOptions{Name: "sequence-timing"})
 	m.Sequences = []components.Sequence{
 		{
 			Name:      "Walk",
@@ -49,8 +49,8 @@ func TestScaleSequenceDurationMatchesTSFlooring(t *testing.T) {
 	}
 }
 
-func TestScaleSequenceDurationPreservesTSCollisionOrder(t *testing.T) {
-	m := New(NewMDLOptions{Name: "parity"})
+func TestScaleSequenceDurationPreservesKeyframeCollisionOrder(t *testing.T) {
+	m := New(NewMDLOptions{Name: "sequence-timing"})
 	m.Sequences = []components.Sequence{{
 		Name:      "Walk",
 		Interval:  [2]int{1435, 2335},

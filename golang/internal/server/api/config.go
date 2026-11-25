@@ -15,7 +15,7 @@ const (
 	recentExportsRel   = "recent-exports.json"
 )
 
-// Config holds converter server settings mirroring src/server/config.ts.
+// Config holds converter API and hosting settings.
 type Config struct {
 	IsSharedHosting  bool
 	IsDev            bool

@@ -37,17 +37,6 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
   // via `ObjectsTranslator.ObjectType`, which is preferable.
   public static readonly ObjectType = ObjectType;
 
-  private static readonly varTypes = {
-    int: 0,
-    real: 1,
-    unreal: 2,
-    string: 3,
-    0: 'int',
-    1: 'real',
-    2: 'unreal',
-    3: 'string',
-  };
-
   public jsonToWar(json: ObjectModificationTable): WarResult {
     const outBufferToWar = new HexBuffer();
 
@@ -101,12 +90,12 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
           }
 
           // Write mod value
-          if (modType === ObjectsTranslator.varTypes.int) {
+          if (modType === varTypes.int) {
             outBufferToWar.addInt(mod.value as number);
-          } else if (modType === ObjectsTranslator.varTypes.real || modType === ObjectsTranslator.varTypes.unreal) {
+          } else if (modType === varTypes.real || modType === varTypes.unreal) {
             // Follow-up: check if unreal values are same hex format as real
             outBufferToWar.addFloat(mod.value as number);
-          } else if (modType === ObjectsTranslator.varTypes.string) {
+          } else if (modType === varTypes.string) {
             // Note that World Editor normally creates a TRIGSTR_000 for these string
             // values - WC3MapTranslator just writes the string directly to file
             outBufferToWar.addString(mod.value as string);
@@ -173,7 +162,7 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
             };
 
             modification.id = fieldIdFromWar(outBufferToJSON.readChars(4));
-            modification.type = ObjectsTranslator.varTypes[outBufferToJSON.readInt()] as unknown as ModificationType; // 'int' | 'real' | 'unreal' | 'string',
+            modification.type = varTypes[outBufferToJSON.readInt()] as unknown as ModificationType;
 
             if (this.type === ObjectType.Doodads || this.type === ObjectType.Abilities || this.type === ObjectType.Upgrades) {
               modification.level = outBufferToJSON.readInt();
@@ -217,6 +206,16 @@ export class ObjectsTranslator implements Translator<ObjectModificationTable> {
 }
 
 const RAWCODE_LENGTH = 4;
+const varTypes = {
+  int: 0,
+  real: 1,
+  unreal: 2,
+  string: 3,
+  0: 'int',
+  1: 'real',
+  2: 'unreal',
+  3: 'string',
+};
 
 function fieldIdToWar(id: string): string {
   const stripped = id.replace(/\0+$/g, '');
@@ -232,13 +231,13 @@ function fieldIdFromWar(id: string): string {
 
 function warModificationType(type: string | undefined, value: unknown): number {
   if (type === 'int' || type === 'real' || type === 'unreal' || type === 'string') {
-    return ObjectsTranslator.varTypes[type];
+    return varTypes[type];
   }
   if (typeof value === 'number') {
-    return ObjectsTranslator.varTypes.int;
+    return varTypes.int;
   }
   if (typeof value === 'string') {
-    return ObjectsTranslator.varTypes.string;
+    return varTypes.string;
   }
   throw new Error(`No type specified and cannot infer type for value ${JSON.stringify(value)}`);
 }

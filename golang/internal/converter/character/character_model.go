@@ -845,7 +845,7 @@ func getExcludedAnimIDs(keepCinematic bool, attackTag animmap.AttackTag) []int {
 	return excluded
 }
 
-// bodyTextureHashInput mirrors TS JSON.stringify({ basePng, textureDraws }) key order for md5 naming.
+// bodyTextureHashInput serializes texture inputs in a fixed order for stable asset names.
 func bodyTextureHashInput(baseRel string, draws []pngfmt.Draw) string {
 	var b strings.Builder
 	b.WriteString(`{"basePng":`)

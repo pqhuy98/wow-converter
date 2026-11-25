@@ -100,6 +100,10 @@ func TestShotCLISingleViewUsesServerCaptureAndLabel(t *testing.T) {
 			captures <- r.URL.Query().Get("name")
 			return
 		}
+		if r.URL.Query().Get("model") == "broken.mdx" {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html")
 		io.WriteString(w, `<!doctype html><style>body{margin:0;background:rgb(38,38,38)}nextjs-portal{position:fixed;inset:0;background:lime}</style><canvas width="1440" height="900"></canvas><nextjs-portal></nextjs-portal><script>
 document.documentElement.dataset.viewerReady='1';document.documentElement.dataset.viewerSequence='Stand 1';
@@ -133,6 +137,9 @@ window.__shotView=async name=>{const c=document.querySelector('canvas').getConte
 	label := tileMask(img, image.Point{}, 64, 26)
 	if !strings.Contains(string(label), string([]byte{1})) {
 		t.Fatal("single-view shot has no label")
+	}
+	if err := runCLI("converter", []string{"broken.mdx", "--view", "front", "--base", server.URL, "--out", out}); err == nil || !strings.Contains(err.Error(), "viewer page returned HTTP 500") {
+		t.Fatalf("expected the viewer HTTP error, got %v", err)
 	}
 }
 

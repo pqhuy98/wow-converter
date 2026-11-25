@@ -4,7 +4,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
-// Config mirrors src/lib/global-config.ts Config.
+// Config holds output and conversion options for an export.
 type Config struct {
 	TextureBaking                      TextureBakingOptions
 	ExportAssetDir                     string

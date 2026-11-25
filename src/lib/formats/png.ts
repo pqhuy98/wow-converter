@@ -1,6 +1,5 @@
+import path from 'path';
 import sharp, { OverlayOptions } from 'sharp';
-
-import { sharpFromExportAsset } from '@/lib/export-asset-store';
 
 const debug = false;
 
@@ -10,7 +9,7 @@ const debug = false;
  * @throws Error if image dimensions are invalid
  */
 export async function getPngDimensions(pngPath: string): Promise<{ width: number; height: number }> {
-  const metadata = await sharpFromExportAsset(pngPath).metadata();
+  const metadata = await sharp(path.normalize(pngPath)).metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error('Invalid image dimensions');
   }
@@ -20,7 +19,7 @@ export async function getPngDimensions(pngPath: string): Promise<{ width: number
 // We need to resize the PNG but RGB and alpha are separate, since wow use alpha as mask
 export async function resizePng(from: string | Buffer, targetWidth: number, targetHeight: number) {
   const fromPath = typeof from === 'string' ? from : '<buffer>';
-  const src = typeof from === 'string' ? sharpFromExportAsset(from) : sharp(from);
+  const src = sharp(typeof from === 'string' ? path.normalize(from) : from);
   const meta = await src.metadata();
 
   debug && console.log('Original image metadata', fromPath, meta);
@@ -68,7 +67,7 @@ export async function drawPngsOnBasePng(
   basePng: string | Buffer,
   draws: PngDraw[],
 ): Promise<Buffer> {
-  const base = typeof basePng === 'string' ? sharpFromExportAsset(basePng) : sharp(basePng);
+  const base = sharp(typeof basePng === 'string' ? path.normalize(basePng) : basePng);
   const meta = await base.metadata();
 
   if (!meta.width || !meta.height) {
@@ -112,7 +111,7 @@ export async function drawPngsOnBasePng(
 }
 
 async function isAbnormalTransparency(png: string | Buffer): Promise<boolean> {
-  const img = typeof png === 'string' ? sharpFromExportAsset(png) : sharp(png);
+  const img = sharp(typeof png === 'string' ? path.normalize(png) : png);
   const metadata = await img.metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error('PNG must have width and height metadata');

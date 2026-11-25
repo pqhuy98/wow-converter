@@ -16,17 +16,32 @@
   };
   if (!renderer || !renderer.canvas) return Object.assign(base, { phase: 'no-viewer' });
   const actor = renderer.actors && renderer.actors[0];
-  const classic = actor && actor.b && actor.b.aq;
-  const model = actor && (classic ? actor.b : actor.a);
-  // Classic and retail ship independently minified viewer builds.
-  const fields = classic
-    ? { rows: 'f', name: 'i', variant: 'l', length: 'f', state: 'Q', clip: 'c', time: 'b', advance: 'X' }
-    : { rows: 'B', name: 'f', variant: 'a', length: 'l', state: 'C', clip: 'e', time: 'c', advance: 'aX' };
-  const data = model && (classic ? model.aq : model.bf);
+  // Wowhead ships independently minified viewer builds. Identify each by its model data.
+  const wrath = Array.isArray(actor?.d?.bk?.J);
+  const classic = !wrath && !!actor?.b?.aq;
+  const fields = wrath
+    ? {
+      model: 'd', data: 'bk', rows: 'J', name: 'i', variant: 'j', length: 'h',
+      state: 'B', clock: 'c', clip: 'e', time: 'c', advance: 'at', index: 'd', blend: 'e', fade: 'd',
+      needsClip: 'f', loadClip: 'ab', vertices: 'c', position: 'b', matrix: 'A',
+    }
+    : classic
+      ? {
+        model: 'b', data: 'aq', rows: 'f', name: 'i', variant: 'l', length: 'f',
+        state: 'Q', clock: 'd', clip: 'c', time: 'b', advance: 'X', index: 'd', blend: 'e', fade: 'c',
+        needsClip: 'U', loadClip: 'i', vertices: 'l', position: 'f', matrix: 'al',
+      }
+      : {
+        model: 'a', data: 'bf', rows: 'B', name: 'f', variant: 'a', length: 'l',
+        state: 'C', clock: 'd', clip: 'e', time: 'c', advance: 'aX', blend: 'a', fade: 'b',
+        vertices: 'Q', position: 'a', matrix: 'j',
+      };
+  const model = actor?.[fields.model];
+  const data = model?.[fields.data];
   const animations = data && data[fields.rows];
-  const state = model && model[fields.state];
-  const clock = state && state.d;
-  if (!model || !animations || !clock) return Object.assign(base, { phase: 'loading' });
+  let state = model && model[fields.state];
+  let clock = state?.[fields.clock];
+  if (!Array.isArray(animations) || !clock || typeof model[fields.advance] !== 'function') return Object.assign(base, { phase: 'loading' });
 
   if (!window.__whInit) {
     renderer.clearBackground();
@@ -38,7 +53,20 @@
     renderer.fov = 45;
     renderer.onResize(1440, 900, 1440 / 900);
     const clock0 = clock;
-    window.__whTimeUnit = clock0 && !classic && typeof clock0[fields.time] === 'number' && clock0[fields.time] > 0 && clock0[fields.time] <= 1 ? 'frac' : 'ms';
+    window.__whTimeUnit = !fields.index && typeof clock0[fields.time] === 'number' && clock0[fields.time] > 0 && clock0[fields.time] <= 1 ? 'frac' : 'ms';
+    window.__whCameraGeometry = () => {
+      const vertices = data[fields.vertices];
+      const matrix = model[fields.matrix];
+      if (!vertices?.length || matrix?.length !== 16) throw new Error('Missing camera geometry');
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (const vertex of vertices) {
+        const z = vertex[fields.position][2];
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+      }
+      return { modelMatrix: Array.from(matrix), height: maxZ - minZ };
+    };
     const bind = actor.getBounds && actor.getBounds();
     const bindSpan = bind && bind[0] && bind[1]
       ? Math.abs(bind[1][0] - bind[0][0]) + Math.abs(bind[1][1] - bind[0][1]) + Math.abs(bind[1][2] - bind[0][2])
@@ -107,7 +135,7 @@
         renderer.eye[2] = eye[2];
       }
       // Converter SD light: one world-up light, then clamp(N·up + 0.7, 0, 1). Wowhead clamps ambient + primary * max(N·L, 0) to 1, so ambient 0.7 and primary 1 is that same curve. Normals are view-space, so the light direction is world +Z through the view matrix.
-      const bag = renderer.gxDevice && renderer.gxDevice.i;
+      const bag = renderer.gxDevice?.[wrath ? 'o' : 'i'];
       const viewM = renderer.viewMatrix;
       if (bag && viewM && bag.uAmbientColor && bag.uPrimaryColor && bag.uSecondaryColor && bag.uLightDir1) {
         let ux = viewM[8];
@@ -145,10 +173,11 @@
     actor.setAnimNoSubAnim && actor.setAnimNoSubAnim(true);
     const origAnim = model[fields.advance].bind(model);
     model[fields.advance] = function(animationState, _dt) {
-      const clock = state && state.d;
+      const clock = animationState?.[fields.clock];
       if (clock && typeof window.__whTime === 'number') clock[fields.time] = window.__whTime;
-      if (state && typeof window.__whTime === 'number') {
-        if (classic) { state.e = 1; state.c = 0; } else { state.a = 1; state.b = 0; }
+      if (animationState && typeof window.__whTime === 'number') {
+        animationState[fields.blend] = 1;
+        animationState[fields.fade] = 0;
       }
       const result = origAnim(animationState, 0);
       if (clock && typeof window.__whTime === 'number') clock[fields.time] = window.__whTime;
@@ -171,19 +200,25 @@
   const playing = clock[fields.clip] && clock[fields.clip][fields.name];
   const len = typeof picked[fields.length] === 'number' ? picked[fields.length] : 0;
   const index = animations.indexOf(picked);
-  if (classic && data.U(index)) {
+  if (fields.needsClip && data[fields.needsClip](index)) {
     if (!window.__whLoadingAnimation) {
       window.__whLoadingAnimation = true;
-      data.i(index).finally(() => { window.__whLoadingAnimation = false; });
+      data[fields.loadClip](index).finally(() => { window.__whLoadingAnimation = false; });
     }
     return Object.assign(base, { phase: 'loading-animation' });
   }
-  if (playing !== picked[fields.name]) actor.setAnimation(picked[fields.name], true);
+  if (playing !== picked[fields.name]) {
+    actor.setAnimation(picked[fields.name], true);
+    state = model[fields.state];
+    clock = state?.[fields.clock];
+    if (!clock) return Object.assign(base, { phase: 'loading-animation' });
+  }
   clock[fields.clip] = picked;
-  if (classic) clock.d = index;
+  if (fields.index) clock[fields.index] = index;
   window.__whTime = window.__whTimeUnit === 'frac' ? 0.5 : len / 2;
   clock[fields.time] = window.__whTime;
-  if (classic) { state.e = 1; state.c = 0; } else { state.a = 1; state.b = 0; }
+  state[fields.blend] = 1;
+  state[fields.fade] = 0;
   const view = window.__whWantView || 'front';
   const orbit = {
     front: [Math.PI * 1.5, Math.PI / 2],

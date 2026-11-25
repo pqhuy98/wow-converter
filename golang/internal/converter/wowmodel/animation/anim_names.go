@@ -1,7 +1,6 @@
 package animation
 
-// Code generated from animation-mapper.ts; DO NOT EDIT.
-
+// animNames is indexed by the WoW animation ID.
 var animNames = []string{
 	"Stand",
 	"Death",

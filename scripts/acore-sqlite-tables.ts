@@ -1,6 +1,6 @@
 export const ACORE_SQLITE_OUTPUT = 'bin/azerothcore-world.sqlite';
 
-/** MySQL UNSIGNED INT columns stored as signed INT32 in SQLite (Prisma Int limit). */
+/** MySQL UNSIGNED INT columns stored as signed 32-bit values in the bundled SQLite schema. */
 export const ACORE_UNSIGNED_INT32_COLUMNS: Record<string, readonly string[]> = {
   creature: ['phaseMask'],
   gameobject: ['phaseMask'],

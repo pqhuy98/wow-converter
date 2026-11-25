@@ -1,6 +1,6 @@
 # Architecture
 
-Go owns production conversion and the offline desktop app. The Next.js UI is shared with the compatibility TS runtime; Go and TS need not have identical internals or features ([ADR 0001](decisions/0001-go-ts-pipeline-divergence.md)). Prefer changes in the owning module over another conversion implementation.
+The Go converter handles model and map exports. The bundled desktop app serves the Next.js UI and converter API from the same process. Automation can submit jobs through the API or reuse the converter's Go packages from tools in this module.
 
 ## Owners
 
@@ -20,7 +20,7 @@ All Go paths below are under `golang/internal/`.
 | `formats/mdl/`, `formats/mdx/` | WC3 model graph and MDL/MDX serialization |
 | `wc3/`, `war3/` | Map types/serialization and generated object field definitions |
 
-`golang/cmd/wow-converter/main.go` wires the bundled runtime and API. `webui/` owns UI behavior, `scripts/` owns build/dev orchestration, and `tests/` owns API/snapshot/map acceptance checks.
+`golang/cmd/wow-converter/main.go` wires the bundled runtime and API. `webui/` owns the UI, `vscode-extension/` packages the model viewer, `scripts/` runs builds and development tools, and `tests/` covers the API, snapshots and map fixtures. `src/` contains libraries for local tools, including Warcraft III map translation and BLP encoding.
 
 ## Trace a change before editing
 

@@ -37,7 +37,7 @@ type BuildInfo struct {
 	Tags          string `json:"Tags"`
 }
 
-// Source is the active CASC archive (mirrors TS CASC interface).
+// Source is the active CASC archive.
 type Source interface {
 	IsLoaded() bool
 	TypeName() string
@@ -119,7 +119,7 @@ type MapList interface {
 	GetMaps(ctx context.Context) ([]MapEntry, error)
 }
 
-// CharacterMetaParams mirrors CharacterMetaParams from TS.
+// CharacterMetaParams identifies a model and its customization for metadata lookup.
 type CharacterMetaParams struct {
 	Race               int            `json:"race"`
 	Gender             int            `json:"gender"`

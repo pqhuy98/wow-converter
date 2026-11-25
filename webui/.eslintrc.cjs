@@ -9,7 +9,7 @@ module.exports = {
     project: './tsconfig.json',
     tsconfigRootDir: __dirname,
   },
-  ignorePatterns: ["**/bin/**/*", "**/dist/**/*", "**/maps/**/*", '**/.eslintrc.cjs', "rollup.config.cjs", "build/**", "wow.export/**/*", "next.config.mjs"],
+  ignorePatterns: ["**/bin/**/*", "**/dist/**/*", "**/maps/**/*", '**/.eslintrc.cjs', "next.config.mjs"],
   rules: {
     'max-len': 'off',
   },

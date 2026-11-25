@@ -5,7 +5,7 @@ description: Diagnose and fix a reported visual mismatch between a Wowhead model
 
 # Debug a Wowhead mismatch
 
-Fix the owning Go layer and trace affected character/map callers. Update TS when the supported compatibility workflow is affected; Go-only features need no TS counterpart (ADR 0001 in `docs/decisions/`).
+Fix the owning Go layer and trace affected character and map callers.
 
 Use [shot-export-wow-converter](../shot-export-wow-converter/SKILL.md) for a fresh export and paired captures. Choose a view that shows the reported difference and read both PNGs before editing. A blank or incomplete Wowhead frame is failed capture evidence; recapture it before diagnosing conversion.
 

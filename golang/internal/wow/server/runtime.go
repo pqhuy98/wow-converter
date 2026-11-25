@@ -36,7 +36,7 @@ func RunLoadFuncs() error {
 	return nil
 }
 
-// RuntimeState mirrors src/lib/wow/server/runtime.ts runtimeState.
+// RuntimeState tracks loaded CASC archives and the active data source.
 type RuntimeState struct {
 	mu sync.RWMutex
 

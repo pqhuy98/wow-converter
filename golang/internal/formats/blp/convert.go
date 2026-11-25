@@ -252,7 +252,7 @@ func png2BlpJS(pngBuffer []byte, distPath string, ignoreAlpha bool) error {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(distPath), 0o755); err != nil {
-		// Match TS: ignore mkdir errors.
+		// Report destination errors from the write below.
 	}
 	return os.WriteFile(distPath, out, 0o644)
 }

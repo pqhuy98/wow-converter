@@ -83,13 +83,13 @@ func hasWhiteCaption(img image.Image) bool {
 
 // Opt-in real-browser check: local export plus Wowhead, without submitting to production.
 func TestLocalLichKingCapture(t *testing.T) {
-	base := os.Getenv("WOW_CONVERTER_URL")
+	base := strings.TrimRight(os.Getenv("WOW_CONVERTER_CAPTURE_TEST_URL"), "/")
 	if base == "" {
-		base = "http://127.0.0.1:3001"
+		t.Skip("set WOW_CONVERTER_CAPTURE_TEST_URL to a running test converter")
 	}
-	resp, err := httpGetOK(base + "/api/get-config")
+	resp, err := httpGetOK(base + "/viewer")
 	if err != nil {
-		t.Skip(err)
+		t.Fatal(err)
 	}
 	resp.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
@@ -128,7 +128,7 @@ func TestLocalLichKingCapture(t *testing.T) {
 func exportLichKing(ctx context.Context, base string) (Request, error) {
 	request := Request{BaseURL: base, WowheadURL: "https://www.wowhead.com/wotlk/npc=36597/the-lich-king"}
 	// Match the accepted model's settings. Every run submits a new export job.
-	payload := `{"character":{"base":{"type":"wowhead","value":"` + request.WowheadURL + `"},"attackTag":"Auto","size":"hero","inGameMovespeed":270,"portraitCameraSequenceName":"Stand"},"outputFileName":"the-lich-king","optimization":{},"format":"mdx","formatVersion":"1000","isBrowse":false}`
+	payload := `{"character":{"base":{"type":"wowhead","value":"` + request.WowheadURL + `"},"attackTag":"Auto","size":"hero","inGameMovespeed":270,"portraitCameraSequenceName":"Stand"},"outputFileName":"capture-tests/the-lich-king","optimization":{},"format":"mdx","formatVersion":"1000","isBrowse":false}`
 	var job struct {
 		ID, Status, Error string
 		Result            struct {
@@ -200,6 +200,11 @@ func TestLichKingCaptureAlwaysExportsAndUsesReturnedMetadata(t *testing.T) {
 	posts := make(chan struct{}, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" && r.URL.Path == "/api/export/character" {
+			var request struct{ OutputFileName string }
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.OutputFileName != "capture-tests/the-lich-king" {
+				http.Error(w, "expected export in the capture test directory", http.StatusBadRequest)
+				return
+			}
 			posts <- struct{}{}
 			fmt.Fprint(w, `{"id":"fresh","status":"pending"}`)
 			return

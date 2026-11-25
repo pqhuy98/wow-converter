@@ -5,7 +5,7 @@ import (
 	animmap "github.com/pqhuy98/wow-converter/internal/converter/wowmodel/animation"
 )
 
-// StartupDemoRequests are pre-queued exports for shared hosting (mirrors export-character.startup.ts).
+// StartupDemoRequests are pre-queued exports for shared hosting.
 func StartupDemoRequests() []exportCharacterRequest {
 	return []exportCharacterRequest{{
 		Character: character.Character{

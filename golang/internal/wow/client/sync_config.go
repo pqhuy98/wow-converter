@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// DesiredConfig mirrors wow-data-client.ts desiredConfig pushed before each export.
+// DesiredConfig holds the reader settings applied before export.
 var DesiredConfig = map[string]any{
 	"copyMode":                   "FULL",
 	"listfileShowFileDataIDs":    true,

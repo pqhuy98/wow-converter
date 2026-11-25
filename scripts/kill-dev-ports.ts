@@ -1,13 +1,12 @@
 /**
  * Kill stale dev servers listening on the standard local ports.
- * Used before `dev` / `dev:split` / `dev:ts` so restarts do not fail with EADDRINUSE.
+ * Used before starting the development stack to avoid EADDRINUSE.
  */
 import { spawnSync } from 'child_process';
 
 const defaultPorts = [
   3000, // Next.js webui
   Number(process.env.PORT || 3001), // wow-converter API
-  Number(process.env.WOW_DATA_SERVER_PORT || 17753), // wow-data-server
 ];
 
 const ports = process.argv.length > 2

@@ -22,7 +22,7 @@ func FVal(x float64) string {
 		num = math.Copysign(999999, num)
 	}
 	rounded := math.Round(num*10000) / 10000
-	// Match TS parseFloat(num.toFixed(4)).toString() which normalizes -0 to 0.
+	// Normalize rounded negative zero to 0 in the MDL output.
 	s := strconv.FormatFloat(rounded, 'f', -1, 64)
 	if s == "-0" {
 		return "0"

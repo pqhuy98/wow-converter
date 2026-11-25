@@ -105,7 +105,7 @@ func ResizePngBytes(pngBuffer []byte, targetWidth, targetHeight int) ([]byte, er
 }
 
 // ResizePngOutside scales PNG to cover target dimensions (sharp fit: outside).
-// When alpha is present, RGB and alpha are resized independently (TS resizePng parity).
+// When alpha is present, RGB and alpha are resized independently.
 func ResizePngOutside(pngBuffer []byte, targetWidth, targetHeight int) ([]byte, error) {
 	data, width, height, err := DecodeRGBA(pngBuffer)
 	if err != nil {

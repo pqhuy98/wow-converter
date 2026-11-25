@@ -7,9 +7,11 @@ bun install
 bun run dev
 ```
 
-The default process runs the bundled Go converter/data reader and a Next.js development UI. The UI is on `http://127.0.0.1:3000`; the API is on `http://127.0.0.1:3001`. If WoW data is not configured, open `/setup`. Go and UI sources hot-reload; the in-process data reader restarts with Go. Starting development first stops processes on ports 3000, 3001 and 17753.
+The default process runs the bundled Go converter/data reader and a Next.js development UI. The UI is on `http://127.0.0.1:3000` and the API defaults to `http://127.0.0.1:3001`. If WoW data is not configured, open `/setup`. Go and UI sources hot-reload. The in-process data reader restarts with Go. Starting development first stops processes on the UI and API ports.
 
-`bun run build` creates the Windows desktop bundle in `dist-go`; `bun run build:linux` builds its Linux counterpart. The bundled application serves both UI and API on port 3001. `bun run dev:ts` is the compatibility TypeScript runtime; [ADR 0001](../decisions/0001-go-ts-pipeline-divergence.md) defines its scope.
+Next.js uses `webui/.next-dev` for development and `webui/.next` for production builds. This lets a static build run while the development UI is serving requests.
+
+`bun run build` creates the Windows desktop bundle in `dist-go`. Use `bun run build:linux` for Linux. The bundled application serves the UI and API on port 3001.
 
 Choose focused checks from [verification](verification.md). `bun run verify` builds and boots a release bundle, then runs its broader checks against that bundle; it is not required for a documentation-only edit.
 
@@ -40,4 +42,4 @@ The generator reads `ACORE_SOURCE_DATABASE_URL`. Its table list is `scripts/acor
 bun scripts/generate-azerothcore-sqlite.ts --sql-dir=<db_world-directory> --tables=gameobject,gameobject_template,gameobject_addon,game_event_gameobject,game_event_creature
 ```
 
-Rerun `bunx prisma generate` when changing the Prisma schema. Check the generated table schema together with converter readers when expanding bundled data.
+Check the generated SQLite schema against the Go readers in `golang/internal/azerothcore` when expanding bundled data.

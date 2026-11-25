@@ -9,7 +9,7 @@ func SafeRegexPattern(pattern string) (string, bool) {
 	if pattern == "" || len(pattern) > maxRegexPatternLen {
 		return "", false
 	}
-	// ponytail: heuristic only; Go regexp is RE2 (linear), but cap pattern size for parity with TS.
+	// Limit the size of user-supplied patterns before compiling them.
 	if strings.Contains(pattern, "(?") && strings.ContainsAny(pattern, "+*{") {
 		return "", false
 	}

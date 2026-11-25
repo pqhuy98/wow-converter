@@ -8,7 +8,7 @@ import (
 	"github.com/pqhuy98/wow-converter/internal/workspace"
 )
 
-// ReaderConfig mirrors src/lib/wow/server/config.ts WowReaderConfig.
+// ReaderConfig controls WoW data sources, caching and export options.
 type ReaderConfig struct {
 	// Remote data sources
 	ListfileURL          string `json:"listfileURL"`
@@ -80,7 +80,7 @@ type ReaderConfig struct {
 
 var (
 	configMu sync.RWMutex
-	// WowConfig is the mutable singleton config (analogous to wowConfig in TS).
+	// WowConfig is the mutable singleton config.
 	WowConfig = DefaultConfig()
 )
 
@@ -88,7 +88,7 @@ func defaultExportPath() string {
 	return workspace.DefaultExportDir()
 }
 
-// DefaultConfig returns defaults matching src/lib/wow/server/config.ts.
+// DefaultConfig returns the default WoW data reader configuration.
 func DefaultConfig() *ReaderConfig {
 	return &ReaderConfig{
 		ListfileURL:          "https://github.com/wowdev/wow-listfile/releases/latest/download/community-listfile.csv",

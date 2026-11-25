@@ -23,14 +23,14 @@ type Config struct {
 	Product          string `json:"product"`
 }
 
-// BuildSummary mirrors CascBuildSummary from TS.
+// BuildSummary describes an available WoW build.
 type BuildSummary struct {
 	Product      string `json:"Product"`
 	Region       string `json:"Region"`
 	VersionsName string `json:"VersionsName"`
 }
 
-// InfoSummary mirrors CascInfoSummary from TS.
+// InfoSummary describes the currently loaded CASC data.
 type InfoSummary struct {
 	Type      string `json:"type"`
 	BuildName string `json:"buildName"`

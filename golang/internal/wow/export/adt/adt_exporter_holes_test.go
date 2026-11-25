@@ -34,7 +34,7 @@ func legacyHoleGridPositions() map[int][2]int {
 	return out
 }
 
-func TestHoleGridMatchesTypeScriptAfterRowSkips(t *testing.T) {
+func TestHoleGridPositionsAfterRowSkips(t *testing.T) {
 	current := holeGridPositions()
 	legacy := legacyHoleGridPositions()
 

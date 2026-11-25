@@ -49,7 +49,7 @@ type Extras struct {
 	Crop bool `json:"crop"`
 }
 
-// ConversionOptions mirrors the TS icon conversion schema.
+// ConversionOptions holds the icon export options accepted by the API.
 type ConversionOptions struct {
 	Size       Size       `json:"size"`
 	Style      Style      `json:"style"`

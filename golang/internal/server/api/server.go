@@ -35,7 +35,7 @@ type Server struct {
 	withUI     bool
 }
 
-// NewServer builds the chi router with all /api routes from src/server/start.ts.
+// NewServer registers the converter API and UI routes.
 func NewServer(d *Deps) *Server {
 	cfg := d.Config
 

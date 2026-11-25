@@ -1,7 +1,6 @@
 package animation
 
-// Code generated from bones-mapper.ts; DO NOT EDIT.
-
+// boneNames maps WoW bone IDs to names.
 var boneNames = map[int]string{
 	0: "ArmL",
 	1: "ArmR",

@@ -19,7 +19,7 @@ Flags: `--seq Stand` defaults to the first prefix match; `--view` accepts front,
 
 POST `/api/export/character` with `character.base` `{"type":"wowhead","value":"<url>"}`, `character.inGameMovespeed` 270, `outputFileName` set to the page slug, `optimization` `{}`, and `format` `mdx`. Poll `/api/export/character/status/{id}` until `done`; fail on `failed` or `cancelled`.
 
-Use `result.exportedModels[].path` and `result.reportMetadata.models[].sequences[]`: WC3 `name` maps to WoW `wowName` and `wowVariant` (`--variant`). Never guess a WoW animation from a WC3 name. Runtime mapping: `golang/internal/converter/wowmodel/animation/`, generated from `src/lib/converter/wow-model/animation/animation-mapper.ts`.
+Use `result.exportedModels[].path` and `result.reportMetadata.models[].sequences[]` to match the WC3 `name` to the WoW `wowName` and `wowVariant` (`--variant`). The runtime tables live in `golang/internal/converter/wowmodel/animation/`.
 
 ```
 go -C golang run ./cmd/shot-converter <asset-path> --seq "Stand 1" --wowhead <url> --wow-seq Stand --view front --out tmp/compare-shots

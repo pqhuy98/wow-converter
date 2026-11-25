@@ -1,9 +1,6 @@
-# wow-converter (Go)
+# Converter and WoW data server
 
-Go ports of:
-
-- `src/wow-data-server/rest-server.ts` → `cmd/wow-data-server`
-- `src/server/start.ts` and controllers → `cmd/wow-converter` + `internal/server/api`
+`cmd/wow-converter` runs the converter API and serves the web UI. The data reader can run inside it or as the standalone `cmd/wow-data-server` service.
 
 ## Build
 
@@ -53,7 +50,7 @@ Output directory: `dist-go/` (Go binary, `webui/out`, `bin/`, `resources/` inclu
 | `dist-go/bin/` | BLP encoder, upscayl, AzerothCore SQLite |
 | `dist-go/resources/` | Icon frame assets and WC3 map template (`template-empty.w3x`) |
 
-Bundled mode is auto-detected when `webui/out` sits beside the exe (same as the Bun desktop build). Configure WoW via the setup page in the UI; no `.env` file required.
+The executable auto-detects bundled mode when `webui/out` sits beside it. Configure WoW through the UI setup page or the environment variables below.
 
 Run: `.\dist-go\wow-converter.exe`
 
@@ -64,8 +61,7 @@ Run: `.\dist-go\wow-converter.exe`
 separate `:17753` listener. The Next.js UI remains on `:3000`; converter API
 and UI proxy are on `:3001`.
 
-Use `bun run dev:ts` only for legacy TS wrapper compatibility work. To debug
-the Go data server independently, run `go run ./cmd/wow-data-server` from
+To debug the data server independently, run `go run ./cmd/wow-data-server` from
 `golang/` alongside the converter.
 
 An export job timeout fails that job only. It must not restart or reset the
@@ -100,7 +96,7 @@ runtime used by other jobs.
 
 ## wow-converter API routes (`/api/*`)
 
-Mirrors `src/server/start.ts`:
+The converter registers these routes in `internal/server/api`. The API reference is available at `/docs`.
 
 | Method | Path | Controller |
 |--------|------|------------|
@@ -118,8 +114,6 @@ Mirrors `src/server/start.ts`:
 | GET/POST | `/api/export/character/*` | export-character |
 | GET/POST | `/api/texture/*` | export-texture |
 | GET | `/api/assets/*`, `/api/browse-assets/*` | export-character (static) |
-
-All converter API routes are wired to the Go implementation (character export, textures, minimap, WC3 map generate).
 
 ## Environment variables
 
@@ -189,4 +183,4 @@ c := client.NewHTTPClient("")
 c := client.NewInProcessClient(handler)
 ```
 
-`client.Client` mirrors TypeScript `WowDataClient`.
+Both clients implement `client.Client`.

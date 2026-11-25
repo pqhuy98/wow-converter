@@ -49,8 +49,6 @@ type wc3AnimInfo struct {
 	loop      *bool
 }
 
-// getWc3AnimName is generated in wc3_anim_mapper_gen.go from animation-mapper.ts.
-
 // AnimationMeta mirrors bundle animation metadata.
 type AnimationMeta struct {
 	ID             uint16

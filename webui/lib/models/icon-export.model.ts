@@ -1,5 +1,5 @@
 // Icon conversion types - shared between frontend and backend
-// Keep in sync with wow-converter/src/lib/converter/icon/index.ts
+// Keep in sync with golang/internal/converter/icon/constants.go.
 
 // Size options
 export type IconSize = '64x64' | '128x128' | '256x256' | 'original';
